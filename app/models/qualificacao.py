@@ -13,6 +13,7 @@ class QualificacaoScore(Base):
     tenant_id: Mapped[str] = mapped_column(String, index=True)
     conta_id: Mapped[int] = mapped_column(ForeignKey("conta.id"))
     decisor_id: Mapped[int] = mapped_column(ForeignKey("decisor.id"))
+    conversa_id: Mapped[int | None] = mapped_column(ForeignKey("conversa_qualificacao.id"), nullable=True)
     score_total: Mapped[float] = mapped_column(Float)
     criterios: Mapped[dict] = mapped_column(JSON, default=dict)  # decomposição S.H.A.R.K.
     limiar_configurado: Mapped[float] = mapped_column(Float)

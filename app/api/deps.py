@@ -10,12 +10,17 @@ from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.claude_provider import ClaudeProvider
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.account_data.receita_federal import ReceitaFederalCNPJProvider
+from app.providers.calendar.base import CalendarProvider
+from app.providers.calendar.google import GoogleCalendarProvider
+from app.providers.calendar.stub import StubCalendarProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.email.smtp import SmtpEmailProvider
 from app.providers.channels.email.stub import StubEmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.channels.whatsapp.meta import MetaWhatsAppProvider
 from app.providers.channels.whatsapp.stub import StubWhatsAppProvider
+from app.providers.crm.base import CrmProvider
+from app.providers.crm.stub import StubCrmProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 
@@ -62,6 +67,19 @@ def get_email_provider() -> EmailProvider:
     if settings.smtp_host:
         return SmtpEmailProvider()
     return StubEmailProvider()
+
+
+def get_calendar_provider() -> CalendarProvider:
+    if settings.google_calendar_access_token:
+        return GoogleCalendarProvider()
+    return StubCalendarProvider()
+
+
+def get_crm_provider() -> CrmProvider:
+    # CoreApiCrmProvider entra aqui quando o núcleo expuser a API de
+    # oportunidades. Até lá, todo ambiente (dev e testes) usa o stub — CRM é
+    # dado do núcleo, mesma regra de fronteira do PlanLimitsProvider.
+    return StubCrmProvider()
 
 
 def get_tenant_id(x_tenant_id: str = Header(..., alias="X-Tenant-Id")) -> str:

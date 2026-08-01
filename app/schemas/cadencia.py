@@ -12,6 +12,7 @@ class CadenciaSchema(BaseModel):
     nome: str
     canais: list
     status: str
+    tipo: str
     data_inicio: datetime | None
     criado_em: datetime
 
@@ -37,6 +38,7 @@ class ToqueCadenciaSchema(BaseModel):
 class CadenciaCreateSchema(BaseModel):
     nome: str
     toques: list[ToqueCadenciaCreateSchema]
+    tipo: str = "prospeccao"
 
 
 class GerarCadenciaRequestSchema(BaseModel):

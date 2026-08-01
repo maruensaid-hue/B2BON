@@ -42,7 +42,9 @@ def criar(db: Session, tenant_id: str, ator_id: str | None, dados: CadenciaCreat
     if len(canais) < MINIMO_CANAIS_DISTINTOS:
         raise RegraNegocioViolada("Os toques precisam estar distribuídos entre pelo menos 2 canais.")
 
-    cadencia = Cadencia(tenant_id=tenant_id, nome=dados.nome, canais=sorted(canais), status="rascunho")
+    cadencia = Cadencia(
+        tenant_id=tenant_id, nome=dados.nome, canais=sorted(canais), status="rascunho", tipo=dados.tipo
+    )
     db.add(cadencia)
     db.flush()
 

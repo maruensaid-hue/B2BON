@@ -9,6 +9,8 @@ from sqlalchemy.pool import StaticPool
 import app.models  # noqa: F401 — registra as tabelas em Base.metadata
 from app.api.deps import (
     get_account_data_provider,
+    get_calendar_provider,
+    get_crm_provider,
     get_db,
     get_email_provider,
     get_graph_client,
@@ -22,6 +24,8 @@ from app.db.base import Base
 from app.main import app
 from app.models.conta import Conta
 from app.models.decisor import Decisor
+from app.providers.calendar.stub import StubCalendarProvider
+from app.providers.crm.stub import StubCrmProvider
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from tests.fakes import (
     FakeAccountDataProvider,
@@ -98,6 +102,16 @@ def fake_email() -> FakeEmailProvider:
 
 
 @pytest.fixture()
+def fake_calendar() -> StubCalendarProvider:
+    return StubCalendarProvider()
+
+
+@pytest.fixture()
+def fake_crm() -> StubCrmProvider:
+    return StubCrmProvider()
+
+
+@pytest.fixture()
 def client(
     db_session: Session,
     fake_graph: FakeGraphClient,
@@ -107,6 +121,8 @@ def client(
     fake_site_fetcher,
     fake_whatsapp: FakeWhatsAppProvider,
     fake_email: FakeEmailProvider,
+    fake_calendar: StubCalendarProvider,
+    fake_crm: StubCrmProvider,
 ) -> Generator[TestClient, None, None]:
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session
@@ -119,6 +135,8 @@ def client(
     app.dependency_overrides[get_site_fetcher] = lambda: fake_site_fetcher
     app.dependency_overrides[get_whatsapp_provider] = lambda: fake_whatsapp
     app.dependency_overrides[get_email_provider] = lambda: fake_email
+    app.dependency_overrides[get_calendar_provider] = lambda: fake_calendar
+    app.dependency_overrides[get_crm_provider] = lambda: fake_crm
 
     with TestClient(app) as test_client:
         test_client.headers.update({"X-Tenant-Id": TENANT_ID, "X-User-Id": ATOR_ID})
@@ -237,3 +255,37 @@ def criar_cadencia(client: TestClient):
         return resposta.json()
 
     return _criar
+
+
+@pytest.fixture()
+def criar_cadencia_nutricao(client: TestClient):
+    def _criar(**overrides: object) -> dict:
+        payload = {
+            "nome": "Nutrição Teste",
+            "tipo": "nutricao",
+            "toques": [
+                {"ordem": 1, "canal": "email", "intervalo_dias_apos_anterior": 0},
+                {"ordem": 2, "canal": "whatsapp", "intervalo_dias_apos_anterior": 7, "template_whatsapp_id": "x"},
+                {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 7},
+                {"ordem": 4, "canal": "linkedin", "intervalo_dias_apos_anterior": 7},
+                {"ordem": 5, "canal": "whatsapp", "intervalo_dias_apos_anterior": 7, "template_whatsapp_id": "x"},
+            ],
+        }
+        payload.update(overrides)
+        resposta = client.post("/api/v1/cadencias", json=payload)
+        assert resposta.status_code == 201, resposta.text
+        return resposta.json()
+
+    return _criar
+
+
+@pytest.fixture()
+def configurar_notificacao(client: TestClient):
+    def _configurar(**overrides: object) -> dict:
+        payload = {"vendedor_id": "vendedor-1", "vendedor_telefone": "+5511988887777"}
+        payload.update(overrides)
+        resposta = client.put("/api/v1/notificacoes/configuracao", json=payload)
+        assert resposta.status_code == 200, resposta.text
+        return resposta.json()
+
+    return _configurar

@@ -53,5 +53,13 @@ class Settings(BaseSettings):
         {"dias": 999999, "limite": 1000},
     ]
 
+    # Google Calendar API — vazio usa StubCalendarProvider em dev/teste.
+    google_calendar_access_token: str = ""
+    google_calendar_id: str = "primary"
+
+    # Padrão recomendado do limiar de qualificação — ajustável por tenant
+    # (E5-H2 pede explicitamente um "padrão recomendado").
+    limiar_qualificacao_padrao: float = 60.0
+
 
 settings = Settings()

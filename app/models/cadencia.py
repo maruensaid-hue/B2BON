@@ -20,5 +20,6 @@ class Cadencia(Base):
     status: Mapped[str] = mapped_column(
         String
     )  # rascunho | aguardando_aprovacao | ativa
+    tipo: Mapped[str] = mapped_column(String, default="prospeccao")  # prospeccao | nutricao
     data_inicio: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
