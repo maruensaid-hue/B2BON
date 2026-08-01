@@ -21,12 +21,11 @@ def criar_proposta(
     canal: str,
     template_id: str | None,
     conteudo: str,
+    toque_cadencia_id: int | None = None,
 ) -> Mensagem:
     """Cria uma mensagem proposta e a correspondente entrada na fila.
 
-    A geração real de propostas é do E3 (Onda 2, cadências); esta função
-    existe para que a fila (E4) tenha o que aprovar já nesta onda, e é usada
-    diretamente pelos testes — não há endpoint HTTP para ela.
+    Chamada pelo `cadencia_service` (E3-H1) para cada toque personalizado.
     """
     mensagem = Mensagem(
         tenant_id=tenant_id,
@@ -35,6 +34,7 @@ def criar_proposta(
         canal=canal,
         template_id=template_id,
         conteudo=conteudo,
+        toque_cadencia_id=toque_cadencia_id,
         status="aguardando_aprovacao",
     )
     db.add(mensagem)

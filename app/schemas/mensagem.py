@@ -10,6 +10,7 @@ class MensagemSchema(BaseModel):
     tenant_id: str
     cadencia_id: int
     decisor_id: int
+    toque_cadencia_id: int | None
     canal: str
     template_id: str | None
     conteudo: str
@@ -17,4 +18,6 @@ class MensagemSchema(BaseModel):
     status: str
     agendado_para: datetime | None
     enviado_em: datetime | None
+    motivo_falha: str | None
+    tentativas_envio: int
     criado_em: datetime

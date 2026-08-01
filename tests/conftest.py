@@ -10,16 +10,26 @@ import app.models  # noqa: F401 — registra as tabelas em Base.metadata
 from app.api.deps import (
     get_account_data_provider,
     get_db,
+    get_email_provider,
     get_graph_client,
     get_llm_provider,
     get_plan_limits_provider,
     get_site_fetcher,
+    get_whatsapp_provider,
 )
 from app.core.config import settings
 from app.db.base import Base
 from app.main import app
+from app.models.conta import Conta
+from app.models.decisor import Decisor
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
-from tests.fakes import FakeAccountDataProvider, FakeGraphClient, FakeLLMProvider
+from tests.fakes import (
+    FakeAccountDataProvider,
+    FakeEmailProvider,
+    FakeGraphClient,
+    FakeLLMProvider,
+    FakeWhatsAppProvider,
+)
 
 TENANT_ID = "tenant-teste"
 ATOR_ID = "user-teste"
@@ -78,6 +88,16 @@ def fake_site_fetcher():
 
 
 @pytest.fixture()
+def fake_whatsapp() -> FakeWhatsAppProvider:
+    return FakeWhatsAppProvider()
+
+
+@pytest.fixture()
+def fake_email() -> FakeEmailProvider:
+    return FakeEmailProvider()
+
+
+@pytest.fixture()
 def client(
     db_session: Session,
     fake_graph: FakeGraphClient,
@@ -85,6 +105,8 @@ def client(
     fake_account_data: FakeAccountDataProvider,
     fake_plan_limits: StubPlanLimitsProvider,
     fake_site_fetcher,
+    fake_whatsapp: FakeWhatsAppProvider,
+    fake_email: FakeEmailProvider,
 ) -> Generator[TestClient, None, None]:
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session
@@ -95,6 +117,8 @@ def client(
     app.dependency_overrides[get_account_data_provider] = lambda: fake_account_data
     app.dependency_overrides[get_plan_limits_provider] = lambda: fake_plan_limits
     app.dependency_overrides[get_site_fetcher] = lambda: fake_site_fetcher
+    app.dependency_overrides[get_whatsapp_provider] = lambda: fake_whatsapp
+    app.dependency_overrides[get_email_provider] = lambda: fake_email
 
     with TestClient(app) as test_client:
         test_client.headers.update({"X-Tenant-Id": TENANT_ID, "X-User-Id": ATOR_ID})
@@ -134,6 +158,81 @@ def criar_oferta(client: TestClient):
         }
         payload.update(overrides)
         resposta = client.post("/api/v1/ofertas", json=payload)
+        assert resposta.status_code == 201, resposta.text
+        return resposta.json()
+
+    return _criar
+
+
+@pytest.fixture()
+def configurar_comunicacao(client: TestClient):
+    def _configurar(**overrides: object) -> dict:
+        payload = {"tom": "consultivo", "restricoes": []}
+        payload.update(overrides)
+        resposta = client.put("/api/v1/comunicacao", json=payload)
+        assert resposta.status_code == 200, resposta.text
+        return resposta.json()
+
+    return _configurar
+
+
+@pytest.fixture()
+def onboarding_completo(criar_icp, criar_oferta, configurar_comunicacao):
+    """E3 depende de ICP + oferta + comunicação já configurados (E1)."""
+    criar_icp()
+    criar_oferta()
+    configurar_comunicacao()
+
+
+@pytest.fixture()
+def criar_conta_com_decisor(db_session: Session, criar_icp):
+    def _criar(**overrides: object) -> tuple[Conta, Decisor]:
+        icp = criar_icp()
+        conta = Conta(tenant_id=TENANT_ID, icp_id=icp["id"], nome="Conta Teste", status="prospectada")
+        db_session.add(conta)
+        db_session.flush()
+
+        dados_decisor = {
+            "nome": "Decisor Teste",
+            "cargo": "CEO",
+            "email": "decisor@empresateste.com.br",
+            "telefone": "+5511999999999",
+            "linkedin_url": "https://linkedin.com/in/decisor-teste",
+        }
+        dados_decisor.update(overrides)
+        decisor = Decisor(tenant_id=TENANT_ID, conta_id=conta.id, **dados_decisor)
+        db_session.add(decisor)
+        db_session.commit()
+        return conta, decisor
+
+    return _criar
+
+
+@pytest.fixture()
+def criar_cadencia(client: TestClient):
+    def _criar(**overrides: object) -> dict:
+        payload = {
+            "nome": "Cadência Teste",
+            "toques": [
+                {"ordem": 1, "canal": "email", "intervalo_dias_apos_anterior": 0},
+                {
+                    "ordem": 2,
+                    "canal": "whatsapp",
+                    "intervalo_dias_apos_anterior": 2,
+                    "template_whatsapp_id": "prospeccao_inicial",
+                },
+                {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 3},
+                {"ordem": 4, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
+                {
+                    "ordem": 5,
+                    "canal": "whatsapp",
+                    "intervalo_dias_apos_anterior": 3,
+                    "template_whatsapp_id": "prospeccao_inicial",
+                },
+            ],
+        }
+        payload.update(overrides)
+        resposta = client.post("/api/v1/cadencias", json=payload)
         assert resposta.status_code == 201, resposta.text
         return resposta.json()
 

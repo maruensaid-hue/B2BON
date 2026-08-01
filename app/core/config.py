@@ -23,5 +23,35 @@ class Settings(BaseSettings):
     # Placeholder até a integração real com o núcleo B2B ON existir.
     core_api_base_url: str = ""
 
+    # WhatsApp Business API (Meta) — vazio usa StubWhatsAppProvider em dev/teste.
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_business_account_id: str = ""
+
+    # SMTP — vazio usa StubEmailProvider em dev/teste.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+
+    # Usado para assinar tokens de opt-out (HMAC) — trocar em produção.
+    secret_key: str = "changeme-dev-secret-key"
+
+    # Degraus de rampa de aquecimento (dias de uso do canal -> limite diário).
+    # Parâmetro de entregabilidade, ajustável por configuração — não é uma
+    # curva comercial fechada.
+    rampa_degraus_whatsapp: list[dict] = [
+        {"dias": 3, "limite": 20},
+        {"dias": 7, "limite": 50},
+        {"dias": 14, "limite": 100},
+        {"dias": 999999, "limite": 500},
+    ]
+    rampa_degraus_email: list[dict] = [
+        {"dias": 3, "limite": 30},
+        {"dias": 7, "limite": 80},
+        {"dias": 14, "limite": 200},
+        {"dias": 999999, "limite": 1000},
+    ]
+
 
 settings = Settings()

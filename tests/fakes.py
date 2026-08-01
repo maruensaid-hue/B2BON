@@ -6,6 +6,10 @@ from app.providers.account_data.base import (
     DecisorCandidato,
     FiltroBusca,
 )
+from app.providers.channels.email.base import EmailProvider
+from app.providers.channels.email.base import ResultadoEnvio as ResultadoEnvioEmail
+from app.providers.channels.whatsapp.base import ResultadoEnvio as ResultadoEnvioWhatsApp
+from app.providers.channels.whatsapp.base import TemplateInfo, WhatsAppProvider
 
 
 class FakeGraphClient:
@@ -112,3 +116,62 @@ class FakeAccountDataProvider(AccountDataProvider):
 
     def buscar_decisores(self, cnpj: str) -> list[DecisorCandidato]:
         return self.decisores.get(cnpj, [])
+
+
+class FakeWhatsAppProvider(WhatsAppProvider):
+    """Duplo de teste — registra envios, permite simular falha e listar
+    templates fixos com status controlado pelo teste."""
+
+    def __init__(self) -> None:
+        self.envios: list[dict] = []
+        self.templates: list[TemplateInfo] = [
+            TemplateInfo(nome="prospeccao_inicial", status="aprovado", corpo="Olá {{1}}")
+        ]
+        self.falhar_proximos = 0
+
+    def _resultado(self) -> ResultadoEnvioWhatsApp:
+        if self.falhar_proximos > 0:
+            self.falhar_proximos -= 1
+            return ResultadoEnvioWhatsApp(sucesso=False, motivo_falha="falha simulada")
+        return ResultadoEnvioWhatsApp(sucesso=True, id_externo=f"fake-{len(self.envios)}")
+
+    def enviar_template(self, telefone: str, template_id: str, variaveis: dict) -> ResultadoEnvioWhatsApp:
+        self.envios.append({"tipo": "template", "telefone": telefone, "template_id": template_id})
+        return self._resultado()
+
+    def enviar_texto_livre(self, telefone: str, texto: str) -> ResultadoEnvioWhatsApp:
+        self.envios.append({"tipo": "livre", "telefone": telefone, "texto": texto})
+        return self._resultado()
+
+    def listar_templates(self) -> list[TemplateInfo]:
+        return self.templates
+
+
+class FakeEmailProvider(EmailProvider):
+    """Duplo de teste — registra envios, permite simular falha."""
+
+    def __init__(self) -> None:
+        self.envios: list[dict] = []
+        self.falhar_proximos = 0
+
+    def enviar(
+        self,
+        destinatario: str,
+        assunto: str,
+        corpo: str,
+        remetente_nome: str,
+        remetente_email: str,
+    ) -> ResultadoEnvioEmail:
+        self.envios.append(
+            {
+                "destinatario": destinatario,
+                "assunto": assunto,
+                "corpo": corpo,
+                "remetente_nome": remetente_nome,
+                "remetente_email": remetente_email,
+            }
+        )
+        if self.falhar_proximos > 0:
+            self.falhar_proximos -= 1
+            return ResultadoEnvioEmail(sucesso=False, motivo_falha="falha simulada")
+        return ResultadoEnvioEmail(sucesso=True, id_externo=f"fake-{len(self.envios)}")
