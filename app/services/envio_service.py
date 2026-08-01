@@ -8,7 +8,7 @@ from app.models.mensagem import Mensagem
 from app.models.tarefa_linkedin import TarefaLinkedin
 from app.providers.channels.email.base import EmailProvider, ResultadoEnvio
 from app.providers.channels.whatsapp.base import WhatsAppProvider
-from app.services import aprovacao_service, auditoria_service, optout_service, rampa_service
+from app.services import aprovacao_service, auditoria_service, optout_service, rampa_service, reputacao_service
 from app.services.errors import RegraNegocioViolada
 
 MAX_TENTATIVAS_ENVIO = 3
@@ -102,6 +102,12 @@ def processar_pendentes(
             continue
 
         if mensagem.canal == "email" and not _dentro_da_janela_dias_uteis_e_horario(config):
+            resultado["adiadas"] += 1
+            continue
+
+        if reputacao_service.canal_pausado(db, tenant_id, mensagem.canal):
+            # Pausa automática por degradação de reputação (E10-H2) — adia,
+            # não falha; cadências já ativas retomam quando o canal reabre.
             resultado["adiadas"] += 1
             continue
 

@@ -10,12 +10,14 @@ from app.api.v1.contas import router as contas_router
 from app.api.v1.conversas import router as conversas_router
 from app.api.v1.decisores import router as decisores_router
 from app.api.v1.envios import router as envios_router
+from app.api.v1.faq import router as faq_router
 from app.api.v1.icp import router as icp_router
 from app.api.v1.linkedin import router as linkedin_router
 from app.api.v1.notificacoes import router as notificacoes_router
 from app.api.v1.ofertas import router as oferta_router
 from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.optout import router as optout_router
+from app.api.v1.painel import router as painel_router
 from app.api.v1.qualificacao import router as qualificacao_router
 from app.api.v1.reunioes import router as reunioes_router
 from app.api.v1.ropa import router as ropa_router
@@ -47,6 +49,5 @@ router.include_router(notificacoes_router)
 router.include_router(decisores_router)
 router.include_router(reunioes_router)
 router.include_router(titulares_router)
-
-# Routers por épico (E8-Painel...) serão incluídos aqui conforme a lógica de
-# negócio for implementada (Onda 4 em diante).
+router.include_router(faq_router)
+router.include_router(painel_router)

@@ -57,6 +57,7 @@ def criar(db: Session, tenant_id: str, ator_id: str | None, dados: CadenciaCreat
                 canal=toque.canal,
                 intervalo_dias_apos_anterior=toque.intervalo_dias_apos_anterior,
                 template_whatsapp_id=toque.template_whatsapp_id,
+                ab_teste_habilitado=toque.ab_teste_habilitado,
             )
         )
 
@@ -81,6 +82,18 @@ def _contexto_de_geracao(db: Session, tenant_id: str) -> tuple[ICP, Oferta, Conf
     return icp, oferta, config
 
 
+_ENQUADRAMENTO_VARIANTE = {
+    "A": "Use um tom direto e objetivo, indo reto ao ponto.",
+    "B": "Use um tom consultivo, abrindo com uma pergunta sobre o contexto do decisor.",
+}
+
+
+def variante_ab_para_decisor(decisor_id: int) -> str:
+    """Distribuição controlada e reproduzível (não aleatória) entre as duas
+    variantes do teste A/B (E3-H5)."""
+    return "A" if decisor_id % 2 == 0 else "B"
+
+
 def _gerar_conteudo_toque(
     llm: LLMProvider,
     icp: ICP,
@@ -89,19 +102,21 @@ def _gerar_conteudo_toque(
     conta: Conta,
     decisor: Decisor,
     toque: ToqueCadencia,
+    variante: str | None = None,
 ) -> str | None:
     """Mensagem personalizada por conta/decisor — não mala direta (E3-H1).
 
     Retorna None se o texto gerado violar as restrições do E1-H3 (melhor
     esforço: o toque é pulado, não bloqueia o restante do lote).
     """
+    enquadramento_variante = f" {_ENQUADRAMENTO_VARIANTE[variante]}" if variante else ""
     resposta = llm.generate(
         LLMRequest(
             prompt=(
                 f"Escreva o toque {toque.ordem} (canal {toque.canal}) de uma cadência de prospecção "
                 f"para {decisor.nome} ({decisor.cargo or 'decisor'}) na empresa {conta.nome}, "
                 f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento}), oferecendo '{oferta.nome}'. "
-                f"Tom: {config.tom}. Nunca mencione: "
+                f"Tom: {config.tom}.{enquadramento_variante} Nunca mencione: "
                 f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
             )
         )
@@ -150,7 +165,8 @@ def gerar_para_lote(
 
         contas_processadas.append(conta_id)
         for toque in toques:
-            conteudo = _gerar_conteudo_toque(llm, icp, oferta, config, conta, decisor, toque)
+            variante = variante_ab_para_decisor(decisor.id) if toque.ab_teste_habilitado else None
+            conteudo = _gerar_conteudo_toque(llm, icp, oferta, config, conta, decisor, toque, variante)
             if conteudo is None:
                 continue
             conteudo = _rodape_por_canal(db, tenant_id, decisor, toque.canal, conteudo)
@@ -163,6 +179,7 @@ def gerar_para_lote(
                 toque.template_whatsapp_id,
                 conteudo,
                 toque_cadencia_id=toque.id,
+                variante_ab=variante,
             )
             mensagens_geradas += 1
 

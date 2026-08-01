@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.aprovacao import Aprovacao
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
+from app.models.regra_auto_aprovacao import RegraAutoAprovacao
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
@@ -22,6 +23,7 @@ def criar_proposta(
     template_id: str | None,
     conteudo: str,
     toque_cadencia_id: int | None = None,
+    variante_ab: str | None = None,
 ) -> Mensagem:
     """Cria uma mensagem proposta e a correspondente entrada na fila.
 
@@ -35,6 +37,7 @@ def criar_proposta(
         template_id=template_id,
         conteudo=conteudo,
         toque_cadencia_id=toque_cadencia_id,
+        variante_ab=variante_ab,
         status="aguardando_aprovacao",
     )
     db.add(mensagem)
@@ -45,9 +48,75 @@ def criar_proposta(
     db.flush()
 
     auditoria_service.registrar(db, tenant_id, "mensagem_proposta", "mensagem", mensagem.id, None, {}, canal=canal)
+
+    _aplicar_regra_auto_aprovacao(db, tenant_id, aprovacao, mensagem)
+
     db.commit()
     db.refresh(mensagem)
     return mensagem
+
+
+def _aplicar_regra_auto_aprovacao(db: Session, tenant_id: str, aprovacao: Aprovacao, mensagem: Mensagem) -> None:
+    """Auto-aprovação por template — opcional, desligada por padrão (E4-H4).
+
+    O log distingue aprovação manual (`aprovacao_aprovada`/`_lote`) da
+    automática (`aprovacao_automatica_por_regra`) pela própria chave do
+    evento de auditoria, sem exigir campo novo.
+    """
+    if mensagem.template_id is None:
+        return
+    regra = (
+        db.query(RegraAutoAprovacao)
+        .filter_by(tenant_id=tenant_id, template_id=mensagem.template_id, habilitada=True)
+        .one_or_none()
+    )
+    if regra is None:
+        return
+
+    aprovacao.status = "aprovado"
+    aprovacao.decidido_em = datetime.now(UTC)
+    mensagem.status = "aprovado"
+
+    auditoria_service.registrar(
+        db,
+        tenant_id,
+        "aprovacao_automatica_por_regra",
+        "aprovacao",
+        aprovacao.id,
+        None,
+        {"template_id": mensagem.template_id},
+        conta_id=_conta_id_da_mensagem(db, mensagem),
+        canal=mensagem.canal,
+    )
+
+
+def definir_regra(
+    db: Session, tenant_id: str, ator_id: str | None, template_id: str, habilitada: bool
+) -> RegraAutoAprovacao:
+    regra = db.query(RegraAutoAprovacao).filter_by(tenant_id=tenant_id, template_id=template_id).one_or_none()
+    if regra is None:
+        regra = RegraAutoAprovacao(tenant_id=tenant_id, template_id=template_id, habilitada=habilitada)
+        db.add(regra)
+    else:
+        regra.habilitada = habilitada
+    db.flush()
+
+    auditoria_service.registrar(
+        db,
+        tenant_id,
+        "regra_auto_aprovacao_definida",
+        "regra_auto_aprovacao",
+        regra.id,
+        ator_id,
+        {"template_id": template_id, "habilitada": habilitada},
+    )
+    db.commit()
+    db.refresh(regra)
+    return regra
+
+
+def listar_regras(db: Session, tenant_id: str) -> list[RegraAutoAprovacao]:
+    return db.query(RegraAutoAprovacao).filter_by(tenant_id=tenant_id).all()
 
 
 def _conta_id_da_mensagem(db: Session, mensagem: Mensagem) -> int:

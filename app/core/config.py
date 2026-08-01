@@ -61,5 +61,14 @@ class Settings(BaseSettings):
     # (E5-H2 pede explicitamente um "padrão recomendado").
     limiar_qualificacao_padrao: float = 60.0
 
+    # Confiança mínima (z-score) para declarar vencedora no teste A/B —
+    # parâmetro estatístico, não decisão comercial (E3-H5). 1.96 ≈ 95%.
+    ab_teste_confianca_z: float = 1.96
+
+    # Limiares de entregabilidade que disparam pausa automática de canal —
+    # ajustáveis por configuração, não uma curva comercial fechada (E10-H2).
+    limiar_bounce_padrao: float = 0.05
+    limiar_spam_padrao: float = 0.001
+
 
 settings = Settings()

@@ -10,8 +10,9 @@ from app.schemas.cadencia import (
     CadenciaSchema,
     GerarCadenciaRequestSchema,
     GerarCadenciaResponseSchema,
+    RelatorioAbTesteSchema,
 )
-from app.services import cadencia_service
+from app.services import ab_teste_service, cadencia_service
 
 router = APIRouter(prefix="/cadencias", tags=["cadencias"])
 
@@ -58,3 +59,13 @@ def ativar_cadencia(
 ) -> AtivarCadenciaResponseSchema:
     resultado = cadencia_service.ativar(db, tenant_id, ator_id, cadencia_id, plan_limits)
     return AtivarCadenciaResponseSchema(**resultado)
+
+
+@router.get("/{cadencia_id}/teste-ab", response_model=RelatorioAbTesteSchema)
+def relatorio_teste_ab(
+    cadencia_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> RelatorioAbTesteSchema:
+    """Relatório de vencedora do teste A/B por taxa de resposta (E3-H5)."""
+    return RelatorioAbTesteSchema(**ab_teste_service.relatorio(db, tenant_id, cadencia_id))

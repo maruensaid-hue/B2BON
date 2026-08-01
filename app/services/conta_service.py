@@ -14,11 +14,11 @@ from app.models.decisor import Decisor
 from app.models.icp import ICP
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, FiltroBusca
 from app.schemas.decisor import DecisorCreateSchema
-from app.services import auditoria_service
+from app.services import auditoria_service, descarte_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 
-def _score_aderencia(icp: ICP, candidato: ContaCandidata) -> float:
+def _score_aderencia(db: Session, tenant_id: str, icp: ICP, candidato: ContaCandidata) -> float:
     pontuacao = 0.0
     if candidato.cnae_principal in icp.cnae_codigos:
         pontuacao += 0.5
@@ -26,7 +26,11 @@ def _score_aderencia(icp: ICP, candidato: ContaCandidata) -> float:
         pontuacao += 0.3
     if icp.porte and candidato.porte == icp.porte:
         pontuacao += 0.2
-    return round(pontuacao, 2)
+
+    penalidade = descarte_service.penalidade_para(
+        db, tenant_id, candidato.cnae_principal, candidato.porte, candidato.uf
+    )
+    return round(max(pontuacao - penalidade, 0.0), 2)
 
 
 def gerar_lista(
@@ -80,7 +84,7 @@ def gerar_lista(
             porte=candidato.porte,
             segmento=candidato.cnae_principal,
             regiao=candidato.uf,
-            score_aderencia=_score_aderencia(icp, candidato),
+            score_aderencia=_score_aderencia(db, tenant_id, icp, candidato),
             status="prospectada",
             origem=candidato.fonte,
         )

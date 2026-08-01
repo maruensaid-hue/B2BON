@@ -5,8 +5,9 @@ from app.api.deps import get_db, get_llm_provider, get_whatsapp_provider
 from app.llm.base import LLMProvider
 from app.models.decisor import Decisor
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.schemas.reputacao import RegistrarEventoReputacaoRequestSchema, SaudeCanalSchema
 from app.schemas.whatsapp import WebhookEmailRequestSchema, WebhookWhatsAppRequestSchema
-from app.services import optout_service, qualificacao_service, resposta_service
+from app.services import optout_service, qualificacao_service, reputacao_service, resposta_service
 from app.services.errors import NaoEncontrado
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -56,3 +57,12 @@ def webhook_email(
         db, dados.tenant_id, decisor.id, "email", dados.texto, llm, whatsapp
     )
     return {**resultado_resposta, **resultado_qualificacao}
+
+
+@router.post("/reputacao", response_model=SaudeCanalSchema)
+def webhook_reputacao(dados: RegistrarEventoReputacaoRequestSchema, db: Session = Depends(get_db)) -> SaudeCanalSchema:
+    """Callback do ESP/Meta com eventos de entregabilidade — dispara pausa
+    automática de canal ao cruzar o limiar crítico (E10-H2)."""
+    return SaudeCanalSchema(
+        **reputacao_service.registrar_evento(db, dados.tenant_id, dados.canal, dados.tipo_evento, dados.quantidade)
+    )

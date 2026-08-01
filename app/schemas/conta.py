@@ -28,6 +28,10 @@ class GerarListaRequestSchema(BaseModel):
     quantidade: int
 
 
+class DescartarContaRequestSchema(BaseModel):
+    motivo: str
+
+
 class FranquiaSchema(BaseModel):
     limite: int
     usado: int

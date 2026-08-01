@@ -124,3 +124,45 @@ def test_editar_mensagem_rejeita_variavel_invalida(client, db_session, cadencia_
     )
 
     assert resposta.status_code == 422
+
+
+def test_regra_auto_aprovacao_desligada_por_padrao(client, db_session, cadencia_e_decisor):
+    """E4-H4: auto-aprovação opcional, desligada por padrão."""
+    cadencia, decisor, _ = cadencia_e_decisor
+    _propor_mensagem(db_session, cadencia, decisor, template_id="tpl-auto")
+
+    item = client.get("/api/v1/aprovacoes").json()[0]
+
+    assert item["status"] == "pendente"
+
+
+def test_regra_auto_aprovacao_ligada_aprova_sem_acao_humana(client, db_session, cadencia_e_decisor):
+    cadencia, decisor, _ = cadencia_e_decisor
+    resposta_regra = client.put("/api/v1/aprovacoes/regras/tpl-auto", json={"habilitada": True})
+    assert resposta_regra.status_code == 200
+    assert resposta_regra.json()["habilitada"] is True
+
+    _propor_mensagem(db_session, cadencia, decisor, template_id="tpl-auto")
+
+    item = client.get("/api/v1/aprovacoes").json()[0]
+    assert item["status"] == "aprovado"
+
+
+def test_log_distingue_aprovacao_automatica_de_manual(client, db_session, cadencia_e_decisor):
+    """E4-H4: log distingue aprovação manual de auto-aprovação por regra."""
+    from app.services import auditoria_service
+
+    cadencia, decisor, conta = cadencia_e_decisor
+    client.put("/api/v1/aprovacoes/regras/tpl-auto", json={"habilitada": True})
+    _propor_mensagem(db_session, cadencia, decisor, template_id="tpl-auto")
+    _propor_mensagem(db_session, cadencia, decisor, template_id="tpl-manual")
+    manual_id = [
+        item["aprovacao_id"] for item in client.get("/api/v1/aprovacoes").json() if item["template_id"] == "tpl-manual"
+    ][0]
+    client.post(f"/api/v1/aprovacoes/{manual_id}/aprovar")
+
+    logs = auditoria_service.consultar(db_session, TENANT_ID, conta_id=conta.id)
+    eventos = {log.evento_tipo for log in logs}
+
+    assert "aprovacao_automatica_por_regra" in eventos
+    assert "aprovacao_aprovada" in eventos

@@ -18,6 +18,7 @@ from app.providers.account_data.base import AccountDataProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.conta import (
     ContaSchema,
+    DescartarContaRequestSchema,
     EnriquecerContaResponseSchema,
     FranquiaSchema,
     GerarListaRequestSchema,
@@ -25,7 +26,7 @@ from app.schemas.conta import (
     GrafoContaResponseSchema,
 )
 from app.schemas.decisor import DecisorCreateSchema, DecisorSchema
-from app.services import conta_service, franquia_service
+from app.services import conta_service, descarte_service, franquia_service
 
 router = APIRouter(tags=["contas"])
 
@@ -107,6 +108,29 @@ def grafo_conta(
     graph: Neo4jClient = Depends(get_graph_client),
 ) -> GrafoContaResponseSchema:
     return GrafoContaResponseSchema(**conta_service.grafo(db, tenant_id, conta_id, graph))
+
+
+@router.post("/contas/{conta_id}/priorizar", response_model=ContaSchema)
+def priorizar_conta(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ContaSchema:
+    """Marca a conta como prioritária (E2-H4)."""
+    return descarte_service.priorizar(db, tenant_id, ator_id, conta_id)
+
+
+@router.post("/contas/{conta_id}/descartar", response_model=ContaSchema)
+def descartar_conta(
+    conta_id: int,
+    dados: DescartarContaRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ContaSchema:
+    """Marca a conta como descartada, com motivo obrigatório (E2-H4)."""
+    return descarte_service.descartar(db, tenant_id, ator_id, conta_id, dados.motivo)
 
 
 @router.get("/contas/{conta_id}/export/pdf")

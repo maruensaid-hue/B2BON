@@ -9,14 +9,16 @@ from app.models.cadencia import Cadencia
 from app.models.configuracao_qualificacao import ConfiguracaoQualificacao
 from app.models.conversa_qualificacao import ConversaQualificacao
 from app.models.decisor import Decisor
+from app.models.faq_item import FaqItem
 from app.models.mensagem import Mensagem
 from app.models.turno_conversa import TurnoConversa
 from app.providers.channels.whatsapp.base import WhatsAppProvider
-from app.services import auditoria_service, cadencia_service, notificacao_service, scoring_service
+from app.services import auditoria_service, cadencia_service, faq_service, notificacao_service, scoring_service
 from app.services.errors import NaoEncontrado
 
 _PREFIXO_CONTINUAR = "CONTINUAR:"
 _PREFIXO_TRANSFERIR = "TRANSFERIR:"
+_PREFIXO_FAQ = "FAQ:"
 
 
 def _limiar(db: Session, tenant_id: str) -> float:
@@ -83,18 +85,31 @@ def processar_mensagem_recebida(
     db.add(TurnoConversa(tenant_id=tenant_id, conversa_id=conversa.id, direcao="entrada", conteudo=texto))
     db.flush()
 
+    faqs = faq_service.listar(db, tenant_id)
+    bloco_faq = (
+        "\n\nPerguntas frequentes cadastradas (responda com o número exato se a mensagem do lead "
+        "corresponder a uma delas):\n" + "\n".join(f"{i + 1}. {item.pergunta}" for i, item in enumerate(faqs))
+        if faqs
+        else ""
+    )
+
     resposta = llm.generate(
         LLMRequest(
             prompt=(
                 "Você conduz uma qualificação de vendas pelo método S.H.A.R.K. "
                 f"Etapa atual do roteiro: '{conversa.etapa_atual}'. Responda SEMPRE começando com "
-                f"'{_PREFIXO_CONTINUAR}' seguido da próxima pergunta do roteiro, ou "
+                f"'{_PREFIXO_CONTINUAR}' seguido da próxima pergunta do roteiro, "
+                f"'{_PREFIXO_FAQ}' seguido do número da pergunta frequente correspondente, ou "
                 f"'{_PREFIXO_TRANSFERIR}' seguido do motivo, caso a mensagem do lead esteja fora do "
-                "roteiro de qualificação — nunca invente informação fora do roteiro.\n\n"
+                "roteiro e fora da base de perguntas frequentes — nunca invente informação fora do "
+                f"roteiro ou da base.{bloco_faq}\n\n"
                 f"Mensagem do lead: {texto}"
             )
         )
     )
+
+    if resposta.content.startswith(_PREFIXO_FAQ):
+        return _responder_faq(db, tenant_id, conversa, decisor, canal, resposta.content, faqs, whatsapp)
 
     pode_continuar = resposta.content.startswith(_PREFIXO_CONTINUAR) and conversa.etapa_atual != "concluida"
     if pode_continuar:
@@ -152,6 +167,7 @@ def _continuar_roteiro(
         "score_total": score.score_total,
         "transferido": False,
         "notificacao_id": notificacao_id,
+        "faq_respondida": False,
     }
 
 
@@ -194,6 +210,58 @@ def _transferir_para_humano(
         "score_total": None,
         "transferido": True,
         "notificacao_id": notificacao.id,
+        "faq_respondida": False,
+    }
+
+
+def _responder_faq(
+    db: Session,
+    tenant_id: str,
+    conversa: ConversaQualificacao,
+    decisor: Decisor,
+    canal: str,
+    conteudo_llm: str,
+    faqs: list[FaqItem],
+    whatsapp: WhatsAppProvider,
+) -> dict:
+    """Responde com o texto armazenado na base de FAQ — nunca com texto
+    gerado pelo LLM (E5-H4). Se o número referenciado não existir na base
+    carregada, cai no mesmo fail-safe de transferência do contrato
+    CONTINUAR:/TRANSFERIR: — nunca inventa."""
+    numero = conteudo_llm[len(_PREFIXO_FAQ) :].strip()
+    item = None
+    if numero.isdigit():
+        indice = int(numero) - 1
+        if 0 <= indice < len(faqs):
+            item = faqs[indice]
+
+    if item is None:
+        return _transferir_para_humano(
+            db, tenant_id, conversa, decisor, canal, "TRANSFERIR: pergunta não localizada na base de FAQ", whatsapp
+        )
+
+    db.add(TurnoConversa(tenant_id=tenant_id, conversa_id=conversa.id, direcao="saida", conteudo=item.resposta))
+
+    auditoria_service.registrar(
+        db,
+        tenant_id,
+        "faq_respondida",
+        "conversa_qualificacao",
+        conversa.id,
+        None,
+        {"faq_id": item.id},
+        conta_id=decisor.conta_id,
+        canal=canal,
+    )
+    db.commit()
+    return {
+        "conversa_id": conversa.id,
+        "status": conversa.status,
+        "etapa_atual": conversa.etapa_atual,
+        "score_total": None,
+        "transferido": False,
+        "notificacao_id": None,
+        "faq_respondida": True,
     }
 
 

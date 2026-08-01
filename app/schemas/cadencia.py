@@ -22,6 +22,7 @@ class ToqueCadenciaCreateSchema(BaseModel):
     canal: str
     intervalo_dias_apos_anterior: int = 0
     template_whatsapp_id: str | None = None
+    ab_teste_habilitado: bool = False
 
 
 class ToqueCadenciaSchema(BaseModel):
@@ -33,6 +34,7 @@ class ToqueCadenciaSchema(BaseModel):
     canal: str
     intervalo_dias_apos_anterior: int
     template_whatsapp_id: str | None
+    ab_teste_habilitado: bool
 
 
 class CadenciaCreateSchema(BaseModel):
@@ -54,3 +56,17 @@ class GerarCadenciaResponseSchema(BaseModel):
 class AtivarCadenciaResponseSchema(BaseModel):
     cadencia: CadenciaSchema
     franquia: dict
+
+
+class VarianteAbSchema(BaseModel):
+    total: int
+    respondentes: int
+    taxa_resposta: float
+
+
+class RelatorioAbTesteSchema(BaseModel):
+    variante_a: VarianteAbSchema
+    variante_b: VarianteAbSchema
+    z_score: float
+    significativo: bool
+    vencedora: str | None

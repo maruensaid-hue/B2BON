@@ -38,3 +38,16 @@ class RejeitarRequestSchema(BaseModel):
 
 class AprovarLoteRequestSchema(BaseModel):
     ids: list[int]
+
+
+class RegraAutoAprovacaoSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tenant_id: str
+    template_id: str
+    habilitada: bool
+
+
+class DefinirRegraAutoAprovacaoRequestSchema(BaseModel):
+    habilitada: bool

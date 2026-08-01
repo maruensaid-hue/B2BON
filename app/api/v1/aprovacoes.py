@@ -6,7 +6,9 @@ from app.schemas.aprovacao import (
     AprovacaoFilaItemSchema,
     AprovacaoSchema,
     AprovarLoteRequestSchema,
+    DefinirRegraAutoAprovacaoRequestSchema,
     EditarMensagemRequestSchema,
+    RegraAutoAprovacaoSchema,
     RejeitarRequestSchema,
 )
 from app.schemas.mensagem import MensagemSchema
@@ -68,3 +70,23 @@ def editar_mensagem(
     db: Session = Depends(get_db),
 ) -> MensagemSchema:
     return aprovacao_service.editar_mensagem(db, tenant_id, ator_id, aprovacao_id, dados.conteudo)
+
+
+@router.get("/regras", response_model=list[RegraAutoAprovacaoSchema])
+def listar_regras_auto_aprovacao(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[RegraAutoAprovacaoSchema]:
+    """Regras de auto-aprovação por template — opcionais, desligadas por padrão (E4-H4)."""
+    return aprovacao_service.listar_regras(db, tenant_id)
+
+
+@router.put("/regras/{template_id}", response_model=RegraAutoAprovacaoSchema)
+def definir_regra_auto_aprovacao(
+    template_id: str,
+    dados: DefinirRegraAutoAprovacaoRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> RegraAutoAprovacaoSchema:
+    return aprovacao_service.definir_regra(db, tenant_id, ator_id, template_id, dados.habilitada)
