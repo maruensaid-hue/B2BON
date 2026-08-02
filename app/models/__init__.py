@@ -1,3 +1,4 @@
+from app.models.alerta_detrator import AlertaDetrator
 from app.models.aprovacao import Aprovacao
 from app.models.auditoria import AuditLog
 from app.models.cadencia import Cadencia
@@ -8,6 +9,7 @@ from app.models.configuracao_canal import ConfiguracaoCanal
 from app.models.configuracao_comunicacao import ConfiguracaoComunicacao
 from app.models.configuracao_envio import ConfiguracaoEnvio
 from app.models.configuracao_notificacao import ConfiguracaoNotificacao
+from app.models.configuracao_nps import ConfiguracaoNps
 from app.models.configuracao_painel import ConfiguracaoPainel
 from app.models.configuracao_qualificacao import ConfiguracaoQualificacao
 from app.models.conversa_qualificacao import ConversaQualificacao
@@ -15,11 +17,13 @@ from app.models.decisor import Decisor
 from app.models.descarte_conta import DescarteConta
 from app.models.faq_item import FaqItem
 from app.models.icp import ICP
+from app.models.indicacao import Indicacao
 from app.models.material_oferta import MaterialOferta
 from app.models.mensagem import Mensagem
 from app.models.notificacao_vendedor import NotificacaoVendedor
 from app.models.oferta import Oferta
 from app.models.pausa_canal import PausaCanal
+from app.models.pesquisa_nps import PesquisaNps
 from app.models.qualificacao import QualificacaoScore
 from app.models.registro_envio_diario import RegistroEnvioDiario
 from app.models.registro_reputacao_canal import RegistroReputacaoCanal
@@ -43,6 +47,7 @@ __all__ = [
     "ConfiguracaoQualificacao",
     "ConfiguracaoNotificacao",
     "ConfiguracaoPainel",
+    "ConfiguracaoNps",
     "Conta",
     "CampoEnriquecido",
     "ContaFranquiaConsumo",
@@ -67,6 +72,9 @@ __all__ = [
     "NotificacaoVendedor",
     "Reuniao",
     "FaqItem",
+    "PesquisaNps",
+    "AlertaDetrator",
+    "Indicacao",
     "CnpjEstabelecimento",
     "CnpjSocio",
 ]

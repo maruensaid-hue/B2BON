@@ -13,9 +13,11 @@ from app.api.deps import (
     get_crm_provider,
     get_db,
     get_email_provider,
+    get_email_validation_provider,
     get_graph_client,
     get_llm_provider,
     get_plan_limits_provider,
+    get_rede_social_provider,
     get_site_fetcher,
     get_whatsapp_provider,
 )
@@ -26,7 +28,9 @@ from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.providers.calendar.stub import StubCalendarProvider
 from app.providers.crm.stub import StubCrmProvider
+from app.providers.email_validation.stub import StubEmailVerificationProvider
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
+from app.providers.rede_social.stub import StubRedeSocialProvider
 from tests.fakes import (
     FakeAccountDataProvider,
     FakeEmailProvider,
@@ -112,6 +116,16 @@ def fake_crm() -> StubCrmProvider:
 
 
 @pytest.fixture()
+def fake_rede_social() -> StubRedeSocialProvider:
+    return StubRedeSocialProvider()
+
+
+@pytest.fixture()
+def fake_email_validacao() -> StubEmailVerificationProvider:
+    return StubEmailVerificationProvider()
+
+
+@pytest.fixture()
 def client(
     db_session: Session,
     fake_graph: FakeGraphClient,
@@ -123,6 +137,8 @@ def client(
     fake_email: FakeEmailProvider,
     fake_calendar: StubCalendarProvider,
     fake_crm: StubCrmProvider,
+    fake_rede_social: StubRedeSocialProvider,
+    fake_email_validacao: StubEmailVerificationProvider,
 ) -> Generator[TestClient, None, None]:
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session
@@ -137,6 +153,8 @@ def client(
     app.dependency_overrides[get_email_provider] = lambda: fake_email
     app.dependency_overrides[get_calendar_provider] = lambda: fake_calendar
     app.dependency_overrides[get_crm_provider] = lambda: fake_crm
+    app.dependency_overrides[get_rede_social_provider] = lambda: fake_rede_social
+    app.dependency_overrides[get_email_validation_provider] = lambda: fake_email_validacao
 
     with TestClient(app) as test_client:
         test_client.headers.update({"X-Tenant-Id": TENANT_ID, "X-User-Id": ATOR_ID})

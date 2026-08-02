@@ -21,8 +21,12 @@ from app.providers.channels.whatsapp.meta import MetaWhatsAppProvider
 from app.providers.channels.whatsapp.stub import StubWhatsAppProvider
 from app.providers.crm.base import CrmProvider
 from app.providers.crm.stub import StubCrmProvider
+from app.providers.email_validation.base import EmailVerificationProvider
+from app.providers.email_validation.stub import StubEmailVerificationProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
+from app.providers.rede_social.base import RedeSocialProvider
+from app.providers.rede_social.stub import StubRedeSocialProvider
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -80,6 +84,20 @@ def get_crm_provider() -> CrmProvider:
     # oportunidades. Até lá, todo ambiente (dev e testes) usa o stub — CRM é
     # dado do núcleo, mesma regra de fronteira do PlanLimitsProvider.
     return StubCrmProvider()
+
+
+def get_rede_social_provider() -> RedeSocialProvider:
+    # CoreApiRedeSocialProvider entra aqui quando o núcleo expuser a API da
+    # Rede Social B2B. Até lá, todo ambiente (dev e testes) usa o stub — é
+    # dado do núcleo, mesma regra de fronteira do CrmProvider.
+    return StubRedeSocialProvider()
+
+
+def get_email_validation_provider() -> EmailVerificationProvider:
+    # ExternalEmailVerificationProvider entra aqui quando uma integração
+    # real de verificação de e-mail for contratada. Até lá, todo ambiente
+    # usa o stub (checagem de sintaxe + domínios conhecidos).
+    return StubEmailVerificationProvider()
 
 
 def get_tenant_id(x_tenant_id: str = Header(..., alias="X-Tenant-Id")) -> str:

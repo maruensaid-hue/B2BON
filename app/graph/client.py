@@ -62,6 +62,26 @@ class Neo4jClient:
             },
         )
 
+    def registrar_indicacao(
+        self, tenant_id: str, promotor_decisor_id: int, indicado_conta_id: int, oportunidade_id: str | None = None
+    ) -> None:
+        """Aresta de indicação — promotor (Decisor) -> indicado (Conta),
+        e indicado -> Oportunidade quando já existe negócio (E11-H3)."""
+        self.run_query(
+            "MERGE (p:Decisor {id: $promotor_id, tenant_id: $tenant_id}) "
+            "MERGE (i:Conta {id: $indicado_id, tenant_id: $tenant_id}) "
+            "MERGE (p)-[:INDICOU]->(i)",
+            {"promotor_id": promotor_decisor_id, "indicado_id": indicado_conta_id, "tenant_id": tenant_id},
+        )
+        if oportunidade_id is None:
+            return
+        self.run_query(
+            "MERGE (i:Conta {id: $indicado_id, tenant_id: $tenant_id}) "
+            "MERGE (o:Oportunidade {id: $oportunidade_id, tenant_id: $tenant_id}) "
+            "MERGE (i)-[:GEROU_OPORTUNIDADE]->(o)",
+            {"indicado_id": indicado_conta_id, "oportunidade_id": oportunidade_id, "tenant_id": tenant_id},
+        )
+
     def grafo_da_conta(self, tenant_id: str, conta_id: int) -> dict:
         registros = self.run_query(
             "MATCH (c:Conta {id: $conta_id, tenant_id: $tenant_id}) "

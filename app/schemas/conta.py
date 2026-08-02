@@ -19,6 +19,8 @@ class ContaSchema(BaseModel):
     status: str
     motivo_descarte: str | None
     origem: str | None
+    nps_classificacao: str | None
+    nps_nota: int | None
     neo4j_node_id: str | None
     criado_em: datetime
     atualizado_em: datetime

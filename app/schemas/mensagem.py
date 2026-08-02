@@ -8,7 +8,7 @@ class MensagemSchema(BaseModel):
 
     id: int
     tenant_id: str
-    cadencia_id: int
+    cadencia_id: int | None
     decisor_id: int
     toque_cadencia_id: int | None
     canal: str

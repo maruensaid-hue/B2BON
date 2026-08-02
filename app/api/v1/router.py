@@ -12,8 +12,10 @@ from app.api.v1.decisores import router as decisores_router
 from app.api.v1.envios import router as envios_router
 from app.api.v1.faq import router as faq_router
 from app.api.v1.icp import router as icp_router
+from app.api.v1.indicacoes import router as indicacoes_router
 from app.api.v1.linkedin import router as linkedin_router
 from app.api.v1.notificacoes import router as notificacoes_router
+from app.api.v1.nps import router as nps_router
 from app.api.v1.ofertas import router as oferta_router
 from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.optout import router as optout_router
@@ -51,3 +53,5 @@ router.include_router(reunioes_router)
 router.include_router(titulares_router)
 router.include_router(faq_router)
 router.include_router(painel_router)
+router.include_router(nps_router)
+router.include_router(indicacoes_router)

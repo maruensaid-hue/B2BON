@@ -7,9 +7,11 @@ from app.api.deps import (
     get_crm_provider,
     get_db,
     get_email_provider,
+    get_graph_client,
     get_tenant_id,
     get_whatsapp_provider,
 )
+from app.graph.client import Neo4jClient
 from app.providers.calendar.base import CalendarProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
@@ -52,9 +54,10 @@ def reagendar(
     db: Session = Depends(get_db),
     calendar: CalendarProvider = Depends(get_calendar_provider),
     crm: CrmProvider = Depends(get_crm_provider),
+    graph: Neo4jClient = Depends(get_graph_client),
 ) -> ReuniaoSchema:
     """Reagendamento pelo próprio lead — endpoint público, sem X-Tenant-Id (E6-H1)."""
-    return reuniao_service.reagendar_por_token(db, token, dados.novo_horario, calendar, crm)
+    return reuniao_service.reagendar_por_token(db, token, dados.novo_horario, calendar, crm, graph)
 
 
 @router.post("/{reuniao_id}/confirmar", response_model=ReuniaoSchema)
@@ -66,9 +69,12 @@ def confirmar(
     db: Session = Depends(get_db),
     calendar: CalendarProvider = Depends(get_calendar_provider),
     crm: CrmProvider = Depends(get_crm_provider),
+    graph: Neo4jClient = Depends(get_graph_client),
 ) -> ReuniaoSchema:
     """Nenhuma reunião do motor sem registro automático no CRM (E6-H2)."""
-    return reuniao_service.confirmar(db, tenant_id, ator_id, reuniao_id, dados.horario_escolhido, calendar, crm)
+    return reuniao_service.confirmar(
+        db, tenant_id, ator_id, reuniao_id, dados.horario_escolhido, calendar, crm, graph
+    )
 
 
 @router.post("/{reuniao_id}/marcar-resultado", response_model=ReuniaoSchema)

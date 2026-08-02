@@ -56,6 +56,28 @@ class FakeGraphClient:
         }
         self.arestas.append({"origem": f"decisor:{decisor_id}", "destino": chave, "tipo": "INTERAGIU_COM"})
 
+    def registrar_indicacao(
+        self, tenant_id: str, promotor_decisor_id: int, indicado_conta_id: int, oportunidade_id: str | None = None
+    ) -> None:
+        chave_promotor = f"decisor:{promotor_decisor_id}"
+        chave_indicado = f"conta:{indicado_conta_id}"
+        self.nos.setdefault(
+            chave_promotor, {"id": chave_promotor, "tipo": "Decisor", "propriedades": {"id": promotor_decisor_id}}
+        )
+        self.nos.setdefault(
+            chave_indicado, {"id": chave_indicado, "tipo": "Conta", "propriedades": {"id": indicado_conta_id}}
+        )
+        self.arestas.append({"origem": chave_promotor, "destino": chave_indicado, "tipo": "INDICOU"})
+
+        if oportunidade_id is None:
+            return
+        chave_oportunidade = f"oportunidade:{oportunidade_id}"
+        self.nos.setdefault(
+            chave_oportunidade,
+            {"id": chave_oportunidade, "tipo": "Oportunidade", "propriedades": {"id": oportunidade_id}},
+        )
+        self.arestas.append({"origem": chave_indicado, "destino": chave_oportunidade, "tipo": "GEROU_OPORTUNIDADE"})
+
     def grafo_da_conta(self, tenant_id: str, conta_id: int) -> dict:
         chave_conta = f"conta:{conta_id}"
         nos_relevantes: dict[str, dict] = {}

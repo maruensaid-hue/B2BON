@@ -13,6 +13,7 @@ from app.models.qualificacao import QualificacaoScore
 from app.models.reuniao import Reuniao
 
 _PERIODO_PADRAO_DIAS = 30
+ALERTA_BAIXO_USO_LIMIAR = 0.5
 
 
 def _mes_anterior(mes: str) -> str:
@@ -73,6 +74,50 @@ def metrica_norte(db: Session, tenant_id: str, mes: str | None = None) -> dict:
         "valor_mes_anterior": valor_mes_anterior,
         "variacao_percentual": variacao_percentual,
     }
+
+
+def ranking_assinantes(db: Session) -> list[dict]:
+    """Ranking de assinantes por atingimento da métrica-norte, com alerta
+    de baixo uso — visão cross-tenant do Admin B2B ON, sem `X-Tenant-Id`
+    (E8-H3).
+
+    Retorna só campos agregados (`tenant_id`, valor, meta, atingimento,
+    alerta) — nenhum dado de conta/decisor/mensagem atravessa esta função,
+    o que torna o isolamento entre assinantes estrutural, verificável por
+    teste, não apenas convencional.
+    """
+    tenant_ids = {tid for (tid,) in db.query(Conta.tenant_id).distinct().all()}
+    tenant_ids |= {tid for (tid,) in db.query(ConfiguracaoPainel.tenant_id).distinct().all()}
+
+    ranking = []
+    for tenant_id in sorted(tenant_ids):
+        dados = metrica_norte(db, tenant_id)
+        meta = dados["meta"]
+        atingimento = dados["valor_mes_atual"] / meta if meta else None
+        alerta_baixo_uso = meta is not None and (atingimento is None or atingimento < ALERTA_BAIXO_USO_LIMIAR)
+        ranking.append(
+            {
+                "tenant_id": tenant_id,
+                "valor_mes_atual": dados["valor_mes_atual"],
+                "meta": meta,
+                "atingimento": atingimento,
+                "alerta_baixo_uso": alerta_baixo_uso,
+            }
+        )
+
+    ranking.sort(key=lambda item: (item["atingimento"] is None, -(item["atingimento"] or 0)))
+    return ranking
+
+
+def distribuicao_nps(db: Session, tenant_id: str) -> dict:
+    """Distribuição promotor/neutro/detrator, visível no painel (E11-H1)."""
+    contas = (
+        db.query(Conta).filter(Conta.tenant_id == tenant_id, Conta.nps_classificacao.isnot(None)).all()
+    )
+    resultado = {"promotor": 0, "neutro": 0, "detrator": 0}
+    for conta in contas:
+        resultado[conta.nps_classificacao] += 1
+    return resultado
 
 
 def periodo_padrao(data_inicio: date | None, data_fim: date | None) -> tuple[date, date]:
@@ -188,10 +233,10 @@ def indicadores_atrito(db: Session, tenant_id: str, data_inicio: date | None, da
 def origem_oportunidade(db: Session, tenant_id: str) -> dict:
     """Prospecção ativa vs. indicação (E8-H2).
 
-    A rede de indicações (E11) é pós-MVP: hoje toda `Conta` nasce de
-    prospecção ativa (`conta_service.gerar_lista`). A classificação já é
-    estrutural — quando E11 gravar `Conta.origem="indicacao"`, esta função
-    passa a contá-las corretamente sem alteração de código.
+    Contas nascidas de prospecção ativa (`conta_service.gerar_lista`) nunca
+    setam `origem`; `indicacao_service.converter` (E11-H3) grava
+    `Conta.origem = "indicacao"` quando a indicação vira negócio — esta
+    função já foi desenhada para ler isso sem alteração de código.
     """
     contas = db.query(Conta).filter_by(tenant_id=tenant_id).all()
     resultado = {"prospeccao_ativa": 0, "indicacao": 0}

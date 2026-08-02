@@ -11,7 +11,9 @@ class Mensagem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, index=True)
-    cadencia_id: Mapped[int] = mapped_column(ForeignKey("cadencia.id"))
+    # Nullable: pedidos de indicação (E11-H2) são mensagens avulsas, fora
+    # do conceito de cadência multicanal.
+    cadencia_id: Mapped[int | None] = mapped_column(ForeignKey("cadencia.id"), nullable=True)
     decisor_id: Mapped[int] = mapped_column(ForeignKey("decisor.id"))
     # Rastreia de qual toque do blueprint esta mensagem veio — usado na
     # ativação da cadência para calcular agendado_para (ordem/intervalo).

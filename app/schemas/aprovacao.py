@@ -22,7 +22,7 @@ class AprovacaoFilaItemSchema(BaseModel):
     canal: str
     template_id: str | None
     conteudo: str
-    cadencia_id: int
+    cadencia_id: int | None
     conta_id: int
     decisor_id: int
     criado_em: datetime

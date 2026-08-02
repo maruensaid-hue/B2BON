@@ -17,17 +17,23 @@ _PADRAO_VARIAVEL = re.compile(r"\{\{(\w+)\}\}")
 def criar_proposta(
     db: Session,
     tenant_id: str,
-    cadencia_id: int,
+    cadencia_id: int | None,
     decisor_id: int,
     canal: str,
     template_id: str | None,
     conteudo: str,
     toque_cadencia_id: int | None = None,
     variante_ab: str | None = None,
+    agendado_para: datetime | None = None,
 ) -> Mensagem:
     """Cria uma mensagem proposta e a correspondente entrada na fila.
 
     Chamada pelo `cadencia_service` (E3-H1) para cada toque personalizado.
+    `cadencia_id=None` e `agendado_para` são usados por mensagens avulsas
+    fora do conceito de cadência multicanal, como o pedido de indicação
+    (E11-H2) — `agendado_para` já preenchido torna a mensagem elegível ao
+    dispatcher `envio_service.processar_pendentes` assim que aprovada, sem
+    depender de ativação de cadência.
     """
     mensagem = Mensagem(
         tenant_id=tenant_id,
@@ -38,6 +44,7 @@ def criar_proposta(
         conteudo=conteudo,
         toque_cadencia_id=toque_cadencia_id,
         variante_ab=variante_ab,
+        agendado_para=agendado_para,
         status="aguardando_aprovacao",
     )
     db.add(mensagem)

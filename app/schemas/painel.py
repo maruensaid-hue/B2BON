@@ -34,3 +34,14 @@ class IndicadoresResponseSchema(BaseModel):
     periodo_fim: str
     energia: IndicadoresEnergiaSchema
     atrito: IndicadoresAtritoSchema
+
+
+class RankingAssinanteSchema(BaseModel):
+    """Só campos agregados — nenhum dado de conta/decisor/mensagem do
+    assinante (isolamento multi-tenant do E8-H3, verificado por teste)."""
+
+    tenant_id: str
+    valor_mes_atual: int
+    meta: int | None
+    atingimento: float | None
+    alerta_baixo_uso: bool

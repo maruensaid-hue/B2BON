@@ -8,6 +8,7 @@ from app.models.mensagem import Mensagem
 from app.models.tarefa_linkedin import TarefaLinkedin
 from app.providers.channels.email.base import EmailProvider, ResultadoEnvio
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.providers.email_validation.base import EmailVerificationProvider
 from app.services import aprovacao_service, auditoria_service, optout_service, rampa_service, reputacao_service
 from app.services.errors import RegraNegocioViolada
 
@@ -53,6 +54,7 @@ def processar_pendentes(
     tenant_id: str,
     whatsapp: WhatsAppProvider,
     email: EmailProvider,
+    email_validation: EmailVerificationProvider,
 ) -> dict:
     """Dispatcher explícito, chamado por cron externo — a arquitetura de
     referência não define fila de jobs; manter isto síncrono e idempotente
@@ -77,7 +79,13 @@ def processar_pendentes(
         .all()
     )
 
-    resultado = {"enviadas": 0, "falhas": 0, "adiadas": 0, "tarefas_linkedin_criadas": 0}
+    resultado = {
+        "enviadas": 0,
+        "falhas": 0,
+        "adiadas": 0,
+        "tarefas_linkedin_criadas": 0,
+        "descartadas_email_invalido": 0,
+    }
 
     for mensagem in candidatas:
         decisor = db.query(Decisor).filter_by(id=mensagem.decisor_id).one()
@@ -104,6 +112,27 @@ def processar_pendentes(
         if mensagem.canal == "email" and not _dentro_da_janela_dias_uteis_e_horario(config):
             resultado["adiadas"] += 1
             continue
+
+        if mensagem.canal == "email":
+            # Verificação prévia de existência do e-mail — descarte
+            # definitivo, não falha/retry nem adiamento (E10-H3).
+            verificacao = email_validation.verificar(decisor.email)
+            if not verificacao.valido:
+                mensagem.status = "cancelado"
+                mensagem.motivo_falha = verificacao.motivo
+                auditoria_service.registrar(
+                    db,
+                    tenant_id,
+                    "email_invalido_descartado",
+                    "mensagem",
+                    mensagem.id,
+                    None,
+                    {"motivo": verificacao.motivo},
+                    conta_id=decisor.conta_id,
+                    canal=mensagem.canal,
+                )
+                resultado["descartadas_email_invalido"] += 1
+                continue
 
         if reputacao_service.canal_pausado(db, tenant_id, mensagem.canal):
             # Pausa automática por degradação de reputação (E10-H2) — adia,

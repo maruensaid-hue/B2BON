@@ -1,12 +1,23 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_calendar_provider, get_db, get_llm_provider, get_tenant_id
+from app.api.deps import (
+    get_ator_id,
+    get_calendar_provider,
+    get_db,
+    get_email_provider,
+    get_llm_provider,
+    get_tenant_id,
+    get_whatsapp_provider,
+)
 from app.llm.base import LLMProvider
 from app.providers.calendar.base import CalendarProvider
+from app.providers.channels.email.base import EmailProvider
+from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.schemas.conversa import DevolverLeadRequestSchema
+from app.schemas.nps import PesquisaNpsSchema
 from app.schemas.reuniao import ProporHorariosRequestSchema, ReuniaoSchema
-from app.services import qualificacao_service, reuniao_service
+from app.services import nps_service, qualificacao_service, reuniao_service
 
 router = APIRouter(prefix="/decisores", tags=["decisores"])
 
@@ -38,3 +49,16 @@ def devolver_lead(
     return qualificacao_service.devolver(
         db, tenant_id, ator_id, decisor_id, dados.motivo, dados.cadencia_nutricao_id, llm
     )
+
+
+@router.post("/{decisor_id}/marco-entrega", response_model=PesquisaNpsSchema, status_code=201)
+def marcar_entrega_concluida(
+    decisor_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+    whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
+    email: EmailProvider = Depends(get_email_provider),
+) -> PesquisaNpsSchema:
+    """Marco manual "entrega concluída" — dispara NPS imediatamente (E11-H1)."""
+    return nps_service.marcar_entrega_concluida(db, tenant_id, ator_id, decisor_id, whatsapp, email)

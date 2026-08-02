@@ -4,11 +4,13 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_tenant_id
+from app.schemas.nps import DistribuicaoNpsSchema
 from app.schemas.painel import (
     ConfiguracaoPainelSchema,
     ConfiguracaoPainelUpsertSchema,
     IndicadoresResponseSchema,
     MetricaNorteSchema,
+    RankingAssinanteSchema,
 )
 from app.services import panel_service
 
@@ -69,3 +71,19 @@ def exportar_indicadores_csv(
 ) -> Response:
     conteudo = panel_service.exportar_csv(db, tenant_id, data_inicio, data_fim)
     return Response(content=conteudo, media_type="text/csv")
+
+
+@router.get("/nps", response_model=DistribuicaoNpsSchema)
+def distribuicao_nps(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> DistribuicaoNpsSchema:
+    """Classificação promotor/neutro/detrator visível no painel (E11-H1)."""
+    return DistribuicaoNpsSchema(**panel_service.distribuicao_nps(db, tenant_id))
+
+
+@router.get("/admin/ranking", response_model=list[RankingAssinanteSchema])
+def ranking_assinantes(db: Session = Depends(get_db)) -> list[RankingAssinanteSchema]:
+    """Visão agregada cross-tenant do Admin B2B ON — sem X-Tenant-Id, mesmo
+    espírito de `TENANT_PLATAFORMA` na auditoria (E8-H3)."""
+    return panel_service.ranking_assinantes(db)

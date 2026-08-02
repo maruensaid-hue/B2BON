@@ -5,8 +5,10 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.graph.client import Neo4jClient
 from app.models.conta import Conta
 from app.models.decisor import Decisor
+from app.models.indicacao import Indicacao
 from app.models.reuniao import Reuniao
 from app.providers.calendar.base import CalendarProvider
 from app.providers.channels.email.base import EmailProvider
@@ -108,6 +110,7 @@ def _confirmar_interno(
     horario_escolhido: datetime,
     calendar: CalendarProvider,
     crm: CrmProvider,
+    graph: Neo4jClient,
 ) -> Reuniao:
     conta = db.query(Conta).filter_by(id=reuniao.conta_id).one()
     decisor = db.query(Decisor).filter_by(id=reuniao.decisor_id).one()
@@ -141,6 +144,23 @@ def _confirmar_interno(
     reuniao.origem_calendario_id = evento.id_externo
     reuniao.origem_crm_id = oportunidade_id
 
+    # Fecha a cadeia promotor -> indicado -> oportunidade no grafo, se esta
+    # conta veio de uma indicação (E11-H3) — gancho automático, sem ação
+    # manual duplicada.
+    indicacao = db.query(Indicacao).filter_by(tenant_id=tenant_id, conta_gerada_id=conta.id).one_or_none()
+    if indicacao is not None:
+        graph.registrar_indicacao(tenant_id, indicacao.promotor_decisor_id, conta.id, oportunidade_id=oportunidade_id)
+        auditoria_service.registrar(
+            db,
+            tenant_id,
+            "indicacao_vinculada_a_oportunidade",
+            "indicacao",
+            indicacao.id,
+            ator_id,
+            {"oportunidade_id": oportunidade_id},
+            conta_id=conta.id,
+        )
+
     auditoria_service.registrar(
         db,
         tenant_id,
@@ -164,6 +184,7 @@ def confirmar(
     horario_escolhido: datetime,
     calendar: CalendarProvider,
     crm: CrmProvider,
+    graph: Neo4jClient,
 ) -> Reuniao:
     """Convite enviado com confirmação rastreada (E6-H1); oportunidade
     criada no ato do agendamento, sem ação humana (E6-H2)."""
@@ -175,11 +196,11 @@ def confirmar(
     if horario_escolhido not in propostos:
         raise ValidacaoFalhou("Horário escolhido não está entre os propostos.")
 
-    return _confirmar_interno(db, tenant_id, ator_id, reuniao, horario_escolhido, calendar, crm)
+    return _confirmar_interno(db, tenant_id, ator_id, reuniao, horario_escolhido, calendar, crm, graph)
 
 
 def reagendar_por_token(
-    db: Session, token: str, novo_horario: datetime, calendar: CalendarProvider, crm: CrmProvider
+    db: Session, token: str, novo_horario: datetime, calendar: CalendarProvider, crm: CrmProvider, graph: Neo4jClient
 ) -> Reuniao:
     """Reagendamento pelo próprio lead (E6-H1) — endpoint público, o lead
     não é usuário autenticado (mesmo padrão do token de opt-out)."""
@@ -204,7 +225,7 @@ def reagendar_por_token(
     db.add(nova_reuniao)
     db.flush()
 
-    nova_reuniao = _confirmar_interno(db, tenant_id, None, nova_reuniao, novo_horario, calendar, crm)
+    nova_reuniao = _confirmar_interno(db, tenant_id, None, nova_reuniao, novo_horario, calendar, crm, graph)
 
     auditoria_service.registrar(
         db,
