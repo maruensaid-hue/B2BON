@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_tenant_id
+from app.api.deps import exigir_papel, get_db, get_tenant_id
 from app.schemas.nps import DistribuicaoNpsSchema
 from app.schemas.painel import (
     ConfiguracaoPainelSchema,
@@ -82,8 +82,13 @@ def distribuicao_nps(
     return DistribuicaoNpsSchema(**panel_service.distribuicao_nps(db, tenant_id))
 
 
-@router.get("/admin/ranking", response_model=list[RankingAssinanteSchema])
+@router.get(
+    "/admin/ranking",
+    response_model=list[RankingAssinanteSchema],
+    dependencies=[Depends(exigir_papel("super_admin"))],
+)
 def ranking_assinantes(db: Session = Depends(get_db)) -> list[RankingAssinanteSchema]:
-    """Visão agregada cross-tenant do Admin B2B ON — sem X-Tenant-Id, mesmo
-    espírito de `TENANT_PLATAFORMA` na auditoria (E8-H3)."""
+    """Visão agregada cross-tenant — só super_admin (E8-H3, protegida de
+    verdade a partir da Onda A; antes da autenticação real este endpoint
+    não tinha como ser protegido)."""
     return panel_service.ranking_assinantes(db)

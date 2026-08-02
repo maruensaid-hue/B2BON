@@ -7,6 +7,7 @@ from app.models.icp import ICP
 from app.services import aprovacao_service
 
 TENANT_ID = "tenant-teste"
+ATOR_ID = "1"  # Onda A: id do usuário de teste padrão da fixture `client`
 
 
 @pytest.fixture()
@@ -58,7 +59,7 @@ def test_aprovar_item_da_fila(client, db_session, cadencia_e_decisor):
 
     assert resposta.status_code == 200
     assert resposta.json()["status"] == "aprovado"
-    assert resposta.json()["aprovador_id"] == "user-teste"
+    assert resposta.json()["aprovador_id"] == ATOR_ID
 
 
 def test_rejeitar_item_da_fila(client, db_session, cadencia_e_decisor):

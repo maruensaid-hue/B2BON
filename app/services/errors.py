@@ -12,3 +12,11 @@ class RegraNegocioViolada(ErroServico):
 
 class ValidacaoFalhou(ErroServico):
     """Mapeado para 422 — entrada estruturalmente válida, mas semanticamente inválida."""
+
+
+class NaoAutenticado(ErroServico):
+    """Mapeado para 401 — token ausente/inválido ou credenciais incorretas (Onda A)."""
+
+
+class NaoAutorizado(ErroServico):
+    """Mapeado para 403 — usuário autenticado, mas sem papel suficiente (Onda A)."""

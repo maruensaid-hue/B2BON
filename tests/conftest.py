@@ -26,11 +26,13 @@ from app.db.base import Base
 from app.main import app
 from app.models.conta import Conta
 from app.models.decisor import Decisor
+from app.models.usuario import Usuario
 from app.providers.calendar.stub import StubCalendarProvider
 from app.providers.crm.stub import StubCrmProvider
 from app.providers.email_validation.stub import StubEmailVerificationProvider
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.providers.rede_social.stub import StubRedeSocialProvider
+from app.services import auth_service
 from tests.fakes import (
     FakeAccountDataProvider,
     FakeEmailProvider,
@@ -40,7 +42,10 @@ from tests.fakes import (
 )
 
 TENANT_ID = "tenant-teste"
-ATOR_ID = "user-teste"
+# Onda A: autenticação real — o usuário de teste padrão é sempre o primeiro
+# registro numa base em memória nova, então seu id (convertido para string
+# por get_ator_id) é sempre "1", de forma determinística por teste.
+ATOR_ID = "1"
 
 
 @pytest.fixture(autouse=True)
@@ -156,10 +161,44 @@ def client(
     app.dependency_overrides[get_rede_social_provider] = lambda: fake_rede_social
     app.dependency_overrides[get_email_validation_provider] = lambda: fake_email_validacao
 
+    usuario_teste = Usuario(
+        tenant_id=TENANT_ID,
+        nome="Usuário Teste",
+        email="teste@tenant-teste.com.br",
+        papel="super_admin",
+        ativo=True,
+    )
+    db_session.add(usuario_teste)
+    db_session.commit()
+    token = auth_service.gerar_token(usuario_teste)
+
     with TestClient(app) as test_client:
-        test_client.headers.update({"X-Tenant-Id": TENANT_ID, "X-User-Id": ATOR_ID})
+        test_client.headers.update({"Authorization": f"Bearer {token}"})
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def criar_usuario_autenticado(db_session: Session):
+    """Cria um usuário (de um tenant qualquer) e devolve os headers de
+    autenticação prontos — usado por testes que precisam de um segundo
+    tenant além do padrão da fixture `client` (ex.: isolamento multi-tenant
+    do E8-H3)."""
+
+    def _criar(tenant_id: str, papel: str = "admin", email: str | None = None) -> dict[str, str]:
+        usuario = Usuario(
+            tenant_id=tenant_id,
+            nome=f"Usuário {tenant_id}",
+            email=email or f"user@{tenant_id}.com.br",
+            papel=papel,
+            ativo=True,
+        )
+        db_session.add(usuario)
+        db_session.commit()
+        token = auth_service.gerar_token(usuario)
+        return {"Authorization": f"Bearer {token}"}
+
+    return _criar
 
 
 @pytest.fixture()

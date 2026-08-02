@@ -8,6 +8,7 @@ from app.graph.client import Neo4jClient
 from app.core.config import settings
 from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.claude_provider import ClaudeProvider
+from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.account_data.receita_federal import ReceitaFederalCNPJProvider
 from app.providers.calendar.base import CalendarProvider
@@ -24,9 +25,11 @@ from app.providers.crm.stub import StubCrmProvider
 from app.providers.email_validation.base import EmailVerificationProvider
 from app.providers.email_validation.stub import StubEmailVerificationProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
-from app.providers.plan_limits.stub import StubPlanLimitsProvider
+from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
 from app.providers.rede_social.base import RedeSocialProvider
 from app.providers.rede_social.stub import StubRedeSocialProvider
+from app.services import auth_service
+from app.services.errors import NaoAutenticado, NaoAutorizado
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -53,10 +56,11 @@ def get_account_data_provider(db: Session = Depends(get_db)) -> AccountDataProvi
     return ReceitaFederalCNPJProvider(db)
 
 
-def get_plan_limits_provider() -> PlanLimitsProvider:
-    # CoreApiPlanLimitsProvider entra aqui quando a integração com o núcleo
-    # existir (Seção 11 da especificação). Até lá, todo ambiente usa o stub.
-    return StubPlanLimitsProvider()
+def get_plan_limits_provider(db: Session = Depends(get_db)) -> PlanLimitsProvider:
+    # Onda A: porta implementada de verdade — licença/plano nascem no
+    # próprio núcleo (mesma base do PREDATOR). StubPlanLimitsProvider
+    # continua existindo só para os testes (dependency override).
+    return NucleoPlanLimitsProvider(db)
 
 
 def get_whatsapp_provider() -> WhatsAppProvider:
@@ -100,14 +104,36 @@ def get_email_validation_provider() -> EmailVerificationProvider:
     return StubEmailVerificationProvider()
 
 
-def get_tenant_id(x_tenant_id: str = Header(..., alias="X-Tenant-Id")) -> str:
-    """Identidade do assinante — propagada pelo núcleo B2B ON via gateway.
+def get_usuario_atual(
+    authorization: str = Header(..., alias="Authorization"),
+    db: Session = Depends(get_db),
+) -> Usuario:
+    """Usuário autenticado por JWT (Onda A) — substitui o antigo trust cru
+    dos headers X-Tenant-Id/X-User-Id, fechando o risco já documentado no
+    manual técnico do PREDATOR."""
+    if not authorization.startswith("Bearer "):
+        raise NaoAutenticado("Cabeçalho Authorization deve ser 'Bearer <token>'.")
+    token = authorization[len("Bearer ") :]
+    return auth_service.validar_token(db, token)
 
-    Placeholder até a integração real de autenticação existir.
-    """
-    return x_tenant_id
+
+def get_tenant_id(usuario: Usuario = Depends(get_usuario_atual)) -> str:
+    """Identidade do assinante — derivada do usuário autenticado (Onda A)."""
+    return usuario.tenant_id
 
 
-def get_ator_id(x_user_id: str | None = Header(None, alias="X-User-Id")) -> str | None:
+def get_ator_id(usuario: Usuario = Depends(get_usuario_atual)) -> str | None:
     """Usuário humano que está agindo — usado para atribuição na auditoria."""
-    return x_user_id
+    return str(usuario.id)
+
+
+def exigir_papel(*papeis: str):
+    """Dependency factory para proteger rotas administrativas por papel
+    (ex.: Depends(exigir_papel("super_admin"))) — Onda A."""
+
+    def _dependencia(usuario: Usuario = Depends(get_usuario_atual)) -> Usuario:
+        if usuario.papel not in papeis:
+            raise NaoAutorizado("Você não tem permissão para executar esta ação.")
+        return usuario
+
+    return _dependencia

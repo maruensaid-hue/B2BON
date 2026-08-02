@@ -1,12 +1,15 @@
 from fastapi import APIRouter
 
+from app.api.v1.admin_tenants import router as admin_tenants_router
 from app.api.v1.aprovacoes import router as aprovacoes_router
 from app.api.v1.auditoria import router as auditoria_router
+from app.api.v1.auth import router as auth_router
 from app.api.v1.cadencias import router as cadencias_router
 from app.api.v1.canais import router as canais_router
 from app.api.v1.comunicacao import router as comunicacao_router
 from app.api.v1.configuracao_envio import router as configuracao_envio_router
 from app.api.v1.contas import router as contas_router
+from app.api.v1.convites import router as convites_router
 from app.api.v1.conversas import router as conversas_router
 from app.api.v1.decisores import router as decisores_router
 from app.api.v1.envios import router as envios_router
@@ -20,6 +23,7 @@ from app.api.v1.ofertas import router as oferta_router
 from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.optout import router as optout_router
 from app.api.v1.painel import router as painel_router
+from app.api.v1.planos import router as planos_router
 from app.api.v1.qualificacao import router as qualificacao_router
 from app.api.v1.reunioes import router as reunioes_router
 from app.api.v1.ropa import router as ropa_router
@@ -55,3 +59,7 @@ router.include_router(faq_router)
 router.include_router(painel_router)
 router.include_router(nps_router)
 router.include_router(indicacoes_router)
+router.include_router(auth_router)
+router.include_router(convites_router)
+router.include_router(planos_router)
+router.include_router(admin_tenants_router)

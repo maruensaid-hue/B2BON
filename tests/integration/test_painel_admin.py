@@ -56,9 +56,9 @@ def _criar_conta_com_reuniao_qualificada(client, headers: dict, fake_account_dat
     return conta
 
 
-def test_ranking_ordenado_por_atingimento_com_alerta_de_baixo_uso(client, fake_account_data):
+def test_ranking_ordenado_por_atingimento_com_alerta_de_baixo_uso(client, fake_account_data, criar_usuario_autenticado):
     """E8-H3: ranking de assinantes por atingimento com alertas de baixo uso."""
-    headers_b = {"X-Tenant-Id": TENANT_B, "X-User-Id": "user-teste"}
+    headers_b = criar_usuario_autenticado(TENANT_B)
     _onboarding(client, headers_b)
     _criar_conta_com_reuniao_qualificada(client, headers_b, fake_account_data, "11111111000101")
     client.put("/api/v1/painel/configuracao-meta", json={"meta_mensal_reunioes": 1}, headers=headers_b)
@@ -76,9 +76,9 @@ def test_ranking_ordenado_por_atingimento_com_alerta_de_baixo_uso(client, fake_a
     assert ranking.index(por_tenant[TENANT_B]) < ranking.index(por_tenant[TENANT_A])
 
 
-def test_isolamento_multi_tenant_no_ranking(client, fake_account_data):
+def test_isolamento_multi_tenant_no_ranking(client, fake_account_data, criar_usuario_autenticado):
     """E8-H3: dados anonimizados entre assinantes (isolamento verificado)."""
-    headers_b = {"X-Tenant-Id": TENANT_B, "X-User-Id": "user-teste"}
+    headers_b = criar_usuario_autenticado(TENANT_B)
     _onboarding(client, headers_b)
     conta_b = _criar_conta_com_reuniao_qualificada(client, headers_b, fake_account_data, "22222222000102")
 

@@ -7,6 +7,7 @@ from app.models.icp import ICP
 from app.services import aprovacao_service
 
 TENANT_ID = "tenant-teste"
+ATOR_ID = "1"  # Onda A: id do usuário de teste padrão da fixture `client`
 
 
 @pytest.fixture()
@@ -41,7 +42,7 @@ def test_auditoria_imutavel_identifica_aprovador(client, aprovacao_registrada):
     assert resposta.status_code == 200
     eventos = resposta.json()
     evento_aprovacao = next(e for e in eventos if e["evento_tipo"] == "aprovacao_aprovada")
-    assert evento_aprovacao["ator_id"] == "user-teste"
+    assert evento_aprovacao["ator_id"] == ATOR_ID
     assert evento_aprovacao["tenant_id"] == "tenant-teste"
 
 

@@ -74,5 +74,11 @@ class Settings(BaseSettings):
     # pesquisa de NPS — ajustável por tenant via ConfiguracaoNps (E11-H1).
     nps_dias_apos_reuniao_padrao: int = 30
 
+    # Autenticação real do núcleo (Onda A). Chave dedicada — não reaproveita
+    # secret_key (usada para HMAC de links públicos) para segregar o risco.
+    jwt_secret_key: str = "changeme-dev-jwt-secret-key-min-32-bytes-long"
+    jwt_expiracao_minutos: int = 1440
+    google_oauth_client_id: str = ""
+
 
 settings = Settings()
