@@ -10,6 +10,7 @@ from app.api.v1.comunicacao import router as comunicacao_router
 from app.api.v1.configuracao_envio import router as configuracao_envio_router
 from app.api.v1.contas import router as contas_router
 from app.api.v1.convites import router as convites_router
+from app.api.v1.crm import router as crm_router
 from app.api.v1.conversas import router as conversas_router
 from app.api.v1.decisores import router as decisores_router
 from app.api.v1.envios import router as envios_router
@@ -63,3 +64,4 @@ router.include_router(auth_router)
 router.include_router(convites_router)
 router.include_router(planos_router)
 router.include_router(admin_tenants_router)
+router.include_router(crm_router)

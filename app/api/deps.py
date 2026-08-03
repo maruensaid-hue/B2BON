@@ -21,7 +21,7 @@ from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.channels.whatsapp.meta import MetaWhatsAppProvider
 from app.providers.channels.whatsapp.stub import StubWhatsAppProvider
 from app.providers.crm.base import CrmProvider
-from app.providers.crm.stub import StubCrmProvider
+from app.providers.crm.nucleo import NucleoCrmProvider
 from app.providers.email_validation.base import EmailVerificationProvider
 from app.providers.email_validation.stub import StubEmailVerificationProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
@@ -83,11 +83,11 @@ def get_calendar_provider() -> CalendarProvider:
     return StubCalendarProvider()
 
 
-def get_crm_provider() -> CrmProvider:
-    # CoreApiCrmProvider entra aqui quando o núcleo expuser a API de
-    # oportunidades. Até lá, todo ambiente (dev e testes) usa o stub — CRM é
-    # dado do núcleo, mesma regra de fronteira do PlanLimitsProvider.
-    return StubCrmProvider()
+def get_crm_provider(db: Session = Depends(get_db)) -> CrmProvider:
+    # Onda B: porta implementada de verdade — CRM Core nasce no próprio
+    # núcleo (mesma base do PREDATOR). StubCrmProvider continua existindo
+    # só para os testes (dependency override).
+    return NucleoCrmProvider(db)
 
 
 def get_rede_social_provider() -> RedeSocialProvider:

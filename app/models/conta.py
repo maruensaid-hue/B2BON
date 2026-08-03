@@ -25,6 +25,10 @@ class Conta(Base):
     # Classificação da última pesquisa de NPS respondida (E11-H1).
     nps_classificacao: Mapped[str | None] = mapped_column(String, nullable=True)  # promotor | neutro | detrator
     nps_nota: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Economia do CRM Core (Onda B): marca quando a conta virou cliente
+    # (primeiro negócio ganho) e, se aplicável, quando cancelou (churn).
+    cliente_desde: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cliente_cancelado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     neo4j_node_id: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(

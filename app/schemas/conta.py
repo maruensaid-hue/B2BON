@@ -21,6 +21,8 @@ class ContaSchema(BaseModel):
     origem: str | None
     nps_classificacao: str | None
     nps_nota: int | None
+    cliente_desde: datetime | None
+    cliente_cancelado_em: datetime | None
     neo4j_node_id: str | None
     criado_em: datetime
     atualizado_em: datetime

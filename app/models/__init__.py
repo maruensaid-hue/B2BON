@@ -1,11 +1,13 @@
 from app.models.alerta_detrator import AlertaDetrator
 from app.models.aprovacao import Aprovacao
+from app.models.atividade import Atividade
 from app.models.auditoria import AuditLog
 from app.models.cadencia import Cadencia
 from app.models.campo_enriquecido import CampoEnriquecido
 from app.models.conta import Conta
 from app.models.conta_franquia_consumo import ContaFranquiaConsumo
 from app.models.configuracao_canal import ConfiguracaoCanal
+from app.models.custo_aquisicao import CustoAquisicao
 from app.models.configuracao_comunicacao import ConfiguracaoComunicacao
 from app.models.configuracao_envio import ConfiguracaoEnvio
 from app.models.configuracao_notificacao import ConfiguracaoNotificacao
@@ -16,12 +18,14 @@ from app.models.convite_cadastro import ConviteCadastro
 from app.models.conversa_qualificacao import ConversaQualificacao
 from app.models.decisor import Decisor
 from app.models.descarte_conta import DescarteConta
+from app.models.estagio_funil import EstagioFunil
 from app.models.faq_item import FaqItem
 from app.models.icp import ICP
 from app.models.indicacao import Indicacao
 from app.models.licenca import Licenca
 from app.models.material_oferta import MaterialOferta
 from app.models.mensagem import Mensagem
+from app.models.negocio import Negocio
 from app.models.notificacao_vendedor import NotificacaoVendedor
 from app.models.oferta import Oferta
 from app.models.pausa_canal import PausaCanal
@@ -85,6 +89,10 @@ __all__ = [
     "Licenca",
     "Usuario",
     "ConviteCadastro",
+    "EstagioFunil",
+    "Negocio",
+    "Atividade",
+    "CustoAquisicao",
     "CnpjEstabelecimento",
     "CnpjSocio",
 ]
