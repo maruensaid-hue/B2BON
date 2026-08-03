@@ -1,3 +1,5 @@
+import json
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -89,8 +91,21 @@ class Settings(BaseSettings):
 
     # Origens do frontend autorizadas a chamar a API (CORS) — Vite dev
     # server por padrão; a origem de produção (Cloudflare Pages, Onda G)
-    # entra via env var, sem mudar código (Onda F1).
-    cors_origins: list[str] = ["http://localhost:5173"]
+    # entra via env var, sem mudar código (Onda F1). Texto puro (não
+    # `list[str]`) de propósito: o pydantic-settings decodifica campos de
+    # lista como JSON *antes* de qualquer validador rodar, e um campo de
+    # texto num painel como o do Render é fácil de preencher sem colchetes
+    # e aspas exatas — ver `origens_cors` abaixo para o parsing tolerante.
+    cors_origins: str = "http://localhost:5173"
+
+    @property
+    def origens_cors(self) -> list[str]:
+        """Aceita tanto JSON (`["https://a.com"]`) quanto uma lista simples
+        separada por vírgula (`https://a.com,https://b.com`) (Onda G)."""
+        texto = self.cors_origins.strip()
+        if texto.startswith("["):
+            return json.loads(texto)
+        return [origem.strip() for origem in texto.split(",") if origem.strip()]
 
 
 settings = Settings()

@@ -31,7 +31,7 @@ app = FastAPI(title="B2B ON — PREDATOR", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.origens_cors,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
