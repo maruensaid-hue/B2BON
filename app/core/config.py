@@ -87,5 +87,10 @@ class Settings(BaseSettings):
     limiar_risco_critico_tenant: float = 75.0
     limiar_risco_atencao_tenant: float = 45.0
 
+    # Origens do frontend autorizadas a chamar a API (CORS) — Vite dev
+    # server por padrão; a origem de produção (Cloudflare Pages, Onda G)
+    # entra via env var, sem mudar código (Onda F1).
+    cors_origins: list[str] = ["http://localhost:5173"]
+
 
 settings = Settings()
