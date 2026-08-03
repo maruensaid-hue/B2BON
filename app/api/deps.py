@@ -105,13 +105,20 @@ def get_email_validation_provider() -> EmailVerificationProvider:
 
 
 def get_usuario_atual(
-    authorization: str = Header(..., alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
     db: Session = Depends(get_db),
 ) -> Usuario:
     """Usuário autenticado por JWT (Onda A) — substitui o antigo trust cru
     dos headers X-Tenant-Id/X-User-Id, fechando o risco já documentado no
-    manual técnico do PREDATOR."""
-    if not authorization.startswith("Bearer "):
+    manual técnico do PREDATOR.
+
+    Header opcional no parâmetro (em vez de obrigatório) para que a
+    ausência completa do header também caia em 401 — não em 422, que é o
+    que o FastAPI devolveria sozinho para um `Header(...)` obrigatório
+    faltante, misturando "não autenticado" com "corpo/parâmetro
+    inválido".
+    """
+    if authorization is None or not authorization.startswith("Bearer "):
         raise NaoAutenticado("Cabeçalho Authorization deve ser 'Bearer <token>'.")
     token = authorization[len("Bearer ") :]
     return auth_service.validar_token(db, token)

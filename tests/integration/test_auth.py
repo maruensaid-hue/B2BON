@@ -1,3 +1,6 @@
+from fastapi.testclient import TestClient
+
+from app.main import app
 from app.models.usuario import Usuario
 from app.services import auth_service
 
@@ -81,6 +84,17 @@ def test_convite_usado_duas_vezes_falha(client, db_session):
 def test_endpoint_existente_exige_token_valido(client):
     """Prova que a blindagem de autenticação está ligada em rotas antigas do PREDATOR, não só nas novas."""
     resposta = client.get("/api/v1/contas/franquia", headers={"Authorization": "Bearer token-invalido"})
+
+    assert resposta.status_code == 401
+
+
+def test_endpoint_sem_header_authorization_retorna_401(client):
+    """Ausência completa do header cai em 401 — não em 422, que seria o
+    comportamento padrão do FastAPI para um Header(...) obrigatório
+    faltante (misturaria "não autenticado" com "parâmetro inválido")."""
+    cliente_sem_header = TestClient(app)
+
+    resposta = cliente_sem_header.get("/api/v1/contas/franquia")
 
     assert resposta.status_code == 401
 
