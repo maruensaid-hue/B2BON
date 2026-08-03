@@ -47,6 +47,15 @@ def gerar_lista(
     return GerarListaResponseSchema(contas=contas)
 
 
+@router.get("/icp/{icp_id}/contas", response_model=list[ContaSchema])
+def listar_contas_do_icp(
+    icp_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[ContaSchema]:
+    return conta_service.listar_por_icp(db, tenant_id, icp_id)
+
+
 @router.get("/contas/franquia", response_model=FranquiaSchema)
 def franquia_atual(
     tenant_id: str = Depends(get_tenant_id),

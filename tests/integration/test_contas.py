@@ -89,6 +89,21 @@ def test_enriquecer_conta_registra_fonte_e_data(client, db_session, criar_icp, f
         assert campo["coletado_em"]
 
 
+def test_listar_contas_do_icp_sobrevive_a_refresh(client, criar_icp, fake_account_data):
+    """Onda F2: a tela de Prospecção precisa reler as contas já geradas,
+    não só a resposta pontual de gerar_lista."""
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech")]
+    client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5})
+
+    resposta = client.get(f"/api/v1/icp/{icp['id']}/contas")
+
+    assert resposta.status_code == 200
+    contas = resposta.json()
+    assert len(contas) == 1
+    assert contas[0]["nome"] == "Alpha Tech"
+
+
 def test_enriquecer_conta_via_brasilapi_registra_fonte(client, criar_icp, fake_account_data):
     """Onda E: enriquecimento pontual de uma conta via BrasilAPI, sem LLM."""
     icp = criar_icp()

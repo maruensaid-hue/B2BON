@@ -59,3 +59,15 @@ export const api = {
   put: <T,>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body: body !== undefined ? JSON.stringify(body) : undefined }),
 };
+
+/** Download binário (ex.: PDF) — não passa por `request()` porque a resposta não é JSON. */
+export async function getBlob(path: string): Promise<Blob> {
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, "Não foi possível baixar o arquivo.");
+  }
+  return response.blob();
+}

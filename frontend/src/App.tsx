@@ -5,7 +5,9 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Dashboard } from "@/pages/Dashboard";
 import { Login } from "@/pages/Login";
 import { Kanban } from "@/pages/crm/Kanban";
+import { Map } from "@/pages/map/Map";
 import { EmConstrucao } from "@/pages/placeholder/EmConstrucao";
+import { Prospeccao } from "@/pages/prospeccao/Prospeccao";
 
 export default function App() {
   return (
@@ -17,8 +19,8 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="crm" element={<Kanban />} />
           <Route path="rede-social" element={<EmConstrucao titulo="Rede Social" />} />
-          <Route path="map" element={<EmConstrucao titulo="MAP — Motor de Alta Performance" />} />
-          <Route path="prospeccao" element={<EmConstrucao titulo="Prospecção (PREDATOR)" />} />
+          <Route path="map" element={<Map />} />
+          <Route path="prospeccao" element={<Prospeccao />} />
           <Route path="admin/tenants" element={<EmConstrucao titulo="Admin — Tenants" />} />
           <Route path="admin/licencas" element={<EmConstrucao titulo="Admin — Licenças" />} />
           <Route path="admin/convites" element={<EmConstrucao titulo="Admin — Convites" />} />

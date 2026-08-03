@@ -107,6 +107,13 @@ def gerar_lista(
     return criadas
 
 
+def listar_por_icp(db: Session, tenant_id: str, icp_id: int) -> list[Conta]:
+    """Contas já geradas para um ICP — para a tela de Prospecção
+    sobreviver a um refresh sem depender só da resposta pontual de
+    `gerar_lista` (Onda F2)."""
+    return db.query(Conta).filter_by(tenant_id=tenant_id, icp_id=icp_id).order_by(Conta.criado_em.desc()).all()
+
+
 def obter(db: Session, tenant_id: str, conta_id: int) -> Conta:
     conta = db.query(Conta).filter_by(id=conta_id, tenant_id=tenant_id).one_or_none()
     if conta is None:
