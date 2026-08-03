@@ -5,6 +5,7 @@ from fpdf import FPDF
 from sqlalchemy.orm import Session
 
 from app.graph.client import Neo4jClient
+from app.integrations.brasilapi_client import BrasilApiClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
@@ -164,6 +165,73 @@ def enriquecer(
         db,
         tenant_id,
         "conta_enriquecida",
+        "conta",
+        conta.id,
+        ator_id,
+        {"campos": len(campos)},
+        conta_id=conta.id,
+    )
+    db.commit()
+    for campo_registro in campos:
+        db.refresh(campo_registro)
+    return campos
+
+
+def enriquecer_via_brasilapi(
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    conta_id: int,
+    brasilapi_client: BrasilApiClient,
+) -> list[CampoEnriquecido]:
+    """Enriquecimento pontual de uma conta via BrasilAPI (Onda E) — dados
+    já estruturados, complementares ao snapshot em lote da Receita
+    Federal (mais recentes: telefone, e-mail, situação cadastral, CNAEs
+    secundários). Sem LLM, ao contrário de `enriquecer()` (site
+    institucional), pois a resposta já vem em JSON."""
+    conta = obter(db, tenant_id, conta_id)
+    if not conta.cnpj:
+        raise RegraNegocioViolada("Conta sem CNPJ cadastrado — não é possível enriquecer via BrasilAPI.")
+
+    try:
+        resposta = brasilapi_client(conta.cnpj)
+    except httpx.HTTPError as erro:
+        raise RegraNegocioViolada(f"Não foi possível consultar a BrasilAPI: {erro}") from erro
+
+    cnaes_secundarios = resposta.get("cnaes_secundarios") or []
+    valores_por_campo = {
+        "telefone": resposta.get("ddd_telefone_1"),
+        "email": resposta.get("email"),
+        "situacao_cadastral": resposta.get("descricao_situacao_cadastral"),
+        "data_situacao_cadastral": resposta.get("data_situacao_cadastral"),
+        "porte": resposta.get("descricao_porte"),
+        "capital_social": resposta.get("capital_social"),
+        "cnaes_secundarios": ", ".join(
+            f"{item.get('codigo')} - {item.get('descricao')}" for item in cnaes_secundarios
+        )
+        if cnaes_secundarios
+        else None,
+    }
+
+    agora = datetime.now(UTC)
+    campos: list[CampoEnriquecido] = []
+    for campo, valor in valores_por_campo.items():
+        if valor in (None, ""):
+            continue
+        registro = CampoEnriquecido(
+            conta_id=conta.id,
+            campo=campo,
+            valor=str(valor),
+            fonte="brasilapi_cnpj",
+            coletado_em=agora,
+        )
+        db.add(registro)
+        campos.append(registro)
+
+    auditoria_service.registrar(
+        db,
+        tenant_id,
+        "conta_enriquecida_brasilapi",
         "conta",
         conta.id,
         ator_id,

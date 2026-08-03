@@ -89,6 +89,22 @@ def test_enriquecer_conta_registra_fonte_e_data(client, db_session, criar_icp, f
         assert campo["coletado_em"]
 
 
+def test_enriquecer_conta_via_brasilapi_registra_fonte(client, criar_icp, fake_account_data):
+    """Onda E: enriquecimento pontual de uma conta via BrasilAPI, sem LLM."""
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech")]
+    conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
+
+    resposta = client.post(f"/api/v1/contas/{conta_id}/enriquecer-brasilapi")
+
+    assert resposta.status_code == 200
+    campos = resposta.json()["campos"]
+    assert len(campos) >= 1
+    for campo in campos:
+        assert campo["fonte"] == "brasilapi_cnpj"
+        assert campo["coletado_em"]
+
+
 def test_mapear_decisores_com_cargo_e_canal(client, criar_icp, fake_account_data):
     """E2-H2: decisores mapeados com cargo e canal provável de contato."""
     icp = criar_icp()

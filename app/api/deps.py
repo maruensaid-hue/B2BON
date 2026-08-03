@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.graph.client import Neo4jClient
 from app.core.config import settings
+from app.integrations.brasilapi_client import BrasilApiClient, consultar_cnpj_brasilapi
 from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.claude_provider import ClaudeProvider
 from app.models.usuario import Usuario
@@ -54,6 +55,10 @@ def get_site_fetcher() -> SiteFetcher:
 
 def get_account_data_provider(db: Session = Depends(get_db)) -> AccountDataProvider:
     return ReceitaFederalCNPJProvider(db)
+
+
+def get_brasilapi_client() -> BrasilApiClient:
+    return consultar_cnpj_brasilapi
 
 
 def get_plan_limits_provider(db: Session = Depends(get_db)) -> PlanLimitsProvider:

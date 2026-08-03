@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import (
     get_account_data_provider,
     get_ator_id,
+    get_brasilapi_client,
     get_db,
     get_graph_client,
     get_llm_provider,
@@ -12,6 +13,7 @@ from app.api.deps import (
     get_tenant_id,
 )
 from app.graph.client import Neo4jClient
+from app.integrations.brasilapi_client import BrasilApiClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
 from app.providers.account_data.base import AccountDataProvider
@@ -73,6 +75,18 @@ def enriquecer_conta(
     site_fetcher: SiteFetcher = Depends(get_site_fetcher),
 ) -> EnriquecerContaResponseSchema:
     campos = conta_service.enriquecer(db, tenant_id, ator_id, conta_id, llm, site_fetcher)
+    return EnriquecerContaResponseSchema(campos=campos)
+
+
+@router.post("/contas/{conta_id}/enriquecer-brasilapi", response_model=EnriquecerContaResponseSchema)
+def enriquecer_conta_via_brasilapi(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+    brasilapi_client: BrasilApiClient = Depends(get_brasilapi_client),
+) -> EnriquecerContaResponseSchema:
+    campos = conta_service.enriquecer_via_brasilapi(db, tenant_id, ator_id, conta_id, brasilapi_client)
     return EnriquecerContaResponseSchema(campos=campos)
 
 

@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 import app.models  # noqa: F401 — registra as tabelas em Base.metadata
 from app.api.deps import (
     get_account_data_provider,
+    get_brasilapi_client,
     get_calendar_provider,
     get_crm_provider,
     get_db,
@@ -101,6 +102,11 @@ def fake_site_fetcher():
 
 
 @pytest.fixture()
+def fake_brasilapi_client():
+    return lambda cnpj: {"ddd_telefone_1": "11987654321", "email": f"contato@{cnpj}.com.br"}
+
+
+@pytest.fixture()
 def fake_whatsapp() -> FakeWhatsAppProvider:
     return FakeWhatsAppProvider()
 
@@ -138,6 +144,7 @@ def client(
     fake_account_data: FakeAccountDataProvider,
     fake_plan_limits: StubPlanLimitsProvider,
     fake_site_fetcher,
+    fake_brasilapi_client,
     fake_whatsapp: FakeWhatsAppProvider,
     fake_email: FakeEmailProvider,
     fake_calendar: StubCalendarProvider,
@@ -154,6 +161,7 @@ def client(
     app.dependency_overrides[get_account_data_provider] = lambda: fake_account_data
     app.dependency_overrides[get_plan_limits_provider] = lambda: fake_plan_limits
     app.dependency_overrides[get_site_fetcher] = lambda: fake_site_fetcher
+    app.dependency_overrides[get_brasilapi_client] = lambda: fake_brasilapi_client
     app.dependency_overrides[get_whatsapp_provider] = lambda: fake_whatsapp
     app.dependency_overrides[get_email_provider] = lambda: fake_email
     app.dependency_overrides[get_calendar_provider] = lambda: fake_calendar
