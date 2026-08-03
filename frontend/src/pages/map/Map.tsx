@@ -6,6 +6,7 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { Modal } from "@/components/ui/Modal";
+import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -144,15 +145,7 @@ export function Map() {
 
   if (!isSuperAdmin) {
     return (
-      <div className="p-5.5">
-        <Card className="flex flex-col items-center py-16 text-center">
-          <div className="mb-3 text-4xl opacity-25">🔒</div>
-          <div className="text-[12px] text-muted">
-            O MAP é restrito ao Admin da B2B ON (super_admin) — monitora a saúde dos tenants assinantes, não os
-            clientes do seu próprio tenant.
-          </div>
-        </Card>
-      </div>
+      <AcessoRestrito mensagem="O MAP é restrito ao Admin da B2B ON (super_admin) — monitora a saúde dos tenants assinantes, não os clientes do seu próprio tenant." />
     );
   }
 

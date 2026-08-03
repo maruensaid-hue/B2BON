@@ -2,12 +2,16 @@ import { Route, Routes } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AdminConvites } from "@/pages/admin/AdminConvites";
+import { AdminLicencas } from "@/pages/admin/AdminLicencas";
+import { AdminPlanos } from "@/pages/admin/AdminPlanos";
+import { AdminTenants } from "@/pages/admin/AdminTenants";
 import { Dashboard } from "@/pages/Dashboard";
 import { Login } from "@/pages/Login";
 import { Kanban } from "@/pages/crm/Kanban";
 import { Map } from "@/pages/map/Map";
-import { EmConstrucao } from "@/pages/placeholder/EmConstrucao";
 import { Prospeccao } from "@/pages/prospeccao/Prospeccao";
+import { RedeSocial } from "@/pages/rede-social/RedeSocial";
 
 export default function App() {
   return (
@@ -18,13 +22,13 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route index element={<Dashboard />} />
           <Route path="crm" element={<Kanban />} />
-          <Route path="rede-social" element={<EmConstrucao titulo="Rede Social" />} />
+          <Route path="rede-social" element={<RedeSocial />} />
           <Route path="map" element={<Map />} />
           <Route path="prospeccao" element={<Prospeccao />} />
-          <Route path="admin/tenants" element={<EmConstrucao titulo="Admin — Tenants" />} />
-          <Route path="admin/licencas" element={<EmConstrucao titulo="Admin — Licenças" />} />
-          <Route path="admin/convites" element={<EmConstrucao titulo="Admin — Convites" />} />
-          <Route path="admin/planos" element={<EmConstrucao titulo="Admin — Planos" />} />
+          <Route path="admin/tenants" element={<AdminTenants />} />
+          <Route path="admin/licencas" element={<AdminLicencas />} />
+          <Route path="admin/convites" element={<AdminConvites />} />
+          <Route path="admin/planos" element={<AdminPlanos />} />
         </Route>
       </Route>
     </Routes>
