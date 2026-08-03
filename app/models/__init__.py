@@ -23,6 +23,7 @@ from app.models.estagio_funil import EstagioFunil
 from app.models.faq_item import FaqItem
 from app.models.icp import ICP
 from app.models.indicacao import Indicacao
+from app.models.interacao_tenant import InteracaoTenant
 from app.models.licenca import Licenca
 from app.models.material_oferta import MaterialOferta
 from app.models.mensagem import Mensagem
@@ -99,6 +100,7 @@ __all__ = [
     "PerfilEmpresa",
     "ConexaoEmpresa",
     "MensagemRedeSocial",
+    "InteracaoTenant",
     "CnpjEstabelecimento",
     "CnpjSocio",
 ]

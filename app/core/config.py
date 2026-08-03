@@ -80,5 +80,12 @@ class Settings(BaseSettings):
     jwt_expiracao_minutos: int = 1440
     google_oauth_client_id: str = ""
 
+    # Limiares de alerta de risco de churn dos tenants (Onda D — Motor de
+    # Alta Performance) — parâmetro de alerta, ajustável, não uma curva
+    # comercial fechada. O cálculo do score em si é metodologia (função
+    # pura em motor_service.py), como o scoring S.H.A.R.K. do PREDATOR.
+    limiar_risco_critico_tenant: float = 75.0
+    limiar_risco_atencao_tenant: float = 45.0
+
 
 settings = Settings()

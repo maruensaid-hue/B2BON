@@ -18,6 +18,7 @@ from app.api.v1.faq import router as faq_router
 from app.api.v1.icp import router as icp_router
 from app.api.v1.indicacoes import router as indicacoes_router
 from app.api.v1.linkedin import router as linkedin_router
+from app.api.v1.motor import router as motor_router
 from app.api.v1.notificacoes import router as notificacoes_router
 from app.api.v1.nps import router as nps_router
 from app.api.v1.ofertas import router as oferta_router
@@ -67,3 +68,4 @@ router.include_router(planos_router)
 router.include_router(admin_tenants_router)
 router.include_router(crm_router)
 router.include_router(rede_social_router)
+router.include_router(motor_router)
