@@ -18,10 +18,14 @@ from app.services.errors import (
 
 configure_logging()
 
-# Sem Alembic neste MVP (limitação já documentada) — cria as tabelas que
-# ainda não existem a cada start; é idempotente, não afeta dados já
-# gravados em tabelas existentes.
-Base.metadata.create_all(bind=engine)
+# Dev/testes (SQLite): cria as tabelas que ainda não existem a cada
+# start, idempotente. Produção (Postgres, Onda G): o schema é
+# gerenciado inteiramente pelo Alembic (`alembic upgrade head`, rodado
+# pelo CMD do Dockerfile antes do Uvicorn subir) — rodar create_all
+# aqui também faria o Postgres ganhar as tabelas sem o registro de
+# versão do Alembic, quebrando migrações futuras.
+if settings.database_url.startswith("sqlite"):
+    Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="B2B ON — PREDATOR", version="0.1.0")
 

@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: b2bon-postgres
+    ports:
+      - "5433:5432"   # host 5433 para não colidir com um Postgres local já em uso
+    environment:
+      - POSTGRES_USER=predator
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-predator12345}
+      - POSTGRES_DB=predator
+    volumes:
+      - postgres_dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U predator"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5.23-community
+    container_name: b2bon-neo4j
+    ports:
+      - "7475:7474"   # console web (http://localhost:7475)
+      - "7689:7687"   # host 7689 para não colidir com um Neo4j local já em uso
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-neo4j12345}
+    volumes:
+      - neo4j_dados:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: b2bon-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    ports:
+      - "8010:8000"   # host 8010 para não colidir com uma API local já em uso
+    environment:
+      - DATABASE_URL=postgresql://predator:${POSTGRES_PASSWORD:-predator12345}@postgres:5432/predator
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-neo4j12345}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-5}
+      - SECRET_KEY=${SECRET_KEY:-troque-esta-chave-em-producao}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-troque-esta-chave-jwt-em-producao-min-32-bytes}
+      - MATERIAIS_STORAGE_PATH=/dados/materiais
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:5173"]}
+    volumes:
+      - api_dados:/dados
+
+volumes:
+  postgres_dados:
+  neo4j_dados:
+  api_dados:

@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: b2bon-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false # URL do Neon, com ?sslmode=require (Onda G)
+      - key: NEO4J_URI
+        sync: false # URL do Neo4j AuraDB Free, formato neo4j+s://
+      - key: NEO4J_USER
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false # gerar um valor aleatorio de pelo menos 32 bytes
+      - key: SECRET_KEY
+        sync: false # gerar um valor aleatorio (HMAC de links de opt-out)
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false # lista JSON, ex.: ["https://b2bon.pages.dev"]
