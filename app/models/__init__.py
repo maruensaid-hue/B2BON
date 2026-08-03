@@ -4,6 +4,7 @@ from app.models.atividade import Atividade
 from app.models.auditoria import AuditLog
 from app.models.cadencia import Cadencia
 from app.models.campo_enriquecido import CampoEnriquecido
+from app.models.conexao_empresa import ConexaoEmpresa
 from app.models.conta import Conta
 from app.models.conta_franquia_consumo import ContaFranquiaConsumo
 from app.models.configuracao_canal import ConfiguracaoCanal
@@ -25,10 +26,12 @@ from app.models.indicacao import Indicacao
 from app.models.licenca import Licenca
 from app.models.material_oferta import MaterialOferta
 from app.models.mensagem import Mensagem
+from app.models.mensagem_rede_social import MensagemRedeSocial
 from app.models.negocio import Negocio
 from app.models.notificacao_vendedor import NotificacaoVendedor
 from app.models.oferta import Oferta
 from app.models.pausa_canal import PausaCanal
+from app.models.perfil_empresa import PerfilEmpresa
 from app.models.pesquisa_nps import PesquisaNps
 from app.models.plano import Plano
 from app.models.qualificacao import QualificacaoScore
@@ -93,6 +96,9 @@ __all__ = [
     "Negocio",
     "Atividade",
     "CustoAquisicao",
+    "PerfilEmpresa",
+    "ConexaoEmpresa",
+    "MensagemRedeSocial",
     "CnpjEstabelecimento",
     "CnpjSocio",
 ]

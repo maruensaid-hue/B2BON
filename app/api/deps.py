@@ -27,7 +27,7 @@ from app.providers.email_validation.stub import StubEmailVerificationProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
 from app.providers.rede_social.base import RedeSocialProvider
-from app.providers.rede_social.stub import StubRedeSocialProvider
+from app.providers.rede_social.nucleo import NucleoRedeSocialProvider
 from app.services import auth_service
 from app.services.errors import NaoAutenticado, NaoAutorizado
 
@@ -90,11 +90,11 @@ def get_crm_provider(db: Session = Depends(get_db)) -> CrmProvider:
     return NucleoCrmProvider(db)
 
 
-def get_rede_social_provider() -> RedeSocialProvider:
-    # CoreApiRedeSocialProvider entra aqui quando o núcleo expuser a API da
-    # Rede Social B2B. Até lá, todo ambiente (dev e testes) usa o stub — é
-    # dado do núcleo, mesma regra de fronteira do CrmProvider.
-    return StubRedeSocialProvider()
+def get_rede_social_provider(db: Session = Depends(get_db)) -> RedeSocialProvider:
+    # Onda C: porta implementada de verdade — Rede Social B2B nasce no
+    # próprio núcleo (mesma base do PREDATOR). StubRedeSocialProvider
+    # continua existindo só para os testes (dependency override).
+    return NucleoRedeSocialProvider(db)
 
 
 def get_email_validation_provider() -> EmailVerificationProvider:

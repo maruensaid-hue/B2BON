@@ -6,7 +6,7 @@ from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
-from app.services import auditoria_service, auth_service
+from app.services import auditoria_service, auth_service, rede_social_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 
@@ -43,6 +43,8 @@ def criar_tenant_inicial(
 
     licenca = Licenca(tenant_id=tenant.id, plano_id=plano_id, status="ativa")
     db.add(licenca)
+
+    rede_social_service.criar_perfil_inicial(db, tenant.id, razao_social)
 
     usuario = Usuario(
         tenant_id=tenant.id,

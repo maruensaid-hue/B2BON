@@ -26,6 +26,7 @@ from app.api.v1.optout import router as optout_router
 from app.api.v1.painel import router as painel_router
 from app.api.v1.planos import router as planos_router
 from app.api.v1.qualificacao import router as qualificacao_router
+from app.api.v1.rede_social import router as rede_social_router
 from app.api.v1.reunioes import router as reunioes_router
 from app.api.v1.ropa import router as ropa_router
 from app.api.v1.titulares import router as titulares_router
@@ -65,3 +66,4 @@ router.include_router(convites_router)
 router.include_router(planos_router)
 router.include_router(admin_tenants_router)
 router.include_router(crm_router)
+router.include_router(rede_social_router)
