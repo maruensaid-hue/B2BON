@@ -63,24 +63,83 @@ function paraLista(texto: string): string[] {
     .filter(Boolean);
 }
 
-/** Aceita colar direto do Excel/Planilhas (separado por TAB) ou um CSV
- * (`;` ou `,`) — uma linha por participante: Nome, Empresa, Cargo, E-mail,
- * Telefone (os três últimos são opcionais). */
-function parseParticipantes(texto: string): ParticipanteEvento[] {
+type CampoParticipante = "nome" | "empresa" | "cargo" | "email" | "telefone";
+
+// Sinônimos comuns em planilhas de organizadores de evento — a ordem das
+// colunas varia de lista para lista (ex.: "Empresa, Nome, Telefone, E-mail"
+// é tão comum quanto "Nome, Empresa, Cargo, E-mail, Telefone").
+const SINONIMOS_CABECALHO: Record<string, CampoParticipante> = {
+  nome: "nome",
+  participante: "nome",
+  responsavel: "nome",
+  contato: "nome",
+  empresa: "empresa",
+  organizacao: "empresa",
+  instituicao: "empresa",
+  cargo: "cargo",
+  funcao: "cargo",
+  posicao: "cargo",
+  email: "email",
+  "e-mail": "email",
+  telefone: "telefone",
+  fone: "telefone",
+  celular: "telefone",
+  whatsapp: "telefone",
+};
+
+function normalizarCabecalho(texto: string): string {
   return texto
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
+/** Se a primeira linha for reconhecível como cabeçalho (nome/empresa/cargo/
+ * e-mail/telefone, em qualquer ordem), usa ela pra mapear as colunas — evita
+ * assumir uma ordem fixa, que quebra silenciosamente quando a planilha do
+ * organizador do evento vem em ordem diferente. Sem cabeçalho reconhecido,
+ * cai no padrão: Nome, Empresa, Cargo, E-mail, Telefone. */
+function detectarMapaColunas(primeiraLinha: string, separador: string): CampoParticipante[] | null {
+  const celulas = primeiraLinha.split(separador).map(normalizarCabecalho);
+  const mapa = celulas.map((celula) => SINONIMOS_CABECALHO[celula]);
+  const reconhecidos = mapa.filter(Boolean);
+  if (reconhecidos.includes("nome") && reconhecidos.includes("empresa")) {
+    return mapa as CampoParticipante[];
+  }
+  return null;
+}
+
+/** Aceita colar direto do Excel/Planilhas (separado por TAB) ou um CSV
+ * (`;` ou `,`) — uma linha por participante. Detecta cabeçalho (Nome,
+ * Empresa, Cargo, E-mail, Telefone, em qualquer ordem); sem cabeçalho,
+ * assume essa mesma ordem por posição. */
+function parseParticipantes(texto: string): ParticipanteEvento[] {
+  const linhas = texto
     .split("\n")
     .map((linha) => linha.trim())
-    .filter(Boolean)
+    .filter(Boolean);
+  if (linhas.length === 0) return [];
+
+  const separadorDaPrimeira = linhas[0].includes("\t") ? "\t" : linhas[0].includes(";") ? ";" : ",";
+  const mapaCabecalho = detectarMapaColunas(linhas[0], separadorDaPrimeira);
+  const linhasDeDados = mapaCabecalho ? linhas.slice(1) : linhas;
+
+  return linhasDeDados
     .map((linha) => {
       const separador = linha.includes("\t") ? "\t" : linha.includes(";") ? ";" : ",";
       const campos = linha.split(separador).map((campo) => campo.trim());
-      const [nome, empresa, cargo, email, telefone] = campos;
+      const valores: Partial<Record<CampoParticipante, string>> = {};
+      const ordem: CampoParticipante[] = mapaCabecalho ?? ["nome", "empresa", "cargo", "email", "telefone"];
+      ordem.forEach((campo, indice) => {
+        if (campo && campos[indice]) valores[campo] = campos[indice];
+      });
       return {
-        nome: nome ?? "",
-        empresa: empresa ?? "",
-        cargo: cargo || undefined,
-        email: email || undefined,
-        telefone: telefone || undefined,
+        nome: valores.nome ?? "",
+        empresa: valores.empresa ?? "",
+        cargo: valores.cargo || undefined,
+        email: valores.email || undefined,
+        telefone: valores.telefone || undefined,
       };
     })
     .filter((participante) => participante.nome && participante.empresa);
@@ -409,11 +468,17 @@ export function Prospeccao() {
       >
         <form onSubmit={importarParticipantes} className="flex flex-col gap-3">
           <div className="text-[11px] text-muted">
-            Cole as linhas direto do Excel/Planilhas (uma por participante). Colunas na ordem: Nome, Empresa,
-            Cargo, E-mail, Telefone — só Nome e Empresa são obrigatórios. Empresas repetidas na lista viram uma
-            única conta; participantes duplicados (mesmo nome ou e-mail na mesma empresa) são ignorados.
+            Cole direto do Excel/Planilhas, com a primeira linha de cabeçalho (Nome, Empresa, Cargo, E-mail,
+            Telefone — em qualquer ordem, só Nome e Empresa são obrigatórios). Sem cabeçalho reconhecido, assume
+            essa mesma ordem por posição. Empresas repetidas viram uma única conta; participantes duplicados
+            (mesmo nome ou e-mail na mesma empresa) são ignorados.
           </div>
-          <Textarea name="participantes" required rows={10} placeholder={"Joana Silva\tClinica Vida Plena\tDiretora\tjoana@vidaplena.com\t11999990000"} />
+          <Textarea
+            name="participantes"
+            required
+            rows={10}
+            placeholder={"Nome\tEmpresa\tCargo\tE-mail\tTelefone\nJoana Silva\tClinica Vida Plena\tDiretora\tjoana@vidaplena.com\t11999990000"}
+          />
           <Button type="submit" className="w-full justify-center">
             Importar
           </Button>
