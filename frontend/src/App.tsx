@@ -6,6 +6,7 @@ import { AdminConvites } from "@/pages/admin/AdminConvites";
 import { AdminLicencas } from "@/pages/admin/AdminLicencas";
 import { AdminPlanos } from "@/pages/admin/AdminPlanos";
 import { AdminTenants } from "@/pages/admin/AdminTenants";
+import { ConviteVitrine } from "@/pages/ConviteVitrine";
 import { Dashboard } from "@/pages/Dashboard";
 import { Login } from "@/pages/Login";
 import { Kanban } from "@/pages/crm/Kanban";
@@ -17,6 +18,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/convite-vitrine/:codigo" element={<ConviteVitrine />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>

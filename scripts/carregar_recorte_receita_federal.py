@@ -24,6 +24,14 @@ from app.models.icp import ICP
 from app.providers.account_data.receita_federal_loader import carregar_recorte
 
 
+def _ler_caminho(mensagem: str) -> str:
+    """Remove aspas coladas por "Copiar como caminho" do Windows Explorer
+    (que envolve o texto em `"..."`, inclusive quando há espaço no caminho)
+    — sem isso, `open()` recebe as aspas como parte literal do nome do
+    arquivo e falha com OSError Errno 22."""
+    return input(mensagem).strip().strip('"').strip("'")
+
+
 def _unir_filtros_icps_ativos(db, tenant_id: str) -> tuple[list[str], list[str]]:
     """União (sem duplicatas) de CNAEs e UFs de todos os ICPs ativos do
     tenant — o recorte carregado deve cobrir todos os ICPs em uso, não só
@@ -56,11 +64,11 @@ def main() -> None:
         print(f"\nCNAEs no recorte: {', '.join(cnae_codigos)}")
         print(f"UFs no recorte: {', '.join(ufs)}")
 
-        caminho_empresas = input("\nCaminho local do arquivo de empresas (ex.: ./dados/EMPRECSV): ").strip()
-        caminho_estabelecimentos = input(
+        caminho_empresas = _ler_caminho("\nCaminho local do arquivo de empresas (ex.: ./dados/EMPRECSV): ")
+        caminho_estabelecimentos = _ler_caminho(
             "Caminho local do arquivo de estabelecimentos (ex.: ./dados/ESTABELE): "
-        ).strip()
-        caminho_socios = input("Caminho local do arquivo de sócios (ex.: ./dados/SOCIOCSV): ").strip()
+        )
+        caminho_socios = _ler_caminho("Caminho local do arquivo de sócios (ex.: ./dados/SOCIOCSV): ")
 
         carregados = carregar_recorte(
             db, cnae_codigos, ufs, caminho_empresas, caminho_estabelecimentos, caminho_socios

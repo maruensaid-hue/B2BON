@@ -27,6 +27,9 @@ from app.db.base import Base
 from app.main import app
 from app.models.conta import Conta
 from app.models.decisor import Decisor
+from app.models.licenca import Licenca
+from app.models.plano import Plano
+from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.calendar.stub import StubCalendarProvider
 from app.providers.crm.stub import StubCrmProvider
@@ -43,6 +46,27 @@ from tests.fakes import (
 )
 
 TENANT_ID = "tenant-teste"
+
+
+def _garantir_licenca_ativa(db_session: Session, tenant_id: str) -> None:
+    """Toda conta de teste padrão representa um cliente pagante — só os
+    testes do fluxo de convite-vitrine (Onda H) criam tenant de propósito
+    sem licença. Idempotente: get-or-create em cada tabela."""
+    if db_session.query(Tenant).filter_by(id=tenant_id).one_or_none() is None:
+        db_session.add(Tenant(id=tenant_id, razao_social=f"Empresa {tenant_id}"))
+        db_session.flush()
+
+    if db_session.query(Licenca).filter_by(tenant_id=tenant_id).one_or_none() is not None:
+        return
+
+    plano = db_session.query(Plano).filter_by(nome="Plano Padrão Teste").one_or_none()
+    if plano is None:
+        plano = Plano(nome="Plano Padrão Teste", franquia_contas_mes=1000, max_usuarios=50, preco_mensal=0.0)
+        db_session.add(plano)
+        db_session.flush()
+
+    db_session.add(Licenca(tenant_id=tenant_id, plano_id=plano.id, status="ativa"))
+    db_session.commit()
 # Onda A: autenticação real — o usuário de teste padrão é sempre o primeiro
 # registro numa base em memória nova, então seu id (convertido para string
 # por get_ator_id) é sempre "1", de forma determinística por teste.
@@ -169,6 +193,8 @@ def client(
     app.dependency_overrides[get_rede_social_provider] = lambda: fake_rede_social
     app.dependency_overrides[get_email_validation_provider] = lambda: fake_email_validacao
 
+    _garantir_licenca_ativa(db_session, TENANT_ID)
+
     usuario_teste = Usuario(
         tenant_id=TENANT_ID,
         nome="Usuário Teste",
@@ -194,6 +220,7 @@ def criar_usuario_autenticado(db_session: Session):
     do E8-H3)."""
 
     def _criar(tenant_id: str, papel: str = "admin", email: str | None = None) -> dict[str, str]:
+        _garantir_licenca_ativa(db_session, tenant_id)
         usuario = Usuario(
             tenant_id=tenant_id,
             nome=f"Usuário {tenant_id}",

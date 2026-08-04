@@ -1,7 +1,11 @@
-from datetime import datetime
+import re
+import secrets
+import unicodedata
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.models.convite_vitrine import ConviteVitrine
 from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
@@ -106,3 +110,138 @@ def atualizar_licenca(
     db.commit()
     db.refresh(licenca)
     return licenca
+
+
+def _gerar_tenant_id(db: Session, razao_social: str) -> str:
+    """Slug legível a partir da razão social — o convite-vitrine não pede
+    o identificador do tenant ao usuário final, então é gerado aqui, com
+    sufixo aleatório em caso de colisão (Onda H)."""
+    sem_acentos = unicodedata.normalize("NFKD", razao_social).encode("ascii", "ignore").decode("ascii")
+    base = re.sub(r"[^a-z0-9]+", "-", sem_acentos.lower()).strip("-")[:40] or "empresa"
+    candidato = base
+    while db.query(Tenant).filter_by(id=candidato).one_or_none() is not None:
+        candidato = f"{base}-{secrets.token_hex(3)}"
+    return candidato
+
+
+def gerar_convite_vitrine(
+    db: Session, tenant_id_origem: str, ator_id: str | None, validade_horas: int | None
+) -> ConviteVitrine:
+    """Qualquer usuário de um tenant já existente pode convidar uma
+    empresa nova para a Rede Social (Onda H) — não exige papel admin,
+    diferente do convite de usuário (`auth_service.gerar_convite`)."""
+    validade_em = datetime.now(UTC) + timedelta(hours=validade_horas) if validade_horas else None
+    convite = ConviteVitrine(
+        tenant_id_origem=tenant_id_origem,
+        codigo=secrets.token_hex(8).upper(),
+        criado_por_usuario_id=int(ator_id) if ator_id else None,
+        validade_em=validade_em,
+    )
+    db.add(convite)
+    db.flush()
+
+    auditoria_service.registrar(
+        db, tenant_id_origem, "convite_vitrine_gerado", "convite_vitrine", convite.id, ator_id, {}
+    )
+    db.commit()
+    db.refresh(convite)
+    return convite
+
+
+def revogar_convite_vitrine(db: Session, tenant_id_origem: str, ator_id: str | None, codigo: str) -> ConviteVitrine:
+    convite = db.query(ConviteVitrine).filter_by(tenant_id_origem=tenant_id_origem, codigo=codigo).one_or_none()
+    if convite is None:
+        raise NaoEncontrado(f"Convite {codigo} não encontrado")
+    if convite.status != "disponivel":
+        raise RegraNegocioViolada("Só é possível revogar convites disponíveis.")
+
+    convite.status = "revogado"
+    auditoria_service.registrar(
+        db, tenant_id_origem, "convite_vitrine_revogado", "convite_vitrine", convite.id, ator_id, {}
+    )
+    db.commit()
+    db.refresh(convite)
+    return convite
+
+
+def listar_convites_vitrine(db: Session, tenant_id_origem: str) -> list[ConviteVitrine]:
+    return (
+        db.query(ConviteVitrine)
+        .filter_by(tenant_id_origem=tenant_id_origem)
+        .order_by(ConviteVitrine.id.desc())
+        .all()
+    )
+
+
+def _validar_convite_vitrine_disponivel(
+    db: Session, convite: ConviteVitrine | None, codigo: str
+) -> ConviteVitrine:
+    if convite is None:
+        raise NaoEncontrado(f"Convite {codigo} não encontrado")
+    if convite.status == "revogado":
+        raise RegraNegocioViolada("Convite revogado.")
+    if convite.status == "usado":
+        raise RegraNegocioViolada("Convite já utilizado.")
+
+    validade = convite.validade_em
+    if validade is not None:
+        if validade.tzinfo is None:
+            validade = validade.replace(tzinfo=UTC)
+        if validade < datetime.now(UTC):
+            convite.status = "expirado"
+            db.commit()
+            raise RegraNegocioViolada("Convite expirado.")
+    return convite
+
+
+def criar_tenant_vitrine(
+    db: Session,
+    codigo_convite: str,
+    razao_social: str,
+    nome_admin: str,
+    email_admin: str,
+    senha_admin: str,
+    cnpj: str | None = None,
+) -> Usuario:
+    """Aceite de convite-vitrine: cria Tenant + Usuario (papel `admin`,
+    nunca `super_admin` — isso evitaria acesso a `/admin/tenants`
+    cross-tenant) + Perfil de Rede Social. Deliberadamente sem Licença —
+    é essa ausência que restringe a conta só à Rede Social (Onda H)."""
+    convite = db.query(ConviteVitrine).filter_by(codigo=codigo_convite).one_or_none()
+    convite = _validar_convite_vitrine_disponivel(db, convite, codigo_convite)
+
+    if db.query(Usuario).filter_by(email=email_admin).one_or_none() is not None:
+        raise RegraNegocioViolada("E-mail já cadastrado.")
+
+    tenant_id = _gerar_tenant_id(db, razao_social)
+    tenant = Tenant(id=tenant_id, razao_social=razao_social, cnpj=cnpj)
+    db.add(tenant)
+    db.flush()
+
+    rede_social_service.criar_perfil_inicial(db, tenant.id, razao_social)
+
+    usuario = Usuario(
+        tenant_id=tenant.id,
+        nome=nome_admin,
+        email=email_admin,
+        senha_hash=auth_service.hash_senha(senha_admin),
+        papel="admin",
+    )
+    db.add(usuario)
+    db.flush()
+
+    convite.status = "usado"
+    convite.tenant_id_gerado = tenant.id
+
+    auditoria_service.registrar(
+        db,
+        tenant.id,
+        "tenant_vitrine_criado",
+        "tenant",
+        0,
+        None,
+        {"razao_social": razao_social, "convite_codigo": codigo_convite},
+    )
+    db.commit()
+    db.refresh(usuario)
+    return usuario

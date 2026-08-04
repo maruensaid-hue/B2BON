@@ -16,6 +16,7 @@ from app.models.configuracao_nps import ConfiguracaoNps
 from app.models.configuracao_painel import ConfiguracaoPainel
 from app.models.configuracao_qualificacao import ConfiguracaoQualificacao
 from app.models.convite_cadastro import ConviteCadastro
+from app.models.convite_vitrine import ConviteVitrine
 from app.models.conversa_qualificacao import ConversaQualificacao
 from app.models.decisor import Decisor
 from app.models.descarte_conta import DescarteConta
@@ -93,6 +94,7 @@ __all__ = [
     "Licenca",
     "Usuario",
     "ConviteCadastro",
+    "ConviteVitrine",
     "EstagioFunil",
     "Negocio",
     "Atividade",

@@ -35,25 +35,44 @@ interface Conexao {
   status: string;
 }
 
+interface ConviteVitrine {
+  id: number;
+  codigo: string;
+  status: string;
+  validade_em: string | null;
+  tenant_id_gerado: string | null;
+  criado_em: string;
+}
+
+function toneStatusConvite(status: string): "green" | "muted" | "red" {
+  if (status === "disponivel") return "green";
+  if (status === "usado") return "muted";
+  return "red";
+}
+
 export function RedeSocial() {
   const { usuario } = useAuth();
   const [perfil, setPerfil] = useState<PerfilEmpresa | null>(null);
   const [empresas, setEmpresas] = useState<EmpresaDiretorio[]>([]);
   const [conexoesPendentes, setConexoesPendentes] = useState<Conexao[]>([]);
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
+  const [modalConviteAberto, setModalConviteAberto] = useState(false);
   const [conversaTenantId, setConversaTenantId] = useState<string | null>(null);
+  const [convites, setConvites] = useState<ConviteVitrine[]>([]);
   const [erro, setErro] = useState<string | null>(null);
 
   async function carregarTudo() {
     try {
-      const [perfilResp, empresasResp, conexoesResp] = await Promise.all([
+      const [perfilResp, empresasResp, conexoesResp, convitesResp] = await Promise.all([
         api.get<PerfilEmpresa>("/rede-social/perfil"),
         api.get<EmpresaDiretorio[]>("/rede-social/empresas"),
         api.get<Conexao[]>("/rede-social/conexoes?status=pendente"),
+        api.get<ConviteVitrine[]>("/convites/vitrine"),
       ]);
       setPerfil(perfilResp);
       setEmpresas(empresasResp);
       setConexoesPendentes(conexoesResp);
+      setConvites(convitesResp);
     } catch {
       setErro("Não foi possível carregar a Rede Social.");
     }
@@ -104,6 +123,30 @@ export function RedeSocial() {
     }
   }
 
+  async function gerarConviteVitrine(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      await api.post("/convites/vitrine", { validade_horas: Number(form.get("validade_horas")) });
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível gerar o convite.");
+    }
+  }
+
+  async function revogarConviteVitrine(codigo: string) {
+    try {
+      await api.post(`/convites/vitrine/${codigo}/revogar`);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível revogar o convite.");
+    }
+  }
+
+  function linkConvite(codigo: string): string {
+    return `${window.location.origin}/convite-vitrine/${codigo}`;
+  }
+
   return (
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
@@ -128,6 +171,44 @@ export function RedeSocial() {
           <Button size="sm" variant="ghost" onClick={() => setModalPerfilAberto(true)}>
             Editar
           </Button>
+        </div>
+      </Card>
+
+      <Card className="mb-4">
+        <div className="mb-2 flex items-center justify-between">
+          <SectionLabel>Convites para empresas</SectionLabel>
+          <Button size="sm" variant="violet" onClick={() => setModalConviteAberto(true)}>
+            + Convidar empresa
+          </Button>
+        </div>
+        <div className="mb-2 text-[11px] text-muted">
+          Convide uma empresa parceira para entrar na Rede Social — ela cria um acesso próprio, sem virar cliente
+          do CRM/MAP/PREDATOR até fazer upgrade de plano.
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {convites.map((convite) => (
+            <div key={convite.id} className="flex items-center justify-between text-[12px]">
+              <div className="flex items-center gap-2">
+                <span className="font-head font-bold tracking-wide">{convite.codigo}</span>
+                <Badge tone={toneStatusConvite(convite.status)}>{convite.status}</Badge>
+              </div>
+              {convite.status === "disponivel" && (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => navigator.clipboard.writeText(linkConvite(convite.codigo))}
+                  >
+                    Copiar link
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => revogarConviteVitrine(convite.codigo)}>
+                    Revogar
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))}
+          {convites.length === 0 && <div className="text-[12px] text-muted">Nenhum convite gerado ainda.</div>}
         </div>
       </Card>
 
@@ -237,6 +318,24 @@ export function RedeSocial() {
           </div>
           <Button type="submit" className="w-full justify-center">
             Salvar
+          </Button>
+        </form>
+      </Modal>
+
+      <Modal title="Convidar empresa" open={modalConviteAberto} onClose={() => setModalConviteAberto(false)}>
+        <form
+          onSubmit={async (event) => {
+            await gerarConviteVitrine(event);
+            setModalConviteAberto(false);
+          }}
+          className="flex flex-col gap-3"
+        >
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Validade (horas)</div>
+            <Input name="validade_horas" type="number" defaultValue={168} min={1} />
+          </div>
+          <Button type="submit" className="w-full justify-center">
+            Gerar convite
           </Button>
         </form>
       </Modal>

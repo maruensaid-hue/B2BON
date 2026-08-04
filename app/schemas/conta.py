@@ -46,6 +46,25 @@ class GerarListaResponseSchema(BaseModel):
     contas: list[ContaSchema]
 
 
+class ParticipanteEventoSchema(BaseModel):
+    nome: str
+    empresa: str
+    cargo: str | None = None
+    email: str | None = None
+    telefone: str | None = None
+
+
+class ImportarParticipantesRequestSchema(BaseModel):
+    participantes: list[ParticipanteEventoSchema]
+
+
+class ImportarParticipantesResponseSchema(BaseModel):
+    contas_criadas: int
+    contas_reaproveitadas: int
+    decisores_criados: int
+    contas: list[ContaSchema]
+
+
 class CampoEnriquecidoSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

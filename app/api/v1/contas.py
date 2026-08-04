@@ -26,6 +26,8 @@ from app.schemas.conta import (
     GerarListaRequestSchema,
     GerarListaResponseSchema,
     GrafoContaResponseSchema,
+    ImportarParticipantesRequestSchema,
+    ImportarParticipantesResponseSchema,
 )
 from app.schemas.decisor import DecisorCreateSchema, DecisorSchema
 from app.services import conta_service, descarte_service, franquia_service
@@ -45,6 +47,25 @@ def gerar_lista(
 ) -> GerarListaResponseSchema:
     contas = conta_service.gerar_lista(db, tenant_id, ator_id, icp_id, dados.quantidade, account_data, graph)
     return GerarListaResponseSchema(contas=contas)
+
+
+@router.post(
+    "/icp/{icp_id}/contas/importar-participantes",
+    response_model=ImportarParticipantesResponseSchema,
+    status_code=201,
+)
+def importar_participantes_evento(
+    icp_id: int,
+    dados: ImportarParticipantesRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+    graph: Neo4jClient = Depends(get_graph_client),
+) -> ImportarParticipantesResponseSchema:
+    resultado = conta_service.importar_participantes_evento(
+        db, tenant_id, ator_id, icp_id, dados.participantes, graph
+    )
+    return ImportarParticipantesResponseSchema(**resultado)
 
 
 @router.get("/icp/{icp_id}/contas", response_model=list[ContaSchema])

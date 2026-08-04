@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.integrations.brasilapi_client import BrasilApiClient, consultar_cnpj_brasilapi
 from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.claude_provider import ClaudeProvider
+from app.models.licenca import Licenca
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.account_data.receita_federal import ReceitaFederalCNPJProvider
@@ -137,6 +138,19 @@ def get_tenant_id(usuario: Usuario = Depends(get_usuario_atual)) -> str:
 def get_ator_id(usuario: Usuario = Depends(get_usuario_atual)) -> str | None:
     """Usuário humano que está agindo — usado para atribuição na auditoria."""
     return str(usuario.id)
+
+
+def exigir_licenca_ativa(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """Trava os módulos pagos (PREDATOR/CRM/MAP) para tenants sem licença
+    ativa — é o que distingue um cliente de uma empresa que só entrou pela
+    Rede Social via convite (Onda H). `/rede-social/*` fica de fora
+    deliberadamente: é a única coisa que uma conta sem licença pode usar."""
+    licenca = db.query(Licenca).filter_by(tenant_id=tenant_id).one_or_none()
+    if licenca is None or licenca.status != "ativa":
+        raise NaoAutorizado("Este recurso exige uma licença ativa.")
 
 
 def exigir_papel(*papeis: str):

@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
+import { Input, Select, Textarea } from "@/components/ui/Input";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { Modal } from "@/components/ui/Modal";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
@@ -41,11 +41,49 @@ interface Franquia {
   restante: number;
 }
 
+interface ParticipanteEvento {
+  nome: string;
+  empresa: string;
+  cargo?: string;
+  email?: string;
+  telefone?: string;
+}
+
+interface ImportarParticipantesResponse {
+  contas_criadas: number;
+  contas_reaproveitadas: number;
+  decisores_criados: number;
+  contas: Conta[];
+}
+
 function paraLista(texto: string): string[] {
   return texto
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+/** Aceita colar direto do Excel/Planilhas (separado por TAB) ou um CSV
+ * (`;` ou `,`) — uma linha por participante: Nome, Empresa, Cargo, E-mail,
+ * Telefone (os três últimos são opcionais). */
+function parseParticipantes(texto: string): ParticipanteEvento[] {
+  return texto
+    .split("\n")
+    .map((linha) => linha.trim())
+    .filter(Boolean)
+    .map((linha) => {
+      const separador = linha.includes("\t") ? "\t" : linha.includes(";") ? ";" : ",";
+      const campos = linha.split(separador).map((campo) => campo.trim());
+      const [nome, empresa, cargo, email, telefone] = campos;
+      return {
+        nome: nome ?? "",
+        empresa: empresa ?? "",
+        cargo: cargo || undefined,
+        email: email || undefined,
+        telefone: telefone || undefined,
+      };
+    })
+    .filter((participante) => participante.nome && participante.empresa);
 }
 
 function statusTone(status: string): "cyan" | "green" | "muted" {
@@ -64,7 +102,9 @@ export function Prospeccao() {
   const [modalIcpAberto, setModalIcpAberto] = useState(false);
   const [icpEmEdicao, setIcpEmEdicao] = useState<ICP | null>(null);
   const [modalGerarAberto, setModalGerarAberto] = useState(false);
+  const [modalImportarAberto, setModalImportarAberto] = useState(false);
   const [contaSelecionadaId, setContaSelecionadaId] = useState<number | null>(null);
+  const [mensagem, setMensagem] = useState<string | null>(null);
 
   const icpSelecionado = icps.find((icp) => icp.id === icpSelecionadoId) ?? null;
 
@@ -155,6 +195,30 @@ export function Prospeccao() {
     }
   }
 
+  async function importarParticipantes(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (icpSelecionadoId === null) return;
+    const form = new FormData(event.currentTarget);
+    const participantes = parseParticipantes(String(form.get("participantes") ?? ""));
+    if (participantes.length === 0) {
+      setErro("Cole ao menos uma linha válida (Nome e Empresa são obrigatórios).");
+      return;
+    }
+    try {
+      const resultado = await api.post<ImportarParticipantesResponse>(
+        `/icp/${icpSelecionadoId}/contas/importar-participantes`,
+        { participantes },
+      );
+      setModalImportarAberto(false);
+      setMensagem(
+        `${resultado.contas_criadas} empresa(s) nova(s), ${resultado.contas_reaproveitadas} já existente(s) reaproveitada(s), ${resultado.decisores_criados} contato(s) adicionado(s).`,
+      );
+      await carregarContas(icpSelecionadoId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível importar os participantes.");
+    }
+  }
+
   return (
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
@@ -162,19 +226,30 @@ export function Prospeccao() {
           <div className="font-head text-xl font-bold">Prospecção</div>
           <div className="mt-0.5 text-[11px] text-muted">ICPs e contas geradas pelo PREDATOR</div>
         </div>
-        <Button
-          size="sm"
-          variant="violet"
-          onClick={() => {
-            setIcpEmEdicao(null);
-            setModalIcpAberto(true);
-          }}
-        >
-          + Criar ICP
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={icpSelecionadoId === null}
+            onClick={() => setModalImportarAberto(true)}
+          >
+            Importar de evento
+          </Button>
+          <Button
+            size="sm"
+            variant="violet"
+            onClick={() => {
+              setIcpEmEdicao(null);
+              setModalIcpAberto(true);
+            }}
+          >
+            + Criar ICP
+          </Button>
+        </div>
       </div>
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
+      {mensagem && <div className="mb-4 text-[12px] text-green">{mensagem}</div>}
 
       <div className="mb-4 grid grid-cols-3 gap-2.5">
         <KpiCard label="Franquia — limite" value={franquia?.limite ?? "—"} colorClassName="text-cyan" />
@@ -279,7 +354,6 @@ export function Prospeccao() {
             [
               ["nome", "Nome"],
               ["segmento", "Segmento"],
-              ["porte", "Porte"],
               ["regiao", "Região"],
             ] as const
           ).map(([campo, rotulo]) => (
@@ -288,6 +362,15 @@ export function Prospeccao() {
               <Input name={campo} required defaultValue={icpEmEdicao?.[campo as keyof ICP] as string} />
             </div>
           ))}
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Porte</div>
+            <Select name="porte" defaultValue={icpEmEdicao?.porte ?? ""}>
+              <option value="">Qualquer porte</option>
+              <option value="MICRO">Micro</option>
+              <option value="PEQUENO">Pequeno</option>
+              <option value="DEMAIS">Demais (médio/grande)</option>
+            </Select>
+          </div>
           {(
             [
               ["cnae_codigos", "CNAEs (separados por vírgula)"],
@@ -315,6 +398,24 @@ export function Prospeccao() {
           </div>
           <Button type="submit" className="w-full justify-center">
             Gerar
+          </Button>
+        </form>
+      </Modal>
+
+      <Modal
+        title={`Importar participantes de evento${icpSelecionado ? ` — ${icpSelecionado.nome}` : ""}`}
+        open={modalImportarAberto}
+        onClose={() => setModalImportarAberto(false)}
+      >
+        <form onSubmit={importarParticipantes} className="flex flex-col gap-3">
+          <div className="text-[11px] text-muted">
+            Cole as linhas direto do Excel/Planilhas (uma por participante). Colunas na ordem: Nome, Empresa,
+            Cargo, E-mail, Telefone — só Nome e Empresa são obrigatórios. Empresas repetidas na lista viram uma
+            única conta; participantes duplicados (mesmo nome ou e-mail na mesma empresa) são ignorados.
+          </div>
+          <Textarea name="participantes" required rows={10} placeholder={"Joana Silva\tClinica Vida Plena\tDiretora\tjoana@vidaplena.com\t11999990000"} />
+          <Button type="submit" className="w-full justify-center">
+            Importar
           </Button>
         </form>
       </Modal>

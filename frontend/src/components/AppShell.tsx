@@ -5,13 +5,16 @@ import { InstallBanner } from "@/components/InstallBanner";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth";
 
-const NAV_ITEMS = [
+const NAV_ITEMS_PAGOS = [
   { path: "/", label: "Dashboard", icon: "⬡", end: true },
   { path: "/crm", label: "CRM", icon: "◈" },
-  { path: "/rede-social", label: "Rede Social", icon: "◎" },
   { path: "/map", label: "MAP", icon: "⚡" },
   { path: "/prospeccao", label: "Prospecção", icon: "🎯" },
 ];
+
+// Sempre visível — é o único módulo que uma conta sem licença ativa
+// (entrou via convite-vitrine, Onda H) tem acesso.
+const NAV_ITEM_REDE_SOCIAL = { path: "/rede-social", label: "Rede Social", icon: "◎", end: false };
 
 const ADMIN_NAV_ITEMS = [
   { path: "/admin/tenants", label: "Tenants", icon: "🏢" },
@@ -39,10 +42,11 @@ function NavButton({ path, label, icon, end }: { path: string; label: string; ic
 }
 
 export function AppShell() {
-  const { usuario, sair } = useAuth();
+  const { usuario, temLicencaAtiva, sair } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const isSuperAdmin = usuario?.papel === "super_admin";
+  const navItems = temLicencaAtiva ? [...NAV_ITEMS_PAGOS, NAV_ITEM_REDE_SOCIAL] : [NAV_ITEM_REDE_SOCIAL];
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -69,7 +73,7 @@ export function AppShell() {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-1.5">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <NavButton key={item.path} {...item} />
           ))}
 
@@ -124,7 +128,7 @@ export function AppShell() {
       </div>
 
       <nav className="fixed right-0 bottom-0 left-0 z-50 hidden justify-around border-t border-border bg-surf2/95 px-1 py-1.5 backdrop-blur-md max-sm:flex">
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

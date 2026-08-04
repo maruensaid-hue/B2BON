@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.api.deps import exigir_licenca_ativa
 from app.api.v1.admin_tenants import router as admin_tenants_router
 from app.api.v1.aprovacoes import router as aprovacoes_router
 from app.api.v1.auditoria import router as auditoria_router
@@ -36,36 +37,42 @@ from app.api.v1.whatsapp import router as whatsapp_router
 
 router = APIRouter()
 
-router.include_router(icp_router)
-router.include_router(oferta_router)
-router.include_router(comunicacao_router)
-router.include_router(onboarding_router)
-router.include_router(contas_router)
-router.include_router(aprovacoes_router)
+# Módulos pagos (PREDATOR/CRM/MAP) — travados para tenants sem licença
+# ativa (Onda H: convite-vitrine só dá acesso à Rede Social). Auth,
+# convites, planos, admin de tenant, webhooks/optout (públicos) e a
+# própria Rede Social ficam de fora deliberadamente.
+_exige_licenca = [Depends(exigir_licenca_ativa)]
+
+router.include_router(icp_router, dependencies=_exige_licenca)
+router.include_router(oferta_router, dependencies=_exige_licenca)
+router.include_router(comunicacao_router, dependencies=_exige_licenca)
+router.include_router(onboarding_router, dependencies=_exige_licenca)
+router.include_router(contas_router, dependencies=_exige_licenca)
+router.include_router(aprovacoes_router, dependencies=_exige_licenca)
 router.include_router(auditoria_router)
-router.include_router(ropa_router)
-router.include_router(cadencias_router)
-router.include_router(envios_router)
-router.include_router(whatsapp_router)
+router.include_router(ropa_router, dependencies=_exige_licenca)
+router.include_router(cadencias_router, dependencies=_exige_licenca)
+router.include_router(envios_router, dependencies=_exige_licenca)
+router.include_router(whatsapp_router, dependencies=_exige_licenca)
 router.include_router(webhooks_router)
 router.include_router(optout_router)
-router.include_router(configuracao_envio_router)
-router.include_router(linkedin_router)
-router.include_router(canais_router)
-router.include_router(qualificacao_router)
-router.include_router(conversas_router)
-router.include_router(notificacoes_router)
-router.include_router(decisores_router)
-router.include_router(reunioes_router)
-router.include_router(titulares_router)
-router.include_router(faq_router)
-router.include_router(painel_router)
-router.include_router(nps_router)
-router.include_router(indicacoes_router)
+router.include_router(configuracao_envio_router, dependencies=_exige_licenca)
+router.include_router(linkedin_router, dependencies=_exige_licenca)
+router.include_router(canais_router, dependencies=_exige_licenca)
+router.include_router(qualificacao_router, dependencies=_exige_licenca)
+router.include_router(conversas_router, dependencies=_exige_licenca)
+router.include_router(notificacoes_router, dependencies=_exige_licenca)
+router.include_router(decisores_router, dependencies=_exige_licenca)
+router.include_router(reunioes_router, dependencies=_exige_licenca)
+router.include_router(titulares_router, dependencies=_exige_licenca)
+router.include_router(faq_router, dependencies=_exige_licenca)
+router.include_router(painel_router, dependencies=_exige_licenca)
+router.include_router(nps_router, dependencies=_exige_licenca)
+router.include_router(indicacoes_router, dependencies=_exige_licenca)
 router.include_router(auth_router)
 router.include_router(convites_router)
 router.include_router(planos_router)
 router.include_router(admin_tenants_router)
-router.include_router(crm_router)
+router.include_router(crm_router, dependencies=_exige_licenca)
 router.include_router(rede_social_router)
-router.include_router(motor_router)
+router.include_router(motor_router, dependencies=_exige_licenca)

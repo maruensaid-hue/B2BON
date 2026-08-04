@@ -132,3 +132,96 @@ def test_convite_exige_papel_admin_ou_super_admin(client, criar_usuario_autentic
     resposta = client.post("/api/v1/convites", json={"papel_concedido": "user"}, headers=headers_user)
 
     assert resposta.status_code == 403
+
+
+def test_registrar_via_convite_normal_retorna_licenca_ativa(client, db_session):
+    """A fixture `client` já representa um tenant pagante (Onda H) —
+    prova que o token de resposta reflete isso, ao contrário do fluxo de
+    convite-vitrine (testado abaixo)."""
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+    resposta = client.post(
+        "/api/v1/auth/registrar",
+        json={
+            "codigo_convite": convite.codigo,
+            "nome": "Novo Pagante",
+            "email": "novo-pagante@teste.com.br",
+            "senha": "senha123",
+        },
+    )
+
+    assert resposta.status_code == 201
+    assert resposta.json()["tem_licenca_ativa"] is True
+
+
+def test_convite_vitrine_qualquer_usuario_pode_gerar_sem_papel_admin(client, criar_usuario_autenticado):
+    """Onda H: diferente do convite de usuário, convite-vitrine não exige
+    papel admin/super_admin — decisão do produto é permitir crescimento
+    peer-to-peer."""
+    headers_user = criar_usuario_autenticado(TENANT_ID, papel="user", email="convida-vitrine@teste.com.br")
+
+    resposta = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}, headers=headers_user)
+
+    assert resposta.status_code == 201
+    assert resposta.json()["status"] == "disponivel"
+
+
+def test_aceitar_convite_vitrine_cria_tenant_sem_licenca_e_loga(client):
+    convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+
+    resposta = client.post(
+        "/api/v1/auth/registrar-vitrine",
+        json={
+            "codigo_convite": convite["codigo"],
+            "razao_social": "Parceira Convidada Ltda",
+            "nome_admin": "Admin Parceira",
+            "email_admin": "admin@parceira.com.br",
+            "senha_admin": "senha123",
+        },
+    )
+
+    assert resposta.status_code == 201
+    corpo = resposta.json()
+    assert corpo["tem_licenca_ativa"] is False
+    assert corpo["usuario"]["papel"] == "admin"
+    assert corpo["usuario"]["tenant_id"] != TENANT_ID
+
+
+def test_tenant_vitrine_acessa_rede_social_mas_nao_modulo_pago(client):
+    """O coração da Onda H: sem licença, `/rede-social/*` funciona e
+    `/icp` (módulo pago) devolve 403 — mesmo com token válido."""
+    convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+    token = client.post(
+        "/api/v1/auth/registrar-vitrine",
+        json={
+            "codigo_convite": convite["codigo"],
+            "razao_social": "Vitrine Sem Licenca Ltda",
+            "nome_admin": "Admin",
+            "email_admin": "vitrine-sem-licenca@teste.com.br",
+            "senha_admin": "senha123",
+        },
+    ).json()["access_token"]
+    headers_vitrine = {"Authorization": f"Bearer {token}"}
+
+    resposta_rede_social = client.get("/api/v1/rede-social/perfil", headers=headers_vitrine)
+    assert resposta_rede_social.status_code == 200
+
+    resposta_icp = client.get("/api/v1/icp", headers=headers_vitrine)
+    assert resposta_icp.status_code == 403
+
+
+def test_convite_vitrine_usado_duas_vezes_via_api_falha(client):
+    convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+    payload = {
+        "codigo_convite": convite["codigo"],
+        "razao_social": "Primeira Vez Ltda",
+        "nome_admin": "A",
+        "email_admin": "primeira-vez@teste.com.br",
+        "senha_admin": "senha123",
+    }
+    client.post("/api/v1/auth/registrar-vitrine", json=payload)
+
+    payload["email_admin"] = "segunda-vez@teste.com.br"
+    resposta = client.post("/api/v1/auth/registrar-vitrine", json=payload)
+
+    assert resposta.status_code == 409

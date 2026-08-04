@@ -19,3 +19,19 @@ class ConviteCadastroSchema(BaseModel):
 class GerarConviteRequestSchema(BaseModel):
     papel_concedido: str = "user"
     validade_horas: int | None = 168
+
+
+class ConviteVitrineSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tenant_id_origem: str
+    codigo: str
+    status: str
+    validade_em: datetime | None
+    tenant_id_gerado: str | None
+    criado_em: datetime
+
+
+class GerarConviteVitrineRequestSchema(BaseModel):
+    validade_horas: int | None = 168

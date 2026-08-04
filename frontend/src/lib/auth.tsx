@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-import { api, getToken, limparSessao, setSessao } from "@/lib/api";
+import { api, getTemLicencaAtiva, getToken, limparSessao, setSessao } from "@/lib/api";
 
 export interface Usuario {
   id: number;
@@ -14,13 +14,25 @@ export interface Usuario {
 interface TokenResponse {
   access_token: string;
   usuario: Usuario;
+  tem_licenca_ativa: boolean;
+}
+
+interface DadosRegistroVitrine {
+  codigo_convite: string;
+  razao_social: string;
+  cnpj?: string;
+  nome_admin: string;
+  email_admin: string;
+  senha_admin: string;
 }
 
 interface AuthContextValue {
   usuario: Usuario | null;
   autenticado: boolean;
+  temLicencaAtiva: boolean;
   entrar: (email: string, senha: string) => Promise<void>;
   entrarComGoogle: (idToken: string) => Promise<void>;
+  registrarVitrine: (dados: DadosRegistroVitrine) => Promise<void>;
   sair: () => void;
 }
 
@@ -38,27 +50,46 @@ function lerUsuarioSalvo(): Usuario | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(lerUsuarioSalvo);
+  const [temLicencaAtiva, setTemLicencaAtiva] = useState<boolean>(getTemLicencaAtiva);
 
   const entrar = useCallback(async (email: string, senha: string) => {
     const resposta = await api.post<TokenResponse>("/auth/login", { email, senha });
-    setSessao(resposta.access_token, resposta.usuario);
+    setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
     setUsuario(resposta.usuario);
+    setTemLicencaAtiva(resposta.tem_licenca_ativa);
   }, []);
 
   const entrarComGoogle = useCallback(async (idToken: string) => {
     const resposta = await api.post<TokenResponse>("/auth/google", { id_token: idToken });
-    setSessao(resposta.access_token, resposta.usuario);
+    setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
     setUsuario(resposta.usuario);
+    setTemLicencaAtiva(resposta.tem_licenca_ativa);
+  }, []);
+
+  const registrarVitrine = useCallback(async (dados: DadosRegistroVitrine) => {
+    const resposta = await api.post<TokenResponse>("/auth/registrar-vitrine", dados);
+    setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
+    setUsuario(resposta.usuario);
+    setTemLicencaAtiva(resposta.tem_licenca_ativa);
   }, []);
 
   const sair = useCallback(() => {
     limparSessao();
     setUsuario(null);
+    setTemLicencaAtiva(true);
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ usuario, autenticado: Boolean(usuario && getToken()), entrar, entrarComGoogle, sair }),
-    [usuario, entrar, entrarComGoogle, sair],
+    () => ({
+      usuario,
+      autenticado: Boolean(usuario && getToken()),
+      temLicencaAtiva,
+      entrar,
+      entrarComGoogle,
+      registrarVitrine,
+      sair,
+    }),
+    [usuario, temLicencaAtiva, entrar, entrarComGoogle, registrarVitrine, sair],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

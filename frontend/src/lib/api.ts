@@ -1,6 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 const TOKEN_KEY = "b2bon_token";
 const USUARIO_KEY = "b2bon_usuario";
+const TEM_LICENCA_KEY = "b2bon_tem_licenca";
 
 export class ApiError extends Error {
   status: number;
@@ -15,14 +16,26 @@ export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-export function setSessao(token: string, usuario: unknown): void {
+export function setSessao(token: string, usuario: unknown, temLicencaAtiva: boolean = true): void {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USUARIO_KEY, JSON.stringify(usuario));
+  localStorage.setItem(TEM_LICENCA_KEY, JSON.stringify(temLicencaAtiva));
+}
+
+export function getTemLicencaAtiva(): boolean {
+  const bruto = localStorage.getItem(TEM_LICENCA_KEY);
+  if (!bruto) return true;
+  try {
+    return JSON.parse(bruto) as boolean;
+  } catch {
+    return true;
+  }
 }
 
 export function limparSessao(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USUARIO_KEY);
+  localStorage.removeItem(TEM_LICENCA_KEY);
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {

@@ -14,6 +14,7 @@ from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.icp import ICP
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, FiltroBusca
+from app.schemas.conta import ParticipanteEventoSchema
 from app.schemas.decisor import DecisorCreateSchema
 from app.services import auditoria_service, descarte_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
@@ -105,6 +106,110 @@ def gerar_lista(
     for conta in criadas:
         db.refresh(conta)
     return criadas
+
+
+def _normalizar_nome(nome: str) -> str:
+    return " ".join(nome.split()).lower()
+
+
+def importar_participantes_evento(
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    icp_id: int,
+    participantes: list[ParticipanteEventoSchema],
+    graph: Neo4jClient,
+) -> dict:
+    """Cria contas a partir de uma listagem de participantes de evento —
+    sem CNPJ, então a empresa é reconhecida pelo nome (normalizado), não
+    por dado da Receita Federal. Cada linha vira um decisor dentro da
+    conta da sua empresa; empresas repetidas na lista (ou já existentes
+    no tenant) são reaproveitadas em vez de duplicadas. Não passa pelo
+    score de aderência do ICP (não há CNAE/UF/porte reais para comparar)
+    nem consome franquia — mesmo raciocínio de `gerar_lista`: só consome
+    quando a conta entra numa cadência ativada."""
+    icp = db.query(ICP).filter_by(id=icp_id, tenant_id=tenant_id).one_or_none()
+    if icp is None:
+        raise NaoEncontrado(f"ICP {icp_id} não encontrado")
+
+    contas_por_nome: dict[str, Conta] = {
+        _normalizar_nome(conta.nome): conta
+        for conta in db.query(Conta).filter_by(tenant_id=tenant_id).all()
+    }
+
+    decisores_por_conta: dict[int, list[Decisor]] = {}
+    for decisor in db.query(Decisor).filter_by(tenant_id=tenant_id).all():
+        decisores_por_conta.setdefault(decisor.conta_id, []).append(decisor)
+
+    contas_criadas = 0
+    contas_reaproveitadas: set[int] = set()
+    decisores_criados = 0
+    contas_tocadas: dict[int, Conta] = {}
+
+    for participante in participantes:
+        chave_empresa = _normalizar_nome(participante.empresa)
+        conta = contas_por_nome.get(chave_empresa)
+        if conta is None:
+            conta = Conta(
+                tenant_id=tenant_id,
+                icp_id=icp_id,
+                nome=participante.empresa.strip(),
+                status="prospectada",
+                origem="evento",
+            )
+            db.add(conta)
+            db.flush()
+            graph.upsert_conta(tenant_id, conta.id, {"nome": conta.nome, "cnpj": conta.cnpj})
+            conta.neo4j_node_id = str(conta.id)
+            contas_por_nome[chave_empresa] = conta
+            contas_criadas += 1
+        elif conta.id not in contas_tocadas:
+            contas_reaproveitadas.add(conta.id)
+
+        contas_tocadas[conta.id] = conta
+
+        existentes = decisores_por_conta.setdefault(conta.id, [])
+        nome_participante = _normalizar_nome(participante.nome)
+        email_participante = participante.email.strip().lower() if participante.email else None
+        ja_cadastrado = any(
+            _normalizar_nome(decisor.nome) == nome_participante
+            or (email_participante and decisor.email and decisor.email.strip().lower() == email_participante)
+            for decisor in existentes
+        )
+        if ja_cadastrado:
+            continue
+
+        novo_decisor = Decisor(
+            tenant_id=tenant_id,
+            conta_id=conta.id,
+            nome=participante.nome.strip(),
+            cargo=participante.cargo,
+            email=participante.email,
+            telefone=participante.telefone,
+        )
+        db.add(novo_decisor)
+        existentes.append(novo_decisor)
+        decisores_criados += 1
+
+    auditoria_service.registrar(
+        db,
+        tenant_id,
+        "participantes_evento_importados",
+        "icp",
+        icp.id,
+        ator_id,
+        {"contas_criadas": contas_criadas, "decisores_criados": decisores_criados},
+    )
+    db.commit()
+    for conta in contas_tocadas.values():
+        db.refresh(conta)
+
+    return {
+        "contas_criadas": contas_criadas,
+        "contas_reaproveitadas": len(contas_reaproveitadas),
+        "decisores_criados": decisores_criados,
+        "contas": list(contas_tocadas.values()),
+    }
 
 
 def listar_por_icp(db: Session, tenant_id: str, icp_id: int) -> list[Conta]:

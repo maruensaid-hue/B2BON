@@ -32,7 +32,17 @@ class RegistrarRequestSchema(BaseModel):
     senha: str = Field(min_length=8, max_length=72)
 
 
+class RegistrarVitrineRequestSchema(BaseModel):
+    codigo_convite: str
+    razao_social: str
+    cnpj: str | None = None
+    nome_admin: str
+    email_admin: EmailStr
+    senha_admin: str = Field(min_length=8, max_length=72)
+
+
 class TokenResponseSchema(BaseModel):
     access_token: str
     token_type: str = "bearer"
     usuario: UsuarioSchema
+    tem_licenca_ativa: bool = True

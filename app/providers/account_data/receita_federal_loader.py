@@ -22,9 +22,14 @@ _PORTE_EMPRESA = {
 }
 
 
-def _ler_csv(caminho: str) -> list[list[str]]:
+def _linhas(caminho: str):
+    """Streama o CSV linha a linha em vez de materializar o arquivo inteiro
+    em memória — os arquivos públicos de CNPJ da Receita Federal chegam a
+    dezenas de GB (base nacional completa); carregar tudo de uma vez antes
+    de filtrar esgota a memória da máquina (ou trava por minutos/horas
+    fazendo swap) mesmo quando o recorte final é pequeno."""
     with open(caminho, encoding="latin-1", newline="") as arquivo:
-        return list(csv.reader(arquivo, delimiter=";"))
+        yield from csv.reader(arquivo, delimiter=";")
 
 
 def carregar_recorte(
@@ -44,13 +49,16 @@ def carregar_recorte(
     cnae_set = set(cnae_codigos)
     uf_set = {uf.upper() for uf in ufs}
 
-    empresas_por_cnpj_basico = {linha[0]: linha for linha in _ler_csv(caminho_empresas)}
-
     estabelecimentos_no_recorte = [
         linha
-        for linha in _ler_csv(caminho_estabelecimentos)
+        for linha in _linhas(caminho_estabelecimentos)
         if linha[11] in cnae_set and linha[19].upper() in uf_set
     ]
+    cnpjs_basicos_no_recorte = {linha[0] for linha in estabelecimentos_no_recorte}
+
+    empresas_por_cnpj_basico = {
+        linha[0]: linha for linha in _linhas(caminho_empresas) if linha[0] in cnpjs_basicos_no_recorte
+    }
 
     agora = datetime.now(UTC)
     carregados = 0
@@ -81,9 +89,7 @@ def carregar_recorte(
             db.add(estabelecimento)
         carregados += 1
 
-    cnpjs_basicos_no_recorte = {linha[0] for linha in estabelecimentos_no_recorte}
-
-    for linha in _ler_csv(caminho_socios):
+    for linha in _linhas(caminho_socios):
         cnpj_basico = linha[0]
         if cnpj_basico not in cnpjs_basicos_no_recorte:
             continue
