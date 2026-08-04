@@ -1,3 +1,7 @@
+# VITE_API_BASE_URL e configurada como variavel de build direto no
+# painel da Cloudflare (Configuracoes > Build > Variaveis e segredos) —
+# o Vite grava esse valor no bundle no momento do "npm run build", nao
+# em tempo de execucao, entao nao pode ir aqui no wrangler.toml.
 name = "b2bon"
 compatibility_date = "2026-08-03"
 
