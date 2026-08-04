@@ -2,9 +2,16 @@
 
 Guia passo a passo para colocar a plataforma no ar usando só serviços
 com camada gratuita real: **Neon** (Postgres), **Neo4j AuraDB Free**
-(grafo), **Render** (backend) e **Cloudflare Pages** (frontend). Cada
-passo abaixo exige uma conta pessoal sua nesses serviços — não é algo
-que possa ser automatizado por aqui.
+(grafo), **Render** (backend) e **Cloudflare Workers** (frontend
+estático — a Cloudflare descontinuou o "Pages" como produto separado
+em 2026, unificando tudo em "Workers"). Cada passo abaixo exige uma
+conta pessoal sua nesses serviços — não é algo que possa ser
+automatizado por aqui.
+
+Já foi feito uma vez com sucesso: backend em
+`https://b2bon-api.onrender.com`, frontend em
+`https://b2bon.maruen-said.workers.dev`. Este guia documenta o caminho
+real percorrido (inclui os desvios da versão original do plano).
 
 ## 1. Banco de dados — Neon
 
@@ -59,27 +66,54 @@ DATABASE_URL="<connection string do Neon>" python scripts/bootstrap_tenant.py
 Mesmo script já usado localmente (Onda A) — pede tenant, plano,
 admin e senha interativamente.
 
-## 5. Frontend — Cloudflare Pages
+## 5. Frontend — Cloudflare Workers (site estático)
 
-1. Em https://pages.cloudflare.com, conecte o mesmo repositório GitHub.
-2. Configuração do build:
-   - Diretório raiz: `frontend`
-   - Comando de build: `npm run build`
-   - Diretório de saída: `dist`
-3. Variável de ambiente do projeto: `VITE_API_BASE_URL` = URL pública
-   do serviço no Render + `/api/v1` (ex.:
-   `https://b2bon-api.onrender.com/api/v1`).
-4. Deploy. O arquivo `frontend/public/_redirects` já está no repo —
-   garante que rotas como `/crm` funcionem ao recarregar a página.
+A Cloudflare não oferece mais "Pages" como fluxo separado — o caminho
+real, hoje, é criar um **Worker** a partir de um repositório Git,
+configurado como ativos estáticos puros (sem código de servidor):
+
+1. Em https://dash.cloudflare.com, vá em **Computação → Workers e
+   Pages** (pode estar direto na barra lateral) → **"Criar
+   aplicativo"** → **"Continue with GitHub"** → selecione o repo
+   `B2BON`.
+2. Na tela "Configure seu aplicativo":
+   - **Comando da build**: `cd frontend && npm install && npm run build`
+   - **Comando de implantação**: `cd frontend && npx wrangler deploy`
+     (o campo já vem preenchido com `npx wrangler deploy` sozinho —
+     é preciso adicionar o `cd frontend &&` na frente).
+3. O arquivo `frontend/wrangler.toml` já está no repo, configurando o
+   Worker como ativos estáticos puros (`[assets] directory = "./dist"`,
+   `not_found_handling = "single-page-application"` — cobre o mesmo
+   papel que o antigo `_redirects` do Pages clássico cobria; **não**
+   recriar um `_redirects`, os dois mecanismos juntos causam um loop
+   infinito de redirecionamento e o deploy falha).
+4. Depois do primeiro deploy, vá em **Configurações → Build** (não em
+   "Variáveis e segredos" da aba principal — aquela seção é só para
+   variáveis de **tempo de execução**, bloqueada para Workers só de
+   ativos estáticos) e adicione, na seção "Variáveis e segredos" **de
+   dentro de Build**:
+   - **Nome**: `VITE_API_BASE_URL`
+   - **Valor**: URL pública do serviço no Render + `/api/v1` (ex.:
+     `https://b2bon-api.onrender.com/api/v1`)
+
+   O Vite grava esse valor dentro do JavaScript já no momento do
+   `npm run build` (não é lido em tempo de execução) — se essa
+   variável for adicionada **depois** do primeiro deploy, é preciso
+   disparar um novo deploy (um novo commit/push é o jeito mais
+   confiável; o botão "Nova implantação" do painel abre um upload
+   manual de arquivos, não um rebuild a partir do Git).
+5. A URL final fica em `https://<nome-do-worker>.<sua-conta>.workers.dev`.
 
 ## 6. Fechar o CORS
 
-Volte ao Render, atualize `CORS_ORIGINS` para incluir a URL real do
-Cloudflare Pages (ex.: `["https://b2bon.pages.dev"]`, ou o domínio
-próprio se configurar um) e faça redeploy do serviço.
+Volte ao Render, no serviço `b2bon-api`, aba **Environment**, atualize
+`CORS_ORIGINS` para a URL real do Worker (ex.:
+`https://b2bon.maruen-said.workers.dev` — texto simples, sem colchetes
+nem aspas; o campo aceita os dois formatos) e salve — o Render redeploya
+sozinho.
 
 ## Verificação final
 
-Acesse a URL do Cloudflare Pages, faça login com o admin criado no
-passo 4, confirme que Dashboard/CRM/Prospecção/MAP/Rede Social/Admin
-carregam dados reais do Neon+AuraDB em produção.
+Acesse a URL do Worker, faça login com o admin criado no passo 4,
+confirme que Dashboard/CRM/Prospecção/MAP/Rede Social/Admin carregam
+dados reais do Neon+AuraDB em produção.
