@@ -13,7 +13,14 @@ from app.models.faq_item import FaqItem
 from app.models.mensagem import Mensagem
 from app.models.turno_conversa import TurnoConversa
 from app.providers.channels.whatsapp.base import WhatsAppProvider
-from app.services import auditoria_service, cadencia_service, faq_service, notificacao_service, scoring_service
+from app.services import (
+    auditoria_service,
+    cadencia_service,
+    faq_service,
+    llm_helpers,
+    notificacao_service,
+    scoring_service,
+)
 from app.services.errors import NaoEncontrado
 
 _PREFIXO_CONTINUAR = "CONTINUAR:"
@@ -93,7 +100,8 @@ def processar_mensagem_recebida(
         else ""
     )
 
-    resposta = llm.generate(
+    resposta = llm_helpers.gerar(
+        llm,
         LLMRequest(
             prompt=(
                 "Você conduz uma qualificação de vendas pelo método S.H.A.R.K. "

@@ -14,7 +14,7 @@ from app.models.indicacao import Indicacao
 from app.models.mensagem import Mensagem
 from app.models.pesquisa_nps import PesquisaNps
 from app.providers.rede_social.base import RedeSocialProvider
-from app.services import aprovacao_service, auditoria_service
+from app.services import aprovacao_service, auditoria_service, llm_helpers
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 
@@ -58,7 +58,8 @@ def solicitar(db: Session, tenant_id: str, pesquisa: PesquisaNps, llm: LLMProvid
     db.add(indicacao)
     db.flush()
 
-    resposta = llm.generate(
+    resposta = llm_helpers.gerar(
+        llm,
         LLMRequest(
             prompt=(
                 f"Escreva uma mensagem curta e calorosa para {decisor.nome}, da empresa {conta.nome}, que acabou "

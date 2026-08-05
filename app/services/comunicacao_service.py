@@ -6,7 +6,7 @@ from app.models.configuracao_comunicacao import ConfiguracaoComunicacao
 from app.models.icp import ICP
 from app.models.oferta import Oferta
 from app.schemas.comunicacao import ConfiguracaoComunicacaoUpsertSchema
-from app.services import auditoria_service
+from app.services import auditoria_service, llm_helpers
 from app.services.errors import RegraNegocioViolada
 
 
@@ -59,7 +59,8 @@ def gerar_amostra(
     for indice in range(quantidade):
         texto_valido: str | None = None
         for _ in range(tentativas_por_mensagem):
-            resposta = llm.generate(
+            resposta = llm_helpers.gerar(
+                llm,
                 LLMRequest(
                     prompt=(
                         f"Escreva a mensagem de prospecção nº {indice + 1} para o ICP "

@@ -16,7 +16,14 @@ from app.models.oferta import Oferta
 from app.models.toque_cadencia import ToqueCadencia
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.cadencia import CadenciaCreateSchema
-from app.services import aprovacao_service, auditoria_service, comunicacao_service, franquia_service, optout_service
+from app.services import (
+    aprovacao_service,
+    auditoria_service,
+    comunicacao_service,
+    franquia_service,
+    llm_helpers,
+    optout_service,
+)
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 MINIMO_TOQUES = 5
@@ -32,6 +39,20 @@ def obter(db: Session, tenant_id: str, cadencia_id: int) -> Cadencia:
 
 def listar(db: Session, tenant_id: str) -> list[Cadencia]:
     return db.query(Cadencia).filter_by(tenant_id=tenant_id).order_by(Cadencia.id.desc()).all()
+
+
+def excluir(db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int) -> None:
+    """Só permite excluir em rascunho — uma vez que `gerar_para_lote` gera
+    ao menos uma mensagem com sucesso, o status já sai de rascunho, então
+    isto garante que nunca há `Mensagem` presa a uma cadência excluída."""
+    cadencia = obter(db, tenant_id, cadencia_id)
+    if cadencia.status != "rascunho":
+        raise RegraNegocioViolada("Só é possível excluir cadências em rascunho, antes da primeira geração de mensagens.")
+
+    db.query(ToqueCadencia).filter_by(cadencia_id=cadencia.id).delete()
+    auditoria_service.registrar(db, tenant_id, "cadencia_excluida", "cadencia", cadencia.id, ator_id, {"nome": cadencia.nome})
+    db.delete(cadencia)
+    db.commit()
 
 
 def toques_da_cadencia(db: Session, cadencia_id: int) -> list[ToqueCadencia]:
@@ -120,7 +141,8 @@ def _gerar_conteudo_toque(
     ) + (f" Gatilhos de abordagem: {', '.join(icp.gatilhos)}." if icp.gatilhos else "")
     diferenciais = f" Diferenciais: {', '.join(oferta.diferenciais)}." if oferta.diferenciais else ""
     provas_sociais = f" Provas sociais: {', '.join(oferta.provas_sociais)}." if oferta.provas_sociais else ""
-    resposta = llm.generate(
+    resposta = llm_helpers.gerar(
+        llm,
         LLMRequest(
             prompt=(
                 f"Escreva o toque {toque.ordem} (canal {toque.canal}) de uma cadência de prospecção "

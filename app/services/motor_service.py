@@ -9,7 +9,7 @@ from app.models.interacao_tenant import InteracaoTenant
 from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
-from app.services import auditoria_service, rede_social_service
+from app.services import auditoria_service, llm_helpers, rede_social_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 _TIPOS_VALIDOS = {
@@ -189,7 +189,8 @@ def gerar_script_resgate(db: Session, tenant_id: str, llm: LLMProvider) -> dict:
     resumo_sinais = ", ".join(f"{tipo}: +{pontos}" for tipo, pontos in risco["sinais"].items()) or "nenhum sinal negativo recente"
     historico = "\n".join(f"- {i.tipo} ({i.criado_em:%Y-%m-%d}): {i.descricao or ''}" for i in interacoes) or "sem interações registradas"
 
-    resposta = llm.generate(
+    resposta = llm_helpers.gerar(
+        llm,
         LLMRequest(
             prompt=(
                 f"O tenant '{perfil.nome_exibicao}' da B2B ON está classificado como "

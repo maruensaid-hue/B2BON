@@ -17,7 +17,7 @@ from app.models.icp import ICP
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, FiltroBusca
 from app.schemas.conta import ParticipanteEventoSchema
 from app.schemas.decisor import DecisorCreateSchema
-from app.services import auditoria_service, descarte_service
+from app.services import auditoria_service, descarte_service, llm_helpers
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 
@@ -107,6 +107,37 @@ def gerar_lista(
     for conta in criadas:
         db.refresh(conta)
     return criadas
+
+
+def criar_manual(
+    db: Session, tenant_id: str, ator_id: str | None, icp_id: int, nome: str, cnpj: str | None, dominio: str | None
+) -> Conta:
+    """Cadastro avulso de uma conta a partir do CRM (E2-H2) — para o cliente
+    que chegou por indicação/inbound, não por uma lista do PREDATOR.
+    Precisa de um ICP porque `Conta.icp_id` é obrigatório no modelo (todo
+    o resto do produto — score de aderência, geração de cadência —
+    presume uma conta ligada a um perfil), mas não passa pelo score de
+    aderência: cadastro manual não tem candidato pra pontuar contra."""
+    icp = db.query(ICP).filter_by(id=icp_id, tenant_id=tenant_id).one_or_none()
+    if icp is None:
+        raise NaoEncontrado(f"ICP {icp_id} não encontrado")
+
+    conta = Conta(
+        tenant_id=tenant_id,
+        icp_id=icp_id,
+        nome=nome,
+        cnpj=cnpj,
+        dominio=dominio,
+        status="prospectada",
+        origem="manual",
+    )
+    db.add(conta)
+    db.flush()
+
+    auditoria_service.registrar(db, tenant_id, "conta_criada_manual", "conta", conta.id, ator_id, {"nome": nome})
+    db.commit()
+    db.refresh(conta)
+    return conta
 
 
 def _normalizar_nome(nome: str) -> str:
@@ -227,6 +258,51 @@ def obter(db: Session, tenant_id: str, conta_id: int) -> Conta:
     return conta
 
 
+def atualizar(
+    db: Session, tenant_id: str, ator_id: str | None, conta_id: int, nome_fantasia: str | None, dominio: str | None
+) -> Conta:
+    """Edição manual da conta (E2-H2) — a Receita Federal não traz site, e
+    a razão social nem sempre é a marca comercial conhecida; sem isto não
+    havia como corrigir esses dois campos depois que a conta já existe."""
+    conta = obter(db, tenant_id, conta_id)
+    conta.nome_fantasia = nome_fantasia
+    conta.dominio = dominio
+
+    auditoria_service.registrar(db, tenant_id, "conta_atualizada", "conta", conta.id, ator_id, {}, conta_id=conta.id)
+    db.commit()
+    db.refresh(conta)
+    return conta
+
+
+def atualizar_decisor(
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    conta_id: int,
+    decisor_id: int,
+    nome: str,
+    cargo: str | None,
+    email: str | None,
+    telefone: str | None,
+    linkedin_url: str | None,
+) -> Decisor:
+    decisor = db.query(Decisor).filter_by(id=decisor_id, conta_id=conta_id, tenant_id=tenant_id).one_or_none()
+    if decisor is None:
+        raise NaoEncontrado(f"Decisor {decisor_id} não encontrado nesta conta")
+    decisor.nome = nome
+    decisor.cargo = cargo
+    decisor.email = email
+    decisor.telefone = telefone
+    decisor.linkedin_url = linkedin_url
+
+    auditoria_service.registrar(
+        db, tenant_id, "decisor_atualizado", "decisor", decisor.id, ator_id, {}, conta_id=conta_id
+    )
+    db.commit()
+    db.refresh(decisor)
+    return decisor
+
+
 def enriquecer(
     db: Session,
     tenant_id: str,
@@ -255,7 +331,8 @@ def enriquecer(
     except httpx.HTTPError as erro:
         raise RegraNegocioViolada(f"Não foi possível acessar o site institucional: {erro}") from erro
 
-    resposta = llm.generate(
+    resposta = llm_helpers.gerar(
+        llm,
         LLMRequest(
             prompt=(
                 f"A seguir está o conteúdo de várias páginas do site institucional da empresa "

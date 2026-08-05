@@ -1,7 +1,7 @@
 import anthropic
 
 from app.core.config import settings
-from app.llm.base import LLMProvider
+from app.llm.base import LLMIndisponivel, LLMProvider
 from app.llm.schemas import LLMRequest, LLMResponse
 
 
@@ -13,13 +13,18 @@ class ClaudeProvider(LLMProvider):
         self._model = settings.anthropic_model
 
     def generate(self, request: LLMRequest) -> LLMResponse:
-        message = self._client.messages.create(
-            model=self._model,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            system=request.system or anthropic.NOT_GIVEN,
-            messages=[{"role": "user", "content": request.prompt}],
-        )
+        if not settings.anthropic_api_key:
+            raise LLMIndisponivel("ANTHROPIC_API_KEY não configurada no servidor.")
+        try:
+            message = self._client.messages.create(
+                model=self._model,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                system=request.system or anthropic.NOT_GIVEN,
+                messages=[{"role": "user", "content": request.prompt}],
+            )
+        except anthropic.AnthropicError as erro:
+            raise LLMIndisponivel(f"Falha ao chamar a IA: {erro}") from erro
         return LLMResponse(
             content=message.content[0].text,
             model=message.model,
