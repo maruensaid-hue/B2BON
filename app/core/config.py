@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     # e aspas exatas — ver `origens_cors` abaixo para o parsing tolerante.
     cors_origins: str = "http://localhost:5173"
 
+    # Segredo compartilhado do disparador de envio agendado (Onda I) — sem
+    # ele, POST /cron/processar-envios sempre recusa (nunca abre exceção
+    # pra segredo vazio). Gerado com `secrets.token_urlsafe(32)`, o mesmo
+    # valor vai no Render (env var) e no GitHub Actions (repo secret).
+    cron_secret: str = ""
+
     @property
     def origens_cors(self) -> list[str]:
         """Aceita tanto JSON (`["https://a.com"]`) quanto uma lista simples

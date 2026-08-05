@@ -112,6 +112,30 @@ Volte ao Render, no serviço `b2bon-api`, aba **Environment**, atualize
 nem aspas; o campo aceita os dois formatos) e salve — o Render redeploya
 sozinho.
 
+## 7. Disparo agendado de envio (Onda I)
+
+O Render free não tem worker/cron nativo — sem esse passo, mensagens
+aprovadas ficam pra sempre "agendadas" e nunca saem, porque nada chama
+`POST /cron/processar-envios` sozinho. Quem chama é um **GitHub
+Actions agendado** (`.github/workflows/cron-envios.yml`, já no repo,
+roda a cada 15 minutos de graça):
+
+1. Gere o segredo: `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+2. Cole o mesmo valor em dois lugares:
+   - Render → `b2bon-api` → **Environment** → `CRON_SECRET`.
+   - GitHub → repositório → **Settings → Secrets and variables →
+     Actions → New repository secret** → nome `CRON_SECRET`.
+3. Se a URL do backend não for `https://b2bon-api.onrender.com/api/v1`,
+   defina também uma **Actions variable** (não secret) chamada
+   `API_BASE_URL` com a URL certa — o workflow já tem esse valor como
+   padrão.
+4. Confirme em **Actions** (aba do GitHub) que o workflow "Disparar
+   envios pendentes" aparece e roda sem erro (pode disparar manual pelo
+   botão "Run workflow" pra testar sem esperar os 15 minutos).
+
+Efeito colateral útil: como o Render free "dorme" sem tráfego, esse
+ping a cada 15 minutos também mantém o serviço acordado.
+
 ## Verificação final
 
 Acesse a URL do Worker, faça login com o admin criado no passo 4,

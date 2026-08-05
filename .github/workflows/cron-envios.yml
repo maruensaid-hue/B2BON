@@ -1,0 +1,24 @@
+name: Disparar envios pendentes
+
+# Onda I — o backend (Render free) nao tem worker/cron nativo, entao o
+# disparo de POST /cron/processar-envios vem de fora, por um GitHub
+# Actions agendado (gratis nesse volume). Efeito colateral bem-vindo:
+# a chamada tambem mantem o servico Render acordado (spin-down do free
+# tier acontece so depois de ficar sem trafego).
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  processar-envios:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar POST /cron/processar-envios
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${API_BASE_URL}/cron/processar-envios" \
+            -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

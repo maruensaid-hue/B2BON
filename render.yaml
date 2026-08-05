@@ -24,3 +24,5 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false # lista JSON, ex.: ["https://b2bon.pages.dev"]
+      - key: CRON_SECRET
+        sync: false # mesmo valor do repo secret CRON_SECRET no GitHub Actions (Onda I)

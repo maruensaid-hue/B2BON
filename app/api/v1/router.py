@@ -13,6 +13,7 @@ from app.api.v1.contas import router as contas_router
 from app.api.v1.convites import router as convites_router
 from app.api.v1.crm import router as crm_router
 from app.api.v1.conversas import router as conversas_router
+from app.api.v1.cron import router as cron_router
 from app.api.v1.decisores import router as decisores_router
 from app.api.v1.envios import router as envios_router
 from app.api.v1.faq import router as faq_router
@@ -39,8 +40,9 @@ router = APIRouter()
 
 # Módulos pagos (PREDATOR/CRM/MAP) — travados para tenants sem licença
 # ativa (Onda H: convite-vitrine só dá acesso à Rede Social). Auth,
-# convites, planos, admin de tenant, webhooks/optout (públicos) e a
-# própria Rede Social ficam de fora deliberadamente.
+# convites, planos, admin de tenant, webhooks/optout/cron (públicos,
+# com seu próprio mecanismo de autenticação) e a própria Rede Social
+# ficam de fora deliberadamente.
 _exige_licenca = [Depends(exigir_licenca_ativa)]
 
 router.include_router(icp_router, dependencies=_exige_licenca)
@@ -56,6 +58,7 @@ router.include_router(envios_router, dependencies=_exige_licenca)
 router.include_router(whatsapp_router, dependencies=_exige_licenca)
 router.include_router(webhooks_router)
 router.include_router(optout_router)
+router.include_router(cron_router)
 router.include_router(configuracao_envio_router, dependencies=_exige_licenca)
 router.include_router(linkedin_router, dependencies=_exige_licenca)
 router.include_router(canais_router, dependencies=_exige_licenca)
