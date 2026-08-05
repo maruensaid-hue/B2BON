@@ -4,21 +4,27 @@
   --font-head: "Space Grotesk", sans-serif;
   --font-body: "Inter", sans-serif;
 
-  --color-bg: #050d1a;
-  --color-surf: #0f1e35;
-  --color-surf2: #162540;
-  --color-surf3: #1c2e4a;
+  /* Tema claro (Onda I) — o escuro original cansava a vista e deixava
+     texto secundário (--color-muted) sem contraste suficiente. Os tons
+     de destaque (cyan/violet/green/amber/red) ficaram mais escuros que
+     antes de propósito: as versões originais foram calibradas pra pop
+     contra um fundo quase preto e ficariam claras demais (baixo
+     contraste) como texto sobre branco. */
+  --color-bg: #f5f8fb;
+  --color-surf: #ffffff;
+  --color-surf2: #eef2f7;
+  --color-surf3: #e2e8f0;
 
-  --color-cyan: #00c2ff;
-  --color-violet: #7c3aed;
-  --color-green: #10b981;
-  --color-amber: #f59e0b;
-  --color-red: #ef4444;
+  --color-cyan: #0087c4;
+  --color-violet: #6d28d9;
+  --color-green: #059669;
+  --color-amber: #b45309;
+  --color-red: #dc2626;
 
-  --color-text: #e2eef9;
-  --color-muted: #4a6a8a;
-  --color-border: rgba(0, 194, 255, 0.11);
-  --color-border2: rgba(0, 194, 255, 0.22);
+  --color-text: #101826;
+  --color-muted: #4b5c72;
+  --color-border: rgba(16, 24, 38, 0.1);
+  --color-border2: rgba(16, 24, 38, 0.18);
 }
 
 * {
