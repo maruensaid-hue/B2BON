@@ -36,6 +36,16 @@ def listar_cadencias(
     return cadencia_service.listar(db, tenant_id)
 
 
+@router.delete("/{cadencia_id}", status_code=204)
+def excluir_cadencia(
+    cadencia_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    cadencia_service.excluir(db, tenant_id, ator_id, cadencia_id)
+
+
 @router.get("/{cadencia_id}/toques", response_model=list[ToqueCadenciaSchema])
 def listar_toques(
     cadencia_id: int,

@@ -123,6 +123,27 @@ def test_ativar_apos_aprovar_todos_os_toques(client, onboarding_completo, criar_
     assert resposta.json()["cadencia"]["status"] == "ativa"
 
 
+def test_excluir_cadencia_em_rascunho(client, criar_cadencia):
+    cadencia = criar_cadencia()
+
+    resposta = client.delete(f"/api/v1/cadencias/{cadencia['id']}")
+
+    assert resposta.status_code == 204
+    assert client.get(f"/api/v1/cadencias/{cadencia['id']}").status_code == 404
+
+
+def test_excluir_cadencia_ja_gerada_e_bloqueado(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia
+):
+    conta, decisor = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    resposta = client.delete(f"/api/v1/cadencias/{cadencia['id']}")
+
+    assert resposta.status_code == 409
+
+
 def test_ativar_cadencia_consome_franquia(client, onboarding_completo, criar_conta_com_decisor, criar_cadencia):
     """Gancho da Onda 1: franquia_service.consumir_para_ativacao chamado de verdade."""
     conta, decisor = criar_conta_com_decisor()

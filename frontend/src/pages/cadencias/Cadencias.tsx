@@ -67,6 +67,7 @@ export function Cadencias() {
     toqueVazio(5, "whatsapp"),
   ]);
   const [resultadoGeracao, setResultadoGeracao] = useState<GerarLoteResultado | null>(null);
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
 
@@ -200,6 +201,20 @@ export function Cadencias() {
     }
   }
 
+  async function excluirCadencia() {
+    if (cadenciaSelecionadaId === null) return;
+    setErro(null);
+    try {
+      await api.delete(`/cadencias/${cadenciaSelecionadaId}`);
+      setConfirmandoExclusao(false);
+      setCadenciaSelecionadaId(null);
+      setMensagem("Cadência excluída.");
+      await carregarCadencias();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir a cadência.");
+    }
+  }
+
   return (
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
@@ -223,7 +238,10 @@ export function Cadencias() {
           {cadencias.map((cadencia) => (
             <button
               key={cadencia.id}
-              onClick={() => setCadenciaSelecionadaId(cadencia.id)}
+              onClick={() => {
+                setCadenciaSelecionadaId(cadencia.id);
+                setConfirmandoExclusao(false);
+              }}
               className={`rounded-lg border px-3 py-1.5 text-[12px] ${
                 cadencia.id === cadenciaSelecionadaId
                   ? "border-cyan bg-cyan/15 text-cyan"
@@ -248,6 +266,22 @@ export function Cadencias() {
                   <Button size="sm" onClick={ativarCadencia}>
                     Ativar cadência
                   </Button>
+                )}
+                {cadenciaSelecionada.status === "rascunho" && !confirmandoExclusao && (
+                  <Button size="sm" variant="danger" onClick={() => setConfirmandoExclusao(true)}>
+                    Excluir
+                  </Button>
+                )}
+                {confirmandoExclusao && (
+                  <>
+                    <span className="text-[11px] text-muted">Excluir esta cadência?</span>
+                    <Button size="sm" variant="danger" onClick={excluirCadencia}>
+                      Confirmar
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmandoExclusao(false)}>
+                      Cancelar
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
