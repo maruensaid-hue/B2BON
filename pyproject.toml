@@ -1,7 +1,7 @@
 [project]
 name = "b2bon-predator"
 version = "0.1.0"
-description = "Scaffolding do módulo PREDATOR — B2B ON"
+description = "B2B ON — plataforma SaaS multi-tenant (CRM, Rede Social, MAP, PREDATOR)"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
