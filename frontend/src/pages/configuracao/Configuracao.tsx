@@ -28,11 +28,109 @@ function paraLista(texto: string): string[] {
     .filter(Boolean);
 }
 
+function OpcoesOferta({
+  oferta,
+  onEditar,
+  onAtivar,
+  onDesativar,
+  onExcluir,
+}: {
+  oferta: Oferta;
+  onEditar: () => void;
+  onAtivar: () => void;
+  onDesativar: () => void;
+  onExcluir: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+
+  if (confirmandoExclusao) {
+    return (
+      <div className="flex items-center gap-1.5 text-[11px]">
+        <span className="text-muted">Excluir "{oferta.nome}"?</span>
+        <Button size="sm" variant="danger" onClick={onExcluir}>
+          Confirmar
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setConfirmandoExclusao(false)}>
+          Cancelar
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setAberto((atual) => !atual)}
+        className="rounded-md px-1.5 py-0.5 text-[13px] text-muted hover:bg-surf2 hover:text-text"
+        aria-label="Opções da oferta"
+      >
+        ⋮
+      </button>
+      {aberto && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setAberto(false)} />
+          <div className="absolute right-0 z-20 mt-1 flex w-44 flex-col overflow-hidden rounded-lg border border-border bg-surf shadow-lg">
+            <button
+              type="button"
+              className="px-3 py-2 text-left text-[12px] hover:bg-surf2"
+              onClick={() => {
+                setAberto(false);
+                onEditar();
+              }}
+            >
+              Editar
+            </button>
+            {oferta.ativo ? (
+              <button
+                type="button"
+                className="px-3 py-2 text-left text-[12px] hover:bg-surf2"
+                onClick={() => {
+                  setAberto(false);
+                  onDesativar();
+                }}
+              >
+                Desativar
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="px-3 py-2 text-left text-[12px] hover:bg-surf2"
+                onClick={() => {
+                  setAberto(false);
+                  onAtivar();
+                }}
+              >
+                Ativar
+              </button>
+            )}
+            <button
+              type="button"
+              className="px-3 py-2 text-left text-[12px] text-red hover:bg-red/10"
+              onClick={() => {
+                setAberto(false);
+                setConfirmandoExclusao(true);
+              }}
+            >
+              Excluir
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Configuracao() {
   const [ofertas, setOfertas] = useState<Oferta[]>([]);
   const [comunicacao, setComunicacao] = useState<ConfiguracaoComunicacao | null>(null);
+  const [ofertaEmEdicaoId, setOfertaEmEdicaoId] = useState<number | null>(null);
+  const [salvandoOferta, setSalvandoOferta] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
+
+  const ofertaEmEdicao = ofertas.find((oferta) => oferta.id === ofertaEmEdicaoId) ?? null;
 
   async function carregarTudo() {
     try {
@@ -53,19 +151,63 @@ export function Configuracao() {
 
   async function salvarOferta(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (salvandoOferta) return;
     const form = new FormData(event.currentTarget);
+    const dados = {
+      nome: String(form.get("nome")),
+      descricao: String(form.get("descricao")),
+      diferenciais: paraLista(String(form.get("diferenciais") ?? "")),
+      provas_sociais: paraLista(String(form.get("provas_sociais") ?? "")),
+    };
+    setSalvandoOferta(true);
+    setErro(null);
     try {
-      await api.post("/ofertas", {
-        nome: String(form.get("nome")),
-        descricao: String(form.get("descricao")),
-        diferenciais: paraLista(String(form.get("diferenciais") ?? "")),
-        provas_sociais: paraLista(String(form.get("provas_sociais") ?? "")),
-      });
+      if (ofertaEmEdicaoId !== null) {
+        await api.put(`/ofertas/${ofertaEmEdicaoId}`, dados);
+        setMensagem("Oferta atualizada.");
+        setOfertaEmEdicaoId(null);
+      } else {
+        await api.post("/ofertas", dados);
+        setMensagem("Oferta salva.");
+      }
       event.currentTarget.reset();
-      setMensagem("Oferta salva.");
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível salvar a oferta.");
+    } finally {
+      setSalvandoOferta(false);
+    }
+  }
+
+  async function ativarOferta(id: number) {
+    setErro(null);
+    try {
+      await api.post(`/ofertas/${id}/ativar`);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível ativar a oferta.");
+    }
+  }
+
+  async function desativarOferta(id: number) {
+    setErro(null);
+    try {
+      await api.post(`/ofertas/${id}/desativar`);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível desativar a oferta.");
+    }
+  }
+
+  async function excluirOferta(id: number) {
+    setErro(null);
+    try {
+      await api.delete(`/ofertas/${id}`);
+      if (ofertaEmEdicaoId === id) setOfertaEmEdicaoId(null);
+      setMensagem("Oferta excluída.");
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir a oferta.");
     }
   }
 
@@ -83,8 +225,6 @@ export function Configuracao() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível salvar a comunicação.");
     }
   }
-
-  const ofertaAtiva = ofertas.find((oferta) => oferta.ativo);
 
   return (
     <div className="p-5.5">
@@ -111,36 +251,80 @@ export function Configuracao() {
           {ofertas.map((oferta) => (
             <div key={oferta.id} className="flex items-center justify-between text-[12px]">
               <span className="font-semibold">{oferta.nome}</span>
-              <Badge tone={oferta.ativo ? "green" : "muted"}>{oferta.ativo ? "ativa" : "inativa"}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge tone={oferta.ativo ? "green" : "muted"}>{oferta.ativo ? "ativa" : "inativa"}</Badge>
+                <OpcoesOferta
+                  oferta={oferta}
+                  onEditar={() => setOfertaEmEdicaoId(oferta.id)}
+                  onAtivar={() => ativarOferta(oferta.id)}
+                  onDesativar={() => desativarOferta(oferta.id)}
+                  onExcluir={() => excluirOferta(oferta.id)}
+                />
+              </div>
             </div>
           ))}
           {ofertas.length === 0 && <div className="text-[12px] text-muted">Nenhuma oferta cadastrada ainda.</div>}
         </div>
-        <form onSubmit={salvarOferta} className="flex flex-col gap-3">
+        <form key={ofertaEmEdicaoId ?? "nova"} onSubmit={salvarOferta} className="flex flex-col gap-3">
+          {ofertaEmEdicao && (
+            <div className="flex items-center justify-between rounded-lg bg-surf2 px-3 py-2 text-[11px] text-muted">
+              Editando "{ofertaEmEdicao.nome}"
+              <button
+                type="button"
+                className="text-cyan hover:underline"
+                onClick={() => setOfertaEmEdicaoId(null)}
+              >
+                Cancelar edição
+              </button>
+            </div>
+          )}
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome</div>
-            <Input name="nome" required placeholder="Ex.: Adequação LGPD completa" />
+            <Input
+              name="nome"
+              required
+              defaultValue={ofertaEmEdicao?.nome}
+              placeholder="Ex.: Adequação LGPD completa"
+            />
           </div>
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
               Descrição (usada pela IA para escrever as mensagens)
             </div>
-            <Textarea name="descricao" required rows={3} placeholder="O que é a oferta e o problema que ela resolve — a IA usa esse texto como base direta do discurso de vendas." />
+            <Textarea
+              name="descricao"
+              required
+              rows={3}
+              defaultValue={ofertaEmEdicao?.descricao}
+              placeholder="O que é a oferta e o problema que ela resolve — a IA usa esse texto como base direta do discurso de vendas."
+            />
           </div>
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
               Diferenciais (separados por vírgula — também entram na mensagem)
             </div>
-            <Input name="diferenciais" placeholder="RIPD incluso, DPO terceirizado, resposta em 48h" />
+            <Input
+              name="diferenciais"
+              defaultValue={ofertaEmEdicao?.diferenciais.join(", ")}
+              placeholder="RIPD incluso, DPO terceirizado, resposta em 48h"
+            />
           </div>
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
               Provas sociais (separadas por vírgula — também entram na mensagem)
             </div>
-            <Input name="provas_sociais" placeholder="+40 clientes atendidos, certificação X" />
+            <Input
+              name="provas_sociais"
+              defaultValue={ofertaEmEdicao?.provas_sociais.join(", ")}
+              placeholder="+40 clientes atendidos, certificação X"
+            />
           </div>
-          <Button type="submit" className="w-full justify-center">
-            {ofertaAtiva ? "Cadastrar nova oferta" : "Cadastrar oferta"}
+          <Button type="submit" disabled={salvandoOferta} className="w-full justify-center">
+            {salvandoOferta
+              ? "Salvando..."
+              : ofertaEmEdicao
+                ? "Salvar alterações"
+                : "Cadastrar oferta"}
           </Button>
         </form>
       </Card>

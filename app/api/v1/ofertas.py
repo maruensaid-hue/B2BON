@@ -26,6 +26,47 @@ def listar_ofertas(
     return oferta_service.listar(db, tenant_id)
 
 
+@router.put("/{oferta_id}", response_model=OfertaSchema)
+def atualizar_oferta(
+    oferta_id: int,
+    dados: OfertaCreateSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> OfertaSchema:
+    return oferta_service.atualizar(db, tenant_id, ator_id, oferta_id, dados)
+
+
+@router.post("/{oferta_id}/ativar", response_model=OfertaSchema)
+def ativar_oferta(
+    oferta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> OfertaSchema:
+    return oferta_service.ativar(db, tenant_id, ator_id, oferta_id)
+
+
+@router.post("/{oferta_id}/desativar", response_model=OfertaSchema)
+def desativar_oferta(
+    oferta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> OfertaSchema:
+    return oferta_service.desativar(db, tenant_id, ator_id, oferta_id)
+
+
+@router.delete("/{oferta_id}", status_code=204)
+def excluir_oferta(
+    oferta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    oferta_service.excluir(db, tenant_id, ator_id, oferta_id)
+
+
 @router.post("/{oferta_id}/materiais", response_model=MaterialOfertaSchema, status_code=201)
 async def enviar_material(
     oferta_id: int,
