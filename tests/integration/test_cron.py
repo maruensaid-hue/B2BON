@@ -40,3 +40,22 @@ def test_processar_envios_com_segredo_certo_processa_todos_os_tenants(client, co
         "descartadas_email_invalido",
     }
     assert isinstance(corpo["por_tenant"], dict)
+
+
+def test_processar_retorno_sem_segredo_configurado_recusa(client):
+    resposta = client.post("/api/v1/cron/processar-retorno")
+    assert resposta.status_code == 403
+
+
+def test_processar_retorno_com_segredo_certo_processa_todos_os_tenants(client, com_segredo_cron):
+    resposta = client.post("/api/v1/cron/processar-retorno", headers={"X-Cron-Secret": SEGREDO})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert "totais" in corpo
+    assert set(corpo["totais"]) == {
+        "lembretes_d1_enviados",
+        "lembretes_h2_enviados",
+        "pesquisas_disparadas",
+    }
+    assert isinstance(corpo["por_tenant"], dict)

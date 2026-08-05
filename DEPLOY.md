@@ -112,13 +112,15 @@ Volte ao Render, no serviço `b2bon-api`, aba **Environment**, atualize
 nem aspas; o campo aceita os dois formatos) e salve — o Render redeploya
 sozinho.
 
-## 7. Disparo agendado de envio (Onda I)
+## 7. Disparo agendado de envio, lembretes e NPS (Onda I / Onda J)
 
 O Render free não tem worker/cron nativo — sem esse passo, mensagens
-aprovadas ficam pra sempre "agendadas" e nunca saem, porque nada chama
-`POST /cron/processar-envios` sozinho. Quem chama é um **GitHub
-Actions agendado** (`.github/workflows/cron-envios.yml`, já no repo,
-roda a cada 15 minutos de graça):
+aprovadas ficam pra sempre "agendadas" e nunca saem, lembretes de
+reunião (D-1/H-2) nunca disparam e pesquisas de NPS nunca são
+disparadas, porque nada chama esses dispatchers sozinho. Quem chama é
+um **GitHub Actions agendado** (`.github/workflows/cron-envios.yml`, já
+no repo, roda a cada 15 minutos de graça, chamando os dois endpoints
+abaixo em sequência):
 
 1. Gere o segredo: `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 2. Cole o mesmo valor em dois lugares:

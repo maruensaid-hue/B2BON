@@ -7,7 +7,7 @@ from app.models.tenant import Tenant
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.email_validation.base import EmailVerificationProvider
-from app.services import envio_service
+from app.services import envio_service, nps_service, reuniao_service
 from app.services.errors import NaoAutorizado
 
 router = APIRouter(prefix="/cron", tags=["cron"])
@@ -41,5 +41,29 @@ def processar_envios_todos_os_tenants(
         resultado_por_tenant[tenant.id] = resultado
         for chave in totais:
             totais[chave] += resultado[chave]
+
+    return {"totais": totais, "por_tenant": resultado_por_tenant}
+
+
+@router.post("/processar-retorno", dependencies=[Depends(_exigir_segredo_cron)])
+def processar_retorno_todos_os_tenants(
+    db: Session = Depends(get_db),
+    whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
+    email: EmailProvider = Depends(get_email_provider),
+) -> dict:
+    """Dispatcher agendado das métricas de retorno (lembrete de reunião
+    D-1/H-2 e disparo de pesquisa NPS pelo marco configurado) — mesmo
+    padrão de `processar_envios_todos_os_tenants`. Sem isto, esses dois
+    dispatchers só rodavam via chamada manual autenticada, nunca sozinhos."""
+    resultado_por_tenant: dict[str, dict] = {}
+    totais = {"lembretes_d1_enviados": 0, "lembretes_h2_enviados": 0, "pesquisas_disparadas": 0}
+
+    for tenant in db.query(Tenant).order_by(Tenant.id).all():
+        lembretes = reuniao_service.processar_lembretes(db, tenant.id, whatsapp, email)
+        nps = nps_service.disparar_pendentes(db, tenant.id, whatsapp, email)
+        resultado_por_tenant[tenant.id] = {**lembretes, **nps}
+        totais["lembretes_d1_enviados"] += lembretes["lembretes_d1_enviados"]
+        totais["lembretes_h2_enviados"] += lembretes["lembretes_h2_enviados"]
+        totais["pesquisas_disparadas"] += nps["pesquisas_disparadas"]
 
     return {"totais": totais, "por_tenant": resultado_por_tenant}
