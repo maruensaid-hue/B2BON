@@ -1,6 +1,10 @@
 from datetime import UTC, datetime
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from app.models.conta import Conta
+from app.models.estagio_funil import EstagioFunil
 from app.models.icp import ICP
 from app.models.usuario import Usuario
 from app.services import crm_service
@@ -37,6 +41,44 @@ def test_estagios_padrao_semeados_na_primeira_chamada(db_session):
     assert {e.tipo for e in estagios} == {"aberto", "ganho", "perdido"}
     # idempotente: chamar de novo não duplica
     assert len(crm_service.garantir_estagios_padrao(db_session, TENANT_ID)) == 5
+
+
+def test_constraint_unica_impede_estagio_duplicado_no_banco(db_session):
+    """Trava real contra a corrida: duas requisições concorrentes que
+    ambas veem a tabela vazia não conseguem inserir o mesmo (tenant_id,
+    ordem) duas vezes — a segunda falha no banco, não na aplicação."""
+    db_session.add(EstagioFunil(tenant_id=TENANT_ID, nome="Descoberta", ordem=1, tipo="aberto"))
+    db_session.commit()
+
+    db_session.add(EstagioFunil(tenant_id=TENANT_ID, nome="Descoberta (duplicado)", ordem=1, tipo="aberto"))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_garantir_estagios_padrao_recua_quando_insercao_colide(db_session, monkeypatch):
+    """Simula a corrida real: por baixo do `db.commit()` desta chamada,
+    outra transação já gravou o mesmo (tenant_id, ordem) — a função
+    precisa recuar (IntegrityError -> rollback) e reler o que já está
+    no banco, em vez de propagar o erro pra cima."""
+
+    commit_original = db_session.commit
+    colidiu = {"ja": False}
+
+    def commit_que_colide_uma_vez():
+        if not colidiu["ja"]:
+            colidiu["ja"] = True
+            db_session.rollback()
+            for nome, ordem, tipo in crm_service._ESTAGIOS_PADRAO:
+                db_session.add(EstagioFunil(tenant_id=TENANT_ID, nome=nome, ordem=ordem, tipo=tipo))
+            commit_original()
+            raise IntegrityError("simulado", params=None, orig=Exception("UNIQUE constraint"))
+        commit_original()
+
+    monkeypatch.setattr(db_session, "commit", commit_que_colide_uma_vez)
+
+    estagios = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)
+    assert len(estagios) == 5
 
 
 def test_criar_negocio_usa_primeiro_estagio_aberto_por_padrao(db_session):

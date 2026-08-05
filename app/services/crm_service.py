@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.atividade import Atividade
@@ -26,13 +27,22 @@ _PERIODO_PADRAO_DIAS = 30
 
 
 def garantir_estagios_padrao(db: Session, tenant_id: str) -> list[EstagioFunil]:
-    """Semeia o funil padrão na primeira vez que o tenant usa o CRM (Onda B)."""
+    """Semeia o funil padrão na primeira vez que o tenant usa o CRM (Onda B).
+
+    Duas chamadas concorrentes (duas abas abrindo o CRM ao mesmo tempo no
+    primeiro uso) podem ambas ver a tabela vazia e tentar inserir — a
+    UniqueConstraint(tenant_id, ordem) do modelo garante que só uma
+    vence; a outra recua e relê o que já foi gravado, em vez de duplicar.
+    """
     estagios = db.query(EstagioFunil).filter_by(tenant_id=tenant_id).order_by(EstagioFunil.ordem).all()
     if estagios:
         return estagios
     for nome, ordem, tipo in _ESTAGIOS_PADRAO:
         db.add(EstagioFunil(tenant_id=tenant_id, nome=nome, ordem=ordem, tipo=tipo))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
     return db.query(EstagioFunil).filter_by(tenant_id=tenant_id).order_by(EstagioFunil.ordem).all()
 
 

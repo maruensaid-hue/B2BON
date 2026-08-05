@@ -11,6 +11,7 @@ class ContaSchema(BaseModel):
     icp_id: int
     cnpj: str | None
     nome: str
+    nome_fantasia: str | None
     dominio: str | None
     porte: str | None
     segmento: str | None
@@ -34,6 +35,17 @@ class GerarListaRequestSchema(BaseModel):
 
 class DescartarContaRequestSchema(BaseModel):
     motivo: str
+
+
+class AtualizarContaRequestSchema(BaseModel):
+    nome_fantasia: str | None = None
+    dominio: str | None = None
+
+
+class CriarContaManualRequestSchema(BaseModel):
+    nome: str
+    cnpj: str | None = None
+    dominio: str | None = None
 
 
 class FranquiaSchema(BaseModel):

@@ -14,6 +14,7 @@ class Conta(Base):
     icp_id: Mapped[int] = mapped_column(ForeignKey("icp.id"))
     cnpj: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     nome: Mapped[str] = mapped_column(String)
+    nome_fantasia: Mapped[str | None] = mapped_column(String, nullable=True)
     dominio: Mapped[str | None] = mapped_column(String, nullable=True)
     porte: Mapped[str | None] = mapped_column(String, nullable=True)
     segmento: Mapped[str | None] = mapped_column(String, nullable=True)
