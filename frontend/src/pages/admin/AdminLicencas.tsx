@@ -127,11 +127,13 @@ export function AdminLicencas() {
                     : "Sem expiração"}
                 </td>
                 <td className="p-2">
-                  {linha.licenca && (
-                    <Button size="sm" variant="ghost" onClick={() => setTenantEmEdicao(linha)}>
-                      Editar
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    variant={linha.licenca ? "ghost" : "violet"}
+                    onClick={() => setTenantEmEdicao(linha)}
+                  >
+                    {linha.licenca ? "Editar" : "Criar licença"}
+                  </Button>
                 </td>
               </tr>
             ))}
@@ -147,7 +149,11 @@ export function AdminLicencas() {
       </Card>
 
       <Modal
-        title={tenantEmEdicao ? `Editar licença — ${tenantEmEdicao.tenant.razao_social}` : "Editar licença"}
+        title={
+          tenantEmEdicao
+            ? `${tenantEmEdicao.licenca ? "Editar" : "Criar"} licença — ${tenantEmEdicao.tenant.razao_social}`
+            : "Licença"
+        }
         open={tenantEmEdicao !== null}
         onClose={() => setTenantEmEdicao(null)}
       >

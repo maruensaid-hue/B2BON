@@ -88,7 +88,32 @@ def atualizar_licenca(
     status: str | None,
     data_expiracao: datetime | None,
 ) -> Licenca:
-    licenca = obter_licenca(db, tenant_id)
+    """Cria a licença se o tenant ainda não tiver nenhuma (ex.: tenant
+    nascido de convite-vitrine, sem `Licenca` por design — Onda H) ou
+    atualiza a existente. Sem isso, não havia como transformar um tenant
+    vitrine em cliente pagante pela tela de Admin: `obter_licenca`
+    recusava qualquer tenant sem licença, mesmo para criar a primeira."""
+    licenca = db.query(Licenca).filter_by(tenant_id=tenant_id).one_or_none()
+
+    if licenca is None:
+        if db.query(Tenant).filter_by(id=tenant_id).one_or_none() is None:
+            raise NaoEncontrado(f"Tenant {tenant_id} não encontrado")
+        if plano_id is None:
+            raise RegraNegocioViolada("Escolha um plano para criar a primeira licença deste tenant.")
+        if db.query(Plano).filter_by(id=plano_id).one_or_none() is None:
+            raise NaoEncontrado(f"Plano {plano_id} não encontrado")
+        licenca = Licenca(
+            tenant_id=tenant_id, plano_id=plano_id, status=status or "ativa", data_expiracao=data_expiracao
+        )
+        db.add(licenca)
+        db.flush()
+        auditoria_service.registrar(
+            db, tenant_id, "licenca_criada", "licenca", licenca.id, ator_id, {"plano_id": plano_id, "status": licenca.status}
+        )
+        db.commit()
+        db.refresh(licenca)
+        return licenca
+
     if plano_id is not None:
         if db.query(Plano).filter_by(id=plano_id).one_or_none() is None:
             raise NaoEncontrado(f"Plano {plano_id} não encontrado")

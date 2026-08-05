@@ -1,4 +1,5 @@
 from app.models.plano import Plano
+from app.models.tenant import Tenant
 
 TENANT_ID = "tenant-teste"
 
@@ -86,6 +87,39 @@ def test_atualizar_licenca_do_tenant(client, db_session):
 
     assert resposta.status_code == 200
     assert resposta.json()["plano_id"] == plano_b_id
+
+
+def test_atribuir_primeira_licenca_a_tenant_sem_licenca(client, db_session):
+    """Bug reportado: tenant nascido via convite-vitrine (Onda H) não tem
+    nenhuma `Licenca` — a tela de Admin precisa conseguir criar a
+    primeira, não só editar uma que já existe."""
+    plano_id = _criar_plano(db_session, nome="Vitrine-Upgrade", franquia=200)
+    db_session.add(Tenant(id="tenant-vitrine", razao_social="Empresa Vitrine"))
+    db_session.commit()
+
+    resposta_antes = client.get("/api/v1/admin/tenants/tenant-vitrine/licenca")
+    assert resposta_antes.status_code == 404
+
+    resposta = client.put(
+        "/api/v1/admin/tenants/tenant-vitrine/licenca", json={"plano_id": plano_id, "status": "ativa"}
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["plano_id"] == plano_id
+    assert corpo["status"] == "ativa"
+
+    resposta_depois = client.get("/api/v1/admin/tenants/tenant-vitrine/licenca")
+    assert resposta_depois.status_code == 200
+
+
+def test_criar_primeira_licenca_exige_plano(client, db_session):
+    db_session.add(Tenant(id="tenant-sem-plano", razao_social="Empresa Sem Plano"))
+    db_session.commit()
+
+    resposta = client.put("/api/v1/admin/tenants/tenant-sem-plano/licenca", json={"status": "ativa"})
+
+    assert resposta.status_code == 409
 
 
 def test_criar_tenant_bloqueado_para_nao_super_admin(client, criar_usuario_autenticado, db_session):
