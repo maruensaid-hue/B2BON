@@ -51,6 +51,41 @@ def obter(db: Session, tenant_id: str, reuniao_id: int) -> Reuniao:
     return reuniao
 
 
+def listar(db: Session, tenant_id: str, status: str | None = None) -> list[dict]:
+    """Não existia rota de listagem — só ações por id (Onda J: faltava tela
+    de Reuniões no frontend, esse é o endpoint que a alimenta). Nome de
+    conta/decisor junto (mesmo padrão de `aprovacao_service.listar_fila`)
+    — a tela não deveria mostrar só IDs crus."""
+    query = (
+        db.query(Reuniao, Conta, Decisor)
+        .join(Conta, Reuniao.conta_id == Conta.id)
+        .join(Decisor, Reuniao.decisor_id == Decisor.id)
+        .filter(Reuniao.tenant_id == tenant_id)
+    )
+    if status is not None:
+        query = query.filter(Reuniao.status == status)
+
+    return [
+        {
+            "id": reuniao.id,
+            "tenant_id": reuniao.tenant_id,
+            "conta_id": reuniao.conta_id,
+            "conta_nome": conta.nome,
+            "decisor_id": reuniao.decisor_id,
+            "decisor_nome": decisor.nome,
+            "vendedor_id": reuniao.vendedor_id,
+            "data_hora": reuniao.data_hora,
+            "status": reuniao.status,
+            "horarios_propostos": reuniao.horarios_propostos,
+            "horario_confirmado": reuniao.horario_confirmado,
+            "link_reuniao": reuniao.link_reuniao,
+            "qualificada_confirmada": reuniao.qualificada_confirmada,
+            "criado_em": reuniao.criado_em,
+        }
+        for reuniao, conta, decisor in query.order_by(Reuniao.data_hora.desc()).all()
+    ]
+
+
 def obter_por_token(db: Session, token: str) -> Reuniao:
     tenant_id, reuniao_id = _validar_token_reagendamento(token)
     return obter(db, tenant_id, reuniao_id)

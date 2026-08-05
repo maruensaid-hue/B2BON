@@ -26,6 +26,23 @@ class ReuniaoSchema(BaseModel):
     criado_em: datetime
 
 
+class ReuniaoListaItemSchema(BaseModel):
+    id: int
+    tenant_id: str
+    conta_id: int
+    conta_nome: str
+    decisor_id: int
+    decisor_nome: str
+    vendedor_id: str
+    data_hora: datetime
+    status: str
+    horarios_propostos: list
+    horario_confirmado: datetime | None
+    link_reuniao: str | None
+    qualificada_confirmada: bool | None
+    criado_em: datetime
+
+
 class ProporHorariosRequestSchema(BaseModel):
     vendedor_id: str
     duracao_minutos: int = 30

@@ -16,6 +16,7 @@ import { Kanban } from "@/pages/crm/Kanban";
 import { Map } from "@/pages/map/Map";
 import { Prospeccao } from "@/pages/prospeccao/Prospeccao";
 import { RedeSocial } from "@/pages/rede-social/RedeSocial";
+import { Reunioes } from "@/pages/reunioes/Reunioes";
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="prospeccao" element={<Prospeccao />} />
           <Route path="cadencias" element={<Cadencias />} />
           <Route path="aprovacoes" element={<Aprovacoes />} />
+          <Route path="reunioes" element={<Reunioes />} />
           <Route path="configuracao" element={<Configuracao />} />
           <Route path="admin/tenants" element={<AdminTenants />} />
           <Route path="admin/licencas" element={<AdminLicencas />} />

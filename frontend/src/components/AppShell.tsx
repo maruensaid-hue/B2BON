@@ -12,6 +12,7 @@ const NAV_ITEMS_PAGOS = [
   { path: "/prospeccao", label: "Prospecção", icon: "🎯" },
   { path: "/cadencias", label: "Cadências", icon: "📨" },
   { path: "/aprovacoes", label: "Aprovações", icon: "✅" },
+  { path: "/reunioes", label: "Reuniões", icon: "📅" },
   { path: "/configuracao", label: "Configuração", icon: "⚙" },
 ];
 

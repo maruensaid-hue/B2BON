@@ -23,11 +23,21 @@ from app.schemas.reuniao import (
     MarcarResultadoReuniaoRequestSchema,
     ProcessarLembretesResponseSchema,
     ReagendarReuniaoRequestSchema,
+    ReuniaoListaItemSchema,
     ReuniaoSchema,
 )
 from app.services import dossie_service, reuniao_service
 
 router = APIRouter(prefix="/reunioes", tags=["reunioes"])
+
+
+@router.get("", response_model=list[ReuniaoListaItemSchema])
+def listar_reunioes(
+    status: str | None = None,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[ReuniaoListaItemSchema]:
+    return [ReuniaoListaItemSchema(**item) for item in reuniao_service.listar(db, tenant_id, status)]
 
 
 @router.post("/processar-lembretes", response_model=ProcessarLembretesResponseSchema)

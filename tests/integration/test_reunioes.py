@@ -106,3 +106,40 @@ def test_confirmar_qualificacao_grava_feedback_ligado_ao_score(client, criar_con
     assert resposta.status_code == 200
     corpo = resposta.json()
     assert corpo["qualificada_confirmada"] is True
+
+
+def test_listar_reunioes_via_api(client, criar_conta_com_decisor):
+    """Onda J: não existia rota de listagem, só ações por id — faltava
+    tela de Reuniões no frontend."""
+    conta, decisor = criar_conta_com_decisor()
+    confirmada = _propor_e_confirmar(client, decisor.id)
+
+    resposta = client.get("/api/v1/reunioes")
+
+    assert resposta.status_code == 200
+    assert any(r["id"] == confirmada["id"] for r in resposta.json())
+
+
+def test_listar_reunioes_filtra_por_status(client, criar_conta_com_decisor):
+    conta, decisor = criar_conta_com_decisor()
+    confirmada = _propor_e_confirmar(client, decisor.id)
+    client.post(f"/api/v1/reunioes/{confirmada['id']}/marcar-resultado", json={"status": "realizada"})
+
+    agendadas = client.get("/api/v1/reunioes", params={"status": "agendada"}).json()
+    realizadas = client.get("/api/v1/reunioes", params={"status": "realizada"}).json()
+
+    assert not any(r["id"] == confirmada["id"] for r in agendadas)
+    assert any(r["id"] == confirmada["id"] for r in realizadas)
+
+
+def test_dossie_apos_reuniao_realizada(client, criar_conta_com_decisor):
+    conta, decisor = criar_conta_com_decisor()
+    confirmada = _propor_e_confirmar(client, decisor.id)
+    client.post(f"/api/v1/reunioes/{confirmada['id']}/marcar-resultado", json={"status": "realizada"})
+
+    resposta = client.get(f"/api/v1/reunioes/{confirmada['id']}/dossie")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["decisor_nome"] == decisor.nome
+    assert corpo["conta_nome"] == conta.nome
