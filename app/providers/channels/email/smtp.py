@@ -1,3 +1,4 @@
+import html
 import smtplib
 from email.message import EmailMessage
 
@@ -15,12 +16,25 @@ class SmtpEmailProvider(EmailProvider):
         corpo: str,
         remetente_nome: str,
         remetente_email: str,
+        pixel_url: str | None = None,
     ) -> ResultadoEnvio:
         mensagem = EmailMessage()
         mensagem["Subject"] = assunto
         mensagem["From"] = f"{remetente_nome} <{remetente_email}>"
         mensagem["To"] = destinatario
         mensagem.set_content(corpo)
+
+        if pixel_url:
+            # multipart/alternative: texto puro continua a parte principal
+            # (clientes que preferem texto simples ignoram o HTML) — o
+            # pixel só existe pra quem renderiza a parte HTML.
+            corpo_html = html.escape(corpo).replace("\n", "<br>")
+            mensagem.add_alternative(
+                f'<html><body>{corpo_html}'
+                f'<img src="{html.escape(pixel_url)}" width="1" height="1" '
+                f'alt="" style="display:none"></body></html>',
+                subtype="html",
+            )
 
         try:
             with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as servidor:

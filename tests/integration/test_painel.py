@@ -86,6 +86,30 @@ def test_indicadores_expoe_energia_e_atrito_por_periodo_configuravel(client, cri
     assert "taxa_no_show" in corpo["atrito"]
 
 
+def test_indicadores_energia_expoe_taxa_de_abertura_de_email(client, db_session, criar_conta_com_decisor):
+    from datetime import UTC, datetime
+
+    from app.models.mensagem import Mensagem
+    from app.services import rastreamento_service
+
+    conta, decisor = criar_conta_com_decisor()
+    agora = datetime.now(UTC)
+    aberta = Mensagem(
+        tenant_id=TENANT_ID, decisor_id=decisor.id, canal="email", conteudo="a", status="enviado", enviado_em=agora
+    )
+    nao_aberta = Mensagem(
+        tenant_id=TENANT_ID, decisor_id=decisor.id, canal="email", conteudo="b", status="enviado", enviado_em=agora
+    )
+    db_session.add_all([aberta, nao_aberta])
+    db_session.commit()
+    rastreamento_service.registrar_abertura(db_session, rastreamento_service.gerar_token_abertura(TENANT_ID, aberta.id))
+
+    resposta = client.get("/api/v1/painel/indicadores", params={"data_inicio": "2020-01-01", "data_fim": "2030-01-01"})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["energia"]["taxa_abertura_email"] == 0.5
+
+
 def test_export_csv_dos_indicadores(client):
     resposta = client.get("/api/v1/painel/indicadores/export.csv")
 

@@ -20,5 +20,10 @@ class EmailProvider(ABC):
         corpo: str,
         remetente_nome: str,
         remetente_email: str,
+        pixel_url: str | None = None,
     ) -> ResultadoEnvio:
+        """`pixel_url`, quando presente, é o rastreio de abertura (Onda I) —
+        exige mandar uma parte HTML do e-mail (texto puro não carrega
+        imagem), então implementações reais devem enviar multipart/
+        alternative com o pixel de 1x1 embutido na parte HTML."""
         raise NotImplementedError

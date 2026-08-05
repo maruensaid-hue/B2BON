@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_llm_provider, get_whatsapp_provider
@@ -7,7 +7,7 @@ from app.models.decisor import Decisor
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.schemas.reputacao import RegistrarEventoReputacaoRequestSchema, SaudeCanalSchema
 from app.schemas.whatsapp import WebhookEmailRequestSchema, WebhookWhatsAppRequestSchema
-from app.services import optout_service, qualificacao_service, reputacao_service, resposta_service
+from app.services import optout_service, qualificacao_service, rastreamento_service, reputacao_service, resposta_service
 from app.services.errors import NaoEncontrado
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -57,6 +57,15 @@ def webhook_email(
         db, dados.tenant_id, decisor.id, "email", dados.texto, llm, whatsapp
     )
     return {**resultado_resposta, **resultado_qualificacao}
+
+
+@router.get("/email/aberto/{token}.png")
+def registrar_abertura_email(token: str, db: Session = Depends(get_db)) -> Response:
+    """Pixel de rastreio de abertura (Onda I) — carregado pelo cliente de
+    e-mail do destinatário, nunca por uma pessoa. Token inválido/expirado
+    não derruba a imagem, só não registra nada (ver rastreamento_service)."""
+    rastreamento_service.registrar_abertura(db, token)
+    return Response(content=rastreamento_service.PIXEL_PNG_1X1, media_type="image/png")
 
 
 @router.post("/reputacao", response_model=SaudeCanalSchema)

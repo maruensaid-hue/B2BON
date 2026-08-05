@@ -9,7 +9,14 @@ from app.models.tarefa_linkedin import TarefaLinkedin
 from app.providers.channels.email.base import EmailProvider, ResultadoEnvio
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.email_validation.base import EmailVerificationProvider
-from app.services import aprovacao_service, auditoria_service, optout_service, rampa_service, reputacao_service
+from app.services import (
+    aprovacao_service,
+    auditoria_service,
+    optout_service,
+    rampa_service,
+    rastreamento_service,
+    reputacao_service,
+)
 from app.services.errors import RegraNegocioViolada
 
 MAX_TENTATIVAS_ENVIO = 3
@@ -46,7 +53,8 @@ def _processar_email(
     remetente_nome = config.remetente_nome if config else "PREDATOR"
     remetente_email = config.remetente_email if config else "no-reply@predator.local"
     corpo = f"{mensagem.conteudo}\n\n{config.assinatura}" if config else mensagem.conteudo
-    return provider.enviar(decisor.email, "Contato", corpo, remetente_nome, remetente_email)
+    pixel_url = rastreamento_service.url_pixel(mensagem.tenant_id, mensagem.id)
+    return provider.enviar(decisor.email, "Contato", corpo, remetente_nome, remetente_email, pixel_url)
 
 
 def processar_pendentes(

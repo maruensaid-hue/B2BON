@@ -19,6 +19,7 @@ class ConfiguracaoPainelUpsertSchema(BaseModel):
 
 class IndicadoresEnergiaSchema(BaseModel):
     taxa_resposta_por_canal: dict[str, float]
+    taxa_abertura_email: float | None
     taxa_qualificacao: float
     tempo_medio_ate_primeira_reuniao_horas: float | None
     origem_oportunidade: dict[str, int]

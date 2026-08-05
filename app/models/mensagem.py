@@ -27,6 +27,9 @@ class Mensagem(Base):
     )  # rascunho | aguardando_aprovacao | aprovado | enviado | falhou | cancelado
     agendado_para: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Só e-mail tem pixel de rastreio (Onda I) — fica nulo pra whatsapp/linkedin
+    # e para e-mails cujo cliente do destinatário bloqueia carregamento de imagem.
+    aberto_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     motivo_falha: Mapped[str | None] = mapped_column(String, nullable=True)
     tentativas_envio: Mapped[int] = mapped_column(Integer, default=0)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

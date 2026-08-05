@@ -155,6 +155,15 @@ def indicadores_energia(db: Session, tenant_id: str, data_inicio: date | None, d
         )
         taxa_resposta_por_canal[canal] = respondentes / len(decisor_ids)
 
+    # Só e-mail tem pixel de rastreio (Onda I) — os demais canais nunca
+    # teriam abertura pra medir, então a taxa fica None em vez de 0.
+    mensagens_email_no_periodo = [m for m in mensagens_enviadas if m.canal == "email" and _no_periodo(m.enviado_em, inicio, fim)]
+    taxa_abertura_email = (
+        sum(1 for m in mensagens_email_no_periodo if m.aberto_em is not None) / len(mensagens_email_no_periodo)
+        if mensagens_email_no_periodo
+        else None
+    )
+
     conversas = (
         db.query(ConversaQualificacao)
         .filter(ConversaQualificacao.tenant_id == tenant_id)
@@ -196,6 +205,7 @@ def indicadores_energia(db: Session, tenant_id: str, data_inicio: date | None, d
 
     return {
         "taxa_resposta_por_canal": taxa_resposta_por_canal,
+        "taxa_abertura_email": taxa_abertura_email,
         "taxa_qualificacao": taxa_qualificacao,
         "tempo_medio_ate_primeira_reuniao_horas": tempo_medio_ate_primeira_reuniao_horas,
         "origem_oportunidade": origem_oportunidade(db, tenant_id),

@@ -104,6 +104,11 @@ class Settings(BaseSettings):
     # valor vai no Render (env var) e no GitHub Actions (repo secret).
     cron_secret: str = ""
 
+    # URL pública onde a própria API responde — precisa ser absoluta pra
+    # entrar em link/pixel dentro do corpo de um e-mail (o cliente de
+    # e-mail do destinatário não sabe resolver caminho relativo). Onda I.
+    url_base_api: str = "http://localhost:8000/api/v1"
+
     @property
     def origens_cors(self) -> list[str]:
         """Aceita tanto JSON (`["https://a.com"]`) quanto uma lista simples

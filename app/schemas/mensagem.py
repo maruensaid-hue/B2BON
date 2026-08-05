@@ -18,6 +18,7 @@ class MensagemSchema(BaseModel):
     status: str
     agendado_para: datetime | None
     enviado_em: datetime | None
+    aberto_em: datetime | None
     motivo_falha: str | None
     tentativas_envio: int
     criado_em: datetime
