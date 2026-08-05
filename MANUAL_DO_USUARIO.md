@@ -33,13 +33,17 @@ conexões, mensagens) de forma controlada.
 Cada usuário tem um papel (`papel`), que define o que ele pode fazer:
 
 - **`user`** — uso normal do dia a dia: CRM, Prospecção, Cadências,
-  Aprovações, Reuniões, Rede Social.
+  Aprovações, Reuniões, Rede Social — e o **MAP**, mas só das contas em
+  que é o vendedor responsável (sua própria carteira).
 - **`admin`** — tudo que `user` faz, mais gerar/revogar convites de
-  cadastro para novos usuários do próprio tenant.
+  cadastro para novos usuários do próprio tenant. No MAP, é o gestor:
+  vê a carteira de todos os vendedores do tenant, com filtro por
+  vendedor, e é quem atribui qual vendedor é responsável por cada conta.
 - **`super_admin`** — reservado à equipe da própria B2B ON (CyberFort):
   além de tudo acima, enxerga a área de **Administração** (Tenants,
-  Licenças, Planos) e o módulo **MAP**, que monitora a saúde de *todos*
-  os tenants assinantes, não só do próprio.
+  Licenças, Planos). O MAP dele é outro: monitora a saúde de *todos os
+  tenants assinantes* da B2B ON, não as contas de um tenant específico
+  — ver seção 4 para a diferença entre os dois MAPs.
 
 ### Entrando na plataforma
 
@@ -116,9 +120,43 @@ mensagens. É o único módulo acessível sem licença ativa.
 
 ## 4. MAP — Motor de Alta Performance
 
-Restrito a `super_admin`. Não é sobre os clientes *do seu* tenant — é o
-motor que monitora o **risco de churn dos tenants assinantes da B2B
-ON** (o negócio da própria CyberFort).
+O MAP é para todo mundo — é um dos diferenciais centrais da plataforma,
+não uma ferramenta interna da CyberFort. O que muda por papel é **o que**
+cada um enxerga, não se tem acesso:
+
+| Papel | O que o MAP mostra |
+|---|---|
+| `user` (vendedor) | Só as contas em que ele é o vendedor responsável — a própria carteira. |
+| `admin` (gestor) | Todas as contas do tenant, de todos os vendedores, com filtro por vendedor. |
+| `super_admin` (B2B ON) | Os tenants **assinantes da B2B ON** (visão cross-tenant, inalterada — é o negócio da própria CyberFort, não as contas de um tenant). |
+
+Nas duas primeiras linhas o MAP mede a saúde das **contas** (clientes e
+prospects dentro do CRM/PREDATOR do tenant); na linha do `super_admin`
+o MAP mede a saúde dos **tenants** (empresas que assinam a B2B ON). São
+dois rankings com a mesma metodologia de score, aplicados a coisas
+diferentes — o `super_admin` não vê as contas internas de cada tenant
+no MAP, só a saúde do tenant como cliente da B2B ON.
+
+### 4.1 MAP de contas (user/admin)
+
+- **Visão geral**: score médio, quantidade de contas em situação
+  crítica/atenção/saudável e valor de pipeline aberto em risco.
+- **Filtro por vendedor** (só para `admin`): reduz o ranking e os KPIs
+  a um vendedor específico — útil para o 1:1 de gestão.
+- **Ranking de saúde**: contas ordenadas por score; o gestor vê também
+  a coluna de qual vendedor é o responsável.
+- **Detalhe da conta**: score de risco (0–100) com os sinais que o
+  compõem, histórico de interações, **Registrar interação** (contato,
+  ticket de suporte, reclamação, feedback positivo, reunião remarcada,
+  menção a concorrente — mesmo vocabulário do MAP de tenants) e
+  **Gerar script de resgate** (roteiro de reengajamento gerado por IA).
+- **Atribuir vendedor a uma conta**: no detalhe da conta em
+  **Prospecção** (`ContaDetalheModal`), o campo "Vendedor responsável
+  (MAP)" — editável só por `admin`/`super_admin` — define de quem é
+  aquela conta. Sem essa atribuição, a conta não aparece para nenhum
+  `user`, só para o gestor.
+
+### 4.2 MAP de tenants (super_admin)
 
 - **Visão geral**: score médio de saúde, quantidade de tenants em
   situação crítica/atenção/saudável e valor mensal total em risco.
@@ -128,9 +166,7 @@ ON** (o negócio da própria CyberFort).
 - **Detalhe do tenant**: ao clicar em um tenant no ranking —
   - Score de risco (0–100) e os sinais que compõem esse score (dias
     sem contato, tickets, reclamações, etc., cada um com seu peso).
-  - Histórico de interações registradas (contato, ticket de suporte,
-    reclamação, feedback positivo, reunião remarcada, menção a
-    concorrente).
+  - Histórico de interações registradas.
   - **Registrar interação**: toda vez que a equipe de sucesso do
     cliente falar com o tenant, vale registrar aqui — é o que alimenta
     o score.

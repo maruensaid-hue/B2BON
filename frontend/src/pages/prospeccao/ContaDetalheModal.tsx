@@ -2,9 +2,10 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Input, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { api, ApiError, getBlob } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface ContaCompleta {
   id: number;
@@ -12,6 +13,7 @@ interface ContaCompleta {
   nome: string;
   nome_fantasia: string | null;
   dominio: string | null;
+  vendedor_usuario_id: number | null;
   porte: string | null;
   segmento: string | null;
   regiao: string | null;
@@ -36,6 +38,11 @@ interface Decisor {
   telefone: string | null;
 }
 
+interface UsuarioResumo {
+  id: number;
+  nome: string;
+}
+
 interface Props {
   contaId: number;
   onClose: () => void;
@@ -43,9 +50,12 @@ interface Props {
 }
 
 export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
+  const { usuario } = useAuth();
+  const isGestor = usuario?.papel === "admin" || usuario?.papel === "super_admin";
   const [conta, setConta] = useState<ContaCompleta | null>(null);
   const [campos, setCampos] = useState<CampoEnriquecido[]>([]);
   const [decisores, setDecisores] = useState<Decisor[]>([]);
+  const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
   const [mostrarDescarte, setMostrarDescarte] = useState(false);
   const [editandoConta, setEditandoConta] = useState(false);
   const [decisorEmEdicaoId, setDecisorEmEdicaoId] = useState<number | null>(null);
@@ -68,6 +78,22 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
   useEffect(() => {
     carregar();
   }, [contaId]);
+
+  useEffect(() => {
+    if (isGestor) {
+      api
+        .get<UsuarioResumo[]>("/usuarios")
+        .then(setVendedores)
+        .catch(() => undefined);
+    }
+  }, [isGestor]);
+
+  async function atribuirVendedor(vendedorUsuarioId: number | null) {
+    await executar("atribuir-vendedor", async () => {
+      await api.put(`/saude-contas/contas/${contaId}/vendedor`, { vendedor_usuario_id: vendedorUsuarioId });
+      await carregar();
+    });
+  }
 
   async function executar(nomeAcao: string, acao: () => Promise<void>) {
     setErro(null);
@@ -203,6 +229,36 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
               </Button>
             </div>
           )}
+
+          <div className="mb-4">
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+              Vendedor responsável (MAP)
+            </div>
+            {isGestor ? (
+              <Select
+                value={conta.vendedor_usuario_id ?? ""}
+                onChange={(event) =>
+                  atribuirVendedor(event.target.value ? Number(event.target.value) : null)
+                }
+                disabled={carregando !== null}
+              >
+                <option value="">Sem vendedor atribuído</option>
+                {vendedores.map((vendedor) => (
+                  <option key={vendedor.id} value={vendedor.id}>
+                    {vendedor.nome}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <div className="text-[11px] text-muted">
+                {conta.vendedor_usuario_id === null
+                  ? "Sem vendedor atribuído"
+                  : conta.vendedor_usuario_id === usuario?.id
+                    ? "Atribuído a você"
+                    : "Atribuído a outro vendedor"}
+              </div>
+            )}
+          </div>
 
           <div className="mb-4 flex flex-wrap gap-2">
             <Button size="sm" variant="green" disabled={carregando !== null} onClick={priorizar}>

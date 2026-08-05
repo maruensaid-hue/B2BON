@@ -16,6 +16,9 @@ class Conta(Base):
     nome: Mapped[str] = mapped_column(String)
     nome_fantasia: Mapped[str | None] = mapped_column(String, nullable=True)
     dominio: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Dono da conta para o MAP de contas (visão de saúde por vendedor/gestor,
+    # distinta do MAP de tenants do super_admin) — nulo até alguém atribuir.
+    vendedor_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
     porte: Mapped[str | None] = mapped_column(String, nullable=True)
     segmento: Mapped[str | None] = mapped_column(String, nullable=True)
     regiao: Mapped[str | None] = mapped_column(String, nullable=True)

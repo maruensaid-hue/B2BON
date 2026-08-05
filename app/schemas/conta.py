@@ -13,6 +13,7 @@ class ContaSchema(BaseModel):
     nome: str
     nome_fantasia: str | None
     dominio: str | None
+    vendedor_usuario_id: int | None
     porte: str | None
     segmento: str | None
     regiao: str | None

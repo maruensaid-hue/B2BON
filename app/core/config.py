@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     limiar_risco_critico_tenant: float = 75.0
     limiar_risco_atencao_tenant: float = 45.0
 
+    # Mesma metodologia acima, aplicada às contas (clientes/prospects) DE
+    # um tenant — MAP de contas, visível a user/admin/super_admin dentro do
+    # próprio tenant, distinto do MAP de tenants (só super_admin, cross-tenant).
+    limiar_risco_critico_conta: float = 75.0
+    limiar_risco_atencao_conta: float = 45.0
+
     # Origens do frontend autorizadas a chamar a API (CORS) — Vite dev
     # server por padrão; a origem de produção (Cloudflare Pages, Onda G)
     # entra via env var, sem mudar código (Onda F1). Texto puro (não
