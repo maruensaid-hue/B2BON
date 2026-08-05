@@ -10,6 +10,9 @@ const NAV_ITEMS_PAGOS = [
   { path: "/crm", label: "CRM", icon: "◈" },
   { path: "/map", label: "MAP", icon: "⚡" },
   { path: "/prospeccao", label: "Prospecção", icon: "🎯" },
+  { path: "/cadencias", label: "Cadências", icon: "📨" },
+  { path: "/aprovacoes", label: "Aprovações", icon: "✅" },
+  { path: "/configuracao", label: "Configuração", icon: "⚙" },
 ];
 
 // Sempre visível — é o único módulo que uma conta sem licença ativa

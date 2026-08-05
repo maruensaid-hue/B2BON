@@ -33,6 +33,26 @@ def test_cadencia_criada_com_sucesso(client, criar_cadencia):
     assert len(cadencia["canais"]) >= 2
 
 
+def test_listar_cadencias_via_api(client, criar_cadencia):
+    criada = criar_cadencia()
+
+    resposta = client.get("/api/v1/cadencias")
+
+    assert resposta.status_code == 200
+    assert any(c["id"] == criada["id"] for c in resposta.json())
+
+
+def test_listar_toques_da_cadencia_via_api(client, criar_cadencia):
+    criada = criar_cadencia()
+
+    resposta = client.get(f"/api/v1/cadencias/{criada['id']}/toques")
+
+    assert resposta.status_code == 200
+    toques = resposta.json()
+    assert len(toques) == 5
+    assert toques[0]["ordem"] == 1
+
+
 def test_mensagens_personalizadas_usam_dados_do_decisor(
     client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm
 ):

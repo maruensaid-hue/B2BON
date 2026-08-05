@@ -11,6 +11,7 @@ from app.schemas.cadencia import (
     GerarCadenciaRequestSchema,
     GerarCadenciaResponseSchema,
     RelatorioAbTesteSchema,
+    ToqueCadenciaSchema,
 )
 from app.services import ab_teste_service, cadencia_service
 
@@ -25,6 +26,24 @@ def criar_cadencia(
     db: Session = Depends(get_db),
 ) -> CadenciaSchema:
     return cadencia_service.criar(db, tenant_id, ator_id, dados)
+
+
+@router.get("", response_model=list[CadenciaSchema])
+def listar_cadencias(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[CadenciaSchema]:
+    return cadencia_service.listar(db, tenant_id)
+
+
+@router.get("/{cadencia_id}/toques", response_model=list[ToqueCadenciaSchema])
+def listar_toques(
+    cadencia_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[ToqueCadenciaSchema]:
+    cadencia_service.obter(db, tenant_id, cadencia_id)
+    return cadencia_service.toques_da_cadencia(db, cadencia_id)
 
 
 @router.get("/{cadencia_id}", response_model=CadenciaSchema)

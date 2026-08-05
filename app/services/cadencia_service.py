@@ -29,6 +29,10 @@ def obter(db: Session, tenant_id: str, cadencia_id: int) -> Cadencia:
     return cadencia
 
 
+def listar(db: Session, tenant_id: str) -> list[Cadencia]:
+    return db.query(Cadencia).filter_by(tenant_id=tenant_id).order_by(Cadencia.id.desc()).all()
+
+
 def toques_da_cadencia(db: Session, cadencia_id: int) -> list[ToqueCadencia]:
     return db.query(ToqueCadencia).filter_by(cadencia_id=cadencia_id).order_by(ToqueCadencia.ordem).all()
 

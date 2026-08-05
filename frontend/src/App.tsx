@@ -9,6 +9,9 @@ import { AdminTenants } from "@/pages/admin/AdminTenants";
 import { ConviteVitrine } from "@/pages/ConviteVitrine";
 import { Dashboard } from "@/pages/Dashboard";
 import { Login } from "@/pages/Login";
+import { Aprovacoes } from "@/pages/aprovacoes/Aprovacoes";
+import { Cadencias } from "@/pages/cadencias/Cadencias";
+import { Configuracao } from "@/pages/configuracao/Configuracao";
 import { Kanban } from "@/pages/crm/Kanban";
 import { Map } from "@/pages/map/Map";
 import { Prospeccao } from "@/pages/prospeccao/Prospeccao";
@@ -27,6 +30,9 @@ export default function App() {
           <Route path="rede-social" element={<RedeSocial />} />
           <Route path="map" element={<Map />} />
           <Route path="prospeccao" element={<Prospeccao />} />
+          <Route path="cadencias" element={<Cadencias />} />
+          <Route path="aprovacoes" element={<Aprovacoes />} />
+          <Route path="configuracao" element={<Configuracao />} />
           <Route path="admin/tenants" element={<AdminTenants />} />
           <Route path="admin/licencas" element={<AdminLicencas />} />
           <Route path="admin/convites" element={<AdminConvites />} />
