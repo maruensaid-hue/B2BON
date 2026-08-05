@@ -70,6 +70,10 @@ def test_mensagens_personalizadas_usam_dados_do_decisor(
     prompts = [chamada.prompt for chamada in fake_llm.chamadas]
     assert len(prompts) == 5
     assert all(decisor.nome in prompt and conta.nome in prompt for prompt in prompts)
+    # a descrição/diferenciais/provas sociais da oferta e as dores/gatilhos do
+    # ICP precisam alimentar o texto gerado, não só o nome da oferta
+    assert all("Descrição da oferta" in prompt and "diferencial1" in prompt for prompt in prompts)
+    assert all("dor1" in prompt and "gatilho1" in prompt for prompt in prompts)
 
 
 def test_gerar_para_conta_sem_decisor_nao_falha_o_lote(

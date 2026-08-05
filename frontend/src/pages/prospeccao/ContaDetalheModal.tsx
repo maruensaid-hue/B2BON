@@ -147,7 +147,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
               Descartar
             </Button>
             <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={enriquecerSite}>
-              Enriquecer (site)
+              Pesquisar empresa (site)
             </Button>
             <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={enriquecerBrasilApi}>
               Enriquecer (BrasilAPI)
@@ -158,6 +158,13 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
             <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={exportarPdf}>
               Exportar PDF
             </Button>
+          </div>
+          <div className="mb-4 text-[11px] text-muted">
+            "Pesquisar empresa (site)" varre a home e páginas internas (sobre,
+            investidores, notícias, privacidade) do domínio cadastrado e pede à
+            IA um resumo de porte, crescimento, marcos, novos projetos e se há
+            política de privacidade/LGPD publicada — serve de insumo para
+            qualquer oferta, não só para prospecção de LGPD.
           </div>
 
           {mostrarDescarte && (

@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 
 import httpx
@@ -234,9 +235,16 @@ def enriquecer(
     llm: LLMProvider,
     site_fetcher: SiteFetcher,
 ) -> list[CampoEnriquecido]:
-    """Ficha de conta com campos enriquecidos e fonte/data de cada dado (E2-H2).
+    """Pesquisa ampla dentro do site institucional da conta, com ficha de
+    campos enriquecidos e fonte/data de cada dado (E2-H2).
 
-    Fetch do site institucional + extração por IA (Seção 11 da especificação).
+    Não fica só na home: `site_fetcher` já tenta páginas de sobre,
+    investidores, notícias e privacidade quando existem (best-effort). O
+    prompt pede sinais de porte/atuação, crescimento, marcos históricos,
+    novos projetos e presença de política de privacidade/LGPD — cobre
+    prospecção para qualquer oferta, não só compliance. Cada página
+    efetivamente pesquisada também vira um campo `pagina_pesquisada`, que
+    funciona como o histórico da pesquisa feita.
     """
     conta = obter(db, tenant_id, conta_id)
     if not conta.dominio:
@@ -250,8 +258,17 @@ def enriquecer(
     resposta = llm.generate(
         LLMRequest(
             prompt=(
-                f"A partir do texto a seguir do site da empresa {conta.nome}, liste sinais "
-                "públicos de porte e atuação em linhas no formato 'campo: valor'.\n\n"
+                f"A seguir está o conteúdo de várias páginas do site institucional da empresa "
+                f"{conta.nome} (cada uma marcada por '=== url ==='). A partir só do que estiver "
+                "de fato presente no texto (nunca invente), liste em linhas no formato "
+                "'campo: valor' sinais públicos relevantes para uma prospecção comercial: porte e "
+                "área de atuação, crescimento ou expansão, marcos ou linha do tempo da empresa, "
+                "lançamento de novos produtos/projetos, resultados financeiros ou informações "
+                "voltadas a investidores, e se há (ou não) política de privacidade/menção a "
+                "LGPD/DPO publicada. Se um desses pontos não aparecer no texto, não invente — "
+                "simplesmente não escreva uma linha para ele. Termine com uma linha "
+                "'possivel_dor: ' resumindo, em uma frase, qual dor ou necessidade de negócio os "
+                "sinais encontrados sugerem.\n\n"
                 f"{texto_site}"
             )
         )
@@ -259,19 +276,26 @@ def enriquecer(
 
     agora = datetime.now(UTC)
     campos: list[CampoEnriquecido] = []
+    for url_pagina in re.findall(r"=== (.*?) ===", texto_site):
+        campos.append(
+            CampoEnriquecido(
+                conta_id=conta.id, campo="pagina_pesquisada", valor=url_pagina,
+                fonte="pesquisa_no_site", coletado_em=agora,
+            )
+        )
     for linha in resposta.content.splitlines():
         if ":" not in linha:
             continue
         campo, valor = linha.split(":", 1)
-        registro = CampoEnriquecido(
-            conta_id=conta.id,
-            campo=campo.strip(),
-            valor=valor.strip(),
-            fonte="site_institucional",
-            coletado_em=agora,
+        if not valor.strip():
+            continue
+        campos.append(
+            CampoEnriquecido(
+                conta_id=conta.id, campo=campo.strip(), valor=valor.strip(),
+                fonte="pesquisa_no_site", coletado_em=agora,
+            )
         )
-        db.add(registro)
-        campos.append(registro)
+    db.add_all(campos)
 
     auditoria_service.registrar(
         db,

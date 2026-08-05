@@ -115,12 +115,18 @@ def _gerar_conteudo_toque(
     esforço: o toque é pulado, não bloqueia o restante do lote).
     """
     enquadramento_variante = f" {_ENQUADRAMENTO_VARIANTE[variante]}" if variante else ""
+    dores_e_gatilhos = (
+        f" Dores prováveis desse perfil de cliente: {', '.join(icp.dores)}." if icp.dores else ""
+    ) + (f" Gatilhos de abordagem: {', '.join(icp.gatilhos)}." if icp.gatilhos else "")
+    diferenciais = f" Diferenciais: {', '.join(oferta.diferenciais)}." if oferta.diferenciais else ""
+    provas_sociais = f" Provas sociais: {', '.join(oferta.provas_sociais)}." if oferta.provas_sociais else ""
     resposta = llm.generate(
         LLMRequest(
             prompt=(
                 f"Escreva o toque {toque.ordem} (canal {toque.canal}) de uma cadência de prospecção "
                 f"para {decisor.nome} ({decisor.cargo or 'decisor'}) na empresa {conta.nome}, "
-                f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento}), oferecendo '{oferta.nome}'. "
+                f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento}).{dores_e_gatilhos} "
+                f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais} "
                 f"Tom: {config.tom}.{enquadramento_variante} Nunca mencione: "
                 f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
             )

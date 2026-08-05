@@ -100,6 +100,13 @@ export function Configuracao() {
 
       <Card className="mb-4">
         <SectionLabel>Oferta</SectionLabel>
+        <div className="mb-3 text-[11px] text-muted">
+          Tudo que você preencher aqui — descrição, diferenciais e provas
+          sociais — entra literalmente no texto que a IA usa para escrever
+          cada mensagem de e-mail e WhatsApp da cadência. Não é um campo só
+          descritivo/interno: escreva como se fosse a matéria-prima do
+          discurso de vendas, não um resumo para uso interno.
+        </div>
         <div className="mb-3 flex flex-col gap-1.5">
           {ofertas.map((oferta) => (
             <div key={oferta.id} className="flex items-center justify-between text-[12px]">
@@ -115,18 +122,20 @@ export function Configuracao() {
             <Input name="nome" required placeholder="Ex.: Adequação LGPD completa" />
           </div>
           <div>
-            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Descrição</div>
-            <Textarea name="descricao" required rows={3} />
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+              Descrição (usada pela IA para escrever as mensagens)
+            </div>
+            <Textarea name="descricao" required rows={3} placeholder="O que é a oferta e o problema que ela resolve — a IA usa esse texto como base direta do discurso de vendas." />
           </div>
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
-              Diferenciais (separados por vírgula)
+              Diferenciais (separados por vírgula — também entram na mensagem)
             </div>
             <Input name="diferenciais" placeholder="RIPD incluso, DPO terceirizado, resposta em 48h" />
           </div>
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
-              Provas sociais (separadas por vírgula)
+              Provas sociais (separadas por vírgula — também entram na mensagem)
             </div>
             <Input name="provas_sociais" placeholder="+40 clientes atendidos, certificação X" />
           </div>

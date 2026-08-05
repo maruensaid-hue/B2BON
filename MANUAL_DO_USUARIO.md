@@ -151,9 +151,13 @@ qualquer envio.
 Antes de gerar cadências, cadastre em **Configuração**:
 
 - **Oferta**: nome, descrição, diferenciais e provas sociais do que
-  está sendo vendido — é o que a IA usa para escrever as mensagens.
-  Só uma oferta fica ativa por vez; cadastrar uma nova substitui a
-  anterior como ativa.
+  está sendo vendido. **A descrição, os diferenciais e as provas
+  sociais entram literalmente no texto que a IA usa para escrever cada
+  mensagem** de e-mail/WhatsApp da cadência — não são um resumo interno,
+  são a matéria-prima do discurso de vendas. Junto com as dores/gatilhos
+  do ICP ativo, é o que dá contexto de negócio à mensagem gerada (sem
+  isso, a IA só saberia o nome da oferta). Só uma oferta fica ativa por
+  vez; cadastrar uma nova substitui a anterior como ativa.
 - **Tom e restrições de comunicação**: o tom da comunicação (ex.:
   "consultivo") e uma lista do que a IA nunca deve mencionar (ex.:
   preço, concorrentes, desconto).
@@ -174,8 +178,18 @@ Antes de gerar cadências, cadastre em **Configuração**:
   via **não consome franquia** — só a geração via ICP consome.
 - **Contas**: tabela com nome, CNPJ, score de aderência ao ICP e status
   (`prospectada` → `priorizada` ou `descartada`). "Ver detalhes" abre
-  decisores mapeados, enriquecimento de dados via BrasilAPI, e ações de
-  priorizar/descartar.
+  decisores mapeados, enriquecimento de dados via BrasilAPI (dados
+  cadastrais oficiais do CNPJ), e ações de priorizar/descartar.
+- **Pesquisar empresa (site)**: dentro do detalhe da conta (exige a
+  conta ter um domínio cadastrado). Varre a home e páginas internas do
+  próprio site (sobre, investidores, notícias, privacidade) — não sai
+  para a web aberta — e pede à IA um resumo de porte, sinais de
+  crescimento, marcos/linha do tempo, novos projetos/produtos e se há
+  política de privacidade ou menção a LGPD/DPO publicada, fechando com
+  uma hipótese de dor. Cada página efetivamente pesquisada fica
+  registrada como um campo `pagina_pesquisada`, funcionando como um
+  pequeno histórico da pesquisa feita — não é só um diagnóstico de
+  LGPD, serve de insumo para qualquer oferta cadastrada.
 - **Franquia**: os três indicadores no topo da tela (limite do plano,
   usado no mês, restante) mostram o consumo em tempo real.
 

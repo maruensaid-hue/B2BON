@@ -83,10 +83,12 @@ def test_enriquecer_conta_registra_fonte_e_data(client, db_session, criar_icp, f
 
     assert resposta.status_code == 200
     campos = resposta.json()["campos"]
-    assert len(campos) == 2
+    # 1 "pagina_pesquisada" (do marcador === url === do site_fetcher) + 2 campos da IA
+    assert len(campos) == 3
     for campo in campos:
-        assert campo["fonte"] == "site_institucional"
+        assert campo["fonte"] == "pesquisa_no_site"
         assert campo["coletado_em"]
+    assert any(campo["campo"] == "pagina_pesquisada" for campo in campos)
 
 
 def test_listar_contas_do_icp_sobrevive_a_refresh(client, criar_icp, fake_account_data):

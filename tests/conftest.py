@@ -122,7 +122,10 @@ def fake_plan_limits() -> StubPlanLimitsProvider:
 
 @pytest.fixture()
 def fake_site_fetcher():
-    return lambda dominio: f"<html>Site institucional de {dominio}: empresa de tecnologia de porte médio.</html>"
+    return lambda dominio: (
+        f"=== https://{dominio} ===\n<html>Site institucional de {dominio}: "
+        "empresa de tecnologia de porte médio.</html>"
+    )
 
 
 @pytest.fixture()
