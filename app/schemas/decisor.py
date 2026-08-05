@@ -26,3 +26,11 @@ class DecisorCreateSchema(BaseModel):
     linkedin_url: str | None = None
     email: str | None = None
     telefone: str | None = None
+
+
+class AtualizarDecisorRequestSchema(BaseModel):
+    nome: str
+    cargo: str | None = None
+    email: str | None = None
+    telefone: str | None = None
+    linkedin_url: str | None = None

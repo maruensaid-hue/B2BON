@@ -19,7 +19,9 @@ from app.llm.base import LLMProvider
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.conta import (
+    AtualizarContaRequestSchema,
     ContaSchema,
+    CriarContaManualRequestSchema,
     DescartarContaRequestSchema,
     EnriquecerContaResponseSchema,
     FranquiaSchema,
@@ -29,7 +31,7 @@ from app.schemas.conta import (
     ImportarParticipantesRequestSchema,
     ImportarParticipantesResponseSchema,
 )
-from app.schemas.decisor import DecisorCreateSchema, DecisorSchema
+from app.schemas.decisor import AtualizarDecisorRequestSchema, DecisorCreateSchema, DecisorSchema
 from app.services import conta_service, descarte_service, franquia_service
 
 router = APIRouter(tags=["contas"])
@@ -68,6 +70,19 @@ def importar_participantes_evento(
     return ImportarParticipantesResponseSchema(**resultado)
 
 
+@router.post("/icp/{icp_id}/contas", response_model=ContaSchema, status_code=201)
+def criar_conta_manual(
+    icp_id: int,
+    dados: CriarContaManualRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ContaSchema:
+    """Cadastro avulso de conta pelo CRM — cliente que chegou por indicação
+    ou inbound, sem passar pela geração de lista do PREDATOR."""
+    return conta_service.criar_manual(db, tenant_id, ator_id, icp_id, dados.nome, dados.cnpj, dados.dominio)
+
+
 @router.get("/icp/{icp_id}/contas", response_model=list[ContaSchema])
 def listar_contas_do_icp(
     icp_id: int,
@@ -93,6 +108,41 @@ def obter_conta(
     db: Session = Depends(get_db),
 ) -> ContaSchema:
     return conta_service.obter(db, tenant_id, conta_id)
+
+
+@router.put("/contas/{conta_id}", response_model=ContaSchema)
+def atualizar_conta(
+    conta_id: int,
+    dados: AtualizarContaRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ContaSchema:
+    return conta_service.atualizar(db, tenant_id, ator_id, conta_id, dados.nome_fantasia, dados.dominio)
+
+
+@router.get("/contas/{conta_id}/decisores", response_model=list[DecisorSchema])
+def listar_decisores_da_conta(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[DecisorSchema]:
+    conta_service.obter(db, tenant_id, conta_id)
+    return conta_service.decisores_da_conta(db, conta_id)
+
+
+@router.put("/contas/{conta_id}/decisores/{decisor_id}", response_model=DecisorSchema)
+def atualizar_decisor(
+    conta_id: int,
+    decisor_id: int,
+    dados: AtualizarDecisorRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> DecisorSchema:
+    return conta_service.atualizar_decisor(
+        db, tenant_id, ator_id, conta_id, decisor_id, dados.nome, dados.cargo, dados.email, dados.telefone, dados.linkedin_url
+    )
 
 
 @router.post("/contas/{conta_id}/enriquecer", response_model=EnriquecerContaResponseSchema)

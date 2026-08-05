@@ -122,6 +122,60 @@ def test_enriquecer_conta_via_brasilapi_registra_fonte(client, criar_icp, fake_a
         assert campo["coletado_em"]
 
 
+def test_criar_conta_manual_via_crm(client, criar_icp):
+    """Bug reportado: o Kanban só deixava referenciar uma conta já
+    existente por ID cru — precisa dar pra cadastrar o cliente na hora."""
+    icp = criar_icp()
+
+    resposta = client.post(
+        f"/api/v1/icp/{icp['id']}/contas",
+        json={"nome": "Clínica Indicação Direta", "cnpj": None, "dominio": "clinicaindicacao.com.br"},
+    )
+
+    assert resposta.status_code == 201
+    corpo = resposta.json()
+    assert corpo["nome"] == "Clínica Indicação Direta"
+    assert corpo["origem"] == "manual"
+    assert corpo["status"] == "prospectada"
+
+
+def test_atualizar_conta_nome_fantasia_e_dominio(client, criar_icp, fake_account_data):
+    """Bug reportado: a Receita Federal não traz site, e a razão social nem
+    sempre é a marca comercial conhecida — precisa dar pra editar os dois."""
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech Consultoria Ltda")]
+    conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
+
+    resposta = client.put(
+        f"/api/v1/contas/{conta_id}", json={"nome_fantasia": "Alpha Tech", "dominio": "alphatech.com.br"}
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["nome_fantasia"] == "Alpha Tech"
+    assert resposta.json()["dominio"] == "alphatech.com.br"
+
+
+def test_atualizar_decisor(client, criar_icp, fake_account_data):
+    icp = criar_icp()
+    cnpj = "11222333000191"
+    fake_account_data.candidatos = [_candidato(cnpj, "Alpha Tech")]
+    fake_account_data.decisores = {cnpj: [DecisorCandidato(cnpj=cnpj, nome="Joao Silva", qualificacao="Sócio")]}
+    conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
+    decisor_id = client.post(f"/api/v1/contas/{conta_id}/decisores/mapear").json()[0]["id"]
+
+    resposta = client.put(
+        f"/api/v1/contas/{conta_id}/decisores/{decisor_id}",
+        json={"nome": "João Silva", "email": "joao@alphatech.com.br", "telefone": "11999998888"},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["email"] == "joao@alphatech.com.br"
+    assert resposta.json()["telefone"] == "11999998888"
+
+    listados = client.get(f"/api/v1/contas/{conta_id}/decisores").json()
+    assert listados[0]["email"] == "joao@alphatech.com.br"
+
+
 def test_mapear_decisores_com_cargo_e_canal(client, criar_icp, fake_account_data):
     """E2-H2: decisores mapeados com cargo e canal provável de contato."""
     icp = criar_icp()
