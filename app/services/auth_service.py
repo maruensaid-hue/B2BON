@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.convite_cadastro import ConviteCadastro
+from app.models.licenca import Licenca
+from app.models.plano import Plano
 from app.models.usuario import Usuario
 from app.services import auditoria_service
 from app.services.errors import NaoAutenticado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
@@ -102,11 +104,37 @@ def _gerar_codigo_convite() -> str:
     return secrets.token_hex(8).upper()
 
 
+def _verificar_limite_de_usuarios(db: Session, tenant_id: str) -> None:
+    """Bloqueia convite/aceite quando o tenant já está no limite de
+    usuários do plano da sua licença ativa.
+
+    Tenant sem licença ativa (ex.: convite-vitrine da Onda H, que nasce
+    deliberadamente sem `Licenca`) não tem limite de usuários aplicado
+    aqui — a ausência de licença já restringe esse tenant a outros
+    módulos, e criar uma segunda regra de bloqueio para o mesmo caso só
+    duplicaria a intenção original.
+    """
+    licenca = db.query(Licenca).filter_by(tenant_id=tenant_id, status="ativa").one_or_none()
+    if licenca is None:
+        return
+    plano = db.query(Plano).filter_by(id=licenca.plano_id).one_or_none()
+    if plano is None:
+        return
+
+    usuarios_ativos = db.query(Usuario).filter_by(tenant_id=tenant_id, ativo=True).count()
+    if usuarios_ativos >= plano.max_usuarios:
+        raise RegraNegocioViolada(
+            f"Limite de usuários do plano '{plano.nome}' atingido ({plano.max_usuarios}). "
+            "Desative um usuário ou faça upgrade do plano antes de convidar outro."
+        )
+
+
 def gerar_convite(
     db: Session, tenant_id: str, ator_id: str | None, papel_concedido: str, validade_horas: int | None
 ) -> ConviteCadastro:
     if papel_concedido not in PAPEIS_VALIDOS:
         raise ValidacaoFalhou(f"Papel inválido: {papel_concedido}")
+    _verificar_limite_de_usuarios(db, tenant_id)
 
     validade_em = datetime.now(UTC) + timedelta(hours=validade_horas) if validade_horas else None
     convite = ConviteCadastro(
@@ -170,6 +198,7 @@ def registrar_com_convite(db: Session, codigo: str, nome: str, email: str, senha
 
     if db.query(Usuario).filter_by(email=email).one_or_none() is not None:
         raise RegraNegocioViolada("E-mail já cadastrado.")
+    _verificar_limite_de_usuarios(db, convite.tenant_id)
 
     usuario = Usuario(
         tenant_id=convite.tenant_id,

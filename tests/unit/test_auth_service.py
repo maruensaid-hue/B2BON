@@ -3,6 +3,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.models.convite_cadastro import ConviteCadastro
+from app.models.licenca import Licenca
+from app.models.plano import Plano
+from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.services import auth_service
 from app.services.errors import NaoAutenticado, RegraNegocioViolada
@@ -24,6 +27,26 @@ def _criar_usuario(db_session, **overrides) -> Usuario:
     db_session.add(usuario)
     db_session.commit()
     return usuario
+
+
+def _criar_licenca(db_session, tenant_id: str, max_usuarios: int, status: str = "ativa") -> Licenca:
+    if db_session.query(Tenant).filter_by(id=tenant_id).one_or_none() is None:
+        db_session.add(Tenant(id=tenant_id, razao_social=f"Empresa {tenant_id}"))
+        db_session.flush()
+
+    plano = Plano(
+        nome=f"Plano teste {tenant_id}-{max_usuarios}",
+        franquia_contas_mes=1000,
+        max_usuarios=max_usuarios,
+        preco_mensal=0.0,
+    )
+    db_session.add(plano)
+    db_session.flush()
+
+    licenca = Licenca(tenant_id=tenant_id, plano_id=plano.id, status=status)
+    db_session.add(licenca)
+    db_session.commit()
+    return licenca
 
 
 def test_hash_e_verificacao_de_senha():
@@ -114,3 +137,65 @@ def test_registro_com_email_ja_cadastrado_falha(db_session):
 
     with pytest.raises(RegraNegocioViolada):
         auth_service.registrar_com_convite(db_session, convite.codigo, "Y", "existente@teste.com.br", "senha123")
+
+
+def test_gerar_convite_bloqueia_quando_limite_de_usuarios_atingido(db_session):
+    _criar_licenca(db_session, TENANT_ID, max_usuarios=1)
+    _criar_usuario(db_session, email="unico@teste.com.br")
+
+    with pytest.raises(RegraNegocioViolada):
+        auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+
+def test_gerar_convite_permite_quando_abaixo_do_limite(db_session):
+    _criar_licenca(db_session, TENANT_ID, max_usuarios=2)
+    _criar_usuario(db_session, email="primeiro@teste.com.br")
+
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+    assert convite.status == "disponivel"
+
+
+def test_usuario_inativo_nao_conta_para_o_limite(db_session):
+    _criar_licenca(db_session, TENANT_ID, max_usuarios=1)
+    _criar_usuario(db_session, email="inativo@teste.com.br", ativo=False)
+
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+    assert convite.status == "disponivel"
+
+
+def test_aceitar_convite_bloqueia_quando_limite_e_atingido_apos_convite_gerado(db_session):
+    """O limite pode ser atingido por outro usuário depois que o convite já
+    foi gerado — o bloqueio precisa valer também no aceite, não só na
+    geração."""
+    _criar_licenca(db_session, TENANT_ID, max_usuarios=2)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    _criar_usuario(db_session, email="primeiro@teste.com.br")
+    _criar_usuario(db_session, email="segundo@teste.com.br", papel="admin")
+
+    with pytest.raises(RegraNegocioViolada):
+        auth_service.registrar_com_convite(db_session, convite.codigo, "Terceiro", "terceiro@teste.com.br", "senha123")
+
+
+def test_tenant_sem_licenca_ativa_nao_bloqueia_convite(db_session):
+    """Tenant de convite-vitrine (Onda H) nasce sem `Licenca` de propósito
+    — o limite de usuários por plano não se aplica a ele aqui."""
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+    usuario = auth_service.registrar_com_convite(
+        db_session, convite.codigo, "Sem Licença", "sem-licenca@teste.com.br", "senha123"
+    )
+
+    assert usuario.tenant_id == TENANT_ID
+
+
+def test_licenca_suspensa_nao_bloqueia_convite(db_session):
+    """Só a licença com status `ativa` é considerada — licença suspensa não
+    tem plano aplicado (comportamento igual ao de `franquia_service`)."""
+    _criar_licenca(db_session, TENANT_ID, max_usuarios=1, status="suspensa")
+    _criar_usuario(db_session, email="unico@teste.com.br")
+
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+    assert convite.status == "disponivel"
