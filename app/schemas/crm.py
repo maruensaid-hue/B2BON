@@ -47,6 +47,12 @@ class CriarNegocioRequestSchema(BaseModel):
     estagio_id: int | None = None
 
 
+class AtualizarNegocioRequestSchema(BaseModel):
+    nome: str
+    valor: float = 0.0
+    probabilidade: int = 50
+
+
 class MoverEstagioRequestSchema(BaseModel):
     estagio_id: int
     motivo_perda: str | None = None

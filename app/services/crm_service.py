@@ -140,6 +140,30 @@ def criar_negocio(
     return negocio
 
 
+def atualizar_negocio(
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    negocio_id: int,
+    nome: str,
+    valor: float,
+    probabilidade: int,
+) -> Negocio:
+    """Edição pós-criação (nome/valor/probabilidade) — não havia como
+    corrigir um negócio depois de cadastrado, só mover de estágio."""
+    negocio = obter_negocio(db, tenant_id, negocio_id)
+    negocio.nome = nome
+    negocio.valor = valor
+    negocio.probabilidade = probabilidade
+
+    auditoria_service.registrar(
+        db, tenant_id, "negocio_atualizado", "negocio", negocio.id, ator_id, {"nome": nome}, conta_id=negocio.conta_id
+    )
+    db.commit()
+    db.refresh(negocio)
+    return negocio
+
+
 def mover_estagio(
     db: Session, tenant_id: str, ator_id: str | None, negocio_id: int, novo_estagio_id: int, motivo_perda: str | None = None
 ) -> Negocio:

@@ -7,6 +7,7 @@ from app.api.deps import get_ator_id, get_db, get_tenant_id
 from app.schemas.conta import ContaSchema
 from app.schemas.crm import (
     AtividadeSchema,
+    AtualizarNegocioRequestSchema,
     CancelarClienteRequestSchema,
     CriarNegocioRequestSchema,
     CustoAquisicaoSchema,
@@ -74,6 +75,19 @@ def criar_negocio(
         dados.probabilidade,
         dados.vendedor_usuario_id,
         dados.estagio_id,
+    )
+
+
+@router.put("/negocios/{negocio_id}", response_model=NegocioSchema)
+def atualizar_negocio(
+    negocio_id: int,
+    dados: AtualizarNegocioRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> NegocioSchema:
+    return crm_service.atualizar_negocio(
+        db, tenant_id, ator_id, negocio_id, dados.nome, dados.valor, dados.probabilidade
     )
 
 

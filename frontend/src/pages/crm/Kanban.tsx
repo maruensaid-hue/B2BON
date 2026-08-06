@@ -45,6 +45,8 @@ export function Kanban() {
   const [contasDoIcp, setContasDoIcp] = useState<Conta[]>([]);
   const [negocioArrastadoId, setNegocioArrastadoId] = useState<number | null>(null);
   const [salvandoNegocio, setSalvandoNegocio] = useState(false);
+  const [negocioEmEdicao, setNegocioEmEdicao] = useState<Negocio | null>(null);
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
   // Defesa contra a duplicidade de estágios já corrigida no backend
   // (UniqueConstraint tenant_id+ordem) — se ainda houver dado antigo
@@ -142,6 +144,15 @@ export function Kanban() {
           dominio: String(form.get("dominio_conta") || "") || null,
         });
         contaId = contaCriada.id;
+
+        const nomeContato = String(form.get("nome_contato") || "").trim();
+        if (nomeContato) {
+          await api.post(`/contas/${contaId}/decisores`, {
+            nome: nomeContato,
+            email: String(form.get("email_contato") || "") || null,
+            telefone: String(form.get("telefone_contato") || "") || null,
+          });
+        }
       }
 
       await api.post("/crm/negocios", { conta_id: contaId, nome: nomeNegocio, valor });
@@ -153,6 +164,27 @@ export function Kanban() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível criar o negócio.");
     } finally {
       setSalvandoNegocio(false);
+    }
+  }
+
+  async function salvarEdicaoNegocio(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!negocioEmEdicao || salvandoEdicao) return;
+    const form = new FormData(event.currentTarget);
+    setSalvandoEdicao(true);
+    setErro(null);
+    try {
+      await api.put(`/crm/negocios/${negocioEmEdicao.id}`, {
+        nome: String(form.get("nome")),
+        valor: Number(form.get("valor") || 0),
+        probabilidade: Number(form.get("probabilidade") || 50),
+      });
+      setNegocioEmEdicao(null);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível salvar as alterações do negócio.");
+    } finally {
+      setSalvandoEdicao(false);
     }
   }
 
@@ -199,7 +231,17 @@ export function Kanban() {
                   onDragStart={() => setNegocioArrastadoId(negocio.id)}
                   onDragEnd={() => setNegocioArrastadoId(null)}
                 >
-                  <div className="mb-1 text-[12px] font-bold">{negocio.nome}</div>
+                  <div className="mb-1 flex items-start justify-between gap-2">
+                    <div className="text-[12px] font-bold">{negocio.nome}</div>
+                    <button
+                      type="button"
+                      className="flex-shrink-0 text-[11px] text-muted hover:text-cyan"
+                      onClick={() => setNegocioEmEdicao(negocio)}
+                      title="Editar negócio"
+                    >
+                      ✎
+                    </button>
+                  </div>
                   <div className="font-head mb-2 text-base font-bold text-cyan">
                     R${Math.round(negocio.valor / 1000)}k
                   </div>
@@ -278,6 +320,10 @@ export function Kanban() {
               <div className="flex flex-col gap-2">
                 <Input name="nome_conta" required placeholder="Nome do cliente" />
                 <Input name="dominio_conta" placeholder="Domínio (opcional)" />
+                <div className="mt-1 text-[10px] tracking-wide text-muted uppercase">Contato (opcional)</div>
+                <Input name="nome_contato" placeholder="Nome do contato" />
+                <Input name="email_contato" type="email" placeholder="E-mail do contato" />
+                <Input name="telefone_contato" placeholder="Telefone do contato" />
               </div>
             )}
           </div>
@@ -294,6 +340,34 @@ export function Kanban() {
             {salvandoNegocio ? "Criando..." : "Criar negócio"}
           </Button>
         </form>
+      </Modal>
+
+      <Modal title="Editar negócio" open={negocioEmEdicao !== null} onClose={() => setNegocioEmEdicao(null)}>
+        {negocioEmEdicao && (
+          <form onSubmit={salvarEdicaoNegocio} className="flex flex-col gap-3">
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome do negócio</div>
+              <Input name="nome" required defaultValue={negocioEmEdicao.nome} />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Valor (R$)</div>
+              <Input name="valor" type="number" step="0.01" defaultValue={negocioEmEdicao.valor} />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Probabilidade (%)</div>
+              <Input
+                name="probabilidade"
+                type="number"
+                min={0}
+                max={100}
+                defaultValue={negocioEmEdicao.probabilidade}
+              />
+            </div>
+            <Button type="submit" disabled={salvandoEdicao} className="w-full justify-center">
+              {salvandoEdicao ? "Salvando..." : "Salvar alterações"}
+            </Button>
+          </form>
+        )}
       </Modal>
     </div>
   );

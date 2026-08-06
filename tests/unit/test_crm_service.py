@@ -92,6 +92,21 @@ def test_criar_negocio_usa_primeiro_estagio_aberto_por_padrao(db_session):
     assert negocio.origem == "manual"
 
 
+def test_atualizar_negocio_edita_nome_e_valor(db_session):
+    """Não havia como corrigir um negócio depois de criado, só mover de
+    estágio — bug reportado."""
+    conta = _criar_conta(db_session)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Nome errado", valor=100.0)
+
+    atualizado = crm_service.atualizar_negocio(
+        db_session, TENANT_ID, None, negocio.id, "Nome corrigido", 2500.0, 80
+    )
+
+    assert atualizado.nome == "Nome corrigido"
+    assert atualizado.valor == 2500.0
+    assert atualizado.probabilidade == 80
+
+
 def test_mover_para_ganho_marca_cliente_desde_so_na_primeira_vez(db_session):
     conta = _criar_conta(db_session)
     negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio", valor=500.0)
