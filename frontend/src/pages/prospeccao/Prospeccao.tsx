@@ -63,6 +63,13 @@ function paraLista(texto: string): string[] {
     .filter(Boolean);
 }
 
+function paraListaPorLinha(texto: string): string[] {
+  return texto
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 type CampoParticipante = "nome" | "empresa" | "cargo" | "email" | "telefone";
 
 // Sinônimos comuns em planilhas de organizadores de evento — a ordem das
@@ -212,8 +219,8 @@ export function Prospeccao() {
       segmento: String(form.get("segmento")),
       porte: String(form.get("porte")),
       regiao: String(form.get("regiao")),
-      dores: paraLista(String(form.get("dores") ?? "")),
-      gatilhos: paraLista(String(form.get("gatilhos") ?? "")),
+      dores: paraListaPorLinha(String(form.get("dores") ?? "")),
+      gatilhos: paraListaPorLinha(String(form.get("gatilhos") ?? "")),
       cnae_codigos: paraLista(String(form.get("cnae_codigos") ?? "")),
       ufs: paraLista(String(form.get("ufs") ?? "")),
     };
@@ -434,13 +441,26 @@ export function Prospeccao() {
             [
               ["cnae_codigos", "CNAEs (separados por vírgula)"],
               ["ufs", "UFs (separadas por vírgula)"],
-              ["dores", "Dores (separadas por vírgula)"],
-              ["gatilhos", "Gatilhos (separados por vírgula)"],
             ] as const
           ).map(([campo, rotulo]) => (
             <div key={campo}>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">{rotulo}</div>
               <Input name={campo} defaultValue={(icpEmEdicao?.[campo as keyof ICP] as string[])?.join(", ")} />
+            </div>
+          ))}
+          {(
+            [
+              ["dores", "Dores (uma por linha)"],
+              ["gatilhos", "Gatilhos (um por linha)"],
+            ] as const
+          ).map(([campo, rotulo]) => (
+            <div key={campo}>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">{rotulo}</div>
+              <Textarea
+                name={campo}
+                rows={3}
+                defaultValue={(icpEmEdicao?.[campo as keyof ICP] as string[])?.join("\n")}
+              />
             </div>
           ))}
           <Button type="submit" className="mt-1 w-full justify-center">

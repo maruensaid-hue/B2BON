@@ -29,6 +29,15 @@ from app.services.errors import NaoEncontrado, RegraNegocioViolada
 MINIMO_TOQUES = 5
 MINIMO_CANAIS_DISTINTOS = 2
 
+# Cada toque gerado é uma chamada síncrona à IA (2-8s cada, dependendo do
+# tamanho do prompt) dentro da mesma requisição HTTP. Um lote grande
+# (ex.: 10 contas x 5 toques = 50 chamadas) estourava o timeout da conexão
+# antes de terminar — bug real de produção: nem a primeira mensagem
+# chegava a ser salva porque a requisição inteira caía por timeout de
+# rede antes do primeiro `commit`. Cap conservador aqui; o frontend
+# quebra seleções maiores em lotes automaticamente.
+MAXIMO_CONTAS_POR_LOTE = 4
+
 
 def obter(db: Session, tenant_id: str, cadencia_id: int) -> Cadencia:
     cadencia = db.query(Cadencia).filter_by(id=cadencia_id, tenant_id=tenant_id).one_or_none()
@@ -179,6 +188,12 @@ def gerar_para_lote(
 ) -> dict:
     """Gera os toques personalizados para um lote de contas e os submete à
     fila de aprovações — cadência inteira antes de ativar (E3-H1)."""
+    if len(conta_ids) > MAXIMO_CONTAS_POR_LOTE:
+        raise RegraNegocioViolada(
+            f"Selecione no máximo {MAXIMO_CONTAS_POR_LOTE} contas por vez — cada toque gerado é uma "
+            "chamada à IA dentro da mesma requisição, e um lote maior arrisca estourar o tempo de "
+            "conexão antes de terminar. Gere em lotes menores."
+        )
     cadencia = obter(db, tenant_id, cadencia_id)
     toques = toques_da_cadencia(db, cadencia.id)
     icp, oferta, config = _contexto_de_geracao(db, tenant_id)

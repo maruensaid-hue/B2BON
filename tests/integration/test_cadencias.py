@@ -76,6 +76,19 @@ def test_mensagens_personalizadas_usam_dados_do_decisor(
     assert all("dor1" in prompt and "gatilho1" in prompt for prompt in prompts)
 
 
+def test_gerar_para_lote_grande_e_bloqueado(client, onboarding_completo, criar_conta_com_decisor, criar_cadencia):
+    """Bug real de produção: um lote grande (muitas contas x vários toques)
+    fazia chamadas demais à IA numa única requisição e estourava o tempo
+    de conexão antes de salvar qualquer mensagem. Bloqueia antes de tentar."""
+    cadencia = criar_cadencia()
+    conta_ids = [criar_conta_com_decisor()[0].id for _ in range(5)]
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": conta_ids})
+
+    assert resposta.status_code == 409
+    assert "no máximo" in resposta.json()["detalhe"]
+
+
 def test_gerar_para_conta_sem_decisor_nao_falha_o_lote(
     client, onboarding_completo, db_session, criar_conta_com_decisor, criar_cadencia
 ):

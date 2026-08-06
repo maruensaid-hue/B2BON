@@ -28,6 +28,13 @@ function paraLista(texto: string): string[] {
     .filter(Boolean);
 }
 
+function paraListaPorLinha(texto: string): string[] {
+  return texto
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function OpcoesOferta({
   oferta,
   onEditar,
@@ -156,8 +163,8 @@ export function Configuracao() {
     const dados = {
       nome: String(form.get("nome")),
       descricao: String(form.get("descricao")),
-      diferenciais: paraLista(String(form.get("diferenciais") ?? "")),
-      provas_sociais: paraLista(String(form.get("provas_sociais") ?? "")),
+      diferenciais: paraListaPorLinha(String(form.get("diferenciais") ?? "")),
+      provas_sociais: paraListaPorLinha(String(form.get("provas_sociais") ?? "")),
     };
     setSalvandoOferta(true);
     setErro(null);
@@ -301,22 +308,24 @@ export function Configuracao() {
           </div>
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
-              Diferenciais (separados por vírgula — também entram na mensagem)
+              Diferenciais (um por linha — também entram na mensagem)
             </div>
-            <Input
+            <Textarea
               name="diferenciais"
-              defaultValue={ofertaEmEdicao?.diferenciais.join(", ")}
-              placeholder="RIPD incluso, DPO terceirizado, resposta em 48h"
+              rows={3}
+              defaultValue={ofertaEmEdicao?.diferenciais.join("\n")}
+              placeholder={"RIPD incluso\nDPO terceirizado\nResposta em 48h (mesmo em picos de demanda)"}
             />
           </div>
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
-              Provas sociais (separadas por vírgula — também entram na mensagem)
+              Provas sociais (uma por linha — também entram na mensagem)
             </div>
-            <Input
+            <Textarea
               name="provas_sociais"
-              defaultValue={ofertaEmEdicao?.provas_sociais.join(", ")}
-              placeholder="+40 clientes atendidos, certificação X"
+              rows={3}
+              defaultValue={ofertaEmEdicao?.provas_sociais.join("\n")}
+              placeholder={"+40 clientes atendidos\nCertificação X (auditada anualmente)"}
             />
           </div>
           <Button type="submit" disabled={salvandoOferta} className="w-full justify-center">

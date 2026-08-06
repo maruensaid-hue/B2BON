@@ -40,6 +40,21 @@ interface GerarLoteResultado {
   mensagens_geradas: number;
 }
 
+// Mesmo limite de app/services/cadencia_service.py::MAXIMO_CONTAS_POR_LOTE —
+// cada toque gerado é uma chamada síncrona à IA na mesma requisição; um
+// lote grande de uma vez estourava o tempo de conexão antes de terminar
+// (bug real de produção). Em vez de forçar a pessoa a fatiar a seleção
+// na mão, a tela quebra automaticamente em lotes desse tamanho.
+const MAXIMO_CONTAS_POR_LOTE = 4;
+
+function paraLotes<T>(itens: T[], tamanho: number): T[][] {
+  const lotes: T[][] = [];
+  for (let i = 0; i < itens.length; i += tamanho) {
+    lotes.push(itens.slice(i, i + tamanho));
+  }
+  return lotes;
+}
+
 function toqueVazio(ordem: number, canal: string): ToqueRascunho {
   return { ordem, canal, intervalo_dias_apos_anterior: ordem === 1 ? 0 : 2, template_whatsapp_id: "", ab_teste_habilitado: false };
 }
@@ -67,6 +82,7 @@ export function Cadencias() {
     toqueVazio(5, "whatsapp"),
   ]);
   const [resultadoGeracao, setResultadoGeracao] = useState<GerarLoteResultado | null>(null);
+  const [progressoGeracao, setProgressoGeracao] = useState<{ atual: number; total: number } | null>(null);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
@@ -177,15 +193,31 @@ export function Cadencias() {
   async function gerarParaLote() {
     if (cadenciaSelecionadaId === null || contasSelecionadas.size === 0) return;
     setErro(null);
+    setResultadoGeracao(null);
+
+    const lotes = paraLotes(Array.from(contasSelecionadas), MAXIMO_CONTAS_POR_LOTE);
+    const acumulado: GerarLoteResultado = { contas_processadas: [], contas_sem_decisor: [], mensagens_geradas: 0 };
+
     try {
-      const resultado = await api.post<GerarLoteResultado>(`/cadencias/${cadenciaSelecionadaId}/gerar`, {
-        conta_ids: Array.from(contasSelecionadas),
-      });
-      setResultadoGeracao(resultado);
+      for (let i = 0; i < lotes.length; i++) {
+        setProgressoGeracao({ atual: i + 1, total: lotes.length });
+        const resultado = await api.post<GerarLoteResultado>(`/cadencias/${cadenciaSelecionadaId}/gerar`, {
+          conta_ids: lotes[i],
+        });
+        acumulado.contas_processadas.push(...resultado.contas_processadas);
+        acumulado.contas_sem_decisor.push(...resultado.contas_sem_decisor);
+        acumulado.mensagens_geradas += resultado.mensagens_geradas;
+      }
+      setResultadoGeracao(acumulado);
       setContasSelecionadas(new Set());
       await carregarCadencias();
     } catch (error) {
+      // Lotes já concluídos ficam salvos (cada mensagem é gravada assim que
+      // gerada) — mostra o que já deu certo antes do lote que falhou.
+      setResultadoGeracao(acumulado);
       setErro(error instanceof ApiError ? error.message : "Não foi possível gerar as mensagens.");
+    } finally {
+      setProgressoGeracao(null);
     }
   }
 
@@ -335,9 +367,18 @@ export function Cadencias() {
                 <div className="mb-3 text-[12px] text-muted">Nenhuma conta gerada para esse ICP ainda.</div>
               )}
 
-              <Button disabled={contasSelecionadas.size === 0} onClick={gerarParaLote}>
-                Gerar mensagens para {contasSelecionadas.size} conta(s)
+              <Button disabled={contasSelecionadas.size === 0 || progressoGeracao !== null} onClick={gerarParaLote}>
+                {progressoGeracao
+                  ? `Gerando lote ${progressoGeracao.atual} de ${progressoGeracao.total}...`
+                  : `Gerar mensagens para ${contasSelecionadas.size} conta(s)`}
               </Button>
+              {contasSelecionadas.size > MAXIMO_CONTAS_POR_LOTE && !progressoGeracao && (
+                <div className="mt-1.5 text-[11px] text-muted">
+                  Serão enviadas em {Math.ceil(contasSelecionadas.size / MAXIMO_CONTAS_POR_LOTE)} lotes de até{" "}
+                  {MAXIMO_CONTAS_POR_LOTE} contas — cada toque gerado é uma chamada à IA, e lotes menores evitam
+                  estourar o tempo de conexão.
+                </div>
+              )}
 
               {resultadoGeracao && (
                 <div className="mt-3 text-[12px] text-muted">
