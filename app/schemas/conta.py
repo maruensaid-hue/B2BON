@@ -8,7 +8,7 @@ class ContaSchema(BaseModel):
 
     id: int
     tenant_id: str
-    icp_id: int
+    icp_id: int | None
     cnpj: str | None
     nome: str
     nome_fantasia: str | None
@@ -25,6 +25,8 @@ class ContaSchema(BaseModel):
     nps_nota: int | None
     cliente_desde: datetime | None
     cliente_cancelado_em: datetime | None
+    proximo_passo: str | None
+    proximo_passo_em: datetime | None
     neo4j_node_id: str | None
     criado_em: datetime
     atualizado_em: datetime
@@ -43,10 +45,24 @@ class AtualizarContaRequestSchema(BaseModel):
     dominio: str | None = None
 
 
+class DefinirProximoPassoRequestSchema(BaseModel):
+    proximo_passo: str | None = None
+    proximo_passo_em: datetime | None = None
+
+
 class CriarContaManualRequestSchema(BaseModel):
     nome: str
     cnpj: str | None = None
     dominio: str | None = None
+
+
+class CriarLeadRequestSchema(BaseModel):
+    nome: str
+    cnpj: str | None = None
+    dominio: str | None = None
+    segmento: str | None = None
+    porte: str | None = None
+    regiao: str | None = None
 
 
 class FranquiaSchema(BaseModel):

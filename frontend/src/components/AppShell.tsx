@@ -16,6 +16,13 @@ const NAV_ITEMS_PAGOS = [
   { path: "/configuracao", label: "Configuração", icon: "⚙" },
 ];
 
+// Leads (E-Leads) — clientes avulsos cadastrados direto no CRM, fora do
+// recorte de um ICP. Mesmo padrão de grupo indentado usado em ADMIN_NAV_ITEMS.
+const LEADS_NAV_ITEMS = [
+  { path: "/leads/empresas", label: "Empresas", icon: "🏬" },
+  { path: "/leads/contatos", label: "Contatos", icon: "🧑‍💼" },
+];
+
 // Sempre visível — é o único módulo que uma conta sem licença ativa
 // (entrou via convite-vitrine, Onda H) tem acesso.
 const NAV_ITEM_REDE_SOCIAL = { path: "/rede-social", label: "Rede Social", icon: "◎", end: false };
@@ -80,6 +87,15 @@ export function AppShell() {
           {navItems.map((item) => (
             <NavButton key={item.path} {...item} />
           ))}
+
+          {temLicencaAtiva && (
+            <>
+              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">Leads</div>
+              {LEADS_NAV_ITEMS.map((item) => (
+                <NavButton key={item.path} {...item} />
+              ))}
+            </>
+          )}
 
           {isSuperAdmin && (
             <>

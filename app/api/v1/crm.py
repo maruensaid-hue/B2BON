@@ -51,11 +51,12 @@ def definir_estagio(
 def listar_negocios(
     estagio_id: int | None = None,
     vendedor_usuario_id: int | None = None,
+    conta_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> list[NegocioSchema]:
     """O "kanban de clientes" (Onda B)."""
-    return crm_service.listar_negocios(db, tenant_id, estagio_id, vendedor_usuario_id)
+    return crm_service.listar_negocios(db, tenant_id, estagio_id, vendedor_usuario_id, conta_id)
 
 
 @router.post("/negocios", response_model=NegocioSchema, status_code=201)

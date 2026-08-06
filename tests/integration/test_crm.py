@@ -29,6 +29,19 @@ def test_criar_e_listar_negocio_via_api(client, criar_conta_com_decisor):
     assert any(n["nome"] == "Negócio API" for n in listagem)
 
 
+def test_listar_negocios_filtra_por_conta(client, criar_conta_com_decisor):
+    """Necessário para a página "Ações na conta" (E-Leads) mostrar só as
+    oportunidades daquela conta, não o kanban inteiro do tenant."""
+    conta_a, _ = criar_conta_com_decisor()
+    conta_b, _ = criar_conta_com_decisor()
+    client.post("/api/v1/crm/negocios", json={"conta_id": conta_a.id, "nome": "Negócio A", "valor": 100.0})
+    client.post("/api/v1/crm/negocios", json={"conta_id": conta_b.id, "nome": "Negócio B", "valor": 200.0})
+
+    resposta = client.get(f"/api/v1/crm/negocios?conta_id={conta_a.id}").json()
+
+    assert [n["nome"] for n in resposta] == ["Negócio A"]
+
+
 def test_mover_estagio_via_api_marca_cliente(client, criar_conta_com_decisor):
     """E2-H4-like (Onda B): mover para estágio "ganho" marca a conta como cliente."""
     conta, _ = criar_conta_com_decisor()

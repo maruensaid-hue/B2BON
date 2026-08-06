@@ -41,6 +41,7 @@ export function Kanban() {
   const [erro, setErro] = useState<string | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [contaOrigem, setContaOrigem] = useState<"existente" | "nova">("existente");
+  const [semIcp, setSemIcp] = useState(false);
   const [icpSelecionadoId, setIcpSelecionadoId] = useState<number | null>(null);
   const [contasDoIcp, setContasDoIcp] = useState<Conta[]>([]);
   const [negocioArrastadoId, setNegocioArrastadoId] = useState<number | null>(null);
@@ -130,19 +131,27 @@ export function Kanban() {
           return;
         }
       } else {
-        if (icpSelecionadoId === null) {
-          setErro("Selecione um ICP para cadastrar a conta nova.");
-          return;
-        }
         const nomeConta = String(form.get("nome_conta") || "").trim();
         if (!nomeConta) {
           setErro("Informe o nome do cliente.");
           return;
         }
-        const contaCriada = await api.post<Conta>(`/icp/${icpSelecionadoId}/contas`, {
-          nome: nomeConta,
-          dominio: String(form.get("dominio_conta") || "") || null,
-        });
+        let contaCriada: Conta;
+        if (semIcp) {
+          contaCriada = await api.post<Conta>("/leads/contas", {
+            nome: nomeConta,
+            dominio: String(form.get("dominio_conta") || "") || null,
+          });
+        } else {
+          if (icpSelecionadoId === null) {
+            setErro("Selecione um ICP para cadastrar a conta nova (ou marque \"Sem ICP\").");
+            return;
+          }
+          contaCriada = await api.post<Conta>(`/icp/${icpSelecionadoId}/contas`, {
+            nome: nomeConta,
+            dominio: String(form.get("dominio_conta") || "") || null,
+          });
+        }
         contaId = contaCriada.id;
 
         const nomeContato = String(form.get("nome_contato") || "").trim();
@@ -158,6 +167,7 @@ export function Kanban() {
       await api.post("/crm/negocios", { conta_id: contaId, nome: nomeNegocio, valor });
       setModalAberto(false);
       setContaOrigem("existente");
+      setSemIcp(false);
       setIcpSelecionadoId(null);
       await carregar();
     } catch (error) {
@@ -292,18 +302,34 @@ export function Kanban() {
               </button>
             </div>
 
-            <Select
-              value={icpSelecionadoId ?? ""}
-              onChange={(event) => setIcpSelecionadoId(event.target.value ? Number(event.target.value) : null)}
-              className="mb-2"
-            >
-              <option value="">{contaOrigem === "existente" ? "Filtrar por ICP" : "Selecione o ICP da conta"}</option>
-              {icps.map((icp) => (
-                <option key={icp.id} value={icp.id}>
-                  {icp.nome}
-                </option>
-              ))}
-            </Select>
+            {contaOrigem === "nova" && (
+              <label className="mb-2 flex items-center gap-1.5 text-[11px] text-muted">
+                <input
+                  type="checkbox"
+                  checked={semIcp}
+                  onChange={(event) => {
+                    setSemIcp(event.target.checked);
+                    setIcpSelecionadoId(null);
+                  }}
+                />
+                Sem ICP (lead avulso — indicação, evento, contato pessoal)
+              </label>
+            )}
+
+            {!(contaOrigem === "nova" && semIcp) && (
+              <Select
+                value={icpSelecionadoId ?? ""}
+                onChange={(event) => setIcpSelecionadoId(event.target.value ? Number(event.target.value) : null)}
+                className="mb-2"
+              >
+                <option value="">{contaOrigem === "existente" ? "Filtrar por ICP" : "Selecione o ICP da conta"}</option>
+                {icps.map((icp) => (
+                  <option key={icp.id} value={icp.id}>
+                    {icp.nome}
+                  </option>
+                ))}
+              </Select>
+            )}
 
             {contaOrigem === "existente" ? (
               <Select name="conta_id" required defaultValue="">

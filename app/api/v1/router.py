@@ -19,6 +19,7 @@ from app.api.v1.envios import router as envios_router
 from app.api.v1.faq import router as faq_router
 from app.api.v1.icp import router as icp_router
 from app.api.v1.indicacoes import router as indicacoes_router
+from app.api.v1.leads import router as leads_router
 from app.api.v1.linkedin import router as linkedin_router
 from app.api.v1.motor import router as motor_router
 from app.api.v1.notificacoes import router as notificacoes_router
@@ -74,6 +75,7 @@ router.include_router(faq_router, dependencies=_exige_licenca)
 router.include_router(painel_router, dependencies=_exige_licenca)
 router.include_router(nps_router, dependencies=_exige_licenca)
 router.include_router(indicacoes_router, dependencies=_exige_licenca)
+router.include_router(leads_router, dependencies=_exige_licenca)
 router.include_router(auth_router)
 router.include_router(convites_router)
 router.include_router(planos_router)

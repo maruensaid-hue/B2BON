@@ -11,7 +11,9 @@ class Conta(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, index=True)
-    icp_id: Mapped[int] = mapped_column(ForeignKey("icp.id"))
+    # Nulo para leads avulsos (E-Leads) — cadastrados direto no CRM, fora do
+    # recorte de um ICP (indicação, evento, contato pessoal).
+    icp_id: Mapped[int | None] = mapped_column(ForeignKey("icp.id"), nullable=True)
     cnpj: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     nome: Mapped[str] = mapped_column(String)
     nome_fantasia: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -33,6 +35,11 @@ class Conta(Base):
     # (primeiro negócio ganho) e, se aplicável, quando cancelou (churn).
     cliente_desde: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cliente_cancelado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Próxima ação prevista nesta conta (E-Leads) — anotação livre de uma
+    # linha + data, disponível mesmo antes de existir um negócio (Atividade
+    # é por negócio, não serve para isso).
+    proximo_passo: Mapped[str | None] = mapped_column(String, nullable=True)
+    proximo_passo_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     neo4j_node_id: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(

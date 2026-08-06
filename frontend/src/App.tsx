@@ -13,6 +13,9 @@ import { Aprovacoes } from "@/pages/aprovacoes/Aprovacoes";
 import { Cadencias } from "@/pages/cadencias/Cadencias";
 import { Configuracao } from "@/pages/configuracao/Configuracao";
 import { Kanban } from "@/pages/crm/Kanban";
+import { LeadsAcoesConta } from "@/pages/leads/LeadsAcoesConta";
+import { LeadsContatos } from "@/pages/leads/LeadsContatos";
+import { LeadsEmpresas } from "@/pages/leads/LeadsEmpresas";
 import { Map } from "@/pages/map/Map";
 import { Prospeccao } from "@/pages/prospeccao/Prospeccao";
 import { RedeSocial } from "@/pages/rede-social/RedeSocial";
@@ -28,6 +31,9 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route index element={<Dashboard />} />
           <Route path="crm" element={<Kanban />} />
+          <Route path="leads/empresas" element={<LeadsEmpresas />} />
+          <Route path="leads/contatos" element={<LeadsContatos />} />
+          <Route path="leads/contas/:id" element={<LeadsAcoesConta />} />
           <Route path="rede-social" element={<RedeSocial />} />
           <Route path="map" element={<Map />} />
           <Route path="prospeccao" element={<Prospeccao />} />

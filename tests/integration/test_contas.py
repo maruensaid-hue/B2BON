@@ -1,5 +1,8 @@
 from app.models.conta import Conta
+from app.models.usuario import Usuario
 from app.providers.account_data.base import ContaCandidata, DecisorCandidato
+
+TENANT_ID = "tenant-teste"
 
 
 def _candidato(cnpj: str, nome: str) -> ContaCandidata:
@@ -275,3 +278,130 @@ def test_export_pdf_gera_arquivo_valido(client, criar_icp, fake_account_data):
     assert resposta.status_code == 200
     assert resposta.headers["content-type"] == "application/pdf"
     assert resposta.content.startswith(b"%PDF")
+
+
+def _id_do_usuario(db_session, email: str) -> int:
+    return db_session.query(Usuario).filter_by(email=email).one().id
+
+
+def test_criar_lead_sem_icp(client):
+    """Pedido do usuário: cliente conquistado no varejo (indicação/evento)
+    não se enquadra no recorte estático de um ICP — precisa cadastrar sem
+    escolher nenhum."""
+    resposta = client.post(
+        "/api/v1/leads/contas",
+        json={"nome": "Consultoria Avulsa Ltda", "dominio": "consultoriaavulsa.com.br"},
+    )
+
+    assert resposta.status_code == 201
+    corpo = resposta.json()
+    assert corpo["nome"] == "Consultoria Avulsa Ltda"
+    assert corpo["icp_id"] is None
+    assert corpo["origem"] == "lead"
+    assert corpo["status"] == "prospectada"
+
+
+def test_listar_leads_nao_traz_contas_de_icp(client, criar_icp, fake_account_data):
+    """Partição estrutural: /leads/contas só lista icp_id IS NULL — contas
+    prospectadas via ICP continuam de fora."""
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech")]
+    client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5})
+    client.post("/api/v1/leads/contas", json={"nome": "Lead Avulso"})
+
+    leads = client.get("/api/v1/leads/contas").json()
+
+    assert [lead["nome"] for lead in leads] == ["Lead Avulso"]
+
+
+def test_user_so_ve_seus_proprios_leads(client, db_session, criar_usuario_autenticado):
+    """Mesma regra de escopo do MAP de contas (saude_conta_service) aplicada
+    a leads: vendedor não enxerga a carteira dos colegas."""
+    headers_vendedor_a = criar_usuario_autenticado(TENANT_ID, papel="user", email="lead-vendedor-a@teste.com.br")
+    headers_vendedor_b = criar_usuario_autenticado(TENANT_ID, papel="user", email="lead-vendedor-b@teste.com.br")
+
+    lead_a = client.post(
+        "/api/v1/leads/contas", json={"nome": "Lead do Vendedor A"}, headers=headers_vendedor_a
+    ).json()
+    vendedor_a_id = _id_do_usuario(db_session, "lead-vendedor-a@teste.com.br")
+    conta = db_session.query(Conta).filter_by(id=lead_a["id"]).one()
+    conta.vendedor_usuario_id = vendedor_a_id
+    db_session.commit()
+
+    leads_a = client.get("/api/v1/leads/contas", headers=headers_vendedor_a).json()
+    assert [lead["id"] for lead in leads_a] == [lead_a["id"]]
+
+    leads_b = client.get("/api/v1/leads/contas", headers=headers_vendedor_b).json()
+    assert leads_b == []
+
+
+def test_admin_ve_todos_os_leads_e_filtra_por_vendedor(client, db_session, criar_usuario_autenticado):
+    headers_vendedor = criar_usuario_autenticado(TENANT_ID, papel="user", email="lead-vendedor-c@teste.com.br")
+    headers_admin = criar_usuario_autenticado(TENANT_ID, papel="admin", email="lead-gestor@teste.com.br")
+
+    lead_vendedor = client.post(
+        "/api/v1/leads/contas", json={"nome": "Lead com dono"}, headers=headers_vendedor
+    ).json()
+    vendedor_id = _id_do_usuario(db_session, "lead-vendedor-c@teste.com.br")
+    conta = db_session.query(Conta).filter_by(id=lead_vendedor["id"]).one()
+    conta.vendedor_usuario_id = vendedor_id
+    db_session.commit()
+    client.post("/api/v1/leads/contas", json={"nome": "Lead sem dono"}, headers=headers_admin)
+
+    todos = client.get("/api/v1/leads/contas", headers=headers_admin).json()
+    assert len(todos) == 2
+
+    filtrados = client.get(f"/api/v1/leads/contas?vendedor_usuario_id={vendedor_id}", headers=headers_admin).json()
+    assert [lead["id"] for lead in filtrados] == [lead_vendedor["id"]]
+
+
+def test_listar_decisores_leads_respeita_mesmo_escopo(client, db_session, criar_usuario_autenticado):
+    headers_vendedor_a = criar_usuario_autenticado(TENANT_ID, papel="user", email="lead-contato-a@teste.com.br")
+    headers_vendedor_b = criar_usuario_autenticado(TENANT_ID, papel="user", email="lead-contato-b@teste.com.br")
+
+    lead = client.post(
+        "/api/v1/leads/contas", json={"nome": "Empresa com contato"}, headers=headers_vendedor_a
+    ).json()
+    vendedor_a_id = _id_do_usuario(db_session, "lead-contato-a@teste.com.br")
+    conta = db_session.query(Conta).filter_by(id=lead["id"]).one()
+    conta.vendedor_usuario_id = vendedor_a_id
+    db_session.commit()
+    client.post(
+        f"/api/v1/contas/{lead['id']}/decisores",
+        json={"nome": "Maria Souza", "cargo": "Diretora"},
+        headers=headers_vendedor_a,
+    )
+
+    decisores_a = client.get("/api/v1/leads/decisores", headers=headers_vendedor_a).json()
+    assert [d["nome"] for d in decisores_a] == ["Maria Souza"]
+
+    decisores_b = client.get("/api/v1/leads/decisores", headers=headers_vendedor_b).json()
+    assert decisores_b == []
+
+
+def test_definir_proximo_passo_da_conta(client):
+    lead = client.post("/api/v1/leads/contas", json={"nome": "Empresa Y"}).json()
+
+    resposta = client.put(
+        f"/api/v1/contas/{lead['id']}/proximo-passo",
+        json={"proximo_passo": "Enviar proposta", "proximo_passo_em": "2026-08-10T15:00:00"},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["proximo_passo"] == "Enviar proposta"
+    assert resposta.json()["proximo_passo_em"].startswith("2026-08-10T15:00:00")
+
+
+def test_definir_proximo_passo_nao_e_apagado_por_edicao_de_conta(client):
+    """Bug evitado por design: editar nome_fantasia/domínio não pode
+    apagar um próximo passo já anotado (são endpoints distintos)."""
+    lead = client.post("/api/v1/leads/contas", json={"nome": "Empresa X"}).json()
+    client.put(
+        f"/api/v1/contas/{lead['id']}/proximo-passo",
+        json={"proximo_passo": "Ligar semana que vem", "proximo_passo_em": "2026-08-13T10:00:00"},
+    )
+
+    resposta = client.put(f"/api/v1/contas/{lead['id']}", json={"nome_fantasia": "Empresa X Ltda"})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["proximo_passo"] == "Ligar semana que vem"

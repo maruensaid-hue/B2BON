@@ -15,6 +15,7 @@ from app.models.campo_enriquecido import CampoEnriquecido
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.icp import ICP
+from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, FiltroBusca
 from app.schemas.conta import ParticipanteEventoSchema
 from app.schemas.decisor import DecisorCreateSchema
@@ -139,6 +140,69 @@ def criar_manual(
     db.commit()
     db.refresh(conta)
     return conta
+
+
+def criar_lead(
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    nome: str,
+    cnpj: str | None,
+    dominio: str | None,
+    segmento: str | None = None,
+    porte: str | None = None,
+    regiao: str | None = None,
+) -> Conta:
+    """Cadastro de cliente avulso ("lead") direto no CRM — indicação,
+    evento, contato pessoal — que não se enquadra no recorte estático de
+    nenhum ICP (segmento/porte/dor variam de cliente para cliente). Ao
+    contrário de `criar_manual`, não exige um ICP: `icp_id` fica nulo."""
+    conta = Conta(
+        tenant_id=tenant_id,
+        icp_id=None,
+        nome=nome,
+        cnpj=cnpj,
+        dominio=_normalizar_dominio(dominio),
+        segmento=segmento,
+        porte=porte,
+        regiao=regiao,
+        status="prospectada",
+        origem="lead",
+    )
+    db.add(conta)
+    db.flush()
+
+    auditoria_service.registrar(db, tenant_id, "lead_criado", "conta", conta.id, ator_id, {"nome": nome})
+    db.commit()
+    db.refresh(conta)
+    return conta
+
+
+def _leads_visiveis(db: Session, tenant_id: str, usuario: Usuario, vendedor_usuario_id: int | None):
+    """Mesma regra de escopo por papel de `saude_conta_service._contas_visiveis`
+    (user só vê as próprias contas; admin/super_admin veem todas e podem
+    filtrar por vendedor), restrita a contas sem ICP (leads avulsos)."""
+    query = db.query(Conta).filter_by(tenant_id=tenant_id).filter(Conta.icp_id.is_(None))
+    if usuario.papel == "user":
+        query = query.filter_by(vendedor_usuario_id=usuario.id)
+    elif vendedor_usuario_id is not None:
+        query = query.filter_by(vendedor_usuario_id=vendedor_usuario_id)
+    return query
+
+
+def listar_leads(
+    db: Session, tenant_id: str, usuario: Usuario, vendedor_usuario_id: int | None = None
+) -> list[Conta]:
+    return _leads_visiveis(db, tenant_id, usuario, vendedor_usuario_id).order_by(Conta.id.desc()).all()
+
+
+def listar_decisores_leads(
+    db: Session, tenant_id: str, usuario: Usuario, vendedor_usuario_id: int | None = None
+) -> list[Decisor]:
+    conta_ids = [conta.id for conta in _leads_visiveis(db, tenant_id, usuario, vendedor_usuario_id).all()]
+    if not conta_ids:
+        return []
+    return db.query(Decisor).filter(Decisor.conta_id.in_(conta_ids)).order_by(Decisor.id.desc()).all()
 
 
 def _normalizar_nome(nome: str) -> str:
@@ -287,6 +351,30 @@ def atualizar(
     conta.dominio = _normalizar_dominio(dominio)
 
     auditoria_service.registrar(db, tenant_id, "conta_atualizada", "conta", conta.id, ator_id, {}, conta_id=conta.id)
+    db.commit()
+    db.refresh(conta)
+    return conta
+
+
+def definir_proximo_passo(
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    conta_id: int,
+    proximo_passo: str | None,
+    proximo_passo_em: datetime | None,
+) -> Conta:
+    """Próxima ação prevista na conta (E-Leads) — em endpoint próprio, e não
+    dentro de `atualizar()`, para que salvar nome/domínio nunca apague sem
+    querer um próximo passo já anotado (o form de edição de conta não
+    manda esses dois campos)."""
+    conta = obter(db, tenant_id, conta_id)
+    conta.proximo_passo = proximo_passo
+    conta.proximo_passo_em = proximo_passo_em
+
+    auditoria_service.registrar(
+        db, tenant_id, "proximo_passo_definido", "conta", conta.id, ator_id, {}, conta_id=conta.id
+    )
     db.commit()
     db.refresh(conta)
     return conta

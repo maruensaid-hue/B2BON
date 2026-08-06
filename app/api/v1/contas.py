@@ -22,6 +22,7 @@ from app.schemas.conta import (
     AtualizarContaRequestSchema,
     ContaSchema,
     CriarContaManualRequestSchema,
+    DefinirProximoPassoRequestSchema,
     DescartarContaRequestSchema,
     EnriquecerContaResponseSchema,
     FranquiaSchema,
@@ -119,6 +120,19 @@ def atualizar_conta(
     db: Session = Depends(get_db),
 ) -> ContaSchema:
     return conta_service.atualizar(db, tenant_id, ator_id, conta_id, dados.nome_fantasia, dados.dominio)
+
+
+@router.put("/contas/{conta_id}/proximo-passo", response_model=ContaSchema)
+def definir_proximo_passo(
+    conta_id: int,
+    dados: DefinirProximoPassoRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ContaSchema:
+    return conta_service.definir_proximo_passo(
+        db, tenant_id, ator_id, conta_id, dados.proximo_passo, dados.proximo_passo_em
+    )
 
 
 @router.get("/contas/{conta_id}/decisores", response_model=list[DecisorSchema])

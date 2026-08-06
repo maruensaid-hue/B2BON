@@ -86,13 +86,19 @@ def obter_negocio(db: Session, tenant_id: str, negocio_id: int) -> Negocio:
 
 
 def listar_negocios(
-    db: Session, tenant_id: str, estagio_id: int | None = None, vendedor_usuario_id: int | None = None
+    db: Session,
+    tenant_id: str,
+    estagio_id: int | None = None,
+    vendedor_usuario_id: int | None = None,
+    conta_id: int | None = None,
 ) -> list[Negocio]:
     query = db.query(Negocio).filter_by(tenant_id=tenant_id)
     if estagio_id is not None:
         query = query.filter_by(estagio_id=estagio_id)
     if vendedor_usuario_id is not None:
         query = query.filter_by(vendedor_usuario_id=vendedor_usuario_id)
+    if conta_id is not None:
+        query = query.filter_by(conta_id=conta_id)
     return query.order_by(Negocio.id.desc()).all()
 
 

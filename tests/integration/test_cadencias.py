@@ -1,3 +1,22 @@
+def test_gerar_cadencia_para_conta_sem_icp(
+    client, onboarding_completo, criar_cadencia, fake_llm
+):
+    """Decisão de escopo do E-Leads: a geração de cadência já usa o ICP
+    ativo do tenant como contexto do prompt (não o icp_id da própria
+    conta), então um lead sem ICP (icp_id=None) tem que gerar mensagem
+    normalmente, sem nenhuma mudança no motor de IA."""
+    lead = client.post("/api/v1/leads/contas", json={"nome": "Lead Sem ICP"}).json()
+    client.post(f"/api/v1/contas/{lead['id']}/decisores", json={"nome": "Decisor do Lead", "cargo": "CEO"})
+    cadencia = criar_cadencia()
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [lead["id"]]})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["contas_processadas"] == [lead["id"]]
+    assert corpo["mensagens_geradas"] == 5
+
+
 def _aprovar_tudo(client, cadencia_id: int) -> list[dict]:
     itens = client.get("/api/v1/aprovacoes", params={"cadencia_id": cadencia_id}).json()
     for item in itens:

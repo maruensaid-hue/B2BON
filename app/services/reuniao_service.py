@@ -51,7 +51,9 @@ def obter(db: Session, tenant_id: str, reuniao_id: int) -> Reuniao:
     return reuniao
 
 
-def listar(db: Session, tenant_id: str, status: str | None = None) -> list[dict]:
+def listar(
+    db: Session, tenant_id: str, status: str | None = None, conta_id: int | None = None
+) -> list[dict]:
     """Não existia rota de listagem — só ações por id (Onda J: faltava tela
     de Reuniões no frontend, esse é o endpoint que a alimenta). Nome de
     conta/decisor junto (mesmo padrão de `aprovacao_service.listar_fila`)
@@ -64,6 +66,8 @@ def listar(db: Session, tenant_id: str, status: str | None = None) -> list[dict]
     )
     if status is not None:
         query = query.filter(Reuniao.status == status)
+    if conta_id is not None:
+        query = query.filter(Reuniao.conta_id == conta_id)
 
     return [
         {
