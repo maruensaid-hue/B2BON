@@ -155,6 +155,24 @@ def test_atualizar_conta_nome_fantasia_e_dominio(client, criar_icp, fake_account
     assert resposta.json()["dominio"] == "alphatech.com.br"
 
 
+def test_atualizar_conta_normaliza_dominio_com_protocolo(client, criar_icp, fake_account_data):
+    """Bug real de produção: colar a URL completa (com https://) fazia
+    site_fetcher montar "https://https://..." e quebrar com erro de DNS."""
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("22333444000155", "Beta Clinica")]
+    conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
+
+    casos = [
+        ("https://www.betaclinica.com.br", "www.betaclinica.com.br"),
+        ("http://betaclinica.com.br/", "betaclinica.com.br"),
+        ("  betaclinica.com.br  ", "betaclinica.com.br"),
+    ]
+    for entrada, esperado in casos:
+        resposta = client.put(f"/api/v1/contas/{conta_id}", json={"dominio": entrada})
+        assert resposta.status_code == 200
+        assert resposta.json()["dominio"] == esperado
+
+
 def test_atualizar_decisor(client, criar_icp, fake_account_data):
     icp = criar_icp()
     cnpj = "11222333000191"

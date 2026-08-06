@@ -52,7 +52,13 @@ def buscar_conteudo_site(dominio: str) -> str:
     histórico da pesquisa). Nunca lança: páginas que falham são só
     ignoradas, e se nem a home responder, a exceção da home é propagada
     (sem home, não há o que pesquisar)."""
-    base_url = f"https://{dominio}"
+    # Defesa contra dominio ja vindo com protocolo (ex.: "https://empresa.com")
+    # -- concatenar direto viraria "https://https://empresa.com" e quebrava
+    # a resolucao de DNS (bug real de producao). O ponto de entrada
+    # principal (conta_service) ja normaliza antes de salvar; isto aqui e
+    # so uma segunda trava para dado que tenha chegado sem passar por la.
+    dominio_limpo = re.sub(r"^[a-zA-Z]+://", "", dominio).strip("/")
+    base_url = f"https://{dominio_limpo}"
     home = httpx.get(base_url, timeout=8.0, follow_redirects=True)
     home.raise_for_status()
     texto_home = home.text[:_MAX_CHARS_POR_PAGINA]

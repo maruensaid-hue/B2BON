@@ -1,5 +1,6 @@
 import re
 from datetime import UTC, datetime
+from urllib.parse import urlparse
 
 import httpx
 from fpdf import FPDF
@@ -127,7 +128,7 @@ def criar_manual(
         icp_id=icp_id,
         nome=nome,
         cnpj=cnpj,
-        dominio=dominio,
+        dominio=_normalizar_dominio(dominio),
         status="prospectada",
         origem="manual",
     )
@@ -258,6 +259,23 @@ def obter(db: Session, tenant_id: str, conta_id: int) -> Conta:
     return conta
 
 
+def _normalizar_dominio(dominio: str | None) -> str | None:
+    """Aceita o que a pessoa colar (com ou sem `https://`, com ou sem
+    caminho/barra final) e guarda só o host — `site_fetcher` monta a URL
+    como `https://{dominio}`, então um valor como `https://empresa.com`
+    salvo ao pé da letra virava `https://https://empresa.com` e quebrava
+    a busca com erro de DNS (bug real reportado em produção)."""
+    if not dominio:
+        return None
+    texto = dominio.strip()
+    if not texto:
+        return None
+    if "://" not in texto:
+        texto = f"//{texto}"
+    netloc = urlparse(texto).netloc
+    return (netloc or texto.lstrip("/")).rstrip("/") or None
+
+
 def atualizar(
     db: Session, tenant_id: str, ator_id: str | None, conta_id: int, nome_fantasia: str | None, dominio: str | None
 ) -> Conta:
@@ -266,7 +284,7 @@ def atualizar(
     havia como corrigir esses dois campos depois que a conta já existe."""
     conta = obter(db, tenant_id, conta_id)
     conta.nome_fantasia = nome_fantasia
-    conta.dominio = dominio
+    conta.dominio = _normalizar_dominio(dominio)
 
     auditoria_service.registrar(db, tenant_id, "conta_atualizada", "conta", conta.id, ator_id, {}, conta_id=conta.id)
     db.commit()
