@@ -8,7 +8,7 @@ from app.models.plano import Plano
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.services import auth_service
-from app.services.errors import NaoAutenticado, RegraNegocioViolada
+from app.services.errors import NaoAutenticado, RegraNegocioViolada, ValidacaoFalhou
 
 TENANT_ID = "tenant-teste"
 
@@ -100,13 +100,27 @@ def test_fluxo_de_convite_gerar_usar_e_bloquear_reuso(db_session):
     assert convite.status == "disponivel"
 
     usuario = auth_service.registrar_com_convite(
-        db_session, convite.codigo, "Novo Usuário", "novo@teste.com.br", "senha123"
+        db_session, convite.codigo, "Novo Usuário", "novo@teste.com.br", "senha123", aceite_termos=True
     )
     assert usuario.tenant_id == TENANT_ID
     assert usuario.papel == "user"
+    assert usuario.termos_aceitos_em is not None
 
     with pytest.raises(RegraNegocioViolada):
-        auth_service.registrar_com_convite(db_session, convite.codigo, "Outro", "outro@teste.com.br", "senha123")
+        auth_service.registrar_com_convite(
+            db_session, convite.codigo, "Outro", "outro@teste.com.br", "senha123", aceite_termos=True
+        )
+
+
+def test_registro_sem_aceitar_termos_e_bloqueado(db_session):
+    """Pedido do usuário: cadastro self-service (convite) precisa exigir o
+    aceite da Política de Privacidade/Termos, com o momento gravado."""
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+    with pytest.raises(ValidacaoFalhou):
+        auth_service.registrar_com_convite(
+            db_session, convite.codigo, "Sem Aceite", "sem-aceite@teste.com.br", "senha123", aceite_termos=False
+        )
 
 
 def test_convite_revogado_bloqueia_registro(db_session):
@@ -114,7 +128,9 @@ def test_convite_revogado_bloqueia_registro(db_session):
     auth_service.revogar_convite(db_session, TENANT_ID, None, convite.codigo)
 
     with pytest.raises(RegraNegocioViolada):
-        auth_service.registrar_com_convite(db_session, convite.codigo, "X", "x@teste.com.br", "senha123")
+        auth_service.registrar_com_convite(
+            db_session, convite.codigo, "X", "x@teste.com.br", "senha123", aceite_termos=True
+        )
 
 
 def test_convite_expirado_bloqueia_registro(db_session):
@@ -128,7 +144,9 @@ def test_convite_expirado_bloqueia_registro(db_session):
     db_session.commit()
 
     with pytest.raises(RegraNegocioViolada):
-        auth_service.registrar_com_convite(db_session, "EXPIRADOTESTE", "X", "x2@teste.com.br", "senha123")
+        auth_service.registrar_com_convite(
+            db_session, "EXPIRADOTESTE", "X", "x2@teste.com.br", "senha123", aceite_termos=True
+        )
 
 
 def test_registro_com_email_ja_cadastrado_falha(db_session):
@@ -136,7 +154,9 @@ def test_registro_com_email_ja_cadastrado_falha(db_session):
     convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
 
     with pytest.raises(RegraNegocioViolada):
-        auth_service.registrar_com_convite(db_session, convite.codigo, "Y", "existente@teste.com.br", "senha123")
+        auth_service.registrar_com_convite(
+            db_session, convite.codigo, "Y", "existente@teste.com.br", "senha123", aceite_termos=True
+        )
 
 
 def test_gerar_convite_bloqueia_quando_limite_de_usuarios_atingido(db_session):
@@ -175,7 +195,9 @@ def test_aceitar_convite_bloqueia_quando_limite_e_atingido_apos_convite_gerado(d
     _criar_usuario(db_session, email="segundo@teste.com.br", papel="admin")
 
     with pytest.raises(RegraNegocioViolada):
-        auth_service.registrar_com_convite(db_session, convite.codigo, "Terceiro", "terceiro@teste.com.br", "senha123")
+        auth_service.registrar_com_convite(
+            db_session, convite.codigo, "Terceiro", "terceiro@teste.com.br", "senha123", aceite_termos=True
+        )
 
 
 def test_tenant_sem_licenca_ativa_nao_bloqueia_convite(db_session):
@@ -184,7 +206,7 @@ def test_tenant_sem_licenca_ativa_nao_bloqueia_convite(db_session):
     convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
 
     usuario = auth_service.registrar_com_convite(
-        db_session, convite.codigo, "Sem Licença", "sem-licenca@teste.com.br", "senha123"
+        db_session, convite.codigo, "Sem Licença", "sem-licenca@teste.com.br", "senha123", aceite_termos=True
     )
 
     assert usuario.tenant_id == TENANT_ID

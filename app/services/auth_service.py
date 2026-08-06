@@ -192,7 +192,12 @@ def _validar_convite_disponivel(db: Session, convite: ConviteCadastro | None, co
     return convite
 
 
-def registrar_com_convite(db: Session, codigo: str, nome: str, email: str, senha: str) -> Usuario:
+def registrar_com_convite(
+    db: Session, codigo: str, nome: str, email: str, senha: str, aceite_termos: bool
+) -> Usuario:
+    if not aceite_termos:
+        raise ValidacaoFalhou("É preciso aceitar a Política de Privacidade e os Termos de Uso para se cadastrar.")
+
     convite = db.query(ConviteCadastro).filter_by(codigo=codigo).one_or_none()
     convite = _validar_convite_disponivel(db, convite, codigo)
 
@@ -206,6 +211,7 @@ def registrar_com_convite(db: Session, codigo: str, nome: str, email: str, senha
         email=email,
         senha_hash=hash_senha(senha),
         papel=convite.papel_concedido,
+        termos_aceitos_em=datetime.now(UTC),
     )
     db.add(usuario)
     db.flush()

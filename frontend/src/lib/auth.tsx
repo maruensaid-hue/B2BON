@@ -24,6 +24,7 @@ interface DadosRegistroVitrine {
   nome_admin: string;
   email_admin: string;
   senha_admin: string;
+  aceite_termos: boolean;
 }
 
 interface AuthContextValue {

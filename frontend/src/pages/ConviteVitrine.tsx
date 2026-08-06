@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +13,7 @@ export function ConviteVitrine() {
   const navigate = useNavigate();
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
+  const [aceiteTermos, setAceiteTermos] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,6 +29,7 @@ export function ConviteVitrine() {
         nome_admin: String(form.get("nome_admin")),
         email_admin: String(form.get("email_admin")),
         senha_admin: String(form.get("senha_admin")),
+        aceite_termos: aceiteTermos,
       });
       navigate("/rede-social", { replace: true });
     } catch (error) {
@@ -74,9 +76,29 @@ export function ConviteVitrine() {
             <Input name="senha_admin" type="password" required minLength={8} placeholder="Mínimo 8 caracteres" />
           </div>
 
+          <label className="flex items-start gap-2 text-[11px] text-muted">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={aceiteTermos}
+              onChange={(event) => setAceiteTermos(event.target.checked)}
+            />
+            <span>
+              Li e aceito a{" "}
+              <Link to="/privacidade" target="_blank" className="text-cyan hover:underline">
+                Política de Privacidade
+              </Link>{" "}
+              e os{" "}
+              <Link to="/termos" target="_blank" className="text-cyan hover:underline">
+                Termos de Uso
+              </Link>
+              .
+            </span>
+          </label>
+
           {erro && <div className="text-[12px] text-red">{erro}</div>}
 
-          <Button type="submit" disabled={carregando} className="mt-1 w-full justify-center">
+          <Button type="submit" disabled={carregando || !aceiteTermos} className="mt-1 w-full justify-center">
             {carregando ? "Entrando..." : "Entrar na Rede Social"}
           </Button>
         </form>

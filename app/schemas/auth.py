@@ -14,6 +14,7 @@ class UsuarioSchema(BaseModel):
     ativo: bool
     criado_em: datetime
     ultimo_login_em: datetime | None
+    termos_aceitos_em: datetime | None
 
 
 class LoginRequestSchema(BaseModel):
@@ -30,6 +31,7 @@ class RegistrarRequestSchema(BaseModel):
     nome: str
     email: EmailStr
     senha: str = Field(min_length=8, max_length=72)
+    aceite_termos: bool
 
 
 class RegistrarVitrineRequestSchema(BaseModel):
@@ -39,6 +41,7 @@ class RegistrarVitrineRequestSchema(BaseModel):
     nome_admin: str
     email_admin: EmailStr
     senha_admin: str = Field(min_length=8, max_length=72)
+    aceite_termos: bool
 
 
 class TokenResponseSchema(BaseModel):

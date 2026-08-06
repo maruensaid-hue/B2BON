@@ -22,3 +22,7 @@ class Usuario(Base):
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     ultimo_login_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Registro do aceite de Política de Privacidade/Termos de Uso no
+    # cadastro (LGPD) — nulo para quem foi criado antes deste campo
+    # existir; todo cadastro novo passa a exigir e a gravar a data.
+    termos_aceitos_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

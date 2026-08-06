@@ -43,7 +43,9 @@ def login_google(dados: LoginGoogleRequestSchema, db: Session = Depends(get_db))
     "/registrar", response_model=TokenResponseSchema, status_code=201, dependencies=[Depends(limitar_por_ip())]
 )
 def registrar(dados: RegistrarRequestSchema, db: Session = Depends(get_db)) -> TokenResponseSchema:
-    usuario = auth_service.registrar_com_convite(db, dados.codigo_convite, dados.nome, dados.email, dados.senha)
+    usuario = auth_service.registrar_com_convite(
+        db, dados.codigo_convite, dados.nome, dados.email, dados.senha, dados.aceite_termos
+    )
     return _resposta_token(usuario, db)
 
 
@@ -63,6 +65,7 @@ def registrar_vitrine(dados: RegistrarVitrineRequestSchema, db: Session = Depend
         dados.nome_admin,
         dados.email_admin,
         dados.senha_admin,
+        dados.aceite_termos,
         dados.cnpj,
     )
     return _resposta_token(usuario, db)

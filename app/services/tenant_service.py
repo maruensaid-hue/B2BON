@@ -11,7 +11,7 @@ from app.models.plano import Plano
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.services import auditoria_service, auth_service, rede_social_service
-from app.services.errors import NaoEncontrado, RegraNegocioViolada
+from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 
 def listar_planos(db: Session) -> list[Plano]:
@@ -226,12 +226,16 @@ def criar_tenant_vitrine(
     nome_admin: str,
     email_admin: str,
     senha_admin: str,
+    aceite_termos: bool,
     cnpj: str | None = None,
 ) -> Usuario:
     """Aceite de convite-vitrine: cria Tenant + Usuario (papel `admin`,
     nunca `super_admin` — isso evitaria acesso a `/admin/tenants`
     cross-tenant) + Perfil de Rede Social. Deliberadamente sem Licença —
     é essa ausência que restringe a conta só à Rede Social (Onda H)."""
+    if not aceite_termos:
+        raise ValidacaoFalhou("É preciso aceitar a Política de Privacidade e os Termos de Uso para se cadastrar.")
+
     convite = db.query(ConviteVitrine).filter_by(codigo=codigo_convite).one_or_none()
     convite = _validar_convite_vitrine_disponivel(db, convite, codigo_convite)
 
@@ -251,6 +255,7 @@ def criar_tenant_vitrine(
         email=email_admin,
         senha_hash=auth_service.hash_senha(senha_admin),
         papel="admin",
+        termos_aceitos_em=datetime.now(UTC),
     )
     db.add(usuario)
     db.flush()

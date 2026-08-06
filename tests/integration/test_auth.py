@@ -55,7 +55,13 @@ def test_registrar_via_convite_gera_token_valido(client, db_session):
 
     resposta = client.post(
         "/api/v1/auth/registrar",
-        json={"codigo_convite": convite.codigo, "nome": "Novo", "email": "novo-via-api@teste.com.br", "senha": "senha123"},
+        json={
+            "codigo_convite": convite.codigo,
+            "nome": "Novo",
+            "email": "novo-via-api@teste.com.br",
+            "senha": "senha123",
+            "aceite_termos": True,
+        },
     )
 
     assert resposta.status_code == 201
@@ -66,16 +72,81 @@ def test_registrar_via_convite_gera_token_valido(client, db_session):
     assert eu.json()["email"] == "novo-via-api@teste.com.br"
 
 
+def test_registrar_sem_aceitar_termos_via_api_falha(client, db_session):
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+    resposta = client.post(
+        "/api/v1/auth/registrar",
+        json={
+            "codigo_convite": convite.codigo,
+            "nome": "Sem Aceite",
+            "email": "sem-aceite-api@teste.com.br",
+            "senha": "senha123",
+            "aceite_termos": False,
+        },
+    )
+
+    assert resposta.status_code == 422
+
+
+def test_registrar_grava_data_do_aceite_dos_termos(client, db_session):
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+    resposta = client.post(
+        "/api/v1/auth/registrar",
+        json={
+            "codigo_convite": convite.codigo,
+            "nome": "Com Aceite",
+            "email": "com-aceite-api@teste.com.br",
+            "senha": "senha123",
+            "aceite_termos": True,
+        },
+    )
+
+    assert resposta.status_code == 201
+    assert resposta.json()["usuario"]["termos_aceitos_em"] is not None
+
+
+def test_registrar_vitrine_sem_aceitar_termos_via_api_falha(client):
+    convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+
+    resposta = client.post(
+        "/api/v1/auth/registrar-vitrine",
+        json={
+            "codigo_convite": convite["codigo"],
+            "razao_social": "Sem Aceite Vitrine Ltda",
+            "nome_admin": "Admin",
+            "email_admin": "sem-aceite-vitrine@teste.com.br",
+            "senha_admin": "senha123",
+            "aceite_termos": False,
+        },
+    )
+
+    assert resposta.status_code == 422
+
+
 def test_convite_usado_duas_vezes_falha(client, db_session):
     convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
     client.post(
         "/api/v1/auth/registrar",
-        json={"codigo_convite": convite.codigo, "nome": "A", "email": "a@teste.com.br", "senha": "senha123"},
+        json={
+            "codigo_convite": convite.codigo,
+            "nome": "A",
+            "email": "a@teste.com.br",
+            "senha": "senha123",
+            "aceite_termos": True,
+        },
     )
 
     resposta = client.post(
         "/api/v1/auth/registrar",
-        json={"codigo_convite": convite.codigo, "nome": "B", "email": "b@teste.com.br", "senha": "senha123"},
+        json={
+            "codigo_convite": convite.codigo,
+            "nome": "B",
+            "email": "b@teste.com.br",
+            "senha": "senha123",
+            "aceite_termos": True,
+        },
     )
 
     assert resposta.status_code == 409
@@ -147,6 +218,7 @@ def test_registrar_via_convite_normal_retorna_licenca_ativa(client, db_session):
             "nome": "Novo Pagante",
             "email": "novo-pagante@teste.com.br",
             "senha": "senha123",
+            "aceite_termos": True,
         },
     )
 
@@ -177,6 +249,7 @@ def test_aceitar_convite_vitrine_cria_tenant_sem_licenca_e_loga(client):
             "nome_admin": "Admin Parceira",
             "email_admin": "admin@parceira.com.br",
             "senha_admin": "senha123",
+            "aceite_termos": True,
         },
     )
 
@@ -199,6 +272,7 @@ def test_tenant_vitrine_acessa_rede_social_mas_nao_modulo_pago(client):
             "nome_admin": "Admin",
             "email_admin": "vitrine-sem-licenca@teste.com.br",
             "senha_admin": "senha123",
+            "aceite_termos": True,
         },
     ).json()["access_token"]
     headers_vitrine = {"Authorization": f"Bearer {token}"}
@@ -218,6 +292,7 @@ def test_convite_vitrine_usado_duas_vezes_via_api_falha(client):
         "nome_admin": "A",
         "email_admin": "primeira-vez@teste.com.br",
         "senha_admin": "senha123",
+        "aceite_termos": True,
     }
     client.post("/api/v1/auth/registrar-vitrine", json=payload)
 
