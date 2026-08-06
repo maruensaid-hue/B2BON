@@ -59,3 +59,17 @@ def test_processar_retorno_com_segredo_certo_processa_todos_os_tenants(client, c
         "pesquisas_disparadas",
     }
     assert isinstance(corpo["por_tenant"], dict)
+
+
+def test_expirar_titulares_sem_segredo_configurado_recusa(client):
+    resposta = client.post("/api/v1/cron/expirar-titulares")
+    assert resposta.status_code == 403
+
+
+def test_expirar_titulares_com_segredo_certo_processa_todos_os_tenants(client, com_segredo_cron):
+    resposta = client.post("/api/v1/cron/expirar-titulares", headers={"X-Cron-Secret": SEGREDO})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert "total_decisores_expirados" in corpo
+    assert isinstance(corpo["por_tenant"], dict)

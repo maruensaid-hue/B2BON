@@ -1,3 +1,4 @@
+import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,6 +10,7 @@ from app.core.logging import configure_logging
 from app.db.base import Base
 from app.db.session import engine
 from app.services.errors import (
+    LimiteDeTaxaExcedido,
     NaoAutenticado,
     NaoAutorizado,
     NaoEncontrado,
@@ -17,6 +19,18 @@ from app.services.errors import (
 )
 
 configure_logging()
+
+settings.validar_segredos_de_producao()
+
+# Observabilidade (raio-X de produção) — sem DSN configurada, é um no-op
+# completo (nada de rede, nada de overhead), então isto é seguro de deixar
+# sempre presente no código em vez de só quando alguém lembrar de ligar.
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment="production" if settings.e_ambiente_producao else "development",
+        traces_sample_rate=0.1,
+    )
 
 # Dev/testes (SQLite): cria as tabelas que ainda não existem a cada
 # start, idempotente. Produção (Postgres, Onda G): o schema é
@@ -36,6 +50,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def cabecalhos_seguranca(request: Request, call_next):
+    """FastAPI não adiciona nenhum destes por padrão — sem eles, o
+    navegador do usuário fica sem proteção de browser contra clickjacking,
+    MIME-sniffing e downgrade pra HTTP."""
+    resposta = await call_next(request)
+    resposta.headers["X-Content-Type-Options"] = "nosniff"
+    resposta.headers["X-Frame-Options"] = "DENY"
+    resposta.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if settings.e_ambiente_producao:
+        resposta.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    return resposta
+
 
 app.include_router(api_v1_router, prefix="/api/v1")
 
@@ -63,6 +92,11 @@ async def handle_nao_autenticado(request: Request, exc: NaoAutenticado) -> JSONR
 @app.exception_handler(NaoAutorizado)
 async def handle_nao_autorizado(request: Request, exc: NaoAutorizado) -> JSONResponse:
     return JSONResponse(status_code=403, content={"detalhe": str(exc)})
+
+
+@app.exception_handler(LimiteDeTaxaExcedido)
+async def handle_limite_de_taxa_excedido(request: Request, exc: LimiteDeTaxaExcedido) -> JSONResponse:
+    return JSONResponse(status_code=429, content={"detalhe": str(exc)})
 
 
 @app.get("/health")

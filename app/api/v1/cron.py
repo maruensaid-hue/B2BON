@@ -7,7 +7,7 @@ from app.models.tenant import Tenant
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.email_validation.base import EmailVerificationProvider
-from app.services import envio_service, nps_service, reuniao_service
+from app.services import envio_service, nps_service, reuniao_service, titular_service
 from app.services.errors import NaoAutorizado
 
 router = APIRouter(prefix="/cron", tags=["cron"])
@@ -67,3 +67,19 @@ def processar_retorno_todos_os_tenants(
         totais["pesquisas_disparadas"] += nps["pesquisas_disparadas"]
 
     return {"totais": totais, "por_tenant": resultado_por_tenant}
+
+
+@router.post("/expirar-titulares", dependencies=[Depends(_exigir_segredo_cron)])
+def expirar_titulares_todos_os_tenants(db: Session = Depends(get_db)) -> dict:
+    """Retenção automática de dados de titulares (raio-X/LGPD) — mesmo
+    padrão dos outros dispatchers agendados, mas 1x/dia basta (não é algo
+    tempo-sensível como envio/lembrete)."""
+    resultado_por_tenant: dict[str, dict] = {}
+    total_expirados = 0
+
+    for tenant in db.query(Tenant).order_by(Tenant.id).all():
+        resultado = titular_service.expirar_inativos(db, tenant.id, settings.dias_retencao_titular_inativo)
+        resultado_por_tenant[tenant.id] = resultado
+        total_expirados += resultado["decisores_expirados"]
+
+    return {"total_decisores_expirados": total_expirados, "por_tenant": resultado_por_tenant}

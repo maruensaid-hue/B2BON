@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_tenant_id
@@ -84,4 +84,19 @@ async def enviar_material(
         arquivo.filename or "arquivo",
         arquivo.content_type or "",
         conteudo,
+    )
+
+
+@router.get("/{oferta_id}/materiais/{material_id}")
+def baixar_material(
+    oferta_id: int,
+    material_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> Response:
+    material = oferta_service.obter_material(db, tenant_id, oferta_id, material_id)
+    return Response(
+        content=material.conteudo,
+        media_type=material.tipo_mime,
+        headers={"Content-Disposition": f'attachment; filename="{material.nome_arquivo}"'},
     )

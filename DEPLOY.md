@@ -49,10 +49,9 @@ real percorrido (inclui os desvios da versão original do plano).
 4. Deploy. O `CMD` do Docker roda `alembic upgrade head` sozinho antes
    de subir o Uvicorn — o schema completo é criado no Neon nesse
    primeiro deploy.
-5. **Limitação conhecida do plano free do Render**: sem disco
-   persistente — arquivos enviados em `/materiais` (upload de ofertas)
-   não sobrevivem a um redeploy. Aceitável para o estágio de cliente
-   zero; reavaliar se isso virar um uso real.
+5. Materiais de oferta (`/materiais`) são salvos como blob direto no
+   Postgres — não dependem mais de disco persistente, sobrevivem a
+   qualquer redeploy mesmo no plano free do Render.
 
 ## 4. Primeiro tenant real (CyberFort)
 

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -84,6 +84,16 @@ export function Login() {
         >
           Entrar com Google
         </Button>
+
+        <div className="mt-5 text-center text-[10px] text-muted">
+          <Link to="/privacidade" className="hover:text-cyan hover:underline">
+            Política de Privacidade
+          </Link>
+          {" · "}
+          <Link to="/termos" className="hover:text-cyan hover:underline">
+            Termos de Uso
+          </Link>
+        </div>
       </Card>
     </div>
   );

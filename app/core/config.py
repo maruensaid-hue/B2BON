@@ -20,8 +20,6 @@ class Settings(BaseSettings):
     # pendente e vem do núcleo via PlanLimitsProvider (Seção 11 da especificação).
     franquia_contas_mes_stub_default: int = 50
 
-    materiais_storage_path: str = "./storage/materiais"
-
     # Placeholder até a integração real com o núcleo B2B ON existir.
     core_api_base_url: str = ""
 
@@ -76,6 +74,10 @@ class Settings(BaseSettings):
     # pesquisa de NPS — ajustável por tenant via ConfiguracaoNps (E11-H1).
     nps_dias_apos_reuniao_padrao: int = 30
 
+    # Retenção automática de titulares prospectados (raio-X/LGPD) — 24
+    # meses sem nenhuma interação e sem ter virado cliente.
+    dias_retencao_titular_inativo: int = 730
+
     # Autenticação real do núcleo (Onda A). Chave dedicada — não reaproveita
     # secret_key (usada para HMAC de links públicos) para segregar o risco.
     jwt_secret_key: str = "changeme-dev-jwt-secret-key-min-32-bytes-long"
@@ -115,6 +117,11 @@ class Settings(BaseSettings):
     # e-mail do destinatário não sabe resolver caminho relativo). Onda I.
     url_base_api: str = "http://localhost:8000/api/v1"
 
+    # Observabilidade (raio-X de produção) — vazio desliga o Sentry por
+    # completo (no-op), sem quebrar nada em dev/teste. Preencher só exige
+    # criar a conta grátis em sentry.io e colar a DSN aqui/no Render.
+    sentry_dsn: str = ""
+
     @property
     def origens_cors(self) -> list[str]:
         """Aceita tanto JSON (`["https://a.com"]`) quanto uma lista simples
@@ -123,6 +130,32 @@ class Settings(BaseSettings):
         if texto.startswith("["):
             return json.loads(texto)
         return [origem.strip() for origem in texto.split(",") if origem.strip()]
+
+    @property
+    def e_ambiente_producao(self) -> bool:
+        """SQLite é usado só em dev/teste (ver `app/main.py`); qualquer outro
+        banco (Postgres/Neon) é produção de verdade — sinal mais confiável
+        que `app_env`, que nunca é setado de fato no Render."""
+        return not self.database_url.startswith("sqlite")
+
+    def validar_segredos_de_producao(self) -> None:
+        """Recusa subir em produção com os segredos padrão do repo — sem
+        isso, `secret_key`/`jwt_secret_key` ficarem no default (visível pra
+        qualquer um que leia o código) deixa qualquer pessoa forjar um JWT
+        de super_admin ou um token de opt-out válido, silenciosamente."""
+        if not self.e_ambiente_producao:
+            return
+        segredos_fracos = {
+            "secret_key": self.secret_key == "changeme-dev-secret-key",
+            "jwt_secret_key": self.jwt_secret_key == "changeme-dev-jwt-secret-key-min-32-bytes-long",
+        }
+        fracos = [nome for nome, esta_fraco in segredos_fracos.items() if esta_fraco]
+        if fracos:
+            raise RuntimeError(
+                f"Configuração insegura: {', '.join(fracos)} ainda está no valor padrão do "
+                "repositório. Gere um valor forte (ex.: secrets.token_urlsafe(32)) e configure "
+                "a variável de ambiente correspondente antes de subir em produção."
+            )
 
 
 settings = Settings()

@@ -1,9 +1,5 @@
-import uuid
-from pathlib import Path
-
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.models.material_oferta import MaterialOferta
 from app.models.oferta import Oferta
 from app.schemas.oferta import OfertaCreateSchema
@@ -14,6 +10,10 @@ TIPOS_MATERIAL_PERMITIDOS = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
+
+# Blob vai direto no Postgres/SQLite (raio-X de produção) — teto evita que
+# um upload gigante esgote banco/memória (nenhum limite existia antes).
+TAMANHO_MAXIMO_MATERIAL_BYTES = 15 * 1024 * 1024
 
 
 def listar(db: Session, tenant_id: str) -> list[Oferta]:
@@ -118,18 +118,16 @@ def salvar_material(
 
     if tipo_mime not in TIPOS_MATERIAL_PERMITIDOS:
         raise ValidacaoFalhou(f"Tipo de arquivo não suportado: {tipo_mime}. Envie PDF ou DOCX.")
-
-    diretorio = Path(settings.materiais_storage_path) / tenant_id / str(oferta_id)
-    diretorio.mkdir(parents=True, exist_ok=True)
-    caminho = diretorio / f"{uuid.uuid4()}_{nome_arquivo}"
-    caminho.write_bytes(conteudo)
+    if len(conteudo) > TAMANHO_MAXIMO_MATERIAL_BYTES:
+        limite_mb = TAMANHO_MAXIMO_MATERIAL_BYTES // (1024 * 1024)
+        raise ValidacaoFalhou(f"Arquivo maior que o limite de {limite_mb}MB.")
 
     material = MaterialOferta(
         tenant_id=tenant_id,
         oferta_id=oferta_id,
         nome_arquivo=nome_arquivo,
         tipo_mime=tipo_mime,
-        caminho=str(caminho),
+        conteudo=conteudo,
         tamanho_bytes=len(conteudo),
     )
     db.add(material)
@@ -140,4 +138,11 @@ def salvar_material(
     )
     db.commit()
     db.refresh(material)
+    return material
+
+
+def obter_material(db: Session, tenant_id: str, oferta_id: int, material_id: int) -> MaterialOferta:
+    material = db.query(MaterialOferta).filter_by(id=material_id, oferta_id=oferta_id, tenant_id=tenant_id).one_or_none()
+    if material is None:
+        raise NaoEncontrado(f"Material {material_id} não encontrado")
     return material

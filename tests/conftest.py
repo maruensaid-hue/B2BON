@@ -22,7 +22,7 @@ from app.api.deps import (
     get_site_fetcher,
     get_whatsapp_provider,
 )
-from app.core.config import settings
+from app.core.rate_limit import limitador_auth
 from app.db.base import Base
 from app.main import app
 from app.models.conta import Conta
@@ -71,12 +71,6 @@ def _garantir_licenca_ativa(db_session: Session, tenant_id: str) -> None:
 # registro numa base em memória nova, então seu id (convertido para string
 # por get_ator_id) é sempre "1", de forma determinística por teste.
 ATOR_ID = "1"
-
-
-@pytest.fixture(autouse=True)
-def _isolar_storage_de_materiais(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Materiais enviados em teste nunca devem tocar ./storage do projeto."""
-    monkeypatch.setattr(settings, "materiais_storage_path", str(tmp_path / "materiais"))
 
 
 @pytest.fixture()
@@ -179,6 +173,8 @@ def client(
     fake_rede_social: StubRedeSocialProvider,
     fake_email_validacao: StubEmailVerificationProvider,
 ) -> Generator[TestClient, None, None]:
+    limitador_auth.resetar()  # a suíte inteira roda no mesmo processo — sem isto, um teste vaza rate-limit pro próximo
+
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session
 

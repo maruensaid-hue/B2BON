@@ -20,3 +20,7 @@ class NaoAutenticado(ErroServico):
 
 class NaoAutorizado(ErroServico):
     """Mapeado para 403 — usuário autenticado, mas sem papel suficiente (Onda A)."""
+
+
+class LimiteDeTaxaExcedido(ErroServico):
+    """Mapeado para 429 — proteção contra força bruta em rotas públicas de autenticação."""

@@ -225,3 +225,22 @@ def test_convite_vitrine_usado_duas_vezes_via_api_falha(client):
     resposta = client.post("/api/v1/auth/registrar-vitrine", json=payload)
 
     assert resposta.status_code == 409
+
+
+def test_login_bloqueia_apos_muitas_tentativas(client, db_session):
+    """Sem isso, força bruta contra a senha de qualquer usuário era viável
+    (achado do raio-X de segurança) — POST /auth/login aceitava tentativas
+    ilimitadas."""
+    _criar_usuario_senha(db_session, "forca-bruta@teste.com.br", "senha-correta")
+
+    for _ in range(5):
+        resposta = client.post(
+            "/api/v1/auth/login", json={"email": "forca-bruta@teste.com.br", "senha": "errada"}
+        )
+        assert resposta.status_code == 401
+
+    bloqueado = client.post(
+        "/api/v1/auth/login", json={"email": "forca-bruta@teste.com.br", "senha": "senha-correta"}
+    )
+
+    assert bloqueado.status_code == 429

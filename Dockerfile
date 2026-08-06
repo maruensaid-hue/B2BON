@@ -15,9 +15,6 @@ COPY app ./app
 
 RUN pip install --no-cache-dir .
 
-# Pasta de materiais enviados no onboarding (E1-H2) — precisa existir e ser gravável
-RUN mkdir -p /app/storage/materiais
-
 EXPOSE 8000
 
 # $PORT é injetado pelo Render (Onda G); localmente cai no default 8000.

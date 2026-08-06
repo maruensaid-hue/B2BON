@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_usuario_atual
+from app.core.rate_limit import limitar_por_ip
 from app.models.licenca import Licenca
 from app.models.usuario import Usuario
 from app.schemas.auth import (
@@ -26,25 +27,32 @@ def _resposta_token(usuario: Usuario, db: Session) -> TokenResponseSchema:
     )
 
 
-@router.post("/login", response_model=TokenResponseSchema)
+@router.post("/login", response_model=TokenResponseSchema, dependencies=[Depends(limitar_por_ip())])
 def login(dados: LoginRequestSchema, db: Session = Depends(get_db)) -> TokenResponseSchema:
     usuario = auth_service.autenticar_senha(db, dados.email, dados.senha)
     return _resposta_token(usuario, db)
 
 
-@router.post("/google", response_model=TokenResponseSchema)
+@router.post("/google", response_model=TokenResponseSchema, dependencies=[Depends(limitar_por_ip())])
 def login_google(dados: LoginGoogleRequestSchema, db: Session = Depends(get_db)) -> TokenResponseSchema:
     usuario = auth_service.autenticar_google(db, dados.id_token)
     return _resposta_token(usuario, db)
 
 
-@router.post("/registrar", response_model=TokenResponseSchema, status_code=201)
+@router.post(
+    "/registrar", response_model=TokenResponseSchema, status_code=201, dependencies=[Depends(limitar_por_ip())]
+)
 def registrar(dados: RegistrarRequestSchema, db: Session = Depends(get_db)) -> TokenResponseSchema:
     usuario = auth_service.registrar_com_convite(db, dados.codigo_convite, dados.nome, dados.email, dados.senha)
     return _resposta_token(usuario, db)
 
 
-@router.post("/registrar-vitrine", response_model=TokenResponseSchema, status_code=201)
+@router.post(
+    "/registrar-vitrine",
+    response_model=TokenResponseSchema,
+    status_code=201,
+    dependencies=[Depends(limitar_por_ip())],
+)
 def registrar_vitrine(dados: RegistrarVitrineRequestSchema, db: Session = Depends(get_db)) -> TokenResponseSchema:
     """Aceite público de convite-vitrine — cria o tenant novo e já loga
     (Onda H). Sem autenticação prévia, como `/registrar`."""

@@ -1,0 +1,43 @@
+name: CI
+
+# Raio-X de produção: os 358 testes do backend só rodavam quando alguém
+# lembrava de chamar `pytest` manualmente antes do push. Isto bloqueia
+# PR/push com teste quebrado ou erro de TypeScript sem depender de memória.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependências
+        run: pip install -e ".[dev]"
+      - name: Rodar testes
+        run: pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependências
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Build (também valida TypeScript)
+        run: npm run build

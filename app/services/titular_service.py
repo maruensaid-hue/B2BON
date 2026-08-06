@@ -1,4 +1,5 @@
 import hashlib
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -86,16 +87,13 @@ def exportar(db: Session, tenant_id: str, identificador: str) -> dict:
     }
 
 
-def eliminar(db: Session, tenant_id: str, ator_id: str | None, identificador: str) -> dict:
-    """Eliminação com preservação apenas do registro mínimo de supressão
-    (E9-H3): apaga os dados pessoais associados e grava só o hash do
-    identificador, para impedir recontato futuro do mesmo titular."""
-    decisor = _buscar_decisor(db, tenant_id, identificador)
-    if decisor is None:
-        raise NaoEncontrado("Titular não encontrado para o identificador informado.")
-
-    identificador_hash = _hash_identificador(identificador)
-
+def _eliminar_decisor(
+    db: Session, tenant_id: str, ator_id: str | None, decisor: Decisor, identificador_hash: str, evento: str
+) -> None:
+    """Núcleo comum de eliminação (E9-H3) — apaga os dados pessoais
+    associados e grava só o hash do identificador, para impedir recontato
+    futuro do mesmo titular. Usado tanto pelo pedido explícito
+    (`eliminar`) quanto pela retenção automática (`expirar_inativos`)."""
     conversas = db.query(ConversaQualificacao).filter_by(tenant_id=tenant_id, decisor_id=decisor.id).all()
     conversa_ids = [conversa.id for conversa in conversas]
 
@@ -122,8 +120,57 @@ def eliminar(db: Session, tenant_id: str, ator_id: str | None, identificador: st
     db.add(RegistroSupressaoPermanente(tenant_id=tenant_id, identificador_hash=identificador_hash))
 
     auditoria_service.registrar(
-        db, tenant_id, "titular_eliminado", "decisor", decisor_id, ator_id, {"identificador_hash": identificador_hash}
+        db, tenant_id, evento, "decisor", decisor_id, ator_id, {"identificador_hash": identificador_hash}
     )
+
+
+def eliminar(db: Session, tenant_id: str, ator_id: str | None, identificador: str) -> dict:
+    """Eliminação por pedido explícito do titular (E9-H3)."""
+    decisor = _buscar_decisor(db, tenant_id, identificador)
+    if decisor is None:
+        raise NaoEncontrado("Titular não encontrado para o identificador informado.")
+
+    identificador_hash = _hash_identificador(identificador)
+    _eliminar_decisor(db, tenant_id, ator_id, decisor, identificador_hash, "titular_eliminado")
     db.commit()
 
     return {"eliminado": True, "identificador_hash": identificador_hash}
+
+
+def expirar_inativos(db: Session, tenant_id: str, dias: int) -> dict:
+    """Retenção automática (raio-X de produção / LGPD): decisores
+    prospectados sem nenhuma interação há `dias` são anonimizados sozinhos,
+    mesmo sem pedido explícito — sem isto, uma base que cresce via geração
+    de listas acumula dado pessoal por tempo indefinido. Nunca expira quem
+    virou cliente de fato (`Conta.cliente_desde` setado) — ali a retenção
+    tem base legal de execução de contrato, não só legítimo interesse de
+    prospecção."""
+    # Naive de propósito: as colunas de data do modelo são `DateTime` sem
+    # timezone, e o SQLite devolve naive na releitura mesmo quando se
+    # grava um valor aware — comparar aware contra o atributo já lido de
+    # volta do banco lança TypeError.
+    limite = (datetime.now(UTC) - timedelta(days=dias)).replace(tzinfo=None)
+
+    candidatos = (
+        db.query(Decisor)
+        .join(Conta, Decisor.conta_id == Conta.id)
+        .filter(
+            Decisor.tenant_id == tenant_id,
+            Decisor.criado_em < limite,
+            Conta.cliente_desde.is_(None),
+        )
+        .all()
+    )
+
+    expirados = 0
+    for decisor in candidatos:
+        ultima_interacao = decisor.ultima_interacao_em
+        if ultima_interacao is not None and ultima_interacao >= limite:
+            continue
+        identificador = decisor.email or decisor.telefone or f"decisor-{decisor.id}"
+        identificador_hash = _hash_identificador(identificador)
+        _eliminar_decisor(db, tenant_id, None, decisor, identificador_hash, "titular_expirado_por_retencao")
+        expirados += 1
+
+    db.commit()
+    return {"decisores_expirados": expirados}
