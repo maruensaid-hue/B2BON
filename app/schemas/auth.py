@@ -42,6 +42,7 @@ class RegistrarVitrineRequestSchema(BaseModel):
     email_admin: EmailStr
     senha_admin: str = Field(min_length=8, max_length=72)
     aceite_termos: bool
+    plano_id: int
 
 
 class TokenResponseSchema(BaseModel):
@@ -49,3 +50,8 @@ class TokenResponseSchema(BaseModel):
     token_type: str = "bearer"
     usuario: UsuarioSchema
     tem_licenca_ativa: bool = True
+    checkout_url: str | None = None
+
+
+class LicencaStatusResponseSchema(BaseModel):
+    status: str

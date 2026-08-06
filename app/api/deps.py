@@ -26,6 +26,9 @@ from app.providers.crm.base import CrmProvider
 from app.providers.crm.nucleo import NucleoCrmProvider
 from app.providers.email_validation.base import EmailVerificationProvider
 from app.providers.email_validation.stub import StubEmailVerificationProvider
+from app.providers.payment.base import PaymentProvider
+from app.providers.payment.mercadopago import MercadoPagoProvider
+from app.providers.payment.stub import StubPaymentProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
 from app.providers.rede_social.base import RedeSocialProvider
@@ -81,6 +84,14 @@ def get_email_provider() -> EmailProvider:
     if settings.smtp_host:
         return SmtpEmailProvider()
     return StubEmailProvider()
+
+
+def get_payment_provider() -> PaymentProvider:
+    # Real (Mercado Pago) quando houver credencial configurada; senão,
+    # stub de dev/teste (cadastro self-service com escolha de plano).
+    if settings.mercadopago_access_token:
+        return MercadoPagoProvider()
+    return StubPaymentProvider()
 
 
 def get_calendar_provider() -> CalendarProvider:

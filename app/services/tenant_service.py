@@ -10,7 +10,8 @@ from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
-from app.services import auditoria_service, auth_service, rede_social_service
+from app.providers.payment.base import PaymentProvider
+from app.services import auditoria_service, auth_service, pagamento_licenca_service, rede_social_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 
@@ -227,14 +228,23 @@ def criar_tenant_vitrine(
     email_admin: str,
     senha_admin: str,
     aceite_termos: bool,
+    plano_id: int,
+    payment_provider: PaymentProvider,
     cnpj: str | None = None,
-) -> Usuario:
+) -> tuple[Usuario, str]:
     """Aceite de convite-vitrine: cria Tenant + Usuario (papel `admin`,
     nunca `super_admin` — isso evitaria acesso a `/admin/tenants`
-    cross-tenant) + Perfil de Rede Social. Deliberadamente sem Licença —
-    é essa ausência que restringe a conta só à Rede Social (Onda H)."""
+    cross-tenant) + Perfil de Rede Social + Licença `pendente_pagamento`
+    do plano escolhido. A licença só vira `ativa` quando o webhook do
+    Mercado Pago confirmar o pagamento (`pagamento_licenca_service`) —
+    até lá o tenant fica restrito à Rede Social, igual ao comportamento
+    anterior de "vitrine sem licença" (Onda H), só que agora com uma
+    cobrança em andamento em vez de ficar assim para sempre."""
     if not aceite_termos:
         raise ValidacaoFalhou("É preciso aceitar a Política de Privacidade e os Termos de Uso para se cadastrar.")
+
+    if db.query(Plano).filter_by(id=plano_id).one_or_none() is None:
+        raise NaoEncontrado(f"Plano {plano_id} não encontrado")
 
     convite = db.query(ConviteVitrine).filter_by(codigo=codigo_convite).one_or_none()
     convite = _validar_convite_vitrine_disponivel(db, convite, codigo_convite)
@@ -260,6 +270,8 @@ def criar_tenant_vitrine(
     db.add(usuario)
     db.flush()
 
+    db.add(Licenca(tenant_id=tenant.id, plano_id=plano_id, status="pendente_pagamento"))
+
     convite.status = "usado"
     convite.tenant_id_gerado = tenant.id
 
@@ -274,4 +286,6 @@ def criar_tenant_vitrine(
     )
     db.commit()
     db.refresh(usuario)
-    return usuario
+
+    _, url_checkout = pagamento_licenca_service.iniciar(db, tenant.id, plano_id, email_admin, payment_provider)
+    return usuario, url_checkout

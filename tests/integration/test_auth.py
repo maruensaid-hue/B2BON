@@ -1,5 +1,10 @@
+import hashlib
+import hmac
+
+import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.main import app
 from app.models.usuario import Usuario
 from app.services import auth_service
@@ -107,8 +112,9 @@ def test_registrar_grava_data_do_aceite_dos_termos(client, db_session):
     assert resposta.json()["usuario"]["termos_aceitos_em"] is not None
 
 
-def test_registrar_vitrine_sem_aceitar_termos_via_api_falha(client):
+def test_registrar_vitrine_sem_aceitar_termos_via_api_falha(client, criar_plano):
     convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+    plano = criar_plano()
 
     resposta = client.post(
         "/api/v1/auth/registrar-vitrine",
@@ -119,6 +125,7 @@ def test_registrar_vitrine_sem_aceitar_termos_via_api_falha(client):
             "email_admin": "sem-aceite-vitrine@teste.com.br",
             "senha_admin": "senha123",
             "aceite_termos": False,
+            "plano_id": plano.id,
         },
     )
 
@@ -238,8 +245,12 @@ def test_convite_vitrine_qualquer_usuario_pode_gerar_sem_papel_admin(client, cri
     assert resposta.json()["status"] == "disponivel"
 
 
-def test_aceitar_convite_vitrine_cria_tenant_sem_licenca_e_loga(client):
+def test_aceitar_convite_vitrine_cria_licenca_pendente_de_pagamento_e_loga(client, criar_plano):
+    """Raio-X de produção: cadastro self-service agora escolhe um plano e
+    abre uma cobrança — a licença nasce `pendente_pagamento` (não mais
+    "sem licença" para sempre, comportamento anterior da Onda H)."""
     convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+    plano = criar_plano()
 
     resposta = client.post(
         "/api/v1/auth/registrar-vitrine",
@@ -250,20 +261,24 @@ def test_aceitar_convite_vitrine_cria_tenant_sem_licenca_e_loga(client):
             "email_admin": "admin@parceira.com.br",
             "senha_admin": "senha123",
             "aceite_termos": True,
+            "plano_id": plano.id,
         },
     )
 
     assert resposta.status_code == 201
     corpo = resposta.json()
     assert corpo["tem_licenca_ativa"] is False
+    assert corpo["checkout_url"] is not None
     assert corpo["usuario"]["papel"] == "admin"
     assert corpo["usuario"]["tenant_id"] != TENANT_ID
 
 
-def test_tenant_vitrine_acessa_rede_social_mas_nao_modulo_pago(client):
-    """O coração da Onda H: sem licença, `/rede-social/*` funciona e
-    `/icp` (módulo pago) devolve 403 — mesmo com token válido."""
+def test_tenant_vitrine_acessa_rede_social_mas_nao_modulo_pago(client, criar_plano):
+    """O coração da Onda H: com a licença ainda `pendente_pagamento`,
+    `/rede-social/*` funciona e `/icp` (módulo pago) devolve 403 — mesmo
+    com token válido."""
     convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+    plano = criar_plano()
     token = client.post(
         "/api/v1/auth/registrar-vitrine",
         json={
@@ -273,6 +288,7 @@ def test_tenant_vitrine_acessa_rede_social_mas_nao_modulo_pago(client):
             "email_admin": "vitrine-sem-licenca@teste.com.br",
             "senha_admin": "senha123",
             "aceite_termos": True,
+            "plano_id": plano.id,
         },
     ).json()["access_token"]
     headers_vitrine = {"Authorization": f"Bearer {token}"}
@@ -284,8 +300,9 @@ def test_tenant_vitrine_acessa_rede_social_mas_nao_modulo_pago(client):
     assert resposta_icp.status_code == 403
 
 
-def test_convite_vitrine_usado_duas_vezes_via_api_falha(client):
+def test_convite_vitrine_usado_duas_vezes_via_api_falha(client, criar_plano):
     convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+    plano = criar_plano()
     payload = {
         "codigo_convite": convite["codigo"],
         "razao_social": "Primeira Vez Ltda",
@@ -293,6 +310,7 @@ def test_convite_vitrine_usado_duas_vezes_via_api_falha(client):
         "email_admin": "primeira-vez@teste.com.br",
         "senha_admin": "senha123",
         "aceite_termos": True,
+        "plano_id": plano.id,
     }
     client.post("/api/v1/auth/registrar-vitrine", json=payload)
 
@@ -300,6 +318,77 @@ def test_convite_vitrine_usado_duas_vezes_via_api_falha(client):
     resposta = client.post("/api/v1/auth/registrar-vitrine", json=payload)
 
     assert resposta.status_code == 409
+
+
+def _assinatura_valida(payment_id: str, request_id: str, ts: str, segredo: str) -> str:
+    manifest = f"id:{payment_id.lower()};request-id:{request_id};ts:{ts};"
+    v1 = hmac.new(segredo.encode(), manifest.encode(), hashlib.sha256).hexdigest()
+    return f"ts={ts},v1={v1}"
+
+
+@pytest.fixture()
+def com_segredo_webhook_mercadopago(monkeypatch: pytest.MonkeyPatch) -> str:
+    segredo = "segredo-webhook-teste"
+    monkeypatch.setattr(settings, "mercadopago_webhook_secret", segredo)
+    return segredo
+
+
+def test_webhook_mercadopago_com_assinatura_valida_ativa_licenca(
+    client, criar_plano, fake_payment, com_segredo_webhook_mercadopago
+):
+    """Fim-a-fim: cadastro self-service com plano fica `pendente_pagamento`
+    até o webhook confirmar — depois disso, o módulo pago libera."""
+    convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+    plano = criar_plano()
+    resposta_cadastro = client.post(
+        "/api/v1/auth/registrar-vitrine",
+        json={
+            "codigo_convite": convite["codigo"],
+            "razao_social": "Fim A Fim Ltda",
+            "nome_admin": "Admin",
+            "email_admin": "fim-a-fim@teste.com.br",
+            "senha_admin": "senha123",
+            "aceite_termos": True,
+            "plano_id": plano.id,
+        },
+    )
+    token = resposta_cadastro.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    assert client.get("/api/v1/auth/licenca-status", headers=headers).json()["status"] == "pendente_pagamento"
+
+    preferencia_id = next(iter(fake_payment._preferencias))
+    payment_id_externo = fake_payment.aprovar(preferencia_id)
+    x_signature = _assinatura_valida(payment_id_externo, "req-teste", "1700000000", com_segredo_webhook_mercadopago)
+
+    resposta_webhook = client.post(
+        f"/api/v1/webhooks/mercadopago?data.id={payment_id_externo}",
+        headers={"x-signature": x_signature, "x-request-id": "req-teste"},
+    )
+
+    assert resposta_webhook.status_code == 200
+    assert client.get("/api/v1/auth/licenca-status", headers=headers).json()["status"] == "ativa"
+    assert client.get("/api/v1/icp", headers=headers).status_code == 200
+
+
+def test_webhook_mercadopago_com_assinatura_invalida_e_rejeitado(client, fake_payment, com_segredo_webhook_mercadopago):
+    """Sem isso, qualquer um poderia forjar um POST de "aprovado" e ganhar
+    licença de graça."""
+    resposta = client.post(
+        "/api/v1/webhooks/mercadopago?data.id=123456",
+        headers={"x-signature": "ts=1700000000,v1=forjado", "x-request-id": "req-forjado"},
+    )
+
+    assert resposta.status_code == 403
+
+
+def test_webhook_mercadopago_sem_segredo_configurado_e_rejeitado(client, fake_payment):
+    """`mercadopago_webhook_secret` vazio nunca autoriza — mesmo padrão do `cron_secret`."""
+    resposta = client.post(
+        "/api/v1/webhooks/mercadopago?data.id=123456",
+        headers={"x-signature": "ts=1700000000,v1=qualquercoisa", "x-request-id": "req-sem-segredo"},
+    )
+
+    assert resposta.status_code == 403
 
 
 def test_login_bloqueia_apos_muitas_tentativas(client, db_session):

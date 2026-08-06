@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
 
+    # Mercado Pago (cadastro self-service com escolha de plano) — vazio
+    # usa StubPaymentProvider em dev/teste. Webhook secret é o "Secret
+    # Key" configurado na seção de Webhooks do painel do Mercado Pago,
+    # não o Access Token — são credenciais diferentes.
+    mercadopago_access_token: str = ""
+    mercadopago_webhook_secret: str = ""
+
+    # URL pública do frontend — usada para montar o `back_urls` do
+    # Checkout Pro (pra onde o Mercado Pago devolve o usuário após pagar).
+    url_base_frontend: str = "http://localhost:5173"
+
     # Usado para assinar tokens de opt-out (HMAC) — trocar em produção.
     secret_key: str = "changeme-dev-secret-key"
 

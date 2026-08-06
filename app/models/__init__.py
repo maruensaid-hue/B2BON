@@ -33,6 +33,7 @@ from app.models.mensagem_rede_social import MensagemRedeSocial
 from app.models.negocio import Negocio
 from app.models.notificacao_vendedor import NotificacaoVendedor
 from app.models.oferta import Oferta
+from app.models.pagamento_licenca import PagamentoLicenca
 from app.models.pausa_canal import PausaCanal
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.pesquisa_nps import PesquisaNps
@@ -93,6 +94,7 @@ __all__ = [
     "Tenant",
     "Plano",
     "Licenca",
+    "PagamentoLicenca",
     "Usuario",
     "ConviteCadastro",
     "ConviteVitrine",

@@ -9,6 +9,7 @@ import { AdminTenants } from "@/pages/admin/AdminTenants";
 import { ConviteVitrine } from "@/pages/ConviteVitrine";
 import { Dashboard } from "@/pages/Dashboard";
 import { Login } from "@/pages/Login";
+import { PagamentoRetorno } from "@/pages/PagamentoRetorno";
 import { Privacidade } from "@/pages/Privacidade";
 import { Termos } from "@/pages/Termos";
 import { Aprovacoes } from "@/pages/aprovacoes/Aprovacoes";
@@ -30,6 +31,7 @@ export default function App() {
       <Route path="/convite-vitrine/:codigo" element={<ConviteVitrine />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/termos" element={<Termos />} />
+      <Route path="/pagamento/retorno" element={<PagamentoRetorno />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>

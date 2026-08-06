@@ -1,14 +1,23 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_llm_provider, get_whatsapp_provider
+from app.api.deps import get_db, get_llm_provider, get_payment_provider, get_whatsapp_provider
+from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.models.decisor import Decisor
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.providers.payment.base import PaymentProvider
 from app.schemas.reputacao import RegistrarEventoReputacaoRequestSchema, SaudeCanalSchema
 from app.schemas.whatsapp import WebhookEmailRequestSchema, WebhookWhatsAppRequestSchema
-from app.services import optout_service, qualificacao_service, rastreamento_service, reputacao_service, resposta_service
-from app.services.errors import NaoEncontrado
+from app.services import (
+    optout_service,
+    pagamento_licenca_service,
+    qualificacao_service,
+    rastreamento_service,
+    reputacao_service,
+    resposta_service,
+)
+from app.services.errors import NaoAutorizado, NaoEncontrado
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -75,3 +84,28 @@ def webhook_reputacao(dados: RegistrarEventoReputacaoRequestSchema, db: Session 
     return SaudeCanalSchema(
         **reputacao_service.registrar_evento(db, dados.tenant_id, dados.canal, dados.tipo_evento, dados.quantidade)
     )
+
+
+@router.post("/mercadopago")
+def webhook_mercadopago(
+    request: Request,
+    db: Session = Depends(get_db),
+    payment_provider: PaymentProvider = Depends(get_payment_provider),
+    x_signature: str | None = Header(None, alias="x-signature"),
+    x_request_id: str | None = Header(None, alias="x-request-id"),
+) -> dict:
+    """Callback do Mercado Pago confirmando (ou não) o pagamento de uma
+    licença (cadastro self-service com escolha de plano, raio-X de
+    produção). A assinatura é validada **antes** de qualquer
+    processamento — sem isso, qualquer um poderia forjar um "aprovado" e
+    ganhar licença de graça (ver
+    `pagamento_licenca_service.verificar_assinatura_webhook`)."""
+    payment_id = request.query_params.get("data.id") or request.query_params.get("id")
+    if not pagamento_licenca_service.verificar_assinatura_webhook(
+        x_signature, x_request_id, payment_id, settings.mercadopago_webhook_secret
+    ):
+        raise NaoAutorizado("Assinatura do webhook inválida.")
+
+    if payment_id:
+        pagamento_licenca_service.confirmar_via_webhook(db, payment_provider, payment_id)
+    return {"recebido": True}

@@ -15,6 +15,7 @@ interface TokenResponse {
   access_token: string;
   usuario: Usuario;
   tem_licenca_ativa: boolean;
+  checkout_url: string | null;
 }
 
 interface DadosRegistroVitrine {
@@ -25,6 +26,7 @@ interface DadosRegistroVitrine {
   email_admin: string;
   senha_admin: string;
   aceite_termos: boolean;
+  plano_id: number;
 }
 
 interface AuthContextValue {
@@ -33,7 +35,7 @@ interface AuthContextValue {
   temLicencaAtiva: boolean;
   entrar: (email: string, senha: string) => Promise<void>;
   entrarComGoogle: (idToken: string) => Promise<void>;
-  registrarVitrine: (dados: DadosRegistroVitrine) => Promise<void>;
+  registrarVitrine: (dados: DadosRegistroVitrine) => Promise<string | null>;
   sair: () => void;
 }
 
@@ -72,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
     setUsuario(resposta.usuario);
     setTemLicencaAtiva(resposta.tem_licenca_ativa);
+    return resposta.checkout_url;
   }, []);
 
   const sair = useCallback(() => {
