@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.integrations.brasilapi_client import BrasilApiClient, consultar_cnpj_brasilapi
 from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.claude_provider import ClaudeProvider
+from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.licenca import Licenca
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider
@@ -70,14 +71,6 @@ def get_plan_limits_provider(db: Session = Depends(get_db)) -> PlanLimitsProvide
     # próprio núcleo (mesma base do PREDATOR). StubPlanLimitsProvider
     # continua existindo só para os testes (dependency override).
     return NucleoPlanLimitsProvider(db)
-
-
-def get_whatsapp_provider() -> WhatsAppProvider:
-    # Real (Meta) quando houver credenciais configuradas; senão, stub de
-    # dev/teste. WhatsApp é a única porta de envio permitida (E3-H2).
-    if settings.whatsapp_access_token:
-        return MetaWhatsAppProvider()
-    return StubWhatsAppProvider()
 
 
 def get_email_provider() -> EmailProvider:
@@ -144,6 +137,39 @@ def get_usuario_atual(
 def get_tenant_id(usuario: Usuario = Depends(get_usuario_atual)) -> str:
     """Identidade do assinante — derivada do usuário autenticado (Onda A)."""
     return usuario.tenant_id
+
+
+def resolver_whatsapp_provider(tenant_id: str, db: Session) -> WhatsAppProvider:
+    """Raio-X de produção: número de WhatsApp por tenant, não mais um
+    único número compartilhado por toda a plataforma (um cliente
+    prospectando mal não pode mais fazer todo mundo perder WhatsApp
+    junto). Prioridade: 1) credencial própria do tenant
+    (`ConfiguracaoWhatsApp`); 2) fallback legado — o token global único,
+    só existe para não quebrar quem ainda não migrou; 3) stub de
+    dev/teste.
+
+    Função simples (não `Depends`) de propósito — os dispatchers de cron
+    (`cron.py`) iteram sobre todos os tenants numa única requisição sem
+    usuário autenticado (só o segredo de cron), então precisam resolver o
+    provider tenant a tenant dentro do loop, não uma vez só no nível da
+    rota como `get_whatsapp_provider` (que depende de `get_tenant_id`, e
+    portanto de um JWT que o cron não tem)."""
+    config_tenant = db.query(ConfiguracaoWhatsApp).filter_by(tenant_id=tenant_id).one_or_none()
+    if config_tenant is not None:
+        return MetaWhatsAppProvider(
+            config_tenant.access_token, config_tenant.phone_number_id, config_tenant.business_account_id
+        )
+    if settings.whatsapp_access_token:
+        return MetaWhatsAppProvider(
+            settings.whatsapp_access_token, settings.whatsapp_phone_number_id, settings.whatsapp_business_account_id
+        )
+    return StubWhatsAppProvider()
+
+
+def get_whatsapp_provider(
+    tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)
+) -> WhatsAppProvider:
+    return resolver_whatsapp_provider(tenant_id, db)
 
 
 def get_ator_id(usuario: Usuario = Depends(get_usuario_atual)) -> str | None:

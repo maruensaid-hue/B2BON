@@ -1,18 +1,21 @@
 import httpx
 
-from app.core.config import settings
 from app.providers.channels.whatsapp.base import ResultadoEnvio, TemplateInfo, WhatsAppProvider
 
 
 class MetaWhatsAppProvider(WhatsAppProvider):
-    """Implementação real via Graph API da Meta — WhatsApp Business API oficial."""
+    """Implementação real via Graph API da Meta — WhatsApp Business API
+    oficial. Credenciais explícitas no construtor (não lidas de
+    `settings` global) desde o raio-X de produção — o número de WhatsApp
+    é por tenant, não compartilhado por toda a plataforma, e cada
+    instância desta classe fala com um número específico."""
 
     _BASE_URL = "https://graph.facebook.com/v20.0"
 
-    def __init__(self) -> None:
-        self._token = settings.whatsapp_access_token
-        self._phone_number_id = settings.whatsapp_phone_number_id
-        self._waba_id = settings.whatsapp_business_account_id
+    def __init__(self, access_token: str, phone_number_id: str, business_account_id: str) -> None:
+        self._token = access_token
+        self._phone_number_id = phone_number_id
+        self._waba_id = business_account_id
 
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self._token}"}

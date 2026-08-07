@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_email_provider, get_email_validation_provider, get_whatsapp_provider
+from app.api.deps import get_db, get_email_provider, get_email_validation_provider, resolver_whatsapp_provider
 from app.core.config import settings
 from app.models.tenant import Tenant
 from app.providers.channels.email.base import EmailProvider
-from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.email_validation.base import EmailVerificationProvider
 from app.services import envio_service, nps_service, reuniao_service, titular_service
 from app.services.errors import NaoAutorizado
@@ -25,7 +24,6 @@ def _exigir_segredo_cron(x_cron_secret: str | None = Header(None)) -> None:
 @router.post("/processar-envios", dependencies=[Depends(_exigir_segredo_cron)])
 def processar_envios_todos_os_tenants(
     db: Session = Depends(get_db),
-    whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
     email: EmailProvider = Depends(get_email_provider),
     email_validation: EmailVerificationProvider = Depends(get_email_validation_provider),
 ) -> dict:
@@ -37,6 +35,7 @@ def processar_envios_todos_os_tenants(
     totais = {"enviadas": 0, "falhas": 0, "adiadas": 0, "tarefas_linkedin_criadas": 0, "descartadas_email_invalido": 0}
 
     for tenant in db.query(Tenant).order_by(Tenant.id).all():
+        whatsapp = resolver_whatsapp_provider(tenant.id, db)
         resultado = envio_service.processar_pendentes(db, tenant.id, whatsapp, email, email_validation)
         resultado_por_tenant[tenant.id] = resultado
         for chave in totais:
@@ -48,7 +47,6 @@ def processar_envios_todos_os_tenants(
 @router.post("/processar-retorno", dependencies=[Depends(_exigir_segredo_cron)])
 def processar_retorno_todos_os_tenants(
     db: Session = Depends(get_db),
-    whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
     email: EmailProvider = Depends(get_email_provider),
 ) -> dict:
     """Dispatcher agendado das métricas de retorno (lembrete de reunião
@@ -59,6 +57,7 @@ def processar_retorno_todos_os_tenants(
     totais = {"lembretes_d1_enviados": 0, "lembretes_h2_enviados": 0, "pesquisas_disparadas": 0}
 
     for tenant in db.query(Tenant).order_by(Tenant.id).all():
+        whatsapp = resolver_whatsapp_provider(tenant.id, db)
         lembretes = reuniao_service.processar_lembretes(db, tenant.id, whatsapp, email)
         nps = nps_service.disparar_pendentes(db, tenant.id, whatsapp, email)
         resultado_por_tenant[tenant.id] = {**lembretes, **nps}

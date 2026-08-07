@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_llm_provider, get_payment_provider, get_whatsapp_provider
+from app.api.deps import get_db, get_llm_provider, get_payment_provider, resolver_whatsapp_provider
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.models.decisor import Decisor
@@ -24,12 +24,28 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 _PALAVRAS_OPTOUT = {"sair", "parar", "stop", "cancelar"}
 
 
+def _whatsapp_provider_do_webhook_whatsapp(
+    dados: WebhookWhatsAppRequestSchema, db: Session = Depends(get_db)
+) -> WhatsAppProvider:
+    """Wrapper testável (`app.dependency_overrides`) em torno de
+    `resolver_whatsapp_provider` — webhook público (Meta chamando, sem
+    JWT), então o tenant vem do próprio corpo da requisição, não de
+    `Depends(get_tenant_id)` (que exigiria usuário autenticado)."""
+    return resolver_whatsapp_provider(dados.tenant_id, db)
+
+
+def _whatsapp_provider_do_webhook_email(
+    dados: WebhookEmailRequestSchema, db: Session = Depends(get_db)
+) -> WhatsAppProvider:
+    return resolver_whatsapp_provider(dados.tenant_id, db)
+
+
 @router.post("/whatsapp")
 def webhook_whatsapp(
     dados: WebhookWhatsAppRequestSchema,
     db: Session = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
-    whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
+    whatsapp: WhatsAppProvider = Depends(_whatsapp_provider_do_webhook_whatsapp),
 ) -> dict:
     """Mensagem recebida do prospect: opt-out por palavra-chave (E9-H2),
     resposta que interrompe a cadência (E3-H3) e alimenta a conversa de
@@ -53,7 +69,7 @@ def webhook_email(
     dados: WebhookEmailRequestSchema,
     db: Session = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
-    whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
+    whatsapp: WhatsAppProvider = Depends(_whatsapp_provider_do_webhook_email),
 ) -> dict:
     """Integração de inbound-parse do ESP — resposta de e-mail interrompe a
     cadência em todos os canais (E3-H3) e alimenta a qualificação (E5-H1)."""

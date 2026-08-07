@@ -11,6 +11,7 @@ from app.models.configuracao_canal import ConfiguracaoCanal
 from app.models.custo_aquisicao import CustoAquisicao
 from app.models.configuracao_comunicacao import ConfiguracaoComunicacao
 from app.models.configuracao_envio import ConfiguracaoEnvio
+from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.configuracao_notificacao import ConfiguracaoNotificacao
 from app.models.configuracao_nps import ConfiguracaoNps
 from app.models.configuracao_painel import ConfiguracaoPainel
@@ -59,6 +60,7 @@ __all__ = [
     "MaterialOferta",
     "ConfiguracaoComunicacao",
     "ConfiguracaoEnvio",
+    "ConfiguracaoWhatsApp",
     "ConfiguracaoCanal",
     "ConfiguracaoQualificacao",
     "ConfiguracaoNotificacao",

@@ -23,6 +23,7 @@ from app.api.deps import (
     get_site_fetcher,
     get_whatsapp_provider,
 )
+from app.api.v1.webhooks import _whatsapp_provider_do_webhook_email, _whatsapp_provider_do_webhook_whatsapp
 from app.core.rate_limit import limitador_auth
 from app.db.base import Base
 from app.main import app
@@ -194,6 +195,8 @@ def client(
     app.dependency_overrides[get_site_fetcher] = lambda: fake_site_fetcher
     app.dependency_overrides[get_brasilapi_client] = lambda: fake_brasilapi_client
     app.dependency_overrides[get_whatsapp_provider] = lambda: fake_whatsapp
+    app.dependency_overrides[_whatsapp_provider_do_webhook_whatsapp] = lambda: fake_whatsapp
+    app.dependency_overrides[_whatsapp_provider_do_webhook_email] = lambda: fake_whatsapp
     app.dependency_overrides[get_email_provider] = lambda: fake_email
     app.dependency_overrides[get_calendar_provider] = lambda: fake_calendar
     app.dependency_overrides[get_crm_provider] = lambda: fake_crm
