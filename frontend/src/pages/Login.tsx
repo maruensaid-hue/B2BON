@@ -14,6 +14,8 @@ export function Login() {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
+  const [mostrarCadastro, setMostrarCadastro] = useState(false);
+  const [codigoConvite, setCodigoConvite] = useState("");
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -27,6 +29,12 @@ export function Login() {
     } finally {
       setCarregando(false);
     }
+  }
+
+  function handleUsarCodigo(event: FormEvent) {
+    event.preventDefault();
+    const codigo = codigoConvite.trim();
+    if (codigo) navigate(`/convite-vitrine/${codigo}`);
   }
 
   return (
@@ -84,6 +92,30 @@ export function Login() {
         >
           Entrar com Google
         </Button>
+
+        <div className="mt-4 text-center text-[11px] text-muted">
+          Ainda não tem conta?{" "}
+          <button
+            type="button"
+            className="text-cyan hover:underline"
+            onClick={() => setMostrarCadastro((atual) => !atual)}
+          >
+            Tenho um código de convite
+          </button>
+        </div>
+
+        {mostrarCadastro && (
+          <form onSubmit={handleUsarCodigo} className="mt-3 flex flex-col gap-2">
+            <Input
+              value={codigoConvite}
+              onChange={(event) => setCodigoConvite(event.target.value)}
+              placeholder="Código do convite"
+            />
+            <Button type="submit" variant="ghost" className="w-full justify-center" disabled={!codigoConvite.trim()}>
+              Continuar cadastro
+            </Button>
+          </form>
+        )}
 
         <div className="mt-5 text-center text-[10px] text-muted">
           <Link to="/privacidade" className="hover:text-cyan hover:underline">
