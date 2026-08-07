@@ -5,11 +5,13 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.convite_vitrine import ConviteVitrine
 from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
+from app.providers.channels.email.base import EmailProvider
 from app.providers.payment.base import PaymentProvider
 from app.services import auditoria_service, auth_service, pagamento_licenca_service, rede_social_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
@@ -151,11 +153,21 @@ def _gerar_tenant_id(db: Session, razao_social: str) -> str:
 
 
 def gerar_convite_vitrine(
-    db: Session, tenant_id_origem: str, ator_id: str | None, validade_horas: int | None
+    db: Session,
+    tenant_id_origem: str,
+    ator_id: str | None,
+    validade_horas: int | None,
+    email_destinatario: str | None = None,
+    email_provider: EmailProvider | None = None,
 ) -> ConviteVitrine:
     """Qualquer usuário de um tenant já existente pode convidar uma
     empresa nova para a Rede Social (Onda H) — não exige papel admin,
-    diferente do convite de usuário (`auth_service.gerar_convite`)."""
+    diferente do convite de usuário (`auth_service.gerar_convite`).
+
+    Antes disto, o único jeito de "enviar" o convite era copiar o link
+    manualmente (nada era enviado de verdade) — bug real relatado pelo
+    usuário. Com `email_destinatario` + `email_provider`, o e-mail sai na
+    hora; sem eles, continua funcionando como antes (só copiar o link)."""
     validade_em = datetime.now(UTC) + timedelta(hours=validade_horas) if validade_horas else None
     convite = ConviteVitrine(
         tenant_id_origem=tenant_id_origem,
@@ -171,6 +183,19 @@ def gerar_convite_vitrine(
     )
     db.commit()
     db.refresh(convite)
+
+    if email_destinatario and email_provider is not None:
+        tenant_origem = db.query(Tenant).filter_by(id=tenant_id_origem).one_or_none()
+        nome_origem = tenant_origem.razao_social if tenant_origem else "Um parceiro"
+        link = f"{settings.url_base_frontend}/convite-vitrine/{convite.codigo}"
+        corpo = (
+            f"{nome_origem} te convidou para conhecer a B2B ON — CRM, prospecção, rede social entre "
+            f"empresas e MAP (Motor de Alta Performance), tudo numa plataforma só.\n\n"
+            f"Para criar sua conta e escolher um plano, acesse:\n{link}\n\n"
+            f"Este link expira {'em ' + str(validade_horas) + ' horas' if validade_horas else 'sem prazo definido'}."
+        )
+        email_provider.enviar(email_destinatario, "Você foi convidado para a B2B ON", corpo, "B2B ON", "no-reply@predator.local")
+
     return convite
 
 

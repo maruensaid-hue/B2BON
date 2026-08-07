@@ -132,6 +132,27 @@ def test_registrar_vitrine_sem_aceitar_termos_via_api_falha(client, criar_plano)
     assert resposta.status_code == 422
 
 
+def test_gerar_convite_vitrine_sem_email_nao_envia(client, fake_email):
+    resposta = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24})
+
+    assert resposta.status_code == 201
+    assert fake_email.envios == []
+
+
+def test_gerar_convite_vitrine_com_email_envia_convite(client, fake_email):
+    resposta = client.post(
+        "/api/v1/convites/vitrine",
+        json={"validade_horas": 24, "email_destinatario": "convidado@teste.com.br"},
+    )
+
+    assert resposta.status_code == 201
+    assert len(fake_email.envios) == 1
+    envio = fake_email.envios[0]
+    assert envio["destinatario"] == "convidado@teste.com.br"
+    codigo = resposta.json()["codigo"]
+    assert f"/convite-vitrine/{codigo}" in envio["corpo"]
+
+
 def test_convite_usado_duas_vezes_falha(client, db_session):
     convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
     client.post(

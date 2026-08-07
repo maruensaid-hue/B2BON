@@ -35,3 +35,4 @@ class ConviteVitrineSchema(BaseModel):
 
 class GerarConviteVitrineRequestSchema(BaseModel):
     validade_horas: int | None = 168
+    email_destinatario: str | None = None

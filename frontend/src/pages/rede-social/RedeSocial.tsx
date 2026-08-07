@@ -127,7 +127,11 @@ export function RedeSocial() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     try {
-      await api.post("/convites/vitrine", { validade_horas: Number(form.get("validade_horas")) });
+      const emailDestinatario = String(form.get("email_destinatario") ?? "").trim();
+      await api.post("/convites/vitrine", {
+        validade_horas: Number(form.get("validade_horas")),
+        email_destinatario: emailDestinatario || null,
+      });
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível gerar o convite.");
@@ -333,6 +337,15 @@ export function RedeSocial() {
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Validade (horas)</div>
             <Input name="validade_horas" type="number" defaultValue={168} min={1} />
+          </div>
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+              E-mail do convidado (opcional)
+            </div>
+            <Input name="email_destinatario" type="email" placeholder="contato@empresa.com" />
+            <div className="mt-1 text-[11px] text-muted">
+              Preenchendo, o convite é enviado por e-mail automaticamente. Deixe em branco para só copiar o link.
+            </div>
           </div>
           <Button type="submit" className="w-full justify-center">
             Gerar convite

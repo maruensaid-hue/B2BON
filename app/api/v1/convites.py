@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_tenant_id
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_email_provider, get_tenant_id
+from app.providers.channels.email.base import EmailProvider
 from app.schemas.convite import (
     ConviteCadastroSchema,
     ConviteVitrineSchema,
@@ -51,10 +52,13 @@ def gerar_convite_vitrine(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
 ) -> ConviteVitrineSchema:
     """Convida uma empresa nova para a Rede Social — sem exigir papel
     admin, qualquer usuário do tenant pode gerar (Onda H)."""
-    return tenant_service.gerar_convite_vitrine(db, tenant_id, ator_id, dados.validade_horas)
+    return tenant_service.gerar_convite_vitrine(
+        db, tenant_id, ator_id, dados.validade_horas, dados.email_destinatario, email
+    )
 
 
 @router.get("/vitrine", response_model=list[ConviteVitrineSchema])
