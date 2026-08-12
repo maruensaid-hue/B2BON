@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     # dev/teste, mapeando decisores só via QSA da Receita Federal.
     contact_enrichment_api_key: str = ""
 
+    # Brave Search API — descobre o site oficial de uma conta sem domínio
+    # cadastrado (`conta_service.enriquecer`). Vazio usa StubWebSearchProvider
+    # em dev/teste.
+    brave_search_api_key: str = ""
+
     # Padrão recomendado do limiar de qualificação — ajustável por tenant
     # (E5-H2 pede explicitamente um "padrão recomendado").
     limiar_qualificacao_padrao: float = 60.0

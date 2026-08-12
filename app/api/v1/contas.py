@@ -12,6 +12,7 @@ from app.api.deps import (
     get_plan_limits_provider,
     get_site_fetcher,
     get_tenant_id,
+    get_web_search_provider,
 )
 from app.graph.client import Neo4jClient
 from app.integrations.brasilapi_client import BrasilApiClient
@@ -21,6 +22,7 @@ from app.models.decisor import Decisor
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
+from app.providers.web_search.base import WebSearchProvider
 from app.schemas.conta import (
     AtualizarContaRequestSchema,
     ContaSchema,
@@ -202,8 +204,9 @@ def enriquecer_conta(
     db: Session = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
     site_fetcher: SiteFetcher = Depends(get_site_fetcher),
+    web_search: WebSearchProvider = Depends(get_web_search_provider),
 ) -> EnriquecerContaResponseSchema:
-    campos = conta_service.enriquecer(db, tenant_id, ator_id, conta_id, llm, site_fetcher)
+    campos = conta_service.enriquecer(db, tenant_id, ator_id, conta_id, llm, site_fetcher, web_search)
     return EnriquecerContaResponseSchema(campos=campos)
 
 

@@ -4,7 +4,12 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from app.integrations.site_fetcher import HostNaoPublico, _validar_host_publico, buscar_conteudo_site
+from app.integrations.site_fetcher import (
+    _CAMINHOS_CANDIDATOS,
+    HostNaoPublico,
+    _validar_host_publico,
+    buscar_conteudo_site,
+)
 
 
 def _addrinfo_para(ip: str):
@@ -39,6 +44,13 @@ def test_buscar_conteudo_site_bloqueia_dominio_apontando_para_ip_privado():
     with patch("app.integrations.site_fetcher.socket.getaddrinfo", return_value=_addrinfo_para("127.0.0.1")):
         with pytest.raises(HostNaoPublico):
             buscar_conteudo_site("empresa-maliciosa.com.br")
+
+
+def test_caminhos_candidatos_incluem_vagas_abertas():
+    """Pedido do usuário: enriquecimento de site também deve olhar vagas
+    abertas (sinal de crescimento/contratação), não só sobre/investidores."""
+    assert "/carreiras" in _CAMINHOS_CANDIDATOS
+    assert "/vagas" in _CAMINHOS_CANDIDATOS
 
 
 def test_buscar_conteudo_site_bloqueia_redirect_para_ip_privado():

@@ -19,6 +19,7 @@ from app.models.icp import ICP
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, DecisorCandidato, FiltroBusca
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
+from app.providers.web_search.base import WebSearchProvider
 from app.schemas.conta import ParticipanteEventoSchema
 from app.schemas.decisor import DecisorCreateSchema
 from app.services import auditoria_service, descarte_service, llm_helpers
@@ -354,6 +355,29 @@ def _normalizar_dominio(dominio: str | None) -> str | None:
     return (netloc or texto.lstrip("/")).rstrip("/") or None
 
 
+# Domínios que aparecem com frequência nos primeiros resultados de busca
+# mas nunca são o site institucional da empresa — descartados ao tentar
+# descobrir o domínio automaticamente (evita salvar o perfil do LinkedIn
+# da empresa como se fosse o site dela, por exemplo).
+_DOMINIOS_IGNORADOS_BUSCA = {
+    "linkedin.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
+    "youtube.com", "wikipedia.org", "indeed.com", "glassdoor.com",
+    "econodata.com.br", "cnpj.biz",
+}
+
+
+def _descobrir_dominio(nome_empresa: str, web_search: WebSearchProvider) -> str | None:
+    """Descoberta best-effort do site oficial via busca na web, usada
+    quando a conta ainda não tem domínio cadastrado (E2-H2). Pega o
+    primeiro resultado cujo domínio não é um dos conhecidos por não
+    serem o site institucional (redes sociais, diretórios de CNPJ etc.)."""
+    for resultado in web_search.buscar(f"{nome_empresa} site oficial"):
+        dominio = _normalizar_dominio(resultado.url)
+        if dominio and not any(dominio == d or dominio.endswith(f".{d}") for d in _DOMINIOS_IGNORADOS_BUSCA):
+            return dominio
+    return None
+
+
 def atualizar(
     db: Session,
     tenant_id: str,
@@ -458,21 +482,35 @@ def enriquecer(
     conta_id: int,
     llm: LLMProvider,
     site_fetcher: SiteFetcher,
+    web_search: WebSearchProvider,
 ) -> list[CampoEnriquecido]:
     """Pesquisa ampla dentro do site institucional da conta, com ficha de
     campos enriquecidos e fonte/data de cada dado (E2-H2).
 
     Não fica só na home: `site_fetcher` já tenta páginas de sobre,
-    investidores, notícias e privacidade quando existem (best-effort). O
-    prompt pede sinais de porte/atuação, crescimento, marcos históricos,
-    novos projetos e presença de política de privacidade/LGPD — cobre
-    prospecção para qualquer oferta, não só compliance. Cada página
-    efetivamente pesquisada também vira um campo `pagina_pesquisada`, que
-    funciona como o histórico da pesquisa feita.
+    investidores, notícias, vagas abertas e privacidade quando existem
+    (best-effort). O prompt pede sinais de porte/atuação, crescimento,
+    marcos históricos, novos projetos, vagas abertas e presença de
+    política de privacidade/LGPD — cobre prospecção para qualquer
+    oferta, não só compliance. Cada página efetivamente pesquisada
+    também vira um campo `pagina_pesquisada`, que funciona como o
+    histórico da pesquisa feita.
+
+    Se a conta ainda não tem domínio cadastrado, tenta descobrir o site
+    oficial sozinha via `web_search` e já salva o domínio encontrado na
+    ficha da empresa — não busca de novo nas próximas pesquisas.
     """
     conta = obter(db, tenant_id, conta_id)
+    dominio_descoberto: str | None = None
     if not conta.dominio:
-        raise RegraNegocioViolada("Conta sem domínio cadastrado — não é possível enriquecer via site.")
+        dominio_descoberto = _descobrir_dominio(conta.nome_fantasia or conta.nome, web_search)
+        if not dominio_descoberto:
+            raise RegraNegocioViolada(
+                "Não foi possível descobrir automaticamente o site da empresa — "
+                "cadastre o domínio manualmente e tente de novo."
+            )
+        conta.dominio = dominio_descoberto
+        db.flush()
 
     try:
         texto_site = site_fetcher(conta.dominio)
@@ -486,14 +524,15 @@ def enriquecer(
                 f"A seguir está o conteúdo de várias páginas do site institucional da empresa "
                 f"{conta.nome} (cada uma marcada por '=== url ==='). A partir só do que estiver "
                 "de fato presente no texto (nunca invente), liste em linhas no formato "
-                "'campo: valor' sinais públicos relevantes para uma prospecção comercial: porte e "
-                "área de atuação, crescimento ou expansão, marcos ou linha do tempo da empresa, "
-                "lançamento de novos produtos/projetos, resultados financeiros ou informações "
-                "voltadas a investidores, e se há (ou não) política de privacidade/menção a "
-                "LGPD/DPO publicada. Se um desses pontos não aparecer no texto, não invente — "
-                "simplesmente não escreva uma linha para ele. Termine com uma linha "
-                "'possivel_dor: ' resumindo, em uma frase, qual dor ou necessidade de negócio os "
-                "sinais encontrados sugerem.\n\n"
+                "'campo: valor' sinais públicos relevantes para uma prospecção comercial e para a "
+                "abordagem de decisores: porte e área de atuação, crescimento ou expansão, marcos "
+                "ou linha do tempo da empresa, lançamento de novos produtos/projetos, resultados "
+                "financeiros ou informações voltadas a investidores, vagas abertas ou áreas em "
+                "contratação (sinal de crescimento e ponto de entrada pra abordagem), e se há (ou "
+                "não) política de privacidade/menção a LGPD/DPO publicada. Se um desses pontos não "
+                "aparecer no texto, não invente — simplesmente não escreva uma linha para ele. "
+                "Termine com uma linha 'possivel_dor: ' resumindo, em uma frase, qual dor ou "
+                "necessidade de negócio os sinais encontrados sugerem.\n\n"
                 f"{texto_site}"
             )
         )
@@ -501,6 +540,13 @@ def enriquecer(
 
     agora = datetime.now(UTC)
     campos: list[CampoEnriquecido] = []
+    if dominio_descoberto:
+        campos.append(
+            CampoEnriquecido(
+                conta_id=conta.id, campo="dominio_descoberto_automaticamente", valor=dominio_descoberto,
+                fonte="busca_web", coletado_em=agora,
+            )
+        )
     for url_pagina in re.findall(r"=== (.*?) ===", texto_site):
         campos.append(
             CampoEnriquecido(

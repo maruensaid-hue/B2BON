@@ -95,6 +95,34 @@ def test_enriquecer_conta_registra_fonte_e_data(client, db_session, criar_icp, f
     assert any(campo["campo"] == "pagina_pesquisada" for campo in campos)
 
 
+def test_enriquecer_sem_dominio_descobre_e_persiste(client, fake_llm, fake_web_search):
+    """Pedido do usuário: enriquecimento de site deve descobrir o domínio
+    sozinho quando a conta ainda não tem um cadastrado, e salvar na ficha."""
+    from app.providers.web_search.base import ResultadoBusca
+
+    conta_id = client.post("/api/v1/leads/contas", json={"nome": "Beta Clinica Descoberta"}).json()["id"]
+    fake_web_search.resultados = [ResultadoBusca(titulo="Beta Clinica", url="https://betaclinica.com.br", descricao="")]
+    fake_llm.definir_respostas(["porte: pequena"])
+
+    resposta = client.post(f"/api/v1/contas/{conta_id}/enriquecer")
+
+    assert resposta.status_code == 200
+    campos_por_nome = {campo["campo"]: campo["valor"] for campo in resposta.json()["campos"]}
+    assert campos_por_nome["dominio_descoberto_automaticamente"] == "betaclinica.com.br"
+
+    conta_atualizada = client.get(f"/api/v1/contas/{conta_id}").json()
+    assert conta_atualizada["dominio"] == "betaclinica.com.br"
+
+
+def test_enriquecer_sem_dominio_e_sem_busca_bem_sucedida_falha_com_mensagem_clara(client, fake_web_search):
+    conta_id = client.post("/api/v1/leads/contas", json={"nome": "Empresa Sem Site Localizavel"}).json()["id"]
+
+    resposta = client.post(f"/api/v1/contas/{conta_id}/enriquecer")
+
+    assert resposta.status_code == 409
+    assert "descobrir automaticamente" in resposta.json()["detalhe"]
+
+
 def test_listar_contas_do_icp_sobrevive_a_refresh(client, criar_icp, fake_account_data):
     """Onda F2: a tela de Prospecção precisa reler as contas já geradas,
     não só a resposta pontual de gerar_lista."""

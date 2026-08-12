@@ -36,6 +36,9 @@ from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
 from app.providers.rede_social.base import RedeSocialProvider
 from app.providers.rede_social.nucleo import NucleoRedeSocialProvider
+from app.providers.web_search.base import WebSearchProvider
+from app.providers.web_search.brave import BraveSearchProvider
+from app.providers.web_search.stub import StubWebSearchProvider
 from app.services import auth_service
 from app.services.errors import NaoAutenticado, NaoAutorizado
 
@@ -70,6 +73,12 @@ def get_contact_enrichment_provider() -> ContactEnrichmentProvider:
     if settings.contact_enrichment_api_key:
         raise NotImplementedError("Configure um fornecedor de enriquecimento de contatos.")
     return StubContactEnrichmentProvider()
+
+
+def get_web_search_provider() -> WebSearchProvider:
+    if settings.brave_search_api_key:
+        return BraveSearchProvider()
+    return StubWebSearchProvider()
 
 
 def get_brasilapi_client() -> BrasilApiClient:

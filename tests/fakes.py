@@ -11,6 +11,7 @@ from app.providers.channels.email.base import ResultadoEnvio as ResultadoEnvioEm
 from app.providers.channels.whatsapp.base import ResultadoEnvio as ResultadoEnvioWhatsApp
 from app.providers.channels.whatsapp.base import TemplateInfo, WhatsAppProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
+from app.providers.web_search.base import ResultadoBusca, WebSearchProvider
 
 
 class FakeGraphClient:
@@ -153,6 +154,19 @@ class FakeContactEnrichmentProvider(ContactEnrichmentProvider):
     def buscar_contatos(self, filtro: FiltroContatos) -> list[ContatoCandidato]:
         self.buscas.append(filtro)
         return self.contatos
+
+
+class FakeWebSearchProvider(WebSearchProvider):
+    """Duplo de teste do WebSearchProvider — resultados controlados pelo
+    teste, vazio por padrão."""
+
+    def __init__(self, resultados: list[ResultadoBusca] | None = None) -> None:
+        self.resultados = resultados or []
+        self.buscas: list[str] = []
+
+    def buscar(self, query: str, limite: int = 5) -> list[ResultadoBusca]:
+        self.buscas.append(query)
+        return self.resultados[:limite]
 
 
 class FakeWhatsAppProvider(WhatsAppProvider):

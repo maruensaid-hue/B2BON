@@ -22,6 +22,7 @@ from app.api.deps import (
     get_plan_limits_provider,
     get_rede_social_provider,
     get_site_fetcher,
+    get_web_search_provider,
     get_whatsapp_provider,
 )
 from app.api.v1.webhooks import _whatsapp_provider_do_webhook_email, _whatsapp_provider_do_webhook_whatsapp
@@ -47,6 +48,7 @@ from tests.fakes import (
     FakeEmailProvider,
     FakeGraphClient,
     FakeLLMProvider,
+    FakeWebSearchProvider,
     FakeWhatsAppProvider,
 )
 
@@ -120,6 +122,11 @@ def fake_contact_enrichment() -> FakeContactEnrichmentProvider:
 
 
 @pytest.fixture()
+def fake_web_search() -> FakeWebSearchProvider:
+    return FakeWebSearchProvider()
+
+
+@pytest.fixture()
 def fake_plan_limits() -> StubPlanLimitsProvider:
     return StubPlanLimitsProvider(franquia_padrao=1000)
 
@@ -179,6 +186,7 @@ def client(
     fake_llm: FakeLLMProvider,
     fake_account_data: FakeAccountDataProvider,
     fake_contact_enrichment: FakeContactEnrichmentProvider,
+    fake_web_search: FakeWebSearchProvider,
     fake_plan_limits: StubPlanLimitsProvider,
     fake_site_fetcher,
     fake_brasilapi_client,
@@ -200,6 +208,7 @@ def client(
     app.dependency_overrides[get_llm_provider] = lambda: fake_llm
     app.dependency_overrides[get_account_data_provider] = lambda: fake_account_data
     app.dependency_overrides[get_contact_enrichment_provider] = lambda: fake_contact_enrichment
+    app.dependency_overrides[get_web_search_provider] = lambda: fake_web_search
     app.dependency_overrides[get_plan_limits_provider] = lambda: fake_plan_limits
     app.dependency_overrides[get_site_fetcher] = lambda: fake_site_fetcher
     app.dependency_overrides[get_brasilapi_client] = lambda: fake_brasilapi_client

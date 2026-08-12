@@ -7,7 +7,7 @@ import httpx
 
 SiteFetcher = Callable[[str], str]
 
-_MAX_PAGINAS = 6
+_MAX_PAGINAS = 8
 _MAX_CHARS_POR_PAGINA = 2500
 _MAX_REDIRECTS = 3
 
@@ -48,6 +48,7 @@ _CAMINHOS_CANDIDATOS = [
     "/sobre", "/sobre-nos", "/quem-somos", "/institucional",
     "/investidores", "/ri", "/relacao-com-investidores", "/resultados",
     "/blog", "/noticias", "/imprensa", "/novidades",
+    "/carreiras", "/vagas", "/trabalhe-conosco", "/jobs", "/careers",
     "/privacidade", "/politica-de-privacidade", "/privacy-policy", "/privacy", "/lgpd",
 ]
 
@@ -56,6 +57,7 @@ _CAMINHOS_CANDIDATOS = [
 _PALAVRAS_CHAVE_LINK = (
     "sobre", "quem-somos", "institucional", "investidor", "\\bri\\b", "resultado",
     "blog", "noticia", "imprensa", "novidade", "historia", "timeline", "linha-do-tempo",
+    "vaga", "carreira", "emprego", "trabalhe-conosco", "\\bjob\\b", "career",
     "privacidade", "privacy", "lgpd",
 )
 _REGEX_LINKS_INTERNOS = re.compile(
@@ -94,7 +96,7 @@ def _buscar_pagina(base_url: str, caminho: str) -> str | None:
 
 def buscar_conteudo_site(dominio: str) -> str:
     """Pesquisa best-effort dentro do próprio site institucional — não só a
-    home, mas também páginas de sobre/investidores/notícias/privacidade
+    home, mas também páginas de sobre/investidores/notícias/vagas/privacidade
     quando existirem, para dar à IA sinais de crescimento, marcos e
     conformidade além do que a home sozinha mostra.
 

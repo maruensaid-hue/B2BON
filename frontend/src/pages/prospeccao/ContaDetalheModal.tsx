@@ -189,6 +189,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
     await executar("enriquecer-site", async () => {
       const resposta = await api.post<{ campos: CampoEnriquecido[] }>(`/contas/${contaId}/enriquecer`);
       setCampos(resposta.campos);
+      await carregar(); // domínio pode ter sido descoberto e salvo agora
     });
   }
 
@@ -334,10 +335,13 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
           </div>
           <div className="mb-4 text-[11px] text-muted">
             "Pesquisar empresa (site)" varre a home e páginas internas (sobre,
-            investidores, notícias, privacidade) do domínio cadastrado e pede à
-            IA um resumo de porte, crescimento, marcos, novos projetos e se há
-            política de privacidade/LGPD publicada — serve de insumo para
-            qualquer oferta, não só para prospecção de LGPD.
+            investidores, notícias, vagas abertas, privacidade) do domínio
+            cadastrado e pede à IA um resumo de porte, crescimento, marcos,
+            novos projetos, vagas em aberto e se há política de
+            privacidade/LGPD publicada — serve de insumo para qualquer
+            oferta, não só para prospecção de LGPD. Se a empresa ainda não
+            tem domínio cadastrado, o sistema tenta descobrir o site sozinho
+            e já salva na ficha.
           </div>
 
           {mostrarDescarte && (
