@@ -45,6 +45,9 @@ export function Kanban() {
   const [semIcp, setSemIcp] = useState(false);
   const [icpSelecionadoId, setIcpSelecionadoId] = useState<number | null>(null);
   const [todasAsContas, setTodasAsContas] = useState<Conta[]>([]);
+  const [buscaContaExistente, setBuscaContaExistente] = useState("");
+  const [contaExistenteSelecionadaId, setContaExistenteSelecionadaId] = useState<number | null>(null);
+  const [sugestoesContaAbertas, setSugestoesContaAbertas] = useState(false);
   const [negocioArrastadoId, setNegocioArrastadoId] = useState<number | null>(null);
   const [salvandoNegocio, setSalvandoNegocio] = useState(false);
   const [negocioEmEdicao, setNegocioEmEdicao] = useState<Negocio | null>(null);
@@ -97,6 +100,18 @@ export function Kanban() {
     if (icpSelecionadoId === null) return todasAsContas;
     return todasAsContas.filter((conta) => conta.icp_id === icpSelecionadoId);
   }, [todasAsContas, icpSelecionadoId]);
+
+  // Busca com autocompletar — com muitas contas vinculadas a uma empresa
+  // ou vendedor, rolar uma lista inteira num <select> nativo fica
+  // inviável; digitar o nome e escolher entre os resultados é bem mais
+  // rápido (limita a 20 sugestões por vez, só por legibilidade).
+  const sugestoesContaExistente = useMemo(() => {
+    const termo = buscaContaExistente.trim().toLowerCase();
+    const lista = termo
+      ? contasParaSelecionar.filter((conta) => (conta.nome_fantasia || conta.nome).toLowerCase().includes(termo))
+      : contasParaSelecionar;
+    return lista.slice(0, 20);
+  }, [contasParaSelecionar, buscaContaExistente]);
 
   async function moverEstagio(negocioId: number, estagioId: number) {
     try {
@@ -171,6 +186,8 @@ export function Kanban() {
       setContaOrigem("existente");
       setSemIcp(false);
       setIcpSelecionadoId(null);
+      setBuscaContaExistente("");
+      setContaExistenteSelecionadaId(null);
       await carregar();
       if (contaOrigem === "nova") {
         api
@@ -340,16 +357,47 @@ export function Kanban() {
             )}
 
             {contaOrigem === "existente" ? (
-              <Select name="conta_id" required defaultValue="">
-                <option value="" disabled>
-                  {contasParaSelecionar.length === 0 ? "Nenhuma conta cadastrada ainda" : "Selecione a conta"}
-                </option>
-                {contasParaSelecionar.map((conta) => (
-                  <option key={conta.id} value={conta.id}>
-                    {conta.nome_fantasia || conta.nome}
-                  </option>
-                ))}
-              </Select>
+              <div className="relative">
+                <Input
+                  value={buscaContaExistente}
+                  onChange={(event) => {
+                    setBuscaContaExistente(event.target.value);
+                    setContaExistenteSelecionadaId(null);
+                    setSugestoesContaAbertas(true);
+                  }}
+                  onFocus={() => setSugestoesContaAbertas(true)}
+                  onBlur={() => setTimeout(() => setSugestoesContaAbertas(false), 150)}
+                  autoComplete="off"
+                  placeholder={
+                    contasParaSelecionar.length === 0 ? "Nenhuma conta cadastrada ainda" : "Digite o nome da empresa..."
+                  }
+                />
+                <input type="hidden" name="conta_id" value={contaExistenteSelecionadaId ?? ""} />
+                {sugestoesContaAbertas && sugestoesContaExistente.length > 0 && (
+                  <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-surf shadow-lg">
+                    {sugestoesContaExistente.map((conta) => (
+                      <button
+                        key={conta.id}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setContaExistenteSelecionadaId(conta.id);
+                          setBuscaContaExistente(conta.nome_fantasia || conta.nome);
+                          setSugestoesContaAbertas(false);
+                        }}
+                        className="block w-full px-3 py-2 text-left text-[12px] hover:bg-surf2"
+                      >
+                        {conta.nome_fantasia || conta.nome}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {sugestoesContaAbertas && buscaContaExistente && sugestoesContaExistente.length === 0 && (
+                  <div className="absolute z-10 mt-1 w-full rounded-lg border border-border bg-surf p-2 text-[12px] text-muted shadow-lg">
+                    Nenhuma conta encontrada com esse nome.
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="flex flex-col gap-2">
                 <Input name="nome_conta" required placeholder="Nome do cliente" />
