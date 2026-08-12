@@ -167,7 +167,8 @@ def test_atualizar_conta_nome_fantasia_e_dominio(client, criar_icp, fake_account
     conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
 
     resposta = client.put(
-        f"/api/v1/contas/{conta_id}", json={"nome_fantasia": "Alpha Tech", "dominio": "alphatech.com.br"}
+        f"/api/v1/contas/{conta_id}",
+        json={"nome": "Alpha Tech Consultoria Ltda", "nome_fantasia": "Alpha Tech", "dominio": "alphatech.com.br"},
     )
 
     assert resposta.status_code == 200
@@ -188,7 +189,7 @@ def test_atualizar_conta_normaliza_dominio_com_protocolo(client, criar_icp, fake
         ("  betaclinica.com.br  ", "betaclinica.com.br"),
     ]
     for entrada, esperado in casos:
-        resposta = client.put(f"/api/v1/contas/{conta_id}", json={"dominio": entrada})
+        resposta = client.put(f"/api/v1/contas/{conta_id}", json={"nome": "Beta Clinica", "dominio": entrada})
         assert resposta.status_code == 200
         assert resposta.json()["dominio"] == esperado
 
@@ -212,6 +213,77 @@ def test_atualizar_decisor(client, criar_icp, fake_account_data):
 
     listados = client.get(f"/api/v1/contas/{conta_id}/decisores").json()
     assert listados[0]["email"] == "joao@alphatech.com.br"
+
+
+def test_atualizar_conta_todos_os_campos(client, criar_icp, fake_account_data):
+    """Bug reportado: só dava pra editar nome_fantasia/domínio — segmento,
+    CNPJ e os demais campos ficavam travados depois que a conta já existe."""
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech")]
+    conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
+
+    resposta = client.put(
+        f"/api/v1/contas/{conta_id}",
+        json={
+            "nome": "Alpha Tech Consultoria S.A.",
+            "cnpj": "99888777000166",
+            "nome_fantasia": "Alpha Tech",
+            "dominio": "alphatech.com.br",
+            "segmento": "Consultoria Financeira",
+            "porte": "MEDIO",
+            "regiao": "RJ",
+        },
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["nome"] == "Alpha Tech Consultoria S.A."
+    assert corpo["cnpj"] == "99888777000166"
+    assert corpo["segmento"] == "Consultoria Financeira"
+    assert corpo["porte"] == "MEDIO"
+    assert corpo["regiao"] == "RJ"
+
+
+def test_atualizar_decisor_move_para_outra_conta(client, criar_icp, fake_account_data):
+    """Contato cadastrado na empresa errada, ou que mudou de emprego,
+    precisa poder ser movido sem excluir e recriar do zero."""
+    icp = criar_icp()
+    fake_account_data.candidatos = [
+        _candidato("11222333000191", "Alpha Tech"),
+        _candidato("22333444000155", "Beta Clinica"),
+    ]
+    contas = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"]
+    conta_origem_id = contas[0]["id"]
+    conta_destino_id = contas[1]["id"]
+    decisor_id = client.post(
+        f"/api/v1/contas/{conta_origem_id}/decisores", json={"nome": "Joao Silva"}
+    ).json()["id"]
+
+    resposta = client.put(
+        f"/api/v1/contas/{conta_origem_id}/decisores/{decisor_id}",
+        json={"nome": "Joao Silva", "conta_id": conta_destino_id},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["conta_id"] == conta_destino_id
+    assert client.get(f"/api/v1/contas/{conta_origem_id}/decisores").json() == []
+    decisores_destino = client.get(f"/api/v1/contas/{conta_destino_id}/decisores").json()
+    assert len(decisores_destino) == 1
+    assert decisores_destino[0]["id"] == decisor_id
+
+
+def test_atualizar_decisor_para_conta_inexistente_falha(client, criar_icp, fake_account_data):
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech")]
+    conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
+    decisor_id = client.post(f"/api/v1/contas/{conta_id}/decisores", json={"nome": "Joao Silva"}).json()["id"]
+
+    resposta = client.put(
+        f"/api/v1/contas/{conta_id}/decisores/{decisor_id}",
+        json={"nome": "Joao Silva", "conta_id": 999999},
+    )
+
+    assert resposta.status_code == 404
 
 
 def test_mapear_decisores_com_cargo_e_canal(client, criar_icp, fake_account_data):
@@ -418,7 +490,7 @@ def test_definir_proximo_passo_nao_e_apagado_por_edicao_de_conta(client):
         json={"proximo_passo": "Ligar semana que vem", "proximo_passo_em": "2026-08-13T10:00:00"},
     )
 
-    resposta = client.put(f"/api/v1/contas/{lead['id']}", json={"nome_fantasia": "Empresa X Ltda"})
+    resposta = client.put(f"/api/v1/contas/{lead['id']}", json={"nome": "Empresa X", "nome_fantasia": "Empresa X Ltda"})
 
     assert resposta.status_code == 200
     assert resposta.json()["proximo_passo"] == "Ligar semana que vem"

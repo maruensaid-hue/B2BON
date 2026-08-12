@@ -13,6 +13,7 @@ interface LeadDecisor {
   conta_id: number;
   nome: string;
   cargo: string | null;
+  linkedin_url: string | null;
   email: string | null;
   telefone: string | null;
 }
@@ -34,6 +35,8 @@ export function LeadsContatos() {
   const [empresaOrigem, setEmpresaOrigem] = useState<"existente" | "nova">("existente");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [contatoEmEdicao, setContatoEmEdicao] = useState<LeadDecisor | null>(null);
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
   async function carregar() {
     try {
@@ -97,6 +100,31 @@ export function LeadsContatos() {
     }
   }
 
+  async function salvarEdicaoContato(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!contatoEmEdicao || salvandoEdicao) return;
+    const form = new FormData(event.currentTarget);
+    const novaContaId = Number(form.get("conta_id"));
+    setSalvandoEdicao(true);
+    setErro(null);
+    try {
+      await api.put(`/contas/${contatoEmEdicao.conta_id}/decisores/${contatoEmEdicao.id}`, {
+        nome: String(form.get("nome")),
+        cargo: String(form.get("cargo") || "") || null,
+        email: String(form.get("email") || "") || null,
+        telefone: String(form.get("telefone") || "") || null,
+        linkedin_url: String(form.get("linkedin_url") || "") || null,
+        conta_id: novaContaId && novaContaId !== contatoEmEdicao.conta_id ? novaContaId : null,
+      });
+      setContatoEmEdicao(null);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível salvar o contato.");
+    } finally {
+      setSalvandoEdicao(false);
+    }
+  }
+
   return (
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
@@ -122,6 +150,7 @@ export function LeadsContatos() {
               <th className="p-2 text-left">Empresa</th>
               <th className="p-2 text-left">E-mail</th>
               <th className="p-2 text-left">Telefone</th>
+              <th className="p-2 text-left">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -138,11 +167,23 @@ export function LeadsContatos() {
                 <td className="p-2 text-muted">{nomeEmpresa(contato.conta_id)}</td>
                 <td className="p-2 text-muted">{contato.email ?? "—"}</td>
                 <td className="p-2 text-muted">{contato.telefone ?? "—"}</td>
+                <td className="p-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setContatoEmEdicao(contato);
+                    }}
+                  >
+                    Editar
+                  </Button>
+                </td>
               </tr>
             ))}
             {contatos.length === 0 && (
               <tr>
-                <td colSpan={4} className="p-4 text-center text-muted">
+                <td colSpan={5} className="p-4 text-center text-muted">
                   Nenhum contato cadastrado ainda.
                 </td>
               </tr>
@@ -210,6 +251,46 @@ export function LeadsContatos() {
             {salvando ? "Cadastrando..." : "Cadastrar contato"}
           </Button>
         </form>
+      </Modal>
+
+      <Modal title="Editar contato" open={contatoEmEdicao !== null} onClose={() => setContatoEmEdicao(null)}>
+        {contatoEmEdicao && (
+          <form key={contatoEmEdicao.id} onSubmit={salvarEdicaoContato} className="flex flex-col gap-3">
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome</div>
+              <Input name="nome" required defaultValue={contatoEmEdicao.nome} placeholder="Nome completo" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Cargo</div>
+              <Input name="cargo" defaultValue={contatoEmEdicao.cargo ?? ""} placeholder="Ex.: Diretor Comercial" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">E-mail</div>
+              <Input name="email" type="email" defaultValue={contatoEmEdicao.email ?? ""} placeholder="contato@empresa.com.br" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Telefone</div>
+              <Input name="telefone" defaultValue={contatoEmEdicao.telefone ?? ""} placeholder="(11) 99999-9999" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">LinkedIn</div>
+              <Input name="linkedin_url" defaultValue={contatoEmEdicao.linkedin_url ?? ""} placeholder="https://linkedin.com/in/..." />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Empresa vinculada</div>
+              <Select name="conta_id" defaultValue={contatoEmEdicao.conta_id}>
+                {empresas.map((empresa) => (
+                  <option key={empresa.id} value={empresa.id}>
+                    {empresa.nome_fantasia || empresa.nome}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <Button type="submit" disabled={salvandoEdicao} className="mt-1 w-full justify-center">
+              {salvandoEdicao ? "Salvando..." : "Salvar"}
+            </Button>
+          </form>
+        )}
       </Modal>
     </div>
   );

@@ -353,14 +353,31 @@ def _normalizar_dominio(dominio: str | None) -> str | None:
 
 
 def atualizar(
-    db: Session, tenant_id: str, ator_id: str | None, conta_id: int, nome_fantasia: str | None, dominio: str | None
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    conta_id: int,
+    nome: str,
+    cnpj: str | None,
+    nome_fantasia: str | None,
+    dominio: str | None,
+    segmento: str | None,
+    porte: str | None,
+    regiao: str | None,
 ) -> Conta:
-    """Edição manual da conta (E2-H2) — a Receita Federal não traz site, e
-    a razão social nem sempre é a marca comercial conhecida; sem isto não
-    havia como corrigir esses dois campos depois que a conta já existe."""
+    """Edição manual da conta (E2-H2) — dados vindos de enriquecimento
+    automático (Receita Federal, PREDATOR) nem sempre batem com a
+    realidade (segmento errado, CNPJ digitado errado na importação,
+    razão social desatualizada), e não havia como corrigir depois que a
+    conta já existe."""
     conta = obter(db, tenant_id, conta_id)
+    conta.nome = nome
+    conta.cnpj = cnpj
     conta.nome_fantasia = nome_fantasia
     conta.dominio = _normalizar_dominio(dominio)
+    conta.segmento = segmento
+    conta.porte = porte
+    conta.regiao = regiao
 
     auditoria_service.registrar(db, tenant_id, "conta_atualizada", "conta", conta.id, ator_id, {}, conta_id=conta.id)
     db.commit()
@@ -403,7 +420,12 @@ def atualizar_decisor(
     email: str | None,
     telefone: str | None,
     linkedin_url: str | None,
+    nova_conta_id: int | None = None,
 ) -> Decisor:
+    """`nova_conta_id`, quando presente e diferente da conta atual, move o
+    contato pra outra empresa do mesmo tenant (E2-H2) — contato cadastrado
+    na empresa errada por engano, ou que mudou de emprego, sem precisar
+    excluir e recriar do zero."""
     decisor = db.query(Decisor).filter_by(id=decisor_id, conta_id=conta_id, tenant_id=tenant_id).one_or_none()
     if decisor is None:
         raise NaoEncontrado(f"Decisor {decisor_id} não encontrado nesta conta")
@@ -413,8 +435,14 @@ def atualizar_decisor(
     decisor.telefone = telefone
     decisor.linkedin_url = linkedin_url
 
+    conta_destino_id = conta_id
+    if nova_conta_id is not None and nova_conta_id != conta_id:
+        obter(db, tenant_id, nova_conta_id)  # 404 se não existir/não for do tenant
+        decisor.conta_id = nova_conta_id
+        conta_destino_id = nova_conta_id
+
     auditoria_service.registrar(
-        db, tenant_id, "decisor_atualizado", "decisor", decisor.id, ator_id, {}, conta_id=conta_id
+        db, tenant_id, "decisor_atualizado", "decisor", decisor.id, ator_id, {}, conta_id=conta_destino_id
     )
     db.commit()
     db.refresh(decisor)

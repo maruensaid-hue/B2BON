@@ -34,6 +34,7 @@ interface Decisor {
   nome: string;
   cargo: string | null;
   canal_provavel: string | null;
+  linkedin_url: string | null;
   email: string | null;
   telefone: string | null;
 }
@@ -41,6 +42,12 @@ interface Decisor {
 interface UsuarioResumo {
   id: number;
   nome: string;
+}
+
+interface ContaResumo {
+  id: number;
+  nome: string;
+  nome_fantasia: string | null;
 }
 
 interface Props {
@@ -56,6 +63,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
   const [campos, setCampos] = useState<CampoEnriquecido[]>([]);
   const [decisores, setDecisores] = useState<Decisor[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
+  const [todasAsContas, setTodasAsContas] = useState<ContaResumo[]>([]);
   const [mostrarDescarte, setMostrarDescarte] = useState(false);
   const [editandoConta, setEditandoConta] = useState(false);
   const [decisorEmEdicaoId, setDecisorEmEdicaoId] = useState<number | null>(null);
@@ -78,6 +86,13 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
   useEffect(() => {
     carregar();
   }, [contaId]);
+
+  useEffect(() => {
+    api
+      .get<ContaResumo[]>("/contas")
+      .then(setTodasAsContas)
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (isGestor) {
@@ -129,8 +144,13 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
     const form = new FormData(event.currentTarget);
     await executar("salvar-conta", async () => {
       await api.put(`/contas/${contaId}`, {
+        nome: String(form.get("nome")),
+        cnpj: String(form.get("cnpj") || "") || null,
         nome_fantasia: String(form.get("nome_fantasia") || "") || null,
         dominio: String(form.get("dominio") || "") || null,
+        segmento: String(form.get("segmento") || "") || null,
+        porte: String(form.get("porte") || "") || null,
+        regiao: String(form.get("regiao") || "") || null,
       });
       setEditandoConta(false);
       await carregar();
@@ -141,12 +161,15 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
   async function salvarDecisor(decisorId: number, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const novaContaId = Number(form.get("conta_id"));
     await executar(`salvar-decisor-${decisorId}`, async () => {
       await api.put(`/contas/${contaId}/decisores/${decisorId}`, {
         nome: String(form.get("nome")),
         cargo: String(form.get("cargo") || "") || null,
         email: String(form.get("email") || "") || null,
         telefone: String(form.get("telefone") || "") || null,
+        linkedin_url: String(form.get("linkedin_url") || "") || null,
+        conta_id: novaContaId && novaContaId !== contaId ? novaContaId : null,
       });
       setDecisorEmEdicaoId(null);
       await carregar();
@@ -194,12 +217,32 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
           {editandoConta ? (
             <form onSubmit={salvarConta} className="mb-4 flex flex-col gap-3">
               <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Razão social</div>
+                <Input name="nome" required defaultValue={conta.nome} placeholder="Razão social" />
+              </div>
+              <div>
                 <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome fantasia</div>
                 <Input name="nome_fantasia" defaultValue={conta.nome_fantasia ?? ""} placeholder="Marca comercial, se diferente da razão social" />
               </div>
               <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">CNPJ</div>
+                <Input name="cnpj" defaultValue={conta.cnpj ?? ""} placeholder="00.000.000/0000-00" />
+              </div>
+              <div>
                 <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Domínio (site)</div>
                 <Input name="dominio" defaultValue={conta.dominio ?? ""} placeholder="empresa.com.br" />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Segmento</div>
+                <Input name="segmento" defaultValue={conta.segmento ?? ""} placeholder="Ex.: Tecnologia" />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Porte</div>
+                <Input name="porte" defaultValue={conta.porte ?? ""} placeholder="Ex.: PEQUENO" />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Região</div>
+                <Input name="regiao" defaultValue={conta.regiao ?? ""} placeholder="Ex.: SP" />
               </div>
               <div className="flex gap-2">
                 <Button size="sm" type="submit" disabled={carregando !== null}>
@@ -334,6 +377,17 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                       <Input name="cargo" defaultValue={decisor.cargo ?? ""} placeholder="Cargo" />
                       <Input name="email" type="email" defaultValue={decisor.email ?? ""} placeholder="E-mail" />
                       <Input name="telefone" defaultValue={decisor.telefone ?? ""} placeholder="Telefone" />
+                      <Input name="linkedin_url" defaultValue={decisor.linkedin_url ?? ""} placeholder="LinkedIn (URL)" />
+                      <div>
+                        <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Empresa vinculada</div>
+                        <Select name="conta_id" defaultValue={contaId}>
+                          {todasAsContas.map((opcao) => (
+                            <option key={opcao.id} value={opcao.id}>
+                              {opcao.nome_fantasia || opcao.nome}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
                       <div className="flex gap-2">
                         <Button size="sm" type="submit" disabled={carregando !== null}>
                           {carregando === `salvar-decisor-${decisor.id}` ? "Salvando..." : "Salvar"}

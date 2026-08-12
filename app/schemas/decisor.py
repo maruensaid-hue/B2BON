@@ -34,3 +34,7 @@ class AtualizarDecisorRequestSchema(BaseModel):
     email: str | None = None
     telefone: str | None = None
     linkedin_url: str | None = None
+    # Nulo mantém a empresa atual — só reatribui quando vier preenchido
+    # (E2-H2: contato cadastrado na empresa errada por engano, ou que
+    # mudou de emprego, precisa poder ser movido sem recriar do zero).
+    conta_id: int | None = None

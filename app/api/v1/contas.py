@@ -129,7 +129,10 @@ def atualizar_conta(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> ContaSchema:
-    return conta_service.atualizar(db, tenant_id, ator_id, conta_id, dados.nome_fantasia, dados.dominio)
+    return conta_service.atualizar(
+        db, tenant_id, ator_id, conta_id, dados.nome, dados.cnpj, dados.nome_fantasia, dados.dominio,
+        dados.segmento, dados.porte, dados.regiao,
+    )
 
 
 @router.put("/contas/{conta_id}/proximo-passo", response_model=ContaSchema)
@@ -165,7 +168,8 @@ def atualizar_decisor(
     db: Session = Depends(get_db),
 ) -> DecisorSchema:
     return conta_service.atualizar_decisor(
-        db, tenant_id, ator_id, conta_id, decisor_id, dados.nome, dados.cargo, dados.email, dados.telefone, dados.linkedin_url
+        db, tenant_id, ator_id, conta_id, decisor_id, dados.nome, dados.cargo, dados.email, dados.telefone,
+        dados.linkedin_url, dados.conta_id,
     )
 
 

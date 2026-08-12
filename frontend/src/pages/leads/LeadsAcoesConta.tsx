@@ -27,8 +27,15 @@ interface Decisor {
   id: number;
   nome: string;
   cargo: string | null;
+  linkedin_url: string | null;
   email: string | null;
   telefone: string | null;
+}
+
+interface ContaResumo {
+  id: number;
+  nome: string;
+  nome_fantasia: string | null;
 }
 
 interface EstagioFunil {
@@ -93,6 +100,7 @@ export function LeadsAcoesConta() {
   const [reunioes, setReunioes] = useState<Reuniao[]>([]);
   const [cadencias, setCadencias] = useState<Cadencia[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
+  const [todasAsContas, setTodasAsContas] = useState<ContaResumo[]>([]);
 
   const [editandoEmpresa, setEditandoEmpresa] = useState(false);
   const [editandoProximoPasso, setEditandoProximoPasso] = useState(false);
@@ -133,6 +141,13 @@ export function LeadsAcoesConta() {
   }, [contaId]);
 
   useEffect(() => {
+    api
+      .get<ContaResumo[]>("/contas")
+      .then(setTodasAsContas)
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     if (isGestor) {
       api
         .get<UsuarioResumo[]>("/usuarios")
@@ -158,8 +173,13 @@ export function LeadsAcoesConta() {
     const form = new FormData(event.currentTarget);
     await executar("salvar-empresa", async () => {
       await api.put(`/contas/${contaId}`, {
+        nome: String(form.get("nome")),
+        cnpj: String(form.get("cnpj") || "") || null,
         nome_fantasia: String(form.get("nome_fantasia") || "") || null,
         dominio: String(form.get("dominio") || "") || null,
+        segmento: String(form.get("segmento") || "") || null,
+        porte: String(form.get("porte") || "") || null,
+        regiao: String(form.get("regiao") || "") || null,
       });
       setEditandoEmpresa(false);
       await carregar();
@@ -205,12 +225,15 @@ export function LeadsAcoesConta() {
   async function salvarContato(decisorId: number, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const novaContaId = Number(form.get("conta_id"));
     await executar(`salvar-contato-${decisorId}`, async () => {
       await api.put(`/contas/${contaId}/decisores/${decisorId}`, {
         nome: String(form.get("nome")),
         cargo: String(form.get("cargo") || "") || null,
         email: String(form.get("email") || "") || null,
         telefone: String(form.get("telefone") || "") || null,
+        linkedin_url: String(form.get("linkedin_url") || "") || null,
+        conta_id: novaContaId && novaContaId !== contaId ? novaContaId : null,
       });
       setDecisorEmEdicaoId(null);
       await carregar();
@@ -320,8 +343,13 @@ export function LeadsAcoesConta() {
           <SectionLabel>Empresa</SectionLabel>
           {editandoEmpresa ? (
             <form onSubmit={salvarEmpresa} className="flex flex-col gap-3">
+              <Input name="nome" required defaultValue={conta.nome} placeholder="Razão social" />
               <Input name="nome_fantasia" defaultValue={conta.nome_fantasia ?? ""} placeholder="Nome fantasia" />
+              <Input name="cnpj" defaultValue={conta.cnpj ?? ""} placeholder="CNPJ" />
               <Input name="dominio" defaultValue={conta.dominio ?? ""} placeholder="Domínio (site)" />
+              <Input name="segmento" defaultValue={conta.segmento ?? ""} placeholder="Segmento" />
+              <Input name="porte" defaultValue={conta.porte ?? ""} placeholder="Porte" />
+              <Input name="regiao" defaultValue={conta.regiao ?? ""} placeholder="Região (UF)" />
               <div className="flex gap-2">
                 <Button size="sm" type="submit" disabled={carregando !== null}>
                   {carregando === "salvar-empresa" ? "Salvando..." : "Salvar"}
@@ -433,6 +461,17 @@ export function LeadsAcoesConta() {
                   <Input name="cargo" defaultValue={decisor.cargo ?? ""} placeholder="Cargo" />
                   <Input name="email" type="email" defaultValue={decisor.email ?? ""} placeholder="E-mail" />
                   <Input name="telefone" defaultValue={decisor.telefone ?? ""} placeholder="Telefone" />
+                  <Input name="linkedin_url" defaultValue={decisor.linkedin_url ?? ""} placeholder="LinkedIn (URL)" />
+                  <div>
+                    <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Empresa vinculada</div>
+                    <Select name="conta_id" defaultValue={contaId}>
+                      {todasAsContas.map((opcao) => (
+                        <option key={opcao.id} value={opcao.id}>
+                          {opcao.nome_fantasia || opcao.nome}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
                   <div className="flex gap-2">
                     <Button size="sm" type="submit" disabled={carregando !== null}>
                       {carregando === `salvar-contato-${decisor.id}` ? "Salvando..." : "Salvar"}

@@ -41,8 +41,13 @@ class DescartarContaRequestSchema(BaseModel):
 
 
 class AtualizarContaRequestSchema(BaseModel):
+    nome: str
+    cnpj: str | None = None
     nome_fantasia: str | None = None
     dominio: str | None = None
+    segmento: str | None = None
+    porte: str | None = None
+    regiao: str | None = None
 
 
 class DefinirProximoPassoRequestSchema(BaseModel):
