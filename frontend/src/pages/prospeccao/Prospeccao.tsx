@@ -26,7 +26,7 @@ export interface ICP {
 
 export interface Conta {
   id: number;
-  icp_id: number;
+  icp_id: number | null;
   cnpj: string | null;
   nome: string;
   dominio: string | null;
@@ -162,6 +162,8 @@ export function Prospeccao() {
   const [icps, setIcps] = useState<ICP[]>([]);
   const [icpSelecionadoId, setIcpSelecionadoId] = useState<number | null>(null);
   const [contas, setContas] = useState<Conta[]>([]);
+  const [origemContas, setOrigemContas] = useState<"icp" | "leads">("icp");
+  const [leads, setLeads] = useState<Conta[]>([]);
   const [franquia, setFranquia] = useState<Franquia | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -194,6 +196,14 @@ export function Prospeccao() {
     }
   }
 
+  async function carregarLeads() {
+    try {
+      setLeads(await api.get<Conta[]>("/leads/contas"));
+    } catch {
+      setErro("Não foi possível carregar os clientes cadastrados.");
+    }
+  }
+
   async function carregarFranquia() {
     try {
       setFranquia(await api.get<Franquia>("/contas/franquia"));
@@ -210,6 +220,10 @@ export function Prospeccao() {
   useEffect(() => {
     if (icpSelecionadoId !== null) carregarContas(icpSelecionadoId);
   }, [icpSelecionadoId]);
+
+  useEffect(() => {
+    if (origemContas === "leads" && leads.length === 0) carregarLeads();
+  }, [origemContas]);
 
   async function salvarIcp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -296,7 +310,7 @@ export function Prospeccao() {
           <Button
             size="sm"
             variant="ghost"
-            disabled={icpSelecionadoId === null}
+            disabled={origemContas === "leads" || icpSelecionadoId === null}
             onClick={() => setModalImportarAberto(true)}
           >
             Importar de evento
@@ -324,55 +338,87 @@ export function Prospeccao() {
       </div>
 
       <Card className="mb-4">
-        <SectionLabel>ICPs</SectionLabel>
-        <div className="flex flex-wrap gap-2">
-          {icps.map((icp) => (
-            <button
-              key={icp.id}
-              onClick={() => setIcpSelecionadoId(icp.id)}
-              className={`rounded-lg border px-3 py-1.5 text-[12px] ${
-                icp.id === icpSelecionadoId
-                  ? "border-cyan bg-cyan/15 text-cyan"
-                  : "border-border text-muted hover:text-text"
-              }`}
-            >
-              {icp.nome} <span className="opacity-60">v{icp.versao}</span>
-              {!icp.ativo && <span className="ml-1 opacity-50">(inativo)</span>}
-            </button>
-          ))}
-          {icps.length === 0 && <div className="text-[12px] text-muted">Nenhum ICP cadastrado ainda.</div>}
+        <div className="mb-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setOrigemContas("icp")}
+            className={`rounded-lg border px-3 py-1.5 text-[12px] ${
+              origemContas === "icp" ? "border-cyan bg-cyan/15 text-cyan" : "border-border text-muted"
+            }`}
+          >
+            Por ICP
+          </button>
+          <button
+            type="button"
+            onClick={() => setOrigemContas("leads")}
+            className={`rounded-lg border px-3 py-1.5 text-[12px] ${
+              origemContas === "leads" ? "border-cyan bg-cyan/15 text-cyan" : "border-border text-muted"
+            }`}
+          >
+            Clientes Cadastrados
+          </button>
         </div>
 
-        {icpSelecionado && (
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-            <div className="text-[11px] text-muted">
-              {icpSelecionado.segmento} · {icpSelecionado.porte} · {icpSelecionado.regiao} · CNAEs:{" "}
-              {icpSelecionado.cnae_codigos.join(", ") || "—"} · UFs: {icpSelecionado.ufs.join(", ") || "—"}
+        {origemContas === "icp" ? (
+          <>
+            <SectionLabel>ICPs</SectionLabel>
+            <div className="flex flex-wrap gap-2">
+              {icps.map((icp) => (
+                <button
+                  key={icp.id}
+                  onClick={() => setIcpSelecionadoId(icp.id)}
+                  className={`rounded-lg border px-3 py-1.5 text-[12px] ${
+                    icp.id === icpSelecionadoId
+                      ? "border-cyan bg-cyan/15 text-cyan"
+                      : "border-border text-muted hover:text-text"
+                  }`}
+                >
+                  {icp.nome} <span className="opacity-60">v{icp.versao}</span>
+                  {!icp.ativo && <span className="ml-1 opacity-50">(inativo)</span>}
+                </button>
+              ))}
+              {icps.length === 0 && <div className="text-[12px] text-muted">Nenhum ICP cadastrado ainda.</div>}
             </div>
-            <div className="ml-auto flex gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setIcpEmEdicao(icpSelecionado);
-                  setModalIcpAberto(true);
-                }}
-              >
-                Nova versão
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => clonarIcp(icpSelecionado)}>
-                Clonar
-              </Button>
-              <Button size="sm" onClick={() => setModalGerarAberto(true)}>
-                Gerar lista
-              </Button>
-            </div>
+
+            {icpSelecionado && (
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                <div className="text-[11px] text-muted">
+                  {icpSelecionado.segmento} · {icpSelecionado.porte} · {icpSelecionado.regiao} · CNAEs:{" "}
+                  {icpSelecionado.cnae_codigos.join(", ") || "—"} · UFs: {icpSelecionado.ufs.join(", ") || "—"}
+                </div>
+                <div className="ml-auto flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setIcpEmEdicao(icpSelecionado);
+                      setModalIcpAberto(true);
+                    }}
+                  >
+                    Nova versão
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => clonarIcp(icpSelecionado)}>
+                    Clonar
+                  </Button>
+                  <Button size="sm" onClick={() => setModalGerarAberto(true)}>
+                    Gerar lista
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-[11px] text-muted">
+            Clientes já cadastrados no CRM sem estar vinculados a um ICP (indicação, evento, contato pessoal) —
+            cadastrados pela tela de Leads.
           </div>
         )}
       </Card>
 
       <Card>
-        <SectionLabel>Contas {icpSelecionado ? `— ${icpSelecionado.nome}` : ""}</SectionLabel>
+        <SectionLabel>
+          Contas {origemContas === "icp" ? (icpSelecionado ? `— ${icpSelecionado.nome}` : "") : "— Clientes Cadastrados"}
+        </SectionLabel>
         <table className="w-full border-collapse text-[12px]">
           <thead>
             <tr className="border-b border-border text-[9.5px] tracking-wide text-muted uppercase">
@@ -384,7 +430,7 @@ export function Prospeccao() {
             </tr>
           </thead>
           <tbody>
-            {contas.map((conta) => (
+            {(origemContas === "icp" ? contas : leads).map((conta) => (
               <tr key={conta.id} className="border-b border-border">
                 <td className="p-2 font-semibold">{conta.nome}</td>
                 <td className="p-2 text-muted">{conta.cnpj ?? "—"}</td>
@@ -399,10 +445,10 @@ export function Prospeccao() {
                 </td>
               </tr>
             ))}
-            {contas.length === 0 && (
+            {(origemContas === "icp" ? contas : leads).length === 0 && (
               <tr>
                 <td colSpan={5} className="p-4 text-center text-muted">
-                  Nenhuma conta gerada para este ICP ainda.
+                  {origemContas === "icp" ? "Nenhuma conta gerada para este ICP ainda." : "Nenhum cliente cadastrado ainda."}
                 </td>
               </tr>
             )}

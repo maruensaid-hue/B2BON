@@ -6,6 +6,7 @@ from app.api.v1.aprovacoes import router as aprovacoes_router
 from app.api.v1.auditoria import router as auditoria_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.cadencias import router as cadencias_router
+from app.api.v1.campanhas import router as campanhas_router
 from app.api.v1.canais import router as canais_router
 from app.api.v1.comunicacao import router as comunicacao_router
 from app.api.v1.configuracao_envio import router as configuracao_envio_router
@@ -58,6 +59,7 @@ router.include_router(aprovacoes_router, dependencies=_exige_licenca)
 router.include_router(auditoria_router)
 router.include_router(ropa_router, dependencies=_exige_licenca)
 router.include_router(cadencias_router, dependencies=_exige_licenca)
+router.include_router(campanhas_router, dependencies=_exige_licenca)
 router.include_router(envios_router, dependencies=_exige_licenca)
 router.include_router(whatsapp_router, dependencies=_exige_licenca)
 router.include_router(webhooks_router)

@@ -70,6 +70,7 @@ export function Cadencias() {
   const [cadenciaSelecionadaId, setCadenciaSelecionadaId] = useState<number | null>(null);
   const [toques, setToques] = useState<ToqueCadencia[]>([]);
   const [icps, setIcps] = useState<ICP[]>([]);
+  const [origemLote, setOrigemLote] = useState<"icp" | "leads">("icp");
   const [icpParaLoteId, setIcpParaLoteId] = useState<number | null>(null);
   const [contasDoIcp, setContasDoIcp] = useState<Conta[]>([]);
   const [contasSelecionadas, setContasSelecionadas] = useState<Set<number>>(new Set());
@@ -125,16 +126,23 @@ export function Cadencias() {
   }, [cadenciaSelecionadaId]);
 
   useEffect(() => {
+    setContasSelecionadas(new Set());
+    if (origemLote === "leads") {
+      api
+        .get<Conta[]>("/leads/contas")
+        .then(setContasDoIcp)
+        .catch(() => setErro("Não foi possível carregar os clientes cadastrados."));
+      return;
+    }
     if (icpParaLoteId === null) {
       setContasDoIcp([]);
       return;
     }
-    setContasSelecionadas(new Set());
     api
       .get<Conta[]>(`/icp/${icpParaLoteId}/contas`)
       .then(setContasDoIcp)
       .catch(() => setErro("Não foi possível carregar as contas do ICP."));
-  }, [icpParaLoteId]);
+  }, [icpParaLoteId, origemLote]);
 
   function atualizarToque(indice: number, campo: keyof ToqueRascunho, valor: string | boolean) {
     setRascunhoToques((atual) =>
@@ -334,20 +342,43 @@ export function Cadencias() {
           {cadenciaSelecionada.status === "rascunho" && (
             <Card>
               <SectionLabel>Selecionar contas para gerar mensagens</SectionLabel>
-              <div className="mb-3">
-                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">ICP</div>
-                <Select
-                  value={icpParaLoteId ?? ""}
-                  onChange={(event) => setIcpParaLoteId(event.target.value ? Number(event.target.value) : null)}
+              <div className="mb-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOrigemLote("icp")}
+                  className={`rounded-lg border px-3 py-1.5 text-[12px] ${
+                    origemLote === "icp" ? "border-cyan bg-cyan/15 text-cyan" : "border-border text-muted"
+                  }`}
                 >
-                  <option value="">Selecione um ICP</option>
-                  {icps.map((icp) => (
-                    <option key={icp.id} value={icp.id}>
-                      {icp.nome} {!icp.ativo && "(inativo)"}
-                    </option>
-                  ))}
-                </Select>
+                  Por ICP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrigemLote("leads")}
+                  className={`rounded-lg border px-3 py-1.5 text-[12px] ${
+                    origemLote === "leads" ? "border-cyan bg-cyan/15 text-cyan" : "border-border text-muted"
+                  }`}
+                >
+                  Clientes Cadastrados
+                </button>
               </div>
+
+              {origemLote === "icp" && (
+                <div className="mb-3">
+                  <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">ICP</div>
+                  <Select
+                    value={icpParaLoteId ?? ""}
+                    onChange={(event) => setIcpParaLoteId(event.target.value ? Number(event.target.value) : null)}
+                  >
+                    <option value="">Selecione um ICP</option>
+                    {icps.map((icp) => (
+                      <option key={icp.id} value={icp.id}>
+                        {icp.nome} {!icp.ativo && "(inativo)"}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
 
               {contasDoIcp.length > 0 && (
                 <div className="mb-3 flex max-h-64 flex-col gap-1 overflow-y-auto rounded-lg border border-border p-2">
@@ -363,8 +394,10 @@ export function Cadencias() {
                   ))}
                 </div>
               )}
-              {icpParaLoteId !== null && contasDoIcp.length === 0 && (
-                <div className="mb-3 text-[12px] text-muted">Nenhuma conta gerada para esse ICP ainda.</div>
+              {contasDoIcp.length === 0 && (origemLote === "leads" || icpParaLoteId !== null) && (
+                <div className="mb-3 text-[12px] text-muted">
+                  {origemLote === "leads" ? "Nenhum cliente cadastrado ainda." : "Nenhuma conta gerada para esse ICP ainda."}
+                </div>
               )}
 
               <Button disabled={contasSelecionadas.size === 0 || progressoGeracao !== null} onClick={gerarParaLote}>

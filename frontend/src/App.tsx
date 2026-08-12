@@ -14,6 +14,7 @@ import { Privacidade } from "@/pages/Privacidade";
 import { Termos } from "@/pages/Termos";
 import { Aprovacoes } from "@/pages/aprovacoes/Aprovacoes";
 import { Cadencias } from "@/pages/cadencias/Cadencias";
+import { Campanhas } from "@/pages/campanhas/Campanhas";
 import { Configuracao } from "@/pages/configuracao/Configuracao";
 import { Kanban } from "@/pages/crm/Kanban";
 import { LeadsAcoesConta } from "@/pages/leads/LeadsAcoesConta";
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="map" element={<Map />} />
           <Route path="prospeccao" element={<Prospeccao />} />
           <Route path="cadencias" element={<Cadencias />} />
+          <Route path="campanhas" element={<Campanhas />} />
           <Route path="aprovacoes" element={<Aprovacoes />} />
           <Route path="reunioes" element={<Reunioes />} />
           <Route path="configuracao" element={<Configuracao />} />

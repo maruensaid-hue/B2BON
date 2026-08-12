@@ -6,7 +6,7 @@ from app.core.config import settings
 from app.models.tenant import Tenant
 from app.providers.channels.email.base import EmailProvider
 from app.providers.email_validation.base import EmailVerificationProvider
-from app.services import envio_service, nps_service, reuniao_service, titular_service
+from app.services import campanha_service, envio_service, nps_service, reuniao_service, titular_service
 from app.services.errors import NaoAutorizado
 
 router = APIRouter(prefix="/cron", tags=["cron"])
@@ -64,6 +64,29 @@ def processar_retorno_todos_os_tenants(
         totais["lembretes_d1_enviados"] += lembretes["lembretes_d1_enviados"]
         totais["lembretes_h2_enviados"] += lembretes["lembretes_h2_enviados"]
         totais["pesquisas_disparadas"] += nps["pesquisas_disparadas"]
+
+    return {"totais": totais, "por_tenant": resultado_por_tenant}
+
+
+@router.post("/processar-campanhas", dependencies=[Depends(_exigir_segredo_cron)])
+def processar_campanhas_todos_os_tenants(
+    db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
+) -> dict:
+    """Dispatcher agendado das campanhas de e-mail/WhatsApp em massa —
+    mesmo padrão síncrono/idempotente dos outros dispatchers deste
+    arquivo. Diferente da cadência (LLM, cara e lenta), o envio de
+    campanha é uma chamada de provider simples por destinatário, então
+    processa tudo pendente de uma vez, sem lote/limite artificial."""
+    resultado_por_tenant: dict[str, dict] = {}
+    totais = {"enviadas": 0, "falhas": 0}
+
+    for tenant in db.query(Tenant).order_by(Tenant.id).all():
+        whatsapp = resolver_whatsapp_provider(tenant.id, db)
+        resultado = campanha_service.processar_pendentes(db, tenant.id, email, whatsapp)
+        resultado_por_tenant[tenant.id] = resultado
+        for chave in totais:
+            totais[chave] += resultado[chave]
 
     return {"totais": totais, "por_tenant": resultado_por_tenant}
 

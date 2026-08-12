@@ -3,6 +3,7 @@ from app.models.aprovacao import Aprovacao
 from app.models.atividade import Atividade
 from app.models.auditoria import AuditLog
 from app.models.cadencia import Cadencia
+from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.campo_enriquecido import CampoEnriquecido
 from app.models.conexao_empresa import ConexaoEmpresa
 from app.models.conta import Conta
@@ -72,6 +73,8 @@ __all__ = [
     "DescarteConta",
     "Decisor",
     "Cadencia",
+    "Campanha",
+    "CampanhaDestinatario",
     "ToqueCadencia",
     "Mensagem",
     "TemplateWhatsApp",

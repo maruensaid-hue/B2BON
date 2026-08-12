@@ -25,6 +25,14 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Chamar POST /cron/processar-campanhas (e-mail/WhatsApp em massa)
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${API_BASE_URL}/cron/processar-campanhas" \
+            -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
       - name: Chamar POST /cron/processar-retorno (lembretes de reunião + NPS)
         run: |
           curl --fail --show-error --silent \
