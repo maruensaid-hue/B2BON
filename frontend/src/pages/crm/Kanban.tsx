@@ -32,6 +32,7 @@ interface Conta {
   id: number;
   nome: string;
   nome_fantasia: string | null;
+  icp_id: number | null;
 }
 
 export function Kanban() {
@@ -43,7 +44,7 @@ export function Kanban() {
   const [contaOrigem, setContaOrigem] = useState<"existente" | "nova">("existente");
   const [semIcp, setSemIcp] = useState(false);
   const [icpSelecionadoId, setIcpSelecionadoId] = useState<number | null>(null);
-  const [contasDoIcp, setContasDoIcp] = useState<Conta[]>([]);
+  const [todasAsContas, setTodasAsContas] = useState<Conta[]>([]);
   const [negocioArrastadoId, setNegocioArrastadoId] = useState<number | null>(null);
   const [salvandoNegocio, setSalvandoNegocio] = useState(false);
   const [negocioEmEdicao, setNegocioEmEdicao] = useState<Negocio | null>(null);
@@ -83,18 +84,19 @@ export function Kanban() {
       .get<ICP[]>("/icp")
       .then(setIcps)
       .catch(() => undefined);
+    api
+      .get<Conta[]>("/contas")
+      .then(setTodasAsContas)
+      .catch(() => setErro("Não foi possível carregar as contas existentes."));
   }, []);
 
-  useEffect(() => {
-    if (icpSelecionadoId === null) {
-      setContasDoIcp([]);
-      return;
-    }
-    api
-      .get<Conta[]>(`/icp/${icpSelecionadoId}/contas`)
-      .then(setContasDoIcp)
-      .catch(() => setErro("Não foi possível carregar as contas do ICP."));
-  }, [icpSelecionadoId]);
+  // Filtro opcional por ICP na hora de escolher "conta existente" — sem
+  // ICP selecionado, mostra todas (inclusive leads sem ICP, que antes
+  // ficavam impossíveis de escolher aqui).
+  const contasParaSelecionar = useMemo(() => {
+    if (icpSelecionadoId === null) return todasAsContas;
+    return todasAsContas.filter((conta) => conta.icp_id === icpSelecionadoId);
+  }, [todasAsContas, icpSelecionadoId]);
 
   async function moverEstagio(negocioId: number, estagioId: number) {
     try {
@@ -170,6 +172,12 @@ export function Kanban() {
       setSemIcp(false);
       setIcpSelecionadoId(null);
       await carregar();
+      if (contaOrigem === "nova") {
+        api
+          .get<Conta[]>("/contas")
+          .then(setTodasAsContas)
+          .catch(() => undefined);
+      }
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível criar o negócio.");
     } finally {
@@ -334,9 +342,9 @@ export function Kanban() {
             {contaOrigem === "existente" ? (
               <Select name="conta_id" required defaultValue="">
                 <option value="" disabled>
-                  {icpSelecionadoId === null ? "Selecione um ICP primeiro" : "Selecione a conta"}
+                  {contasParaSelecionar.length === 0 ? "Nenhuma conta cadastrada ainda" : "Selecione a conta"}
                 </option>
-                {contasDoIcp.map((conta) => (
+                {contasParaSelecionar.map((conta) => (
                   <option key={conta.id} value={conta.id}>
                     {conta.nome_fantasia || conta.nome}
                   </option>

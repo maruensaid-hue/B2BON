@@ -93,6 +93,16 @@ def listar_contas_do_icp(
     return conta_service.listar_por_icp(db, tenant_id, icp_id)
 
 
+@router.get("/contas", response_model=list[ContaSchema])
+def listar_todas_as_contas(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[ContaSchema]:
+    """Toda conta do tenant, com ou sem ICP — usado pelo seletor "conta
+    existente" ao criar um negócio no Kanban."""
+    return conta_service.listar_todas(db, tenant_id)
+
+
 @router.get("/contas/franquia", response_model=FranquiaSchema)
 def franquia_atual(
     tenant_id: str = Depends(get_tenant_id),

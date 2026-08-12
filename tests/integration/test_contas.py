@@ -109,6 +109,23 @@ def test_listar_contas_do_icp_sobrevive_a_refresh(client, criar_icp, fake_accoun
     assert contas[0]["nome"] == "Alpha Tech"
 
 
+def test_listar_todas_as_contas_inclui_leads_sem_icp(client, criar_icp, fake_account_data):
+    """O seletor "conta existente" do Kanban precisa enxergar tanto contas
+    de um ICP quanto leads (sem ICP) — antes só listava por ICP e não
+    havia como escolher um lead pra criar um negócio nele."""
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech")]
+    client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5})
+    client.post("/api/v1/leads/contas", json={"nome": "Lead Sem ICP"})
+
+    resposta = client.get("/api/v1/contas")
+
+    assert resposta.status_code == 200
+    nomes = {conta["nome"] for conta in resposta.json()}
+    assert "Alpha Tech" in nomes
+    assert "Lead Sem ICP" in nomes
+
+
 def test_enriquecer_conta_via_brasilapi_registra_fonte(client, criar_icp, fake_account_data):
     """Onda E: enriquecimento pontual de uma conta via BrasilAPI, sem LLM."""
     icp = criar_icp()

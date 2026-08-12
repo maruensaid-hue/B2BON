@@ -320,6 +320,14 @@ def listar_por_icp(db: Session, tenant_id: str, icp_id: int) -> list[Conta]:
     return db.query(Conta).filter_by(tenant_id=tenant_id, icp_id=icp_id).order_by(Conta.criado_em.desc()).all()
 
 
+def listar_todas(db: Session, tenant_id: str) -> list[Conta]:
+    """Toda conta do tenant, com ou sem ICP — usado pelo seletor "conta
+    existente" do Kanban (E2), que antes só listava contas de um ICP e
+    deixava um lead (conta sem ICP) impossível de escolher pra criar um
+    negócio nele."""
+    return db.query(Conta).filter_by(tenant_id=tenant_id).order_by(Conta.criado_em.desc()).all()
+
+
 def obter(db: Session, tenant_id: str, conta_id: int) -> Conta:
     conta = db.query(Conta).filter_by(id=conta_id, tenant_id=tenant_id).one_or_none()
     if conta is None:
