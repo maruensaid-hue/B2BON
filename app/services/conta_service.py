@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 
@@ -16,7 +17,8 @@ from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.icp import ICP
 from app.models.usuario import Usuario
-from app.providers.account_data.base import AccountDataProvider, ContaCandidata, FiltroBusca
+from app.providers.account_data.base import AccountDataProvider, ContaCandidata, DecisorCandidato, FiltroBusca
+from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
 from app.schemas.conta import ParticipanteEventoSchema
 from app.schemas.decisor import DecisorCreateSchema
 from app.services import auditoria_service, descarte_service, llm_helpers
@@ -607,29 +609,73 @@ def campos_enriquecidos(db: Session, conta_id: int) -> list[CampoEnriquecido]:
     return db.query(CampoEnriquecido).filter_by(conta_id=conta_id).all()
 
 
+def _normalizar_nome_decisor(nome: str) -> str:
+    sem_acentos = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode("ascii")
+    return " ".join(sem_acentos.lower().split())
+
+
+def _dados_candidato(candidato: DecisorCandidato | ContatoCandidato) -> dict:
+    return {
+        "nome": candidato.nome,
+        "cargo": getattr(candidato, "qualificacao", None) or getattr(candidato, "cargo", None),
+        "email": getattr(candidato, "email", None),
+        "telefone": getattr(candidato, "telefone", None),
+        "linkedin_url": getattr(candidato, "linkedin_url", None),
+        "fonte": candidato.fonte,
+    }
+
+
 def mapear_decisores(
     db: Session,
     tenant_id: str,
     ator_id: str | None,
     conta_id: int,
     account_data: AccountDataProvider,
+    contact_enrichment: ContactEnrichmentProvider,
     graph: Neo4jClient,
 ) -> list[Decisor]:
-    """Decisores mapeados com cargo e canal provável, persistidos no grafo (E2-H2)."""
+    """Decisores mapeados combinando o QSA da Receita Federal (sócios/
+    administradores formais, quando a conta tem CNPJ) com uma base de
+    enriquecimento de contatos (C-Levels, Diretores, Gerentes e Heads que
+    não aparecem no QSA por não terem participação societária),
+    persistidos no grafo (E2-H2)."""
     conta = obter(db, tenant_id, conta_id)
-    if not conta.cnpj:
-        raise RegraNegocioViolada("Conta sem CNPJ — não é possível mapear decisores via QSA.")
 
-    candidatos = account_data.buscar_decisores(conta.cnpj)
+    candidatos: list[DecisorCandidato | ContatoCandidato] = []
+    if conta.cnpj:
+        candidatos.extend(account_data.buscar_decisores(conta.cnpj))
+    candidatos.extend(
+        contact_enrichment.buscar_contatos(
+            FiltroContatos(nome_empresa=conta.nome_fantasia or conta.nome, dominio=conta.dominio, cnpj=conta.cnpj)
+        )
+    )
 
-    decisores: list[Decisor] = []
+    existentes = {_normalizar_nome_decisor(d.nome): d for d in decisores_da_conta(db, conta.id)}
+    novos = 0
     for candidato in candidatos:
+        dados = _dados_candidato(candidato)
+        chave = _normalizar_nome_decisor(dados["nome"])
+
+        decisor_existente = existentes.get(chave)
+        if decisor_existente is not None:
+            # Já mapeado antes (reclique ou mesma pessoa nas duas fontes) —
+            # só completa o que estava vazio, não duplica a linha.
+            decisor_existente.email = decisor_existente.email or dados["email"]
+            decisor_existente.telefone = decisor_existente.telefone or dados["telefone"]
+            decisor_existente.linkedin_url = decisor_existente.linkedin_url or dados["linkedin_url"]
+            decisor_existente.origem = decisor_existente.origem or dados["fonte"]
+            continue
+
         decisor = Decisor(
             tenant_id=tenant_id,
             conta_id=conta.id,
-            nome=candidato.nome,
-            cargo=candidato.qualificacao,
+            nome=dados["nome"],
+            cargo=dados["cargo"],
             canal_provavel="email",
+            email=dados["email"],
+            telefone=dados["telefone"],
+            linkedin_url=dados["linkedin_url"],
+            origem=dados["fonte"],
         )
         db.add(decisor)
         db.flush()
@@ -640,7 +686,8 @@ def mapear_decisores(
             decisor.id,
         ):
             decisor.neo4j_node_id = str(decisor.id)
-        decisores.append(decisor)
+        existentes[chave] = decisor
+        novos += 1
 
     auditoria_service.registrar(
         db,
@@ -649,13 +696,11 @@ def mapear_decisores(
         "conta",
         conta.id,
         ator_id,
-        {"quantidade": len(decisores)},
+        {"quantidade": novos},
         conta_id=conta.id,
     )
     db.commit()
-    for decisor in decisores:
-        db.refresh(decisor)
-    return decisores
+    return decisores_da_conta(db, conta.id)
 
 
 def criar_decisor_manual(

@@ -19,6 +19,10 @@ class Decisor(Base):
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     telefone: Mapped[str | None] = mapped_column(String, nullable=True)
     neo4j_node_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # De onde veio este decisor (ex.: "receita_federal_cnpj_qsa",
+    # "enriquecimento_contatos", "manual", "evento") — mesmo propósito de
+    # Conta.origem, útil para explicar a procedência de cada contato.
+    origem: Mapped[str | None] = mapped_column(String, nullable=True)
     # Janela de 24h do WhatsApp (E3-H2): última interação recebida do decisor.
     ultima_interacao_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Opt-out permanente (E9-H2): setado, bloqueia envio em qualquer canal/cadência.

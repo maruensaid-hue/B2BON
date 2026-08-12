@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     google_calendar_access_token: str = ""
     google_calendar_id: str = "primary"
 
+    # Base B2B de contatos (Apollo/Hunter/Lusha etc., fornecedor ainda em
+    # avaliação comercial) — vazio usa StubContactEnrichmentProvider em
+    # dev/teste, mapeando decisores só via QSA da Receita Federal.
+    contact_enrichment_api_key: str = ""
+
     # Padrão recomendado do limiar de qualificação — ajustável por tenant
     # (E5-H2 pede explicitamente um "padrão recomendado").
     limiar_qualificacao_padrao: float = 60.0

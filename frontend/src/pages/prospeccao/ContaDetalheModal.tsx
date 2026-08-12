@@ -37,7 +37,16 @@ interface Decisor {
   linkedin_url: string | null;
   email: string | null;
   telefone: string | null;
+  origem: string | null;
+  linkedin_conectado: boolean;
 }
+
+const ROTULOS_ORIGEM: Record<string, string> = {
+  receita_federal_cnpj_qsa: "QSA/Receita Federal",
+  enriquecimento_contatos: "Enriquecimento",
+  manual: "Manual",
+  evento: "Evento",
+};
 
 interface UsuarioResumo {
   id: number;
@@ -398,7 +407,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                       </div>
                     </form>
                   ) : (
-                    <div key={decisor.id} className="flex items-center justify-between border-b border-border py-1">
+                    <div key={decisor.id} className="flex items-center justify-between border-b border-border py-1 gap-2">
                       <div>
                         <span className="font-semibold text-text">{decisor.nome}</span>
                         {decisor.cargo && <span className="text-muted"> · {decisor.cargo}</span>}
@@ -406,9 +415,27 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                         {decisor.telefone && <span className="text-muted"> · {decisor.telefone}</span>}
                         {decisor.canal_provavel && <span className="text-muted"> · canal: {decisor.canal_provavel}</span>}
                       </div>
-                      <Button size="sm" variant="ghost" onClick={() => setDecisorEmEdicaoId(decisor.id)}>
-                        Editar
-                      </Button>
+                      <div className="flex items-center gap-1.5">
+                        {decisor.origem && ROTULOS_ORIGEM[decisor.origem] && (
+                          <Badge tone="muted">{ROTULOS_ORIGEM[decisor.origem]}</Badge>
+                        )}
+                        {decisor.linkedin_url &&
+                          (decisor.linkedin_conectado ? (
+                            <Badge tone="green">✓ Já conectado</Badge>
+                          ) : (
+                            <a
+                              href={decisor.linkedin_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-cyan hover:underline"
+                            >
+                              Conectar no LinkedIn ↗
+                            </a>
+                          ))}
+                        <Button size="sm" variant="ghost" onClick={() => setDecisorEmEdicaoId(decisor.id)}>
+                          Editar
+                        </Button>
+                      </div>
                     </div>
                   ),
                 )}

@@ -16,6 +16,8 @@ class DecisorSchema(BaseModel):
     email: str | None
     telefone: str | None
     neo4j_node_id: str | None
+    origem: str | None = None
+    linkedin_conectado: bool = False
     criado_em: datetime
 
 

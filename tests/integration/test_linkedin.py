@@ -1,3 +1,12 @@
+_CSV_EXPORT_LINKEDIN = """Notes:
+"When exporting your connection data, you may notice that some of the email addresses are blank."
+
+
+First Name,Last Name,URL,Email Address,Company,Position,Connected On
+Joao,Silva,https://www.linkedin.com/in/joao-silva,joao@example.com,Alpha Tech,CEO,01 Jan 2024
+Maria,Souza,https://www.linkedin.com/in/maria-souza/,,Beta Clinica,Diretora,15 Mar 2023
+"""
+
 _TOQUES_LINKEDIN_PRIMEIRO = [
     {"ordem": 1, "canal": "linkedin", "intervalo_dias_apos_anterior": 0},
     {"ordem": 2, "canal": "email", "intervalo_dias_apos_anterior": 2},
@@ -70,3 +79,37 @@ def test_marcar_ignorada_cancela_mensagem(client, onboarding_completo, criar_con
 
     assert resposta.status_code == 200
     assert resposta.json()["status"] == "ignorada"
+
+
+def test_importar_conexoes_reconhece_export_oficial_do_linkedin(client):
+    """O export real do LinkedIn traz linhas de nota antes do cabeçalho —
+    o parser precisa achar a linha certa mesmo assim."""
+    resposta = client.post("/api/v1/linkedin/conexoes/importar", json={"conteudo_csv": _CSV_EXPORT_LINKEDIN})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["total_importado"] == 2
+
+    status = client.get("/api/v1/linkedin/conexoes/status").json()
+    assert status["total"] == 2
+    assert status["atualizado_em"] is not None
+
+
+def test_importar_conexoes_csv_invalido_retorna_erro_claro(client):
+    resposta = client.post("/api/v1/linkedin/conexoes/importar", json={"conteudo_csv": "nao,e,um,csv,do,linkedin"})
+
+    assert resposta.status_code == 422
+    assert "conexões do LinkedIn" in resposta.json()["detalhe"]
+
+
+def test_reupload_substitui_em_vez_de_acumular(client):
+    client.post("/api/v1/linkedin/conexoes/importar", json={"conteudo_csv": _CSV_EXPORT_LINKEDIN})
+    client.post("/api/v1/linkedin/conexoes/importar", json={"conteudo_csv": _CSV_EXPORT_LINKEDIN})
+
+    status = client.get("/api/v1/linkedin/conexoes/status").json()
+    assert status["total"] == 2
+
+
+def test_status_sem_importacao_retorna_zero(client):
+    status = client.get("/api/v1/linkedin/conexoes/status").json()
+
+    assert status == {"total": 0, "atualizado_em": None}

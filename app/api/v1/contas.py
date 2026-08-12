@@ -5,6 +5,7 @@ from app.api.deps import (
     get_account_data_provider,
     get_ator_id,
     get_brasilapi_client,
+    get_contact_enrichment_provider,
     get_db,
     get_graph_client,
     get_llm_provider,
@@ -16,7 +17,9 @@ from app.graph.client import Neo4jClient
 from app.integrations.brasilapi_client import BrasilApiClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
+from app.models.decisor import Decisor
 from app.providers.account_data.base import AccountDataProvider
+from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.conta import (
     AtualizarContaRequestSchema,
@@ -33,9 +36,26 @@ from app.schemas.conta import (
     ImportarParticipantesResponseSchema,
 )
 from app.schemas.decisor import AtualizarDecisorRequestSchema, DecisorCreateSchema, DecisorSchema
-from app.services import conta_service, descarte_service, franquia_service
+from app.services import conta_service, descarte_service, franquia_service, linkedin_conexao_service
 
 router = APIRouter(tags=["contas"])
+
+
+def _serializar_decisores_com_linkedin(
+    db: Session, tenant_id: str, conta_id: int, ator_id: str | None, decisores: list[Decisor]
+) -> list[DecisorSchema]:
+    conta = conta_service.obter(db, tenant_id, conta_id)
+    usuario_id = conta.vendedor_usuario_id or (int(ator_id) if ator_id else None)
+    resultado = []
+    for decisor in decisores:
+        dados = DecisorSchema.model_validate(decisor).model_dump()
+        dados["linkedin_conectado"] = (
+            linkedin_conexao_service.esta_conectado(db, tenant_id, usuario_id, decisor)
+            if usuario_id is not None
+            else False
+        )
+        resultado.append(DecisorSchema(**dados))
+    return resultado
 
 
 @router.post("/icp/{icp_id}/contas/gerar", response_model=GerarListaResponseSchema, status_code=201)
@@ -152,10 +172,11 @@ def definir_proximo_passo(
 def listar_decisores_da_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> list[DecisorSchema]:
-    conta_service.obter(db, tenant_id, conta_id)
-    return conta_service.decisores_da_conta(db, conta_id)
+    decisores = conta_service.decisores_da_conta(db, conta_id)
+    return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, decisores)
 
 
 @router.put("/contas/{conta_id}/decisores/{decisor_id}", response_model=DecisorSchema)
@@ -205,9 +226,13 @@ def mapear_decisores(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
     account_data: AccountDataProvider = Depends(get_account_data_provider),
+    contact_enrichment: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider),
     graph: Neo4jClient = Depends(get_graph_client),
 ) -> list[DecisorSchema]:
-    return conta_service.mapear_decisores(db, tenant_id, ator_id, conta_id, account_data, graph)
+    decisores = conta_service.mapear_decisores(
+        db, tenant_id, ator_id, conta_id, account_data, contact_enrichment, graph
+    )
+    return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, decisores)
 
 
 @router.post("/contas/{conta_id}/decisores", response_model=DecisorSchema, status_code=201)

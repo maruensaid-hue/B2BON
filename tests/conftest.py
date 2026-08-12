@@ -11,6 +11,7 @@ from app.api.deps import (
     get_account_data_provider,
     get_brasilapi_client,
     get_calendar_provider,
+    get_contact_enrichment_provider,
     get_crm_provider,
     get_db,
     get_email_provider,
@@ -42,6 +43,7 @@ from app.providers.rede_social.stub import StubRedeSocialProvider
 from app.services import auth_service
 from tests.fakes import (
     FakeAccountDataProvider,
+    FakeContactEnrichmentProvider,
     FakeEmailProvider,
     FakeGraphClient,
     FakeLLMProvider,
@@ -113,6 +115,11 @@ def fake_account_data() -> FakeAccountDataProvider:
 
 
 @pytest.fixture()
+def fake_contact_enrichment() -> FakeContactEnrichmentProvider:
+    return FakeContactEnrichmentProvider()
+
+
+@pytest.fixture()
 def fake_plan_limits() -> StubPlanLimitsProvider:
     return StubPlanLimitsProvider(franquia_padrao=1000)
 
@@ -171,6 +178,7 @@ def client(
     fake_graph: FakeGraphClient,
     fake_llm: FakeLLMProvider,
     fake_account_data: FakeAccountDataProvider,
+    fake_contact_enrichment: FakeContactEnrichmentProvider,
     fake_plan_limits: StubPlanLimitsProvider,
     fake_site_fetcher,
     fake_brasilapi_client,
@@ -191,6 +199,7 @@ def client(
     app.dependency_overrides[get_graph_client] = lambda: fake_graph
     app.dependency_overrides[get_llm_provider] = lambda: fake_llm
     app.dependency_overrides[get_account_data_provider] = lambda: fake_account_data
+    app.dependency_overrides[get_contact_enrichment_provider] = lambda: fake_contact_enrichment
     app.dependency_overrides[get_plan_limits_provider] = lambda: fake_plan_limits
     app.dependency_overrides[get_site_fetcher] = lambda: fake_site_fetcher
     app.dependency_overrides[get_brasilapi_client] = lambda: fake_brasilapi_client

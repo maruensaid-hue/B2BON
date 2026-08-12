@@ -6,6 +6,7 @@ from app.models.cadencia import Cadencia
 from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.campo_enriquecido import CampoEnriquecido
 from app.models.conexao_empresa import ConexaoEmpresa
+from app.models.conexao_linkedin import ConexaoLinkedin
 from app.models.conta import Conta
 from app.models.conta_franquia_consumo import ContaFranquiaConsumo
 from app.models.configuracao_canal import ConfiguracaoCanal

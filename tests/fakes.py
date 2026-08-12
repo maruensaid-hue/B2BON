@@ -10,6 +10,7 @@ from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.email.base import ResultadoEnvio as ResultadoEnvioEmail
 from app.providers.channels.whatsapp.base import ResultadoEnvio as ResultadoEnvioWhatsApp
 from app.providers.channels.whatsapp.base import TemplateInfo, WhatsAppProvider
+from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
 
 
 class FakeGraphClient:
@@ -138,6 +139,20 @@ class FakeAccountDataProvider(AccountDataProvider):
 
     def buscar_decisores(self, cnpj: str) -> list[DecisorCandidato]:
         return self.decisores.get(cnpj, [])
+
+
+class FakeContactEnrichmentProvider(ContactEnrichmentProvider):
+    """Duplo de teste do ContactEnrichmentProvider — contatos controlados
+    pelo teste, vazio por padrão (não interfere em testes que só se
+    importam com o QSA)."""
+
+    def __init__(self, contatos: list[ContatoCandidato] | None = None) -> None:
+        self.contatos = contatos or []
+        self.buscas: list[FiltroContatos] = []
+
+    def buscar_contatos(self, filtro: FiltroContatos) -> list[ContatoCandidato]:
+        self.buscas.append(filtro)
+        return self.contatos
 
 
 class FakeWhatsAppProvider(WhatsAppProvider):
