@@ -96,6 +96,7 @@ export function LeadsAcoesConta() {
 
   const [editandoEmpresa, setEditandoEmpresa] = useState(false);
   const [editandoProximoPasso, setEditandoProximoPasso] = useState(false);
+  const [decisorEmEdicaoId, setDecisorEmEdicaoId] = useState<number | null>(null);
   const [modalContato, setModalContato] = useState(false);
   const [modalNegocio, setModalNegocio] = useState(false);
   const [modalReuniao, setModalReuniao] = useState(false);
@@ -197,6 +198,21 @@ export function LeadsAcoesConta() {
         telefone: String(form.get("telefone") || "") || null,
       });
       setModalContato(false);
+      await carregar();
+    });
+  }
+
+  async function salvarContato(decisorId: number, event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await executar(`salvar-contato-${decisorId}`, async () => {
+      await api.put(`/contas/${contaId}/decisores/${decisorId}`, {
+        nome: String(form.get("nome")),
+        cargo: String(form.get("cargo") || "") || null,
+        email: String(form.get("email") || "") || null,
+        telefone: String(form.get("telefone") || "") || null,
+      });
+      setDecisorEmEdicaoId(null);
       await carregar();
     });
   }
@@ -405,15 +421,41 @@ export function LeadsAcoesConta() {
               + Contato
             </Button>
           </div>
-          <div className="flex flex-col gap-1.5 text-[12px]">
-            {decisores.map((decisor) => (
-              <div key={decisor.id} className="border-b border-border py-1">
-                <span className="font-semibold text-text">{decisor.nome}</span>
-                {decisor.cargo && <span className="text-muted"> · {decisor.cargo}</span>}
-                {decisor.email && <span className="text-muted"> · {decisor.email}</span>}
-                {decisor.telefone && <span className="text-muted"> · {decisor.telefone}</span>}
-              </div>
-            ))}
+          <div className="flex flex-col gap-2 text-[12px]">
+            {decisores.map((decisor) =>
+              decisorEmEdicaoId === decisor.id ? (
+                <form
+                  key={decisor.id}
+                  onSubmit={(event) => salvarContato(decisor.id, event)}
+                  className="flex flex-col gap-2 rounded-lg border border-border p-2.5"
+                >
+                  <Input name="nome" required defaultValue={decisor.nome} placeholder="Nome" />
+                  <Input name="cargo" defaultValue={decisor.cargo ?? ""} placeholder="Cargo" />
+                  <Input name="email" type="email" defaultValue={decisor.email ?? ""} placeholder="E-mail" />
+                  <Input name="telefone" defaultValue={decisor.telefone ?? ""} placeholder="Telefone" />
+                  <div className="flex gap-2">
+                    <Button size="sm" type="submit" disabled={carregando !== null}>
+                      {carregando === `salvar-contato-${decisor.id}` ? "Salvando..." : "Salvar"}
+                    </Button>
+                    <Button size="sm" variant="ghost" type="button" onClick={() => setDecisorEmEdicaoId(null)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div key={decisor.id} className="flex items-center justify-between border-b border-border py-1">
+                  <div>
+                    <span className="font-semibold text-text">{decisor.nome}</span>
+                    {decisor.cargo && <span className="text-muted"> · {decisor.cargo}</span>}
+                    {decisor.email && <span className="text-muted"> · {decisor.email}</span>}
+                    {decisor.telefone && <span className="text-muted"> · {decisor.telefone}</span>}
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => setDecisorEmEdicaoId(decisor.id)}>
+                    Editar
+                  </Button>
+                </div>
+              ),
+            )}
             {decisores.length === 0 && <div className="text-muted">Nenhum contato cadastrado.</div>}
           </div>
         </Card>
