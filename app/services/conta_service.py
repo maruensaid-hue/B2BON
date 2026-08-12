@@ -6,7 +6,7 @@ import httpx
 from fpdf import FPDF
 from sqlalchemy.orm import Session
 
-from app.graph.client import Neo4jClient
+from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.integrations.brasilapi_client import BrasilApiClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
@@ -96,8 +96,10 @@ def gerar_lista(
         db.add(conta)
         db.flush()
 
-        graph.upsert_conta(tenant_id, conta.id, {"nome": conta.nome, "cnpj": conta.cnpj})
-        conta.neo4j_node_id = str(conta.id)
+        if sincronizar_com_tolerancia(
+            lambda: graph.upsert_conta(tenant_id, conta.id, {"nome": conta.nome, "cnpj": conta.cnpj}), "conta", conta.id
+        ):
+            conta.neo4j_node_id = str(conta.id)
 
         criadas.append(conta)
         cnpjs_existentes.add(candidato.cnpj)
@@ -256,8 +258,10 @@ def importar_participantes_evento(
             )
             db.add(conta)
             db.flush()
-            graph.upsert_conta(tenant_id, conta.id, {"nome": conta.nome, "cnpj": conta.cnpj})
-            conta.neo4j_node_id = str(conta.id)
+            if sincronizar_com_tolerancia(
+                lambda: graph.upsert_conta(tenant_id, conta.id, {"nome": conta.nome, "cnpj": conta.cnpj}), "conta", conta.id
+            ):
+                conta.neo4j_node_id = str(conta.id)
             contas_por_nome[chave_empresa] = conta
             contas_criadas += 1
         elif conta.id not in contas_tocadas:
@@ -594,8 +598,12 @@ def mapear_decisores(
         db.add(decisor)
         db.flush()
 
-        graph.upsert_decisor(tenant_id, decisor.id, conta.id, {"nome": decisor.nome, "cargo": decisor.cargo})
-        decisor.neo4j_node_id = str(decisor.id)
+        if sincronizar_com_tolerancia(
+            lambda: graph.upsert_decisor(tenant_id, decisor.id, conta.id, {"nome": decisor.nome, "cargo": decisor.cargo}),
+            "decisor",
+            decisor.id,
+        ):
+            decisor.neo4j_node_id = str(decisor.id)
         decisores.append(decisor)
 
     auditoria_service.registrar(
@@ -628,8 +636,12 @@ def criar_decisor_manual(
     db.add(decisor)
     db.flush()
 
-    graph.upsert_decisor(tenant_id, decisor.id, conta.id, {"nome": decisor.nome, "cargo": decisor.cargo or ""})
-    decisor.neo4j_node_id = str(decisor.id)
+    if sincronizar_com_tolerancia(
+        lambda: graph.upsert_decisor(tenant_id, decisor.id, conta.id, {"nome": decisor.nome, "cargo": decisor.cargo or ""}),
+        "decisor",
+        decisor.id,
+    ):
+        decisor.neo4j_node_id = str(decisor.id)
 
     auditoria_service.registrar(
         db, tenant_id, "decisor_criado_manual", "decisor", decisor.id, ator_id, {}, conta_id=conta.id

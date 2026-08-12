@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.graph.client import Neo4jClient
+from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.conta import Conta
@@ -125,7 +125,9 @@ def converter(
 
     conta.origem = "indicacao"
 
-    graph.registrar_indicacao(tenant_id, indicacao.promotor_decisor_id, conta.id)
+    sincronizar_com_tolerancia(
+        lambda: graph.registrar_indicacao(tenant_id, indicacao.promotor_decisor_id, conta.id), "indicacao", indicacao.id
+    )
 
     auditoria_service.registrar(
         db,

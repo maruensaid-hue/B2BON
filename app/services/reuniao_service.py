@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.graph.client import Neo4jClient
+from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.indicacao import Indicacao
@@ -188,7 +188,13 @@ def _confirmar_interno(
     # manual duplicada.
     indicacao = db.query(Indicacao).filter_by(tenant_id=tenant_id, conta_gerada_id=conta.id).one_or_none()
     if indicacao is not None:
-        graph.registrar_indicacao(tenant_id, indicacao.promotor_decisor_id, conta.id, oportunidade_id=oportunidade_id)
+        sincronizar_com_tolerancia(
+            lambda: graph.registrar_indicacao(
+                tenant_id, indicacao.promotor_decisor_id, conta.id, oportunidade_id=oportunidade_id
+            ),
+            "indicacao",
+            indicacao.id,
+        )
         auditoria_service.registrar(
             db,
             tenant_id,

@@ -1,3 +1,5 @@
+import logging
+
 import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +21,8 @@ from app.services.errors import (
 )
 
 configure_logging()
+
+logger = logging.getLogger(__name__)
 
 settings.validar_segredos_de_producao()
 
@@ -97,6 +101,24 @@ async def handle_nao_autorizado(request: Request, exc: NaoAutorizado) -> JSONRes
 @app.exception_handler(LimiteDeTaxaExcedido)
 async def handle_limite_de_taxa_excedido(request: Request, exc: LimiteDeTaxaExcedido) -> JSONResponse:
     return JSONResponse(status_code=429, content={"detalhe": str(exc)})
+
+
+@app.exception_handler(Exception)
+async def handle_erro_inesperado(request: Request, exc: Exception) -> JSONResponse:
+    """Rede de segurança contra bugs não mapeados nas classes de erro
+    acima (ex.: uma dependência externa como o Neo4j fora do ar) — sem
+    isto, o FastAPI devolve `{"detail": "Internal Server Error"}` (chave
+    em inglês, sem acento), que o frontend não reconhece e mostra uma
+    mensagem genérica sem explicar nada pro usuário. Loga o erro de
+    verdade (Sentry, se configurado) e devolve um `detalhe` honesto, sem
+    vazar stack trace pro cliente."""
+    logger.exception("Erro não tratado em %s %s", request.method, request.url.path)
+    if settings.sentry_dsn:
+        sentry_sdk.capture_exception(exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detalhe": "Ocorreu um erro inesperado. Tente novamente em instantes."},
+    )
 
 
 @app.get("/health")

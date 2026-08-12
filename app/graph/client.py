@@ -1,6 +1,27 @@
+import logging
+from typing import Callable
+
 from neo4j import Driver, GraphDatabase
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+def sincronizar_com_tolerancia(operacao_grafo: Callable[[], None], entidade: str, entidade_id: int | str) -> bool:
+    """Grava no Neo4j é um espelho pra visualização de relacionamento
+    (E2-H3) — nunca o registro de origem. Uma falha aqui (Neo4j fora do
+    ar, AuraDB pausada, credencial errada, etc.) não pode derrubar a
+    operação principal, que já está commitada no banco relacional; só
+    perde a atualização do grafo até a próxima sincronização. Devolve se
+    sincronizou, pra quem chama só marcar `neo4j_node_id` quando o nó
+    realmente existe."""
+    try:
+        operacao_grafo()
+        return True
+    except Exception:
+        logger.warning("Falha ao sincronizar %s %s com o grafo Neo4j", entidade, entidade_id, exc_info=True)
+        return False
 
 
 class Neo4jClient:
