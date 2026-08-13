@@ -9,7 +9,7 @@ from app.models.custo_aquisicao import CustoAquisicao
 from app.models.estagio_funil import EstagioFunil
 from app.models.negocio import Negocio
 from app.models.usuario import Usuario
-from app.services import auditoria_service, panel_service
+from app.services import atividade_service, auditoria_service, panel_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 # Padrão recomendado, não decisão comercial fechada — configurável depois
@@ -138,6 +138,10 @@ def criar_negocio(
     db.add(negocio)
     db.flush()
 
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta_id, negocio_id=negocio.id, tipo="sistema",
+        descricao=f"Negócio '{nome}' criado", ator_id=ator_id,
+    )
     auditoria_service.registrar(
         db, tenant_id, "negocio_criado", "negocio", negocio.id, ator_id, {"conta_id": conta_id}, conta_id=conta_id
     )
@@ -162,6 +166,10 @@ def atualizar_negocio(
     negocio.valor = valor
     negocio.probabilidade = probabilidade
 
+    atividade_service.registrar(
+        db, tenant_id, conta_id=negocio.conta_id, negocio_id=negocio.id, tipo="sistema",
+        descricao=f"Negócio '{nome}' editado", ator_id=ator_id,
+    )
     auditoria_service.registrar(
         db, tenant_id, "negocio_atualizado", "negocio", negocio.id, ator_id, {"nome": nome}, conta_id=negocio.conta_id
     )
@@ -190,10 +198,19 @@ def mover_estagio(
         if conta.cliente_desde is None:
             conta.cliente_desde = datetime.now(UTC)
     elif novo_estagio.tipo == "perdido":
+        if not motivo_perda or not motivo_perda.strip():
+            raise ValidacaoFalhou("Informe o motivo da perda para marcar o negócio como perdido.")
         if negocio.perdido_em is None:
             negocio.perdido_em = datetime.now(UTC)
         negocio.motivo_perda = motivo_perda
 
+    descricao = f"Negócio movido para '{novo_estagio.nome}'"
+    if novo_estagio.tipo == "perdido":
+        descricao += f" — motivo: {motivo_perda}"
+    atividade_service.registrar(
+        db, tenant_id, conta_id=negocio.conta_id, negocio_id=negocio.id, tipo="sistema",
+        descricao=descricao, ator_id=ator_id,
+    )
     auditoria_service.registrar(
         db,
         tenant_id,
@@ -209,12 +226,41 @@ def mover_estagio(
     return negocio
 
 
+def excluir_negocio(db: Session, tenant_id: str, ator_id: str | None, negocio_id: int) -> None:
+    """Exclusão de negócio (Onda B) — não existia nenhuma forma de remover
+    um negócio cadastrado por engano. Atividades ligadas só a este negócio
+    são apagadas junto; as que também têm `conta_id` (a maioria, já que
+    quase toda atividade de negócio grava os dois) só perdem o vínculo com
+    o negócio e continuam na timeline da conta."""
+    negocio = obter_negocio(db, tenant_id, negocio_id)
+    nome = negocio.nome
+    conta_id = negocio.conta_id
+
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta_id, tipo="sistema", descricao=f"Negócio '{nome}' excluído", ator_id=ator_id
+    )
+
+    atividades_do_negocio = db.query(Atividade).filter_by(tenant_id=tenant_id, negocio_id=negocio.id).all()
+    for atividade in atividades_do_negocio:
+        if atividade.conta_id is not None:
+            atividade.negocio_id = None
+        else:
+            db.delete(atividade)
+
+    auditoria_service.registrar(
+        db, tenant_id, "negocio_excluido", "negocio", negocio.id, ator_id, {"nome": nome}, conta_id=conta_id
+    )
+    db.delete(negocio)
+    db.commit()
+
+
 def registrar_atividade(
     db: Session, tenant_id: str, ator_id: str | None, negocio_id: int, tipo: str, descricao: str
 ) -> Atividade:
     negocio = obter_negocio(db, tenant_id, negocio_id)
     atividade = Atividade(
         tenant_id=tenant_id,
+        conta_id=negocio.conta_id,
         negocio_id=negocio.id,
         usuario_id=int(ator_id) if ator_id else None,
         tipo=tipo,

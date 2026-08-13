@@ -51,6 +51,29 @@ def test_enriquecer_com_dominio_ja_cadastrado_nao_busca_na_web(db_session):
     assert web_search.buscas == []
 
 
+def test_enriquecer_popula_resumo_site_so_na_primeira_vez(db_session):
+    """Pedido do usuário: resumo da pesquisa de site vira campo editável do
+    vendedor — pesquisas seguintes não podem sobrescrever o que ele já
+    editou."""
+    conta = _criar_conta(db_session, dominio="alphatech.com.br")
+    web_search = FakeWebSearchProvider()
+
+    conta_service.enriquecer(
+        db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["porte: media"]), _site_fetcher(), web_search
+    )
+    db_session.refresh(conta)
+    assert conta.resumo_site == "porte: media"
+
+    conta.resumo_site = "Editado manualmente pelo vendedor."
+    db_session.commit()
+
+    conta_service.enriquecer(
+        db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["porte: grande"]), _site_fetcher(), web_search
+    )
+    db_session.refresh(conta)
+    assert conta.resumo_site == "Editado manualmente pelo vendedor."
+
+
 def test_descobrir_dominio_ignora_dominio_bloqueado_e_pega_o_proximo(db_session):
     web_search = FakeWebSearchProvider(
         [

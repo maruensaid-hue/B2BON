@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input, Select } from "@/components/ui/Input";
+import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { api, ApiError, getBlob } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -20,6 +20,8 @@ interface ContaCompleta {
   score_aderencia: number | null;
   status: string;
   motivo_descarte: string | null;
+  resumo_site: string | null;
+  observacoes: string | null;
 }
 
 interface CampoEnriquecido {
@@ -59,6 +61,27 @@ interface ContaResumo {
   nome_fantasia: string | null;
 }
 
+interface Atividade {
+  id: number;
+  conta_id: number | null;
+  negocio_id: number | null;
+  usuario_id: number | null;
+  tipo: string;
+  descricao: string;
+  criado_em: string;
+}
+
+const ICONES_TIPO_ATIVIDADE: Record<string, string> = {
+  ligacao: "📞",
+  nota: "📝",
+  reuniao: "📅",
+  email: "✉️",
+  whatsapp: "💬",
+  linkedin: "🔗",
+  tarefa: "✅",
+  sistema: "🤖",
+};
+
 interface Props {
   contaId: number;
   onClose: () => void;
@@ -71,6 +94,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
   const [conta, setConta] = useState<ContaCompleta | null>(null);
   const [campos, setCampos] = useState<CampoEnriquecido[]>([]);
   const [decisores, setDecisores] = useState<Decisor[]>([]);
+  const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
   const [todasAsContas, setTodasAsContas] = useState<ContaResumo[]>([]);
   const [mostrarDescarte, setMostrarDescarte] = useState(false);
@@ -81,12 +105,14 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
 
   async function carregar() {
     try {
-      const [contaResp, decisoresResp] = await Promise.all([
+      const [contaResp, decisoresResp, atividadesResp] = await Promise.all([
         api.get<ContaCompleta>(`/contas/${contaId}`),
         api.get<Decisor[]>(`/contas/${contaId}/decisores`),
+        api.get<Atividade[]>(`/contas/${contaId}/atividades`),
       ]);
       setConta(contaResp);
       setDecisores(decisoresResp);
+      setAtividades(atividadesResp);
     } catch {
       setErro("Não foi possível carregar a conta.");
     }
@@ -160,6 +186,8 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
         segmento: String(form.get("segmento") || "") || null,
         porte: String(form.get("porte") || "") || null,
         regiao: String(form.get("regiao") || "") || null,
+        resumo_site: String(form.get("resumo_site") || "") || null,
+        observacoes: String(form.get("observacoes") || "") || null,
       });
       setEditandoConta(false);
       await carregar();
@@ -254,6 +282,21 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                 <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Região</div>
                 <Input name="regiao" defaultValue={conta.regiao ?? ""} placeholder="Ex.: SP" />
               </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+                  Resumo da pesquisa de site (editável)
+                </div>
+                <Textarea
+                  name="resumo_site"
+                  rows={4}
+                  defaultValue={conta.resumo_site ?? ""}
+                  placeholder="Preenchido automaticamente na primeira pesquisa de site — depois disso é seu, edite/complete à vontade."
+                />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Observações</div>
+                <Textarea name="observacoes" rows={3} defaultValue={conta.observacoes ?? ""} placeholder="Anotações livres sobre a conta" />
+              </div>
               <div className="flex gap-2">
                 <Button size="sm" type="submit" disabled={carregando !== null}>
                   {carregando === "salvar-conta" ? "Salvando..." : "Salvar"}
@@ -277,6 +320,18 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                 </div>
                 <div>Score: {conta.score_aderencia ?? "—"}</div>
               </div>
+              {conta.resumo_site && (
+                <div className="mb-2">
+                  <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Resumo da pesquisa de site</div>
+                  <div className="rounded-lg bg-surf2 p-2 text-[11px] whitespace-pre-wrap text-text">{conta.resumo_site}</div>
+                </div>
+              )}
+              {conta.observacoes && (
+                <div className="mb-2">
+                  <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Observações</div>
+                  <div className="rounded-lg bg-surf2 p-2 text-[11px] whitespace-pre-wrap text-text">{conta.observacoes}</div>
+                </div>
+              )}
               <Button size="sm" variant="ghost" onClick={() => setEditandoConta(true)}>
                 Editar dados da conta
               </Button>
@@ -443,6 +498,23 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                     </div>
                   ),
                 )}
+              </div>
+            </div>
+          )}
+
+          {atividades.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Atividades</div>
+              <div className="flex flex-col gap-1.5">
+                {atividades.map((atividade) => (
+                  <div key={atividade.id} className="flex items-start gap-2 border-b border-border py-1 text-[11px]">
+                    <span>{ICONES_TIPO_ATIVIDADE[atividade.tipo] ?? "•"}</span>
+                    <div className="flex-1">
+                      <div className="text-text">{atividade.descricao}</div>
+                      <div className="text-muted">{new Date(atividade.criado_em).toLocaleString("pt-BR")}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

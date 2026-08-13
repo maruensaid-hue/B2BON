@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.models.conta import Conta
 from app.models.descarte_conta import DescarteConta
-from app.services import auditoria_service
+from app.services import atividade_service, auditoria_service
 from app.services.errors import NaoEncontrado
 
 # Parâmetro de aprendizado do funil, não decisão comercial fechada — mesmo
@@ -24,6 +24,9 @@ def priorizar(db: Session, tenant_id: str, ator_id: str | None, conta_id: int) -
     conta = _obter_conta(db, tenant_id, conta_id)
     conta.status = "priorizada"
 
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao="Conta priorizada", ator_id=ator_id
+    )
     auditoria_service.registrar(
         db, tenant_id, "conta_priorizada", "conta", conta.id, ator_id, {}, conta_id=conta.id
     )
@@ -53,6 +56,9 @@ def descartar(db: Session, tenant_id: str, ator_id: str | None, conta_id: int, m
         )
     )
 
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao=f"Conta descartada — motivo: {motivo}", ator_id=ator_id
+    )
     auditoria_service.registrar(
         db, tenant_id, "conta_descartada", "conta", conta.id, ator_id, {"motivo": motivo}, conta_id=conta.id
     )

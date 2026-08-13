@@ -11,6 +11,7 @@ from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.email_validation.base import EmailVerificationProvider
 from app.services import (
     aprovacao_service,
+    atividade_service,
     auditoria_service,
     optout_service,
     rampa_service,
@@ -164,6 +165,10 @@ def processar_pendentes(
 
         if envio.sucesso:
             aprovacao_service.marcar_enviada(db, tenant_id, mensagem.id)
+            atividade_service.registrar(
+                db, tenant_id, conta_id=decisor.conta_id, tipo=mensagem.canal,
+                descricao=f"Mensagem de cadência enviada ({mensagem.canal})",
+            )
             resultado["enviadas"] += 1
         else:
             mensagem.motivo_falha = envio.motivo_falha

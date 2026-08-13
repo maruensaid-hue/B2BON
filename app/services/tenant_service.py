@@ -1,3 +1,4 @@
+import logging
 import re
 import secrets
 import unicodedata
@@ -6,15 +7,23 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.graph.client import Neo4jClient
+from app.integrations.site_fetcher import SiteFetcher
+from app.llm.base import LLMProvider
 from app.models.convite_vitrine import ConviteVitrine
 from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
+from app.providers.account_data.base import AccountDataProvider
 from app.providers.channels.email.base import EmailProvider
+from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.payment.base import PaymentProvider
-from app.services import auditoria_service, auth_service, pagamento_licenca_service, rede_social_service
+from app.providers.web_search.base import WebSearchProvider
+from app.services import auditoria_service, auth_service, conta_service, pagamento_licenca_service, rede_social_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
+
+logger = logging.getLogger(__name__)
 
 
 def listar_planos(db: Session) -> list[Plano]:
@@ -255,6 +264,12 @@ def criar_tenant_vitrine(
     aceite_termos: bool,
     plano_id: int,
     payment_provider: PaymentProvider,
+    llm: LLMProvider,
+    site_fetcher: SiteFetcher,
+    web_search: WebSearchProvider,
+    account_data: AccountDataProvider,
+    contact_enrichment: ContactEnrichmentProvider,
+    graph: Neo4jClient,
     cnpj: str | None = None,
 ) -> tuple[Usuario, str]:
     """Aceite de convite-vitrine: cria Tenant + Usuario (papel `admin`,
@@ -309,6 +324,30 @@ def criar_tenant_vitrine(
         None,
         {"razao_social": razao_social, "convite_codigo": codigo_convite},
     )
+
+    # A empresa convidada também entra como prospect no CRM de quem a
+    # convidou — não só como tenant novo e independente da Rede Social.
+    conta_prospect = conta_service.criar_a_partir_de_convite_rede_social(
+        db, convite.tenant_id_origem, razao_social, cnpj, nome_admin, email_admin
+    )
+
+    # Best-effort: a IA já sai pesquisando site e contatos dessa conta
+    # recém-criada, mas nada aqui pode travar o cadastro do tenant — se
+    # qualquer provedor falhar, só loga e segue (mesmo espírito de
+    # `sincronizar_com_tolerancia`).
+    try:
+        conta_service.enriquecer(
+            db, convite.tenant_id_origem, None, conta_prospect.id, llm, site_fetcher, web_search
+        )
+    except Exception:
+        logger.warning("Falha ao enriquecer via site a conta %s criada por convite de rede social", conta_prospect.id, exc_info=True)
+    try:
+        conta_service.mapear_decisores(
+            db, convite.tenant_id_origem, None, conta_prospect.id, account_data, contact_enrichment, graph
+        )
+    except Exception:
+        logger.warning("Falha ao mapear decisores da conta %s criada por convite de rede social", conta_prospect.id, exc_info=True)
+
     db.commit()
     db.refresh(usuario)
 

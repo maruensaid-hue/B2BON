@@ -22,7 +22,7 @@ from app.providers.contact_enrichment.base import ContactEnrichmentProvider, Con
 from app.providers.web_search.base import WebSearchProvider
 from app.schemas.conta import ParticipanteEventoSchema
 from app.schemas.decisor import DecisorCreateSchema
-from app.services import auditoria_service, descarte_service, llm_helpers
+from app.services import atividade_service, auditoria_service, descarte_service, llm_helpers
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 
@@ -180,6 +180,46 @@ def criar_lead(
     auditoria_service.registrar(db, tenant_id, "lead_criado", "conta", conta.id, ator_id, {"nome": nome})
     db.commit()
     db.refresh(conta)
+    return conta
+
+
+def criar_a_partir_de_convite_rede_social(
+    db: Session, tenant_id: str, nome: str, cnpj: str | None, nome_contato: str, email_contato: str
+) -> Conta:
+    """Empresa convidada por um vendedor pela Rede Social e que aceitou o
+    convite-vitrine (virou tenant próprio) já entra também como prospect no
+    CRM de quem convidou — contato inicial vem do próprio cadastro de
+    aceite do convite. CNPJ vem do que a empresa já preencheu ao aceitar
+    (campo opcional do formulário); continua editável depois, igual
+    qualquer outra conta.
+
+    De propósito **não comita** — quem chama (`tenant_service.criar_tenant_vitrine`)
+    precisa que isso aconteça na mesma transação da criação do tenant."""
+    conta = Conta(
+        tenant_id=tenant_id,
+        icp_id=None,
+        nome=nome,
+        cnpj=cnpj,
+        status="prospectada",
+        origem="rede_social_convite",
+    )
+    db.add(conta)
+    db.flush()
+
+    decisor = Decisor(
+        tenant_id=tenant_id, conta_id=conta.id, nome=nome_contato, email=email_contato,
+        origem="rede_social_convite",
+    )
+    db.add(decisor)
+    db.flush()
+
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta.id, tipo="sistema",
+        descricao="Empresa cadastrada automaticamente via convite de Rede Social aceito",
+    )
+    auditoria_service.registrar(
+        db, tenant_id, "conta_criada_via_rede_social", "conta", conta.id, None, {"nome": nome}, conta_id=conta.id
+    )
     return conta
 
 
@@ -390,6 +430,8 @@ def atualizar(
     segmento: str | None,
     porte: str | None,
     regiao: str | None,
+    resumo_site: str | None = None,
+    observacoes: str | None = None,
 ) -> Conta:
     """Edição manual da conta (E2-H2) — dados vindos de enriquecimento
     automático (Receita Federal, PREDATOR) nem sempre batem com a
@@ -404,6 +446,8 @@ def atualizar(
     conta.segmento = segmento
     conta.porte = porte
     conta.regiao = regiao
+    conta.resumo_site = resumo_site
+    conta.observacoes = observacoes
 
     auditoria_service.registrar(db, tenant_id, "conta_atualizada", "conta", conta.id, ator_id, {}, conta_id=conta.id)
     db.commit()
@@ -568,6 +612,13 @@ def enriquecer(
         )
     db.add_all(campos)
 
+    if not conta.resumo_site or not conta.resumo_site.strip():
+        conta.resumo_site = resposta.content
+
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao="IA pesquisou o site institucional",
+        ator_id=ator_id,
+    )
     auditoria_service.registrar(
         db,
         tenant_id,
@@ -635,6 +686,9 @@ def enriquecer_via_brasilapi(
         db.add(registro)
         campos.append(registro)
 
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao="IA enriqueceu via BrasilAPI", ator_id=ator_id
+    )
     auditoria_service.registrar(
         db,
         tenant_id,
@@ -735,6 +789,10 @@ def mapear_decisores(
         existentes[chave] = decisor
         novos += 1
 
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao=f"IA mapeou {novos} decisor(es)",
+        ator_id=ator_id,
+    )
     auditoria_service.registrar(
         db,
         tenant_id,

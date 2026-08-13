@@ -56,6 +56,32 @@ def test_mover_estagio_via_api_marca_cliente(client, criar_conta_com_decisor):
     assert resposta.json()["ganho_em"] is not None
 
 
+def test_mover_estagio_para_perdido_sem_motivo_via_api_falha(client, criar_conta_com_decisor):
+    conta, _ = criar_conta_com_decisor()
+    negocio = client.post(
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio", "valor": 1000.0}
+    ).json()
+    estagio_perdido = next(e for e in client.get("/api/v1/crm/estagios").json() if e["tipo"] == "perdido")
+
+    resposta = client.put(f"/api/v1/crm/negocios/{negocio['id']}/estagio", json={"estagio_id": estagio_perdido["id"]})
+
+    assert resposta.status_code == 422
+
+
+def test_excluir_negocio_via_api(client, criar_conta_com_decisor):
+    conta, _ = criar_conta_com_decisor()
+    negocio = client.post(
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio a excluir", "valor": 1000.0}
+    ).json()
+
+    resposta = client.delete(f"/api/v1/crm/negocios/{negocio['id']}")
+
+    assert resposta.status_code == 204
+    assert client.get("/api/v1/crm/negocios", params={"conta_id": conta.id}).json() == []
+    # Reexcluir o mesmo id agora não encontra mais o negócio.
+    assert client.delete(f"/api/v1/crm/negocios/{negocio['id']}").status_code == 404
+
+
 def test_atividade_via_api(client, criar_conta_com_decisor):
     conta, _ = criar_conta_com_decisor()
     negocio = client.post(
@@ -68,8 +94,9 @@ def test_atividade_via_api(client, criar_conta_com_decisor):
     assert criada.status_code == 201
 
     listagem = client.get(f"/api/v1/crm/negocios/{negocio['id']}/atividades").json()
-    assert len(listagem) == 1
-    assert listagem[0]["descricao"] == "Falei com o cliente"
+    # +1 automática ("negócio criado") além da registrada manualmente aqui.
+    assert len(listagem) == 2
+    assert any(a["descricao"] == "Falei com o cliente" for a in listagem)
 
 
 def test_cancelar_cliente_via_api(client, criar_conta_com_decisor):
@@ -121,7 +148,8 @@ def test_dashboard_atividade_via_api(client, criar_conta_com_decisor):
     resposta = client.get("/api/v1/crm/dashboard/atividade")
 
     assert resposta.status_code == 200
-    assert resposta.json()["total_equipe"] == 1
+    # +1 automática ("negócio criado") além da atividade manual registrada aqui.
+    assert resposta.json()["total_equipe"] == 2
 
 
 def test_dashboard_economia_via_api(client):

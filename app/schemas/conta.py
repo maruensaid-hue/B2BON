@@ -27,6 +27,8 @@ class ContaSchema(BaseModel):
     cliente_cancelado_em: datetime | None
     proximo_passo: str | None
     proximo_passo_em: datetime | None
+    resumo_site: str | None
+    observacoes: str | None
     neo4j_node_id: str | None
     criado_em: datetime
     atualizado_em: datetime
@@ -48,6 +50,8 @@ class AtualizarContaRequestSchema(BaseModel):
     segmento: str | None = None
     porte: str | None = None
     regiao: str | None = None
+    resumo_site: str | None = None
+    observacoes: str | None = None
 
 
 class DefinirProximoPassoRequestSchema(BaseModel):

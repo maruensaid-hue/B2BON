@@ -63,7 +63,8 @@ class AtividadeSchema(BaseModel):
 
     id: int
     tenant_id: str
-    negocio_id: int
+    conta_id: int | None
+    negocio_id: int | None
     usuario_id: int | None
     tipo: str
     descricao: str

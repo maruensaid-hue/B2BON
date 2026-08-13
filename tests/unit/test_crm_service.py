@@ -7,7 +7,8 @@ from app.models.conta import Conta
 from app.models.estagio_funil import EstagioFunil
 from app.models.icp import ICP
 from app.models.usuario import Usuario
-from app.services import crm_service
+from app.services import atividade_service, crm_service
+from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 TENANT_ID = "tenant-teste"
 
@@ -136,6 +137,38 @@ def test_mover_para_perdido_grava_motivo(db_session):
     assert movido.motivo_perda == "Sem orçamento"
 
 
+def test_mover_para_perdido_sem_motivo_falha(db_session):
+    """Pedido do usuário: motivo da perda passa a ser obrigatório."""
+    conta = _criar_conta(db_session)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio", valor=500.0)
+    estagio_perdido = next(e for e in crm_service.listar_estagios(db_session, TENANT_ID) if e.tipo == "perdido")
+
+    with pytest.raises(ValidacaoFalhou):
+        crm_service.mover_estagio(db_session, TENANT_ID, None, negocio.id, estagio_perdido.id)
+    with pytest.raises(ValidacaoFalhou):
+        crm_service.mover_estagio(db_session, TENANT_ID, None, negocio.id, estagio_perdido.id, motivo_perda="   ")
+
+
+def test_excluir_negocio(db_session):
+    conta = _criar_conta(db_session)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio a excluir", valor=500.0)
+    crm_service.registrar_atividade(db_session, TENANT_ID, "1", negocio.id, "nota", "Nota qualquer")
+
+    crm_service.excluir_negocio(db_session, TENANT_ID, None, negocio.id)
+
+    with pytest.raises(NaoEncontrado):
+        crm_service.obter_negocio(db_session, TENANT_ID, negocio.id)
+    # Atividades ligadas à conta sobrevivem (perdem só o vínculo com o negócio).
+    atividades_da_conta = atividade_service.listar_por_conta(db_session, TENANT_ID, conta.id)
+    assert len(atividades_da_conta) >= 2  # "negócio criado" + "nota qualquer" + "negócio excluído"
+    assert all(a.negocio_id is None for a in atividades_da_conta)
+
+
+def test_excluir_negocio_inexistente_falha(db_session):
+    with pytest.raises(NaoEncontrado):
+        crm_service.excluir_negocio(db_session, TENANT_ID, None, 999999)
+
+
 def test_marcar_cliente_cancelado_exige_ser_cliente(db_session):
     import pytest
 
@@ -165,9 +198,10 @@ def test_registrar_e_listar_atividade(db_session):
     crm_service.registrar_atividade(db_session, TENANT_ID, "1", negocio.id, "ligacao", "Liguei para o cliente")
 
     atividades = crm_service.listar_atividades(db_session, TENANT_ID, negocio.id)
-    assert len(atividades) == 1
-    assert atividades[0].tipo == "ligacao"
-    assert atividades[0].usuario_id == 1
+    # +1 automática ("negócio criado", vem primeiro) além da registrada manualmente aqui.
+    assert len(atividades) == 2
+    assert atividades[-1].tipo == "ligacao"
+    assert atividades[-1].usuario_id == 1
 
 
 def test_dashboard_funil_calcula_taxa_de_conversao(db_session):

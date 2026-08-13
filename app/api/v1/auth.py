@@ -1,11 +1,27 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_payment_provider, get_usuario_atual
+from app.api.deps import (
+    get_account_data_provider,
+    get_contact_enrichment_provider,
+    get_db,
+    get_graph_client,
+    get_llm_provider,
+    get_payment_provider,
+    get_site_fetcher,
+    get_usuario_atual,
+    get_web_search_provider,
+)
 from app.core.rate_limit import limitar_por_ip
+from app.graph.client import Neo4jClient
+from app.integrations.site_fetcher import SiteFetcher
+from app.llm.base import LLMProvider
 from app.models.licenca import Licenca
 from app.models.usuario import Usuario
+from app.providers.account_data.base import AccountDataProvider
+from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.payment.base import PaymentProvider
+from app.providers.web_search.base import WebSearchProvider
 from app.schemas.auth import (
     LicencaStatusResponseSchema,
     LoginGoogleRequestSchema,
@@ -62,12 +78,19 @@ def registrar_vitrine(
     dados: RegistrarVitrineRequestSchema,
     db: Session = Depends(get_db),
     payment_provider: PaymentProvider = Depends(get_payment_provider),
+    llm: LLMProvider = Depends(get_llm_provider),
+    site_fetcher: SiteFetcher = Depends(get_site_fetcher),
+    web_search: WebSearchProvider = Depends(get_web_search_provider),
+    account_data: AccountDataProvider = Depends(get_account_data_provider),
+    contact_enrichment: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider),
+    graph: Neo4jClient = Depends(get_graph_client),
 ) -> TokenResponseSchema:
     """Aceite público de convite-vitrine — cria o tenant novo, já loga, e
     abre a cobrança do plano escolhido (Onda H + raio-X de produção). Sem
     autenticação prévia, como `/registrar`. A licença nasce
     `pendente_pagamento`; o frontend redireciona pro `checkout_url`
-    devolvido aqui."""
+    devolvido aqui. Também cadastra a empresa como prospect no CRM de
+    quem enviou o convite, já tentando enriquecer via site/contatos."""
     usuario, checkout_url = tenant_service.criar_tenant_vitrine(
         db,
         dados.codigo_convite,
@@ -78,6 +101,12 @@ def registrar_vitrine(
         dados.aceite_termos,
         dados.plano_id,
         payment_provider,
+        llm,
+        site_fetcher,
+        web_search,
+        account_data,
+        contact_enrichment,
+        graph,
         dados.cnpj,
     )
     return _resposta_token(usuario, db, checkout_url)

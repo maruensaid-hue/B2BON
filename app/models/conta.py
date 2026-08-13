@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -36,10 +36,21 @@ class Conta(Base):
     cliente_desde: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cliente_cancelado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Próxima ação prevista nesta conta (E-Leads) — anotação livre de uma
-    # linha + data, disponível mesmo antes de existir um negócio (Atividade
-    # é por negócio, não serve para isso).
+    # linha + data, em destaque na ficha (distinto da timeline de Atividade
+    # e do texto livre de `observacoes`, que não têm data/lembrete).
     proximo_passo: Mapped[str | None] = mapped_column(String, nullable=True)
     proximo_passo_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Texto corrido que a IA devolve ao pesquisar o site institucional
+    # (`conta_service.enriquecer`) — só preenchido automaticamente na
+    # primeira vez; depois disso é campo de trabalho do vendedor, que pode
+    # complementar/editar livremente sem risco de a próxima pesquisa
+    # sobrescrever. `CampoEnriquecido` continua guardando o histórico bruto
+    # linha a linha, com fonte/data, para auditoria.
+    resumo_site: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Observações livres do vendedor sobre a conta — sem fonte/data
+    # associada, ao contrário de Atividade (timeline) e CampoEnriquecido
+    # (achados da IA).
+    observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
     neo4j_node_id: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(

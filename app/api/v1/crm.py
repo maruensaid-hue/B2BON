@@ -92,6 +92,16 @@ def atualizar_negocio(
     )
 
 
+@router.delete("/negocios/{negocio_id}", status_code=204)
+def excluir_negocio(
+    negocio_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    crm_service.excluir_negocio(db, tenant_id, ator_id, negocio_id)
+
+
 @router.put("/negocios/{negocio_id}/estagio", response_model=NegocioSchema)
 def mover_estagio(
     negocio_id: int,

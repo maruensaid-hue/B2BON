@@ -37,8 +37,9 @@ from app.schemas.conta import (
     ImportarParticipantesRequestSchema,
     ImportarParticipantesResponseSchema,
 )
+from app.schemas.crm import AtividadeSchema
 from app.schemas.decisor import AtualizarDecisorRequestSchema, DecisorCreateSchema, DecisorSchema
-from app.services import conta_service, descarte_service, franquia_service, linkedin_conexao_service
+from app.services import atividade_service, conta_service, descarte_service, franquia_service, linkedin_conexao_service
 
 router = APIRouter(tags=["contas"])
 
@@ -153,7 +154,7 @@ def atualizar_conta(
 ) -> ContaSchema:
     return conta_service.atualizar(
         db, tenant_id, ator_id, conta_id, dados.nome, dados.cnpj, dados.nome_fantasia, dados.dominio,
-        dados.segmento, dados.porte, dados.regiao,
+        dados.segmento, dados.porte, dados.regiao, dados.resumo_site, dados.observacoes,
     )
 
 
@@ -258,6 +259,16 @@ def grafo_conta(
     graph: Neo4jClient = Depends(get_graph_client),
 ) -> GrafoContaResponseSchema:
     return GrafoContaResponseSchema(**conta_service.grafo(db, tenant_id, conta_id, graph))
+
+
+@router.get("/contas/{conta_id}/atividades", response_model=list[AtividadeSchema])
+def listar_atividades_da_conta(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[AtividadeSchema]:
+    conta_service.obter(db, tenant_id, conta_id)
+    return atividade_service.listar_por_conta(db, tenant_id, conta_id)
 
 
 @router.post("/contas/{conta_id}/priorizar", response_model=ContaSchema)

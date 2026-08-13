@@ -10,7 +10,7 @@ from app.models.decisor import Decisor
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.schemas.campanha import DestinatarioAvulsoSchema
-from app.services import auditoria_service, optout_service
+from app.services import atividade_service, auditoria_service, optout_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 _SEPARADOR = ":"
@@ -283,6 +283,13 @@ def processar_pendentes(db: Session, tenant_id: str, email_provider: EmailProvid
             if sucesso:
                 destinatario.status = "enviado"
                 destinatario.enviado_em = datetime.now(UTC)
+                if destinatario.decisor_id is not None:
+                    decisor = db.query(Decisor).filter_by(id=destinatario.decisor_id).one_or_none()
+                    if decisor is not None:
+                        atividade_service.registrar(
+                            db, tenant_id, conta_id=decisor.conta_id, tipo="sistema",
+                            descricao=f"Campanha '{campanha.nome}' enviada",
+                        )
                 resultado["enviadas"] += 1
             else:
                 destinatario.status = "falhou"

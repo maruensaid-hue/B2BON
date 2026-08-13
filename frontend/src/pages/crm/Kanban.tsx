@@ -2,9 +2,18 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Input, Select } from "@/components/ui/Input";
+import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { api, ApiError } from "@/lib/api";
+
+const MOTIVOS_PERDA = [
+  "Preço/orçamento",
+  "Escolheu concorrente",
+  "Não é fit com o produto",
+  "Perdeu contato/sem resposta",
+  "Projeto cancelado",
+  "Outro",
+];
 
 interface EstagioFunil {
   id: number;
@@ -52,6 +61,11 @@ export function Kanban() {
   const [salvandoNegocio, setSalvandoNegocio] = useState(false);
   const [negocioEmEdicao, setNegocioEmEdicao] = useState<Negocio | null>(null);
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [negocioParaExcluir, setNegocioParaExcluir] = useState<number | null>(null);
+  const [negocioParaMarcarPerdido, setNegocioParaMarcarPerdido] = useState<{ negocio: Negocio; estagioId: number } | null>(null);
+  const [motivoPerdaSelecionado, setMotivoPerdaSelecionado] = useState(MOTIVOS_PERDA[0]);
+  const [motivoPerdaOutro, setMotivoPerdaOutro] = useState("");
+  const [salvandoMotivoPerda, setSalvandoMotivoPerda] = useState(false);
 
   // Defesa contra a duplicidade de estágios já corrigida no backend
   // (UniqueConstraint tenant_id+ordem) — se ainda houver dado antigo
@@ -113,12 +127,51 @@ export function Kanban() {
     return lista.slice(0, 20);
   }, [contasParaSelecionar, buscaContaExistente]);
 
-  async function moverEstagio(negocioId: number, estagioId: number) {
+  async function moverEstagio(negocioId: number, estagioId: number, motivoPerda?: string) {
     try {
-      await api.put(`/crm/negocios/${negocioId}/estagio`, { estagio_id: estagioId });
+      await api.put(`/crm/negocios/${negocioId}/estagio`, { estagio_id: estagioId, motivo_perda: motivoPerda });
       await carregar();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível mover o negócio.");
+    }
+  }
+
+  function tentarMoverEstagio(negocio: Negocio, estagioId: number) {
+    if (negocio.estagio_id === estagioId) return;
+    const estagioDestino = estagiosUnicos.find((e) => e.id === estagioId);
+    if (estagioDestino?.tipo === "perdido") {
+      setMotivoPerdaSelecionado(MOTIVOS_PERDA[0]);
+      setMotivoPerdaOutro("");
+      setNegocioParaMarcarPerdido({ negocio, estagioId });
+      return;
+    }
+    moverEstagio(negocio.id, estagioId);
+  }
+
+  async function confirmarMotivoPerda() {
+    if (!negocioParaMarcarPerdido || salvandoMotivoPerda) return;
+    const motivo = motivoPerdaSelecionado === "Outro" ? motivoPerdaOutro.trim() : motivoPerdaSelecionado;
+    if (!motivo) {
+      setErro("Informe o motivo da perda.");
+      return;
+    }
+    setSalvandoMotivoPerda(true);
+    setErro(null);
+    try {
+      await moverEstagio(negocioParaMarcarPerdido.negocio.id, negocioParaMarcarPerdido.estagioId, motivo);
+      setNegocioParaMarcarPerdido(null);
+    } finally {
+      setSalvandoMotivoPerda(false);
+    }
+  }
+
+  async function excluirNegocio(negocioId: number) {
+    try {
+      await api.delete(`/crm/negocios/${negocioId}`);
+      setNegocioParaExcluir(null);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir o negócio.");
     }
   }
 
@@ -127,7 +180,7 @@ export function Kanban() {
     const negocio = negocios.find((n) => n.id === negocioArrastadoId);
     setNegocioArrastadoId(null);
     if (!negocio || negocio.estagio_id === estagioId) return;
-    moverEstagio(negocio.id, estagioId);
+    tentarMoverEstagio(negocio, estagioId);
   }
 
   async function criarNegocio(event: FormEvent<HTMLFormElement>) {
@@ -268,21 +321,43 @@ export function Kanban() {
                 >
                   <div className="mb-1 flex items-start justify-between gap-2">
                     <div className="text-[12px] font-bold">{negocio.nome}</div>
-                    <button
-                      type="button"
-                      className="flex-shrink-0 text-[11px] text-muted hover:text-cyan"
-                      onClick={() => setNegocioEmEdicao(negocio)}
-                      title="Editar negócio"
-                    >
-                      ✎
-                    </button>
+                    {negocioParaExcluir === negocio.id ? (
+                      <div className="flex flex-shrink-0 items-center gap-1 text-[10px]">
+                        <span className="text-muted">Excluir?</span>
+                        <button type="button" className="text-red hover:underline" onClick={() => excluirNegocio(negocio.id)}>
+                          Sim
+                        </button>
+                        <button type="button" className="text-muted hover:underline" onClick={() => setNegocioParaExcluir(null)}>
+                          Não
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          className="text-[11px] text-muted hover:text-cyan"
+                          onClick={() => setNegocioEmEdicao(negocio)}
+                          title="Editar negócio"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          className="text-[11px] text-muted hover:text-red"
+                          onClick={() => setNegocioParaExcluir(negocio.id)}
+                          title="Excluir negócio"
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="font-head mb-2 text-base font-bold text-cyan">
                     R${Math.round(negocio.valor / 1000)}k
                   </div>
                   <Select
                     value={negocio.estagio_id}
-                    onChange={(event) => moverEstagio(negocio.id, Number(event.target.value))}
+                    onChange={(event) => tentarMoverEstagio(negocio, Number(event.target.value))}
                   >
                     {estagiosUnicos.map((opcao) => (
                       <option key={opcao.id} value={opcao.id}>
@@ -449,6 +524,40 @@ export function Kanban() {
               {salvandoEdicao ? "Salvando..." : "Salvar alterações"}
             </Button>
           </form>
+        )}
+      </Modal>
+
+      <Modal title="Motivo da perda" open={negocioParaMarcarPerdido !== null} onClose={() => setNegocioParaMarcarPerdido(null)}>
+        {negocioParaMarcarPerdido && (
+          <div className="flex flex-col gap-3">
+            <div className="text-[12px] text-muted">
+              Por que "{negocioParaMarcarPerdido.negocio.nome}" foi perdido?
+            </div>
+            <Select value={motivoPerdaSelecionado} onChange={(event) => setMotivoPerdaSelecionado(event.target.value)}>
+              {MOTIVOS_PERDA.map((motivo) => (
+                <option key={motivo} value={motivo}>
+                  {motivo}
+                </option>
+              ))}
+            </Select>
+            {motivoPerdaSelecionado === "Outro" && (
+              <Textarea
+                rows={3}
+                value={motivoPerdaOutro}
+                onChange={(event) => setMotivoPerdaOutro(event.target.value)}
+                placeholder="Descreva o motivo"
+                autoFocus
+              />
+            )}
+            <div className="flex gap-2">
+              <Button type="button" disabled={salvandoMotivoPerda} onClick={confirmarMotivoPerda}>
+                {salvandoMotivoPerda ? "Salvando..." : "Confirmar"}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setNegocioParaMarcarPerdido(null)}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

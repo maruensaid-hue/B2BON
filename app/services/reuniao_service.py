@@ -14,7 +14,7 @@ from app.providers.calendar.base import CalendarProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.crm.base import CrmProvider
-from app.services import auditoria_service
+from app.services import atividade_service, auditoria_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 _SEPARADOR = ":"
@@ -126,6 +126,10 @@ def propor_horarios(
     db.add(reuniao)
     db.flush()
 
+    atividade_service.registrar(
+        db, tenant_id, conta_id=decisor.conta_id, tipo="reuniao", descricao="Horários de reunião propostos",
+        ator_id=ator_id,
+    )
     auditoria_service.registrar(
         db,
         tenant_id,
@@ -206,6 +210,14 @@ def _confirmar_interno(
             conta_id=conta.id,
         )
 
+    # `oportunidade_id` só é o id numérico do Negocio quando `crm` é o
+    # NucleoCrmProvider real — o StubCrmProvider (testes) devolve um id
+    # fake não numérico, então o vínculo com negócio é best-effort aqui.
+    negocio_id_numerico = int(oportunidade_id) if oportunidade_id.isdigit() else None
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta.id, negocio_id=negocio_id_numerico, tipo="reuniao",
+        descricao=f"Reunião confirmada para {horario_escolhido.isoformat()}", ator_id=ator_id,
+    )
     auditoria_service.registrar(
         db,
         tenant_id,
@@ -336,6 +348,10 @@ def marcar_resultado(db: Session, tenant_id: str, ator_id: str | None, reuniao_i
 
     reuniao = obter(db, tenant_id, reuniao_id)
     reuniao.status = status
+    atividade_service.registrar(
+        db, tenant_id, conta_id=reuniao.conta_id, tipo="reuniao",
+        descricao=f"Resultado da reunião: {status}", ator_id=ator_id,
+    )
     auditoria_service.registrar(
         db, tenant_id, "reuniao_resultado_marcado", "reuniao", reuniao.id, ator_id, {"status": status}, conta_id=reuniao.conta_id
     )
@@ -352,6 +368,11 @@ def confirmar_qualificacao(
     reuniao = obter(db, tenant_id, reuniao_id)
     reuniao.qualificada_confirmada = qualificada
     reuniao.motivo_qualificacao = motivo
+    atividade_service.registrar(
+        db, tenant_id, conta_id=reuniao.conta_id, tipo="reuniao",
+        descricao=f"Qualificação da reunião confirmada: {'qualificada' if qualificada else 'não qualificada'}",
+        ator_id=ator_id,
+    )
     auditoria_service.registrar(
         db,
         tenant_id,

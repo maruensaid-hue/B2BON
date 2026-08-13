@@ -37,6 +37,7 @@ class NucleoCrmProvider(CrmProvider):
             self._db.add(
                 Atividade(
                     tenant_id=tenant_id,
+                    conta_id=conta_id,
                     negocio_id=negocio.id,
                     usuario_id=None,
                     tipo="sistema",
