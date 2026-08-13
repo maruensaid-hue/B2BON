@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, getBlob, postFile } from "@/lib/api";
 
 const MOTIVOS_PERDA = [
   "Preço/orçamento",
@@ -25,10 +26,35 @@ interface EstagioFunil {
 interface Negocio {
   id: number;
   conta_id: number;
+  conta_nome: string;
+  decisor_id: number | null;
+  decisor_nome: string | null;
   estagio_id: number;
   nome: string;
   valor: number;
   probabilidade: number;
+}
+
+interface DecisorResumo {
+  id: number;
+  nome: string;
+}
+
+interface ItemProposta {
+  descricao: string;
+  valor: number | null;
+}
+
+interface PropostaNegocio {
+  id: number;
+  negocio_id: number;
+  versao: number;
+  nome_arquivo: string;
+  tipo_mime: string;
+  tamanho_bytes: number;
+  gerada_automaticamente: boolean;
+  enviada_por_usuario_id: number | null;
+  criado_em: string;
 }
 
 interface ICP {
@@ -66,6 +92,16 @@ export function Kanban() {
   const [motivoPerdaSelecionado, setMotivoPerdaSelecionado] = useState(MOTIVOS_PERDA[0]);
   const [motivoPerdaOutro, setMotivoPerdaOutro] = useState("");
   const [salvandoMotivoPerda, setSalvandoMotivoPerda] = useState(false);
+  const [decisoresDaContaSelecionada, setDecisoresDaContaSelecionada] = useState<DecisorResumo[]>([]);
+  const [decisoresDaContaEmEdicao, setDecisoresDaContaEmEdicao] = useState<DecisorResumo[]>([]);
+  const [atividadesDoNegocio, setAtividadesDoNegocio] = useState<Atividade[]>([]);
+  const [propostasDoNegocio, setPropostasDoNegocio] = useState<PropostaNegocio[]>([]);
+  const [enviandoProposta, setEnviandoProposta] = useState(false);
+  const [erroProposta, setErroProposta] = useState<string | null>(null);
+  const [prevaGeracaoAberta, setPrevaGeracaoAberta] = useState(false);
+  const [itensProdutosGerar, setItensProdutosGerar] = useState<ItemProposta[]>([]);
+  const [itensServicosGerar, setItensServicosGerar] = useState<ItemProposta[]>([]);
+  const [gerandoProposta, setGerandoProposta] = useState(false);
 
   // Defesa contra a duplicidade de estágios já corrigida no backend
   // (UniqueConstraint tenant_id+ordem) — se ainda houver dado antigo
@@ -126,6 +162,138 @@ export function Kanban() {
       : contasParaSelecionar;
     return lista.slice(0, 20);
   }, [contasParaSelecionar, buscaContaExistente]);
+
+  // O negócio precisa de um contato responsável — busca os decisores da
+  // conta escolhida assim que ela é selecionada, pra popular o <Select>.
+  useEffect(() => {
+    if (contaExistenteSelecionadaId === null) {
+      setDecisoresDaContaSelecionada([]);
+      return;
+    }
+    api
+      .get<DecisorResumo[]>(`/contas/${contaExistenteSelecionadaId}/decisores`)
+      .then(setDecisoresDaContaSelecionada)
+      .catch(() => setDecisoresDaContaSelecionada([]));
+  }, [contaExistenteSelecionadaId]);
+
+  useEffect(() => {
+    if (!negocioEmEdicao) {
+      setDecisoresDaContaEmEdicao([]);
+      setAtividadesDoNegocio([]);
+      setPropostasDoNegocio([]);
+      setPrevaGeracaoAberta(false);
+      return;
+    }
+    api
+      .get<DecisorResumo[]>(`/contas/${negocioEmEdicao.conta_id}/decisores`)
+      .then(setDecisoresDaContaEmEdicao)
+      .catch(() => setDecisoresDaContaEmEdicao([]));
+    carregarAtividadesDoNegocio(negocioEmEdicao.id);
+    carregarPropostasDoNegocio(negocioEmEdicao.id);
+  }, [negocioEmEdicao]);
+
+  async function carregarAtividadesDoNegocio(negocioId: number) {
+    try {
+      setAtividadesDoNegocio(await api.get<Atividade[]>(`/crm/negocios/${negocioId}/atividades`));
+    } catch {
+      setAtividadesDoNegocio([]);
+    }
+  }
+
+  async function registrarAtividadeDoNegocio(tipo: string, descricao: string) {
+    if (!negocioEmEdicao) return;
+    await api.post(`/crm/negocios/${negocioEmEdicao.id}/atividades`, { tipo, descricao });
+    await carregarAtividadesDoNegocio(negocioEmEdicao.id);
+  }
+
+  async function carregarPropostasDoNegocio(negocioId: number) {
+    try {
+      setPropostasDoNegocio(await api.get<PropostaNegocio[]>(`/crm/negocios/${negocioId}/propostas`));
+    } catch {
+      setPropostasDoNegocio([]);
+    }
+  }
+
+  async function enviarProposta(arquivo: File) {
+    if (!negocioEmEdicao || enviandoProposta) return;
+    setEnviandoProposta(true);
+    setErroProposta(null);
+    try {
+      await postFile(`/crm/negocios/${negocioEmEdicao.id}/propostas`, arquivo);
+      await carregarPropostasDoNegocio(negocioEmEdicao.id);
+    } catch (error) {
+      setErroProposta(error instanceof ApiError ? error.message : "Não foi possível enviar a proposta.");
+    } finally {
+      setEnviandoProposta(false);
+    }
+  }
+
+  async function abrirPreviaGeracao() {
+    setErroProposta(null);
+    try {
+      interface ItemTemplate {
+        tipo: "produto" | "servico";
+        descricao: string;
+        valor: number | null;
+      }
+      const [produtos, servicos] = await Promise.all([
+        api.get<ItemTemplate[]>("/template-proposta/itens?tipo=produto"),
+        api.get<ItemTemplate[]>("/template-proposta/itens?tipo=servico"),
+      ]);
+      setItensProdutosGerar(produtos.map((item) => ({ descricao: item.descricao, valor: item.valor })));
+      setItensServicosGerar(servicos.map((item) => ({ descricao: item.descricao, valor: item.valor })));
+      setPrevaGeracaoAberta(true);
+    } catch {
+      setErroProposta("Não foi possível carregar os itens padrão do modelo de proposta.");
+    }
+  }
+
+  async function confirmarGeracaoProposta() {
+    if (!negocioEmEdicao || gerandoProposta) return;
+    setGerandoProposta(true);
+    setErroProposta(null);
+    try {
+      await api.post(`/crm/negocios/${negocioEmEdicao.id}/propostas/gerar`, {
+        itens_produtos: itensProdutosGerar,
+        itens_servicos: itensServicosGerar,
+      });
+      setPrevaGeracaoAberta(false);
+      await carregarPropostasDoNegocio(negocioEmEdicao.id);
+    } catch (error) {
+      setErroProposta(error instanceof ApiError ? error.message : "Não foi possível gerar a proposta.");
+    } finally {
+      setGerandoProposta(false);
+    }
+  }
+
+  function atualizarItemGerar(
+    lista: "produtos" | "servicos",
+    indice: number,
+    campo: "descricao" | "valor",
+    valor: string,
+  ) {
+    const setter = lista === "produtos" ? setItensProdutosGerar : setItensServicosGerar;
+    setter((atual) =>
+      atual.map((item, i) =>
+        i === indice ? { ...item, [campo]: campo === "valor" ? (valor ? Number(valor) : null) : valor } : item,
+      ),
+    );
+  }
+
+  async function baixarProposta(proposta: PropostaNegocio) {
+    if (!negocioEmEdicao) return;
+    try {
+      const blob = await getBlob(`/crm/negocios/${negocioEmEdicao.id}/propostas/${proposta.id}/download`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = proposta.nome_arquivo;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setErroProposta("Não foi possível baixar a proposta.");
+    }
+  }
 
   async function moverEstagio(negocioId: number, estagioId: number, motivoPerda?: string) {
     try {
@@ -194,16 +362,27 @@ export function Kanban() {
     setErro(null);
     try {
       let contaId: number;
+      let decisorId: number;
       if (contaOrigem === "existente") {
         contaId = Number(form.get("conta_id"));
         if (!contaId) {
           setErro("Selecione uma conta.");
           return;
         }
+        decisorId = Number(form.get("decisor_id"));
+        if (!decisorId) {
+          setErro("Selecione o contato responsável pela oportunidade.");
+          return;
+        }
       } else {
         const nomeConta = String(form.get("nome_conta") || "").trim();
         if (!nomeConta) {
           setErro("Informe o nome do cliente.");
+          return;
+        }
+        const nomeContato = String(form.get("nome_contato") || "").trim();
+        if (!nomeContato) {
+          setErro("Informe o contato responsável pela oportunidade.");
           return;
         }
         let contaCriada: Conta;
@@ -224,17 +403,15 @@ export function Kanban() {
         }
         contaId = contaCriada.id;
 
-        const nomeContato = String(form.get("nome_contato") || "").trim();
-        if (nomeContato) {
-          await api.post(`/contas/${contaId}/decisores`, {
-            nome: nomeContato,
-            email: String(form.get("email_contato") || "") || null,
-            telefone: String(form.get("telefone_contato") || "") || null,
-          });
-        }
+        const decisorCriado = await api.post<DecisorResumo>(`/contas/${contaId}/decisores`, {
+          nome: nomeContato,
+          email: String(form.get("email_contato") || "") || null,
+          telefone: String(form.get("telefone_contato") || "") || null,
+        });
+        decisorId = decisorCriado.id;
       }
 
-      await api.post("/crm/negocios", { conta_id: contaId, nome: nomeNegocio, valor });
+      await api.post("/crm/negocios", { conta_id: contaId, decisor_id: decisorId, nome: nomeNegocio, valor });
       setModalAberto(false);
       setContaOrigem("existente");
       setSemIcp(false);
@@ -262,10 +439,16 @@ export function Kanban() {
     setSalvandoEdicao(true);
     setErro(null);
     try {
+      const decisorId = Number(form.get("decisor_id"));
+      if (!decisorId) {
+        setErro("Selecione o contato responsável pela oportunidade.");
+        return;
+      }
       await api.put(`/crm/negocios/${negocioEmEdicao.id}`, {
         nome: String(form.get("nome")),
         valor: Number(form.get("valor") || 0),
         probabilidade: Number(form.get("probabilidade") || 50),
+        decisor_id: decisorId,
       });
       setNegocioEmEdicao(null);
       await carregar();
@@ -320,7 +503,11 @@ export function Kanban() {
                   onDragEnd={() => setNegocioArrastadoId(null)}
                 >
                   <div className="mb-1 flex items-start justify-between gap-2">
-                    <div className="text-[12px] font-bold">{negocio.nome}</div>
+                    <div>
+                      <div className="text-[10px] font-bold tracking-wide text-cyan uppercase">{negocio.conta_nome}</div>
+                      <div className="text-[12px] font-bold">{negocio.nome}</div>
+                      {negocio.decisor_nome && <div className="text-[10px] text-muted">{negocio.decisor_nome}</div>}
+                    </div>
                     {negocioParaExcluir === negocio.id ? (
                       <div className="flex flex-shrink-0 items-center gap-1 text-[10px]">
                         <span className="text-muted">Excluir?</span>
@@ -472,13 +659,34 @@ export function Kanban() {
                     Nenhuma conta encontrada com esse nome.
                   </div>
                 )}
+                {contaExistenteSelecionadaId !== null && (
+                  <div className="mt-2">
+                    <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Contato responsável</div>
+                    {decisoresDaContaSelecionada.length === 0 ? (
+                      <div className="text-[11px] text-muted">
+                        Esta conta ainda não tem contato cadastrado — cadastre um antes de criar a oportunidade.
+                      </div>
+                    ) : (
+                      <Select name="decisor_id" required defaultValue="">
+                        <option value="" disabled>
+                          Selecione o contato
+                        </option>
+                        {decisoresDaContaSelecionada.map((decisor) => (
+                          <option key={decisor.id} value={decisor.id}>
+                            {decisor.nome}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-2">
                 <Input name="nome_conta" required placeholder="Nome do cliente" />
                 <Input name="dominio_conta" placeholder="Domínio (opcional)" />
-                <div className="mt-1 text-[10px] tracking-wide text-muted uppercase">Contato (opcional)</div>
-                <Input name="nome_contato" placeholder="Nome do contato" />
+                <div className="mt-1 text-[10px] tracking-wide text-muted uppercase">Contato responsável</div>
+                <Input name="nome_contato" required placeholder="Nome do contato" />
                 <Input name="email_contato" type="email" placeholder="E-mail do contato" />
                 <Input name="telefone_contato" placeholder="Telefone do contato" />
               </div>
@@ -499,9 +707,13 @@ export function Kanban() {
         </form>
       </Modal>
 
-      <Modal title="Editar negócio" open={negocioEmEdicao !== null} onClose={() => setNegocioEmEdicao(null)}>
+      <Modal title="Detalhes do negócio" open={negocioEmEdicao !== null} onClose={() => setNegocioEmEdicao(null)}>
         {negocioEmEdicao && (
+          <div className="flex flex-col gap-4">
           <form onSubmit={salvarEdicaoNegocio} className="flex flex-col gap-3">
+            <div className="text-[11px] text-muted">
+              Empresa: <span className="font-semibold text-text">{negocioEmEdicao.conta_nome}</span>
+            </div>
             <div>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome do negócio</div>
               <Input name="nome" required defaultValue={negocioEmEdicao.nome} />
@@ -520,10 +732,134 @@ export function Kanban() {
                 defaultValue={negocioEmEdicao.probabilidade}
               />
             </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Contato responsável</div>
+              <Select name="decisor_id" required defaultValue={negocioEmEdicao.decisor_id ?? ""}>
+                <option value="" disabled>
+                  Selecione o contato
+                </option>
+                {decisoresDaContaEmEdicao.map((decisor) => (
+                  <option key={decisor.id} value={decisor.id}>
+                    {decisor.nome}
+                  </option>
+                ))}
+              </Select>
+            </div>
             <Button type="submit" disabled={salvandoEdicao} className="w-full justify-center">
               {salvandoEdicao ? "Salvando..." : "Salvar alterações"}
             </Button>
           </form>
+
+          <ListaAtividades atividades={atividadesDoNegocio} aoRegistrar={registrarAtividadeDoNegocio} />
+
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Propostas</div>
+            <div className="mb-3 flex flex-col gap-2 rounded-lg border border-border p-2.5">
+              {erroProposta && <div className="text-[11px] text-red">{erroProposta}</div>}
+              <input
+                type="file"
+                accept=".pdf,.docx"
+                disabled={enviandoProposta}
+                onChange={(event) => {
+                  const arquivo = event.target.files?.[0];
+                  if (arquivo) enviarProposta(arquivo);
+                  event.target.value = "";
+                }}
+                className="text-[11px] text-muted"
+              />
+              {enviandoProposta && <div className="text-[11px] text-muted">Enviando...</div>}
+              <Button type="button" size="sm" variant="ghost" onClick={abrirPreviaGeracao}>
+                Gerar proposta automática
+              </Button>
+            </div>
+
+            {prevaGeracaoAberta && (
+              <div className="mb-3 flex flex-col gap-3 rounded-lg border border-cyan/30 bg-cyan/5 p-2.5">
+                <div className="text-[11px] text-muted">
+                  Texto, logo e termo de aceite vêm do modelo salvo em Configuração. Ajuste só os itens abaixo — a
+                  edição aqui não altera o modelo padrão.
+                </div>
+                <div>
+                  <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Produtos</div>
+                  {itensProdutosGerar.map((item, indice) => (
+                    <div key={indice} className="mb-1 flex gap-1.5">
+                      <Input
+                        value={item.descricao}
+                        onChange={(event) => atualizarItemGerar("produtos", indice, "descricao", event.target.value)}
+                        className="flex-1"
+                      />
+                      <Input
+                        value={item.valor ?? ""}
+                        type="number"
+                        step="0.01"
+                        onChange={(event) => atualizarItemGerar("produtos", indice, "valor", event.target.value)}
+                        className="w-24"
+                      />
+                    </div>
+                  ))}
+                  {itensProdutosGerar.length === 0 && (
+                    <div className="text-[11px] text-muted">Nenhum item de produto no modelo padrão.</div>
+                  )}
+                </div>
+                <div>
+                  <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Serviços</div>
+                  {itensServicosGerar.map((item, indice) => (
+                    <div key={indice} className="mb-1 flex gap-1.5">
+                      <Input
+                        value={item.descricao}
+                        onChange={(event) => atualizarItemGerar("servicos", indice, "descricao", event.target.value)}
+                        className="flex-1"
+                      />
+                      <Input
+                        value={item.valor ?? ""}
+                        type="number"
+                        step="0.01"
+                        onChange={(event) => atualizarItemGerar("servicos", indice, "valor", event.target.value)}
+                        className="w-24"
+                      />
+                    </div>
+                  ))}
+                  {itensServicosGerar.length === 0 && (
+                    <div className="text-[11px] text-muted">Nenhum item de serviço no modelo padrão.</div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" disabled={gerandoProposta} onClick={confirmarGeracaoProposta}>
+                    {gerandoProposta ? "Gerando..." : "Confirmar e gerar"}
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setPrevaGeracaoAberta(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {propostasDoNegocio.length === 0 ? (
+              <div className="text-[11px] text-muted">Nenhuma proposta anexada ainda.</div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {propostasDoNegocio.map((proposta) => (
+                  <div key={proposta.id} className="flex items-center justify-between gap-2 border-b border-border py-1 text-[11px]">
+                    <div>
+                      <div className="text-text">
+                        v{proposta.versao} — {proposta.nome_arquivo}
+                        {proposta.gerada_automaticamente && (
+                          <span className="ml-1.5 rounded-full bg-cyan/15 px-1.5 py-px text-[10px] text-cyan">
+                            gerada automaticamente
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-muted">{new Date(proposta.criado_em).toLocaleString("pt-BR")}</div>
+                    </div>
+                    <button type="button" className="text-cyan hover:underline" onClick={() => baixarProposta(proposta)}>
+                      Baixar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          </div>
         )}
       </Modal>
 

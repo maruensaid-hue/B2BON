@@ -41,6 +41,8 @@ from app.models.pausa_canal import PausaCanal
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.pesquisa_nps import PesquisaNps
 from app.models.plano import Plano
+from app.models.proposta_negocio import PropostaNegocio
+from app.models.template_proposta import ItemTemplateProposta, TemplateProposta
 from app.models.qualificacao import QualificacaoScore
 from app.models.registro_envio_diario import RegistroEnvioDiario
 from app.models.registro_reputacao_canal import RegistroReputacaoCanal
@@ -107,6 +109,9 @@ __all__ = [
     "EstagioFunil",
     "Negocio",
     "Atividade",
+    "PropostaNegocio",
+    "TemplateProposta",
+    "ItemTemplateProposta",
     "CustoAquisicao",
     "PerfilEmpresa",
     "ConexaoEmpresa",

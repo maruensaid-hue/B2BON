@@ -85,3 +85,33 @@ export async function getBlob(path: string): Promise<Blob> {
   }
   return response.blob();
 }
+
+/** Upload de arquivo binário (ex.: PDF/DOCX de proposta) via multipart —
+ * não passa por `request()` porque não pode forçar Content-Type: application/json
+ * (o browser precisa definir o boundary do multipart sozinho). */
+export async function postFile<T>(path: string, file: File): Promise<T> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("arquivo", file);
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (response.status === 401) {
+    limparSessao();
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+    throw new ApiError(401, "Sessão expirada — faça login novamente.");
+  }
+
+  if (!response.ok) {
+    const corpo = await response.json().catch(() => ({}));
+    throw new ApiError(response.status, corpo.detalhe ?? "Não foi possível enviar o arquivo.");
+  }
+
+  return (await response.json()) as T;
+}

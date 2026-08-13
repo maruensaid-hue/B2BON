@@ -28,6 +28,7 @@ class NucleoCrmProvider(CrmProvider):
             negocio = Negocio(
                 tenant_id=tenant_id,
                 conta_id=conta_id,
+                decisor_id=dados.get("decisor_id"),
                 nome=f"Oportunidade — conta {conta_id}",
                 estagio_id=primeiro_aberto.id,
                 origem="predator_reuniao",

@@ -36,6 +36,7 @@ from app.api.v1.rede_social import router as rede_social_router
 from app.api.v1.reunioes import router as reunioes_router
 from app.api.v1.ropa import router as ropa_router
 from app.api.v1.saude_conta import router as saude_conta_router
+from app.api.v1.template_proposta import router as template_proposta_router
 from app.api.v1.titulares import router as titulares_router
 from app.api.v1.usuarios import router as usuarios_router
 from app.api.v1.webhooks import router as webhooks_router
@@ -92,3 +93,4 @@ router.include_router(motor_router, dependencies=_exige_licenca)
 # super_admin, cross-tenant).
 router.include_router(saude_conta_router, dependencies=_exige_licenca)
 router.include_router(usuarios_router, dependencies=_exige_licenca)
+router.include_router(template_proposta_router, dependencies=_exige_licenca)

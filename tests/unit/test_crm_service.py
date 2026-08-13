@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.models.conta import Conta
+from app.models.decisor import Decisor
 from app.models.estagio_funil import EstagioFunil
 from app.models.icp import ICP
 from app.models.usuario import Usuario
@@ -26,6 +27,13 @@ def _criar_conta(db_session, **overrides) -> Conta:
     db_session.add(conta)
     db_session.commit()
     return conta
+
+
+def _criar_decisor(db_session, conta: Conta, nome: str = "Decisor Teste") -> Decisor:
+    decisor = Decisor(tenant_id=TENANT_ID, conta_id=conta.id, nome=nome)
+    db_session.add(decisor)
+    db_session.commit()
+    return decisor
 
 
 def _criar_usuario(db_session, email="vendedor@teste.com.br") -> Usuario:
@@ -84,8 +92,9 @@ def test_garantir_estagios_padrao_recua_quando_insercao_colide(db_session, monke
 
 def test_criar_negocio_usa_primeiro_estagio_aberto_por_padrao(db_session):
     conta = _criar_conta(db_session)
+    decisor = _criar_decisor(db_session, conta)
 
-    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio Teste", valor=1000.0)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "Negócio Teste", valor=1000.0)
 
     estagios = crm_service.listar_estagios(db_session, TENANT_ID)
     primeiro_aberto = next(e for e in estagios if e.tipo == "aberto")
@@ -93,14 +102,32 @@ def test_criar_negocio_usa_primeiro_estagio_aberto_por_padrao(db_session):
     assert negocio.origem == "manual"
 
 
+def test_criar_negocio_sem_decisor_falha(db_session):
+    """Pedido do usuário: contato responsável é obrigatório."""
+    conta = _criar_conta(db_session)
+
+    with pytest.raises(ValidacaoFalhou):
+        crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, None, "Negócio", valor=100.0)
+
+
+def test_criar_negocio_com_decisor_de_outra_conta_falha(db_session):
+    conta1 = _criar_conta(db_session, nome="Conta 1")
+    conta2 = _criar_conta(db_session, nome="Conta 2")
+    decisor_de_outra_conta = _criar_decisor(db_session, conta2)
+
+    with pytest.raises(NaoEncontrado):
+        crm_service.criar_negocio(db_session, TENANT_ID, None, conta1.id, decisor_de_outra_conta.id, "Negócio", valor=100.0)
+
+
 def test_atualizar_negocio_edita_nome_e_valor(db_session):
     """Não havia como corrigir um negócio depois de criado, só mover de
     estágio — bug reportado."""
     conta = _criar_conta(db_session)
-    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Nome errado", valor=100.0)
+    decisor = _criar_decisor(db_session, conta)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "Nome errado", valor=100.0)
 
     atualizado = crm_service.atualizar_negocio(
-        db_session, TENANT_ID, None, negocio.id, "Nome corrigido", 2500.0, 80
+        db_session, TENANT_ID, None, negocio.id, "Nome corrigido", 2500.0, 80, decisor.id
     )
 
     assert atualizado.nome == "Nome corrigido"
@@ -110,7 +137,8 @@ def test_atualizar_negocio_edita_nome_e_valor(db_session):
 
 def test_mover_para_ganho_marca_cliente_desde_so_na_primeira_vez(db_session):
     conta = _criar_conta(db_session)
-    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio", valor=500.0)
+    decisor = _criar_decisor(db_session, conta)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "Negócio", valor=500.0)
     estagio_ganho = next(e for e in crm_service.listar_estagios(db_session, TENANT_ID) if e.tipo == "ganho")
 
     movido = crm_service.mover_estagio(db_session, TENANT_ID, None, negocio.id, estagio_ganho.id)
@@ -128,7 +156,8 @@ def test_mover_para_ganho_marca_cliente_desde_so_na_primeira_vez(db_session):
 
 def test_mover_para_perdido_grava_motivo(db_session):
     conta = _criar_conta(db_session)
-    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio", valor=500.0)
+    decisor = _criar_decisor(db_session, conta)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "Negócio", valor=500.0)
     estagio_perdido = next(e for e in crm_service.listar_estagios(db_session, TENANT_ID) if e.tipo == "perdido")
 
     movido = crm_service.mover_estagio(db_session, TENANT_ID, None, negocio.id, estagio_perdido.id, motivo_perda="Sem orçamento")
@@ -140,7 +169,8 @@ def test_mover_para_perdido_grava_motivo(db_session):
 def test_mover_para_perdido_sem_motivo_falha(db_session):
     """Pedido do usuário: motivo da perda passa a ser obrigatório."""
     conta = _criar_conta(db_session)
-    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio", valor=500.0)
+    decisor = _criar_decisor(db_session, conta)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "Negócio", valor=500.0)
     estagio_perdido = next(e for e in crm_service.listar_estagios(db_session, TENANT_ID) if e.tipo == "perdido")
 
     with pytest.raises(ValidacaoFalhou):
@@ -151,7 +181,8 @@ def test_mover_para_perdido_sem_motivo_falha(db_session):
 
 def test_excluir_negocio(db_session):
     conta = _criar_conta(db_session)
-    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio a excluir", valor=500.0)
+    decisor = _criar_decisor(db_session, conta)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "Negócio a excluir", valor=500.0)
     crm_service.registrar_atividade(db_session, TENANT_ID, "1", negocio.id, "nota", "Nota qualquer")
 
     crm_service.excluir_negocio(db_session, TENANT_ID, None, negocio.id)
@@ -182,7 +213,8 @@ def test_marcar_cliente_cancelado_exige_ser_cliente(db_session):
 
 def test_marcar_cliente_cancelado_apos_ganho(db_session):
     conta = _criar_conta(db_session)
-    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio", valor=500.0)
+    decisor = _criar_decisor(db_session, conta)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "Negócio", valor=500.0)
     estagio_ganho = next(e for e in crm_service.listar_estagios(db_session, TENANT_ID) if e.tipo == "ganho")
     crm_service.mover_estagio(db_session, TENANT_ID, None, negocio.id, estagio_ganho.id)
 
@@ -193,7 +225,8 @@ def test_marcar_cliente_cancelado_apos_ganho(db_session):
 
 def test_registrar_e_listar_atividade(db_session):
     conta = _criar_conta(db_session)
-    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio", valor=100.0)
+    decisor = _criar_decisor(db_session, conta)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "Negócio", valor=100.0)
 
     crm_service.registrar_atividade(db_session, TENANT_ID, "1", negocio.id, "ligacao", "Liguei para o cliente")
 
@@ -206,9 +239,10 @@ def test_registrar_e_listar_atividade(db_session):
 
 def test_dashboard_funil_calcula_taxa_de_conversao(db_session):
     conta = _criar_conta(db_session)
+    decisor = _criar_decisor(db_session, conta)
     estagios = {e.tipo: e for e in crm_service.listar_estagios(db_session, TENANT_ID)}
-    n1 = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "N1", valor=100.0)
-    n2 = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "N2", valor=200.0)
+    n1 = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "N1", valor=100.0)
+    n2 = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "N2", valor=200.0)
     crm_service.mover_estagio(db_session, TENANT_ID, None, n1.id, estagios["ganho"].id)
 
     resultado = crm_service.dashboard_funil(db_session, TENANT_ID)
@@ -221,8 +255,9 @@ def test_dashboard_funil_calcula_taxa_de_conversao(db_session):
 
 def test_dashboard_atividade_agrupa_por_usuario(db_session):
     conta = _criar_conta(db_session)
+    decisor = _criar_decisor(db_session, conta)
     usuario = _criar_usuario(db_session)
-    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, "Negócio", valor=0.0)
+    negocio = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "Negócio", valor=0.0)
 
     crm_service.registrar_atividade(db_session, TENANT_ID, str(usuario.id), negocio.id, "ligacao", "Ligação 1")
     crm_service.registrar_atividade(db_session, TENANT_ID, str(usuario.id), negocio.id, "nota", "Nota 1")
@@ -237,10 +272,12 @@ def test_dashboard_atividade_agrupa_por_usuario(db_session):
 def test_dashboard_economia_calcula_ltv_cac_churn(db_session):
     conta1 = _criar_conta(db_session, nome="Cliente 1")
     conta2 = _criar_conta(db_session, nome="Cliente 2")
+    decisor1 = _criar_decisor(db_session, conta1)
+    decisor2 = _criar_decisor(db_session, conta2)
     estagio_ganho = next(e for e in crm_service.listar_estagios(db_session, TENANT_ID) if e.tipo == "ganho")
 
-    n1 = crm_service.criar_negocio(db_session, TENANT_ID, None, conta1.id, "N1", valor=1000.0)
-    n2 = crm_service.criar_negocio(db_session, TENANT_ID, None, conta2.id, "N2", valor=2000.0)
+    n1 = crm_service.criar_negocio(db_session, TENANT_ID, None, conta1.id, decisor1.id, "N1", valor=1000.0)
+    n2 = crm_service.criar_negocio(db_session, TENANT_ID, None, conta2.id, decisor2.id, "N2", valor=2000.0)
     crm_service.mover_estagio(db_session, TENANT_ID, None, n1.id, estagio_ganho.id)
     crm_service.mover_estagio(db_session, TENANT_ID, None, n2.id, estagio_ganho.id)
 

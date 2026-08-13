@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.atividade import Atividade
 from app.models.conta import Conta
 from app.models.custo_aquisicao import CustoAquisicao
+from app.models.decisor import Decisor
 from app.models.estagio_funil import EstagioFunil
 from app.models.negocio import Negocio
 from app.models.usuario import Usuario
@@ -102,11 +103,18 @@ def listar_negocios(
     return query.order_by(Negocio.id.desc()).all()
 
 
+def _validar_decisor_da_conta(db: Session, tenant_id: str, conta_id: int, decisor_id: int) -> None:
+    decisor = db.query(Decisor).filter_by(id=decisor_id, tenant_id=tenant_id, conta_id=conta_id).one_or_none()
+    if decisor is None:
+        raise NaoEncontrado(f"Decisor {decisor_id} não encontrado nesta conta")
+
+
 def criar_negocio(
     db: Session,
     tenant_id: str,
     ator_id: str | None,
     conta_id: int,
+    decisor_id: int | None,
     nome: str,
     valor: float = 0.0,
     probabilidade: int = 50,
@@ -114,9 +122,15 @@ def criar_negocio(
     estagio_id: int | None = None,
 ) -> Negocio:
     """Cadastro manual de negócio (origem="manual") — direto pelo vendedor,
-    sem passar pelo PREDATOR (Onda B)."""
+    sem passar pelo PREDATOR (Onda B). O contato responsável do lado do
+    cliente é obrigatório aqui — só fica nulo em negócios antigos/os que o
+    PREDATOR cria sozinho (Onda J: "necessariamente deve trazer... o
+    contato que está conduzindo a oportunidade")."""
     if db.query(Conta).filter_by(id=conta_id, tenant_id=tenant_id).one_or_none() is None:
         raise NaoEncontrado(f"Conta {conta_id} não encontrada")
+    if decisor_id is None:
+        raise ValidacaoFalhou("Selecione o contato responsável pela oportunidade.")
+    _validar_decisor_da_conta(db, tenant_id, conta_id, decisor_id)
 
     if estagio_id is None:
         estagios = garantir_estagios_padrao(db, tenant_id)
@@ -128,6 +142,7 @@ def criar_negocio(
     negocio = Negocio(
         tenant_id=tenant_id,
         conta_id=conta_id,
+        decisor_id=decisor_id,
         nome=nome,
         valor=valor,
         probabilidade=probabilidade,
@@ -158,13 +173,19 @@ def atualizar_negocio(
     nome: str,
     valor: float,
     probabilidade: int,
+    decisor_id: int | None = None,
 ) -> Negocio:
-    """Edição pós-criação (nome/valor/probabilidade) — não havia como
-    corrigir um negócio depois de cadastrado, só mover de estágio."""
+    """Edição pós-criação (nome/valor/probabilidade/contato) — não havia
+    como corrigir um negócio depois de cadastrado, só mover de estágio."""
     negocio = obter_negocio(db, tenant_id, negocio_id)
+    if decisor_id is None:
+        raise ValidacaoFalhou("Selecione o contato responsável pela oportunidade.")
+    _validar_decisor_da_conta(db, tenant_id, negocio.conta_id, decisor_id)
+
     negocio.nome = nome
     negocio.valor = valor
     negocio.probabilidade = probabilidade
+    negocio.decisor_id = decisor_id
 
     atividade_service.registrar(
         db, tenant_id, conta_id=negocio.conta_id, negocio_id=negocio.id, tipo="sistema",

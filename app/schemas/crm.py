@@ -25,6 +25,9 @@ class NegocioSchema(BaseModel):
     id: int
     tenant_id: str
     conta_id: int
+    conta_nome: str = ""
+    decisor_id: int | None = None
+    decisor_nome: str | None = None
     vendedor_usuario_id: int | None
     estagio_id: int
     nome: str
@@ -40,6 +43,7 @@ class NegocioSchema(BaseModel):
 
 class CriarNegocioRequestSchema(BaseModel):
     conta_id: int
+    decisor_id: int | None = None
     nome: str
     valor: float = 0.0
     probabilidade: int = 50
@@ -51,6 +55,7 @@ class AtualizarNegocioRequestSchema(BaseModel):
     nome: str
     valor: float = 0.0
     probabilidade: int = 50
+    decisor_id: int | None = None
 
 
 class MoverEstagioRequestSchema(BaseModel):
@@ -74,6 +79,20 @@ class AtividadeSchema(BaseModel):
 class RegistrarAtividadeRequestSchema(BaseModel):
     tipo: str
     descricao: str
+
+
+class PropostaNegocioSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    negocio_id: int
+    versao: int
+    nome_arquivo: str
+    tipo_mime: str
+    tamanho_bytes: int
+    gerada_automaticamente: bool
+    enviada_por_usuario_id: int | None
+    criado_em: datetime
 
 
 class CancelarClienteRequestSchema(BaseModel):

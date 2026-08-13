@@ -20,6 +20,10 @@ class Negocio(Base):
     tenant_id: Mapped[str] = mapped_column(String, index=True)
     conta_id: Mapped[int] = mapped_column(ForeignKey("conta.id"))
     vendedor_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
+    # Contato que conduz a oportunidade do lado do cliente — nulo pra não
+    # quebrar negócios antigos/os que o PREDATOR já cria sozinho, mas
+    # exigido pela camada de serviço no cadastro manual (crm_service).
+    decisor_id: Mapped[int | None] = mapped_column(ForeignKey("decisor.id"), nullable=True)
     estagio_id: Mapped[int] = mapped_column(ForeignKey("estagio_funil.id"))
     nome: Mapped[str] = mapped_column(String)
     valor: Mapped[float] = mapped_column(Float, default=0.0)

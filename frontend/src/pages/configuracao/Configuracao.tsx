@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, getBlob, postFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 interface Oferta {
@@ -32,6 +32,23 @@ interface ConfiguracaoWhatsApp {
 interface StatusConexoesLinkedin {
   total: number;
   atualizado_em: string | null;
+}
+
+interface TemplateProposta {
+  id: number;
+  texto_introdutorio: string | null;
+  logo_tipo_mime: string | null;
+  termo_aceite: string | null;
+  mostrar_tabela_produtos: boolean;
+  mostrar_tabela_servicos: boolean;
+}
+
+interface ItemTemplateProposta {
+  id: number;
+  tipo: "produto" | "servico";
+  ordem: number;
+  descricao: string;
+  valor: number | null;
 }
 
 function paraLista(texto: string): string[] {
@@ -142,6 +159,73 @@ function OpcoesOferta({
   );
 }
 
+function ListaItensTemplate({
+  titulo,
+  itens,
+  onAdicionar,
+  onRemover,
+}: {
+  titulo: string;
+  itens: ItemTemplateProposta[];
+  onAdicionar: (descricao: string, valor: number | null) => Promise<void>;
+  onRemover: (id: number) => Promise<void>;
+}) {
+  const [descricao, setDescricao] = useState("");
+  const [valor, setValor] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function adicionar() {
+    if (!descricao.trim() || salvando) return;
+    setSalvando(true);
+    try {
+      await onAdicionar(descricao.trim(), valor.trim() ? Number(valor) : null);
+      setDescricao("");
+      setValor("");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">{titulo}</div>
+      <div className="mb-2 flex flex-col gap-1.5">
+        {itens.map((item) => (
+          <div key={item.id} className="flex items-center justify-between gap-2 text-[12px]">
+            <span>
+              {item.descricao}
+              {item.valor !== null && <span className="text-muted"> — R${item.valor.toFixed(2)}</span>}
+            </span>
+            <button type="button" className="text-[11px] text-muted hover:text-red" onClick={() => onRemover(item.id)}>
+              Remover
+            </button>
+          </div>
+        ))}
+        {itens.length === 0 && <div className="text-[11px] text-muted">Nenhum item cadastrado ainda.</div>}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          value={descricao}
+          onChange={(event) => setDescricao(event.target.value)}
+          placeholder="Descrição"
+          className="flex-1"
+        />
+        <Input
+          value={valor}
+          onChange={(event) => setValor(event.target.value)}
+          type="number"
+          step="0.01"
+          placeholder="R$"
+          className="w-24"
+        />
+        <Button type="button" size="sm" disabled={!descricao.trim() || salvando} onClick={adicionar}>
+          +
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function Configuracao() {
   const { usuario } = useAuth();
   const isGestor = usuario?.papel === "admin" || usuario?.papel === "super_admin";
@@ -158,8 +242,35 @@ export function Configuracao() {
   const [importandoLinkedin, setImportandoLinkedin] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [templateProposta, setTemplateProposta] = useState<TemplateProposta | null>(null);
+  const [itensProdutos, setItensProdutos] = useState<ItemTemplateProposta[]>([]);
+  const [itensServicos, setItensServicos] = useState<ItemTemplateProposta[]>([]);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [salvandoTemplateProposta, setSalvandoTemplateProposta] = useState(false);
+  const [enviandoLogo, setEnviandoLogo] = useState(false);
 
   const ofertaEmEdicao = ofertas.find((oferta) => oferta.id === ofertaEmEdicaoId) ?? null;
+
+  async function carregarTemplateProposta() {
+    try {
+      const [template, produtos, servicos] = await Promise.all([
+        api.get<TemplateProposta>("/template-proposta"),
+        api.get<ItemTemplateProposta[]>("/template-proposta/itens?tipo=produto"),
+        api.get<ItemTemplateProposta[]>("/template-proposta/itens?tipo=servico"),
+      ]);
+      setTemplateProposta(template);
+      setItensProdutos(produtos);
+      setItensServicos(servicos);
+      if (template.logo_tipo_mime) {
+        const blob = await getBlob("/template-proposta/logo");
+        setLogoPreviewUrl(URL.createObjectURL(blob));
+      } else {
+        setLogoPreviewUrl(null);
+      }
+    } catch {
+      // Modelo de proposta é opcional — silencioso se ainda não configurado.
+    }
+  }
 
   async function carregarTudo() {
     try {
@@ -173,6 +284,7 @@ export function Configuracao() {
       if (isGestor) {
         setWhatsapp(await api.get<ConfiguracaoWhatsApp | null>("/configuracao-whatsapp"));
       }
+      await carregarTemplateProposta();
     } catch {
       setErro("Não foi possível carregar a configuração.");
     }
@@ -279,6 +391,53 @@ export function Configuracao() {
     } finally {
       setSalvandoWhatsapp(false);
     }
+  }
+
+  async function salvarTemplateProposta(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (salvandoTemplateProposta) return;
+    const form = new FormData(event.currentTarget);
+    setSalvandoTemplateProposta(true);
+    setErro(null);
+    try {
+      const salvo = await api.put<TemplateProposta>("/template-proposta", {
+        texto_introdutorio: String(form.get("texto_introdutorio") || "") || null,
+        termo_aceite: String(form.get("termo_aceite") || "") || null,
+        mostrar_tabela_produtos: form.get("mostrar_tabela_produtos") === "on",
+        mostrar_tabela_servicos: form.get("mostrar_tabela_servicos") === "on",
+      });
+      setTemplateProposta(salvo);
+      setMensagem("Modelo de proposta salvo.");
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível salvar o modelo de proposta.");
+    } finally {
+      setSalvandoTemplateProposta(false);
+    }
+  }
+
+  async function enviarLogoTemplate(arquivo: File) {
+    if (enviandoLogo) return;
+    setEnviandoLogo(true);
+    setErro(null);
+    try {
+      await postFile("/template-proposta/logo", arquivo);
+      await carregarTemplateProposta();
+      setMensagem("Logo atualizada.");
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível enviar a logo.");
+    } finally {
+      setEnviandoLogo(false);
+    }
+  }
+
+  async function adicionarItemTemplate(tipo: "produto" | "servico", descricao: string, valor: number | null) {
+    await api.post("/template-proposta/itens", { tipo, descricao, valor });
+    await carregarTemplateProposta();
+  }
+
+  async function removerItemTemplate(id: number) {
+    await api.delete(`/template-proposta/itens/${id}`);
+    await carregarTemplateProposta();
   }
 
   function selecionarArquivoLinkedin(event: ChangeEvent<HTMLInputElement>) {
@@ -518,6 +677,90 @@ export function Configuracao() {
           </form>
         </Card>
       )}
+
+      <Card className="mt-4">
+        <SectionLabel>Modelo de proposta</SectionLabel>
+        <div className="mb-3 text-[11px] text-muted">
+          Parte institucional (texto, logo, termo de aceite) usada em toda
+          proposta gerada automaticamente para uma oportunidade — os itens de
+          produtos e serviços aqui são o padrão, mas o vendedor pode ajustá-los
+          por proposta sem alterar este modelo.
+        </div>
+
+        <div className="mb-3 flex items-center gap-3">
+          {logoPreviewUrl && (
+            <img src={logoPreviewUrl} alt="Logo atual" className="h-10 w-auto rounded border border-border" />
+          )}
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            disabled={enviandoLogo}
+            onChange={(event) => {
+              const arquivo = event.target.files?.[0];
+              if (arquivo) enviarLogoTemplate(arquivo);
+              event.target.value = "";
+            }}
+            className="text-[11px] text-muted"
+          />
+        </div>
+
+        <form key={templateProposta?.id ?? "novo"} onSubmit={salvarTemplateProposta} className="flex flex-col gap-3">
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Texto introdutório</div>
+            <Textarea
+              name="texto_introdutorio"
+              rows={3}
+              defaultValue={templateProposta?.texto_introdutorio ?? ""}
+              placeholder="Apresentação da empresa que abre toda proposta gerada."
+            />
+          </div>
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Termo de aceite</div>
+            <Textarea
+              name="termo_aceite"
+              rows={3}
+              defaultValue={templateProposta?.termo_aceite ?? ""}
+              placeholder="Texto legal/condições que fecha a proposta."
+            />
+          </div>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-1.5 text-[12px] text-muted">
+              <input
+                type="checkbox"
+                name="mostrar_tabela_produtos"
+                defaultChecked={templateProposta?.mostrar_tabela_produtos ?? true}
+              />
+              Mostrar tabela de produtos
+            </label>
+            <label className="flex items-center gap-1.5 text-[12px] text-muted">
+              <input
+                type="checkbox"
+                name="mostrar_tabela_servicos"
+                defaultChecked={templateProposta?.mostrar_tabela_servicos ?? true}
+              />
+              Mostrar tabela de serviços
+            </label>
+          </div>
+          <Button type="submit" disabled={salvandoTemplateProposta} className="w-full justify-center">
+            {salvandoTemplateProposta ? "Salvando..." : "Salvar modelo"}
+          </Button>
+        </form>
+
+        <div className="mt-4 flex flex-col gap-4">
+          <ListaItensTemplate
+            titulo="Produtos"
+            itens={itensProdutos}
+            onAdicionar={(descricao, valor) => adicionarItemTemplate("produto", descricao, valor)}
+            onRemover={removerItemTemplate}
+          />
+          <ListaItensTemplate
+            titulo="Serviços"
+            itens={itensServicos}
+            onAdicionar={(descricao, valor) => adicionarItemTemplate("servico", descricao, valor)}
+            onRemover={removerItemTemplate}
+          />
+        </div>
+      </Card>
     </div>
   );
 }

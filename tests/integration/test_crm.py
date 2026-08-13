@@ -17,25 +17,36 @@ def test_estagios_padrao_via_api(client):
 
 
 def test_criar_e_listar_negocio_via_api(client, criar_conta_com_decisor):
-    conta, _ = criar_conta_com_decisor()
+    conta, decisor = criar_conta_com_decisor()
 
     criado = client.post(
-        "/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio API", "valor": 5000.0}
+        "/api/v1/crm/negocios",
+        json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio API", "valor": 5000.0},
     )
     assert criado.status_code == 201
     assert criado.json()["origem"] == "manual"
+    assert criado.json()["conta_nome"]
+    assert criado.json()["decisor_nome"] == decisor.nome
 
     listagem = client.get("/api/v1/crm/negocios").json()
     assert any(n["nome"] == "Negócio API" for n in listagem)
 
 
+def test_criar_negocio_sem_decisor_via_api_falha(client, criar_conta_com_decisor):
+    conta, _ = criar_conta_com_decisor()
+
+    resposta = client.post("/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio", "valor": 100.0})
+
+    assert resposta.status_code == 422
+
+
 def test_listar_negocios_filtra_por_conta(client, criar_conta_com_decisor):
     """Necessário para a página "Ações na conta" (E-Leads) mostrar só as
     oportunidades daquela conta, não o kanban inteiro do tenant."""
-    conta_a, _ = criar_conta_com_decisor()
-    conta_b, _ = criar_conta_com_decisor()
-    client.post("/api/v1/crm/negocios", json={"conta_id": conta_a.id, "nome": "Negócio A", "valor": 100.0})
-    client.post("/api/v1/crm/negocios", json={"conta_id": conta_b.id, "nome": "Negócio B", "valor": 200.0})
+    conta_a, decisor_a = criar_conta_com_decisor()
+    conta_b, decisor_b = criar_conta_com_decisor()
+    client.post("/api/v1/crm/negocios", json={"conta_id": conta_a.id, "decisor_id": decisor_a.id, "nome": "Negócio A", "valor": 100.0})
+    client.post("/api/v1/crm/negocios", json={"conta_id": conta_b.id, "decisor_id": decisor_b.id, "nome": "Negócio B", "valor": 200.0})
 
     resposta = client.get(f"/api/v1/crm/negocios?conta_id={conta_a.id}").json()
 
@@ -44,9 +55,9 @@ def test_listar_negocios_filtra_por_conta(client, criar_conta_com_decisor):
 
 def test_mover_estagio_via_api_marca_cliente(client, criar_conta_com_decisor):
     """E2-H4-like (Onda B): mover para estágio "ganho" marca a conta como cliente."""
-    conta, _ = criar_conta_com_decisor()
+    conta, decisor = criar_conta_com_decisor()
     negocio = client.post(
-        "/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio", "valor": 1000.0}
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio", "valor": 1000.0}
     ).json()
     estagio_ganho = next(e for e in client.get("/api/v1/crm/estagios").json() if e["tipo"] == "ganho")
 
@@ -57,9 +68,9 @@ def test_mover_estagio_via_api_marca_cliente(client, criar_conta_com_decisor):
 
 
 def test_mover_estagio_para_perdido_sem_motivo_via_api_falha(client, criar_conta_com_decisor):
-    conta, _ = criar_conta_com_decisor()
+    conta, decisor = criar_conta_com_decisor()
     negocio = client.post(
-        "/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio", "valor": 1000.0}
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio", "valor": 1000.0}
     ).json()
     estagio_perdido = next(e for e in client.get("/api/v1/crm/estagios").json() if e["tipo"] == "perdido")
 
@@ -69,9 +80,9 @@ def test_mover_estagio_para_perdido_sem_motivo_via_api_falha(client, criar_conta
 
 
 def test_excluir_negocio_via_api(client, criar_conta_com_decisor):
-    conta, _ = criar_conta_com_decisor()
+    conta, decisor = criar_conta_com_decisor()
     negocio = client.post(
-        "/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio a excluir", "valor": 1000.0}
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio a excluir", "valor": 1000.0}
     ).json()
 
     resposta = client.delete(f"/api/v1/crm/negocios/{negocio['id']}")
@@ -83,9 +94,9 @@ def test_excluir_negocio_via_api(client, criar_conta_com_decisor):
 
 
 def test_atividade_via_api(client, criar_conta_com_decisor):
-    conta, _ = criar_conta_com_decisor()
+    conta, decisor = criar_conta_com_decisor()
     negocio = client.post(
-        "/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio", "valor": 100.0}
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio", "valor": 100.0}
     ).json()
 
     criada = client.post(
@@ -100,9 +111,9 @@ def test_atividade_via_api(client, criar_conta_com_decisor):
 
 
 def test_cancelar_cliente_via_api(client, criar_conta_com_decisor):
-    conta, _ = criar_conta_com_decisor()
+    conta, decisor = criar_conta_com_decisor()
     negocio = client.post(
-        "/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio", "valor": 100.0}
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio", "valor": 100.0}
     ).json()
     estagio_ganho = next(e for e in client.get("/api/v1/crm/estagios").json() if e["tipo"] == "ganho")
     client.put(f"/api/v1/crm/negocios/{negocio['id']}/estagio", json={"estagio_id": estagio_ganho["id"]})
@@ -129,8 +140,8 @@ def test_custo_aquisicao_via_api(client):
 
 
 def test_dashboard_funil_via_api(client, criar_conta_com_decisor):
-    conta, _ = criar_conta_com_decisor()
-    client.post("/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio", "valor": 100.0})
+    conta, decisor = criar_conta_com_decisor()
+    client.post("/api/v1/crm/negocios", json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio", "valor": 100.0})
 
     resposta = client.get("/api/v1/crm/dashboard/funil")
 
@@ -139,9 +150,9 @@ def test_dashboard_funil_via_api(client, criar_conta_com_decisor):
 
 
 def test_dashboard_atividade_via_api(client, criar_conta_com_decisor):
-    conta, _ = criar_conta_com_decisor()
+    conta, decisor = criar_conta_com_decisor()
     negocio = client.post(
-        "/api/v1/crm/negocios", json={"conta_id": conta.id, "nome": "Negócio", "valor": 0.0}
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio", "valor": 0.0}
     ).json()
     client.post(f"/api/v1/crm/negocios/{negocio['id']}/atividades", json={"tipo": "nota", "descricao": "Nota"})
 
@@ -170,6 +181,71 @@ def test_dashboard_flywheel_via_api(client):
     assert "funil" in corpo
 
 
+def test_anexar_listar_e_baixar_proposta_via_api(client, criar_conta_com_decisor):
+    conta, decisor = criar_conta_com_decisor()
+    negocio = client.post(
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio", "valor": 100.0}
+    ).json()
+
+    anexada = client.post(
+        f"/api/v1/crm/negocios/{negocio['id']}/propostas",
+        files={"arquivo": ("proposta.pdf", b"%PDF-1.4 conteudo", "application/pdf")},
+    )
+    assert anexada.status_code == 201
+    assert anexada.json()["versao"] == 1
+
+    listagem = client.get(f"/api/v1/crm/negocios/{negocio['id']}/propostas").json()
+    assert len(listagem) == 1
+
+    download = client.get(f"/api/v1/crm/negocios/{negocio['id']}/propostas/{listagem[0]['id']}/download")
+    assert download.status_code == 200
+    assert download.content == b"%PDF-1.4 conteudo"
+
+
+def test_anexar_proposta_tipo_invalido_falha_via_api(client, criar_conta_com_decisor):
+    conta, decisor = criar_conta_com_decisor()
+    negocio = client.post(
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio", "valor": 100.0}
+    ).json()
+
+    resposta = client.post(
+        f"/api/v1/crm/negocios/{negocio['id']}/propostas",
+        files={"arquivo": ("malware.exe", b"x", "application/x-msdownload")},
+    )
+
+    assert resposta.status_code == 422
+
+
+def test_gerar_proposta_automatica_via_api(client, criar_conta_com_decisor):
+    conta, decisor = criar_conta_com_decisor()
+    negocio = client.post(
+        "/api/v1/crm/negocios", json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio", "valor": 100.0}
+    ).json()
+    client.put(
+        "/api/v1/template-proposta",
+        json={
+            "texto_introdutorio": "Bem-vindo",
+            "termo_aceite": "Termo",
+            "mostrar_tabela_produtos": True,
+            "mostrar_tabela_servicos": True,
+        },
+    )
+
+    gerada = client.post(
+        f"/api/v1/crm/negocios/{negocio['id']}/propostas/gerar",
+        json={"itens_produtos": [{"descricao": "Licença", "valor": 500.0}], "itens_servicos": []},
+    )
+
+    assert gerada.status_code == 201
+    corpo = gerada.json()
+    assert corpo["gerada_automaticamente"] is True
+    assert corpo["enviada_por_usuario_id"] is None
+
+    download = client.get(f"/api/v1/crm/negocios/{negocio['id']}/propostas/{corpo['id']}/download")
+    assert download.status_code == 200
+    assert download.content.startswith(b"%PDF")
+
+
 def test_retroalimentacao_reuniao_confirmada_cria_negocio_real(client, db_session, criar_conta_com_decisor):
     """Onda B: o que acontece no PREDATOR aparece no CRM sem nenhuma
     mudança em reuniao_service.py — usa o NucleoCrmProvider real em vez
@@ -187,3 +263,6 @@ def test_retroalimentacao_reuniao_confirmada_cria_negocio_real(client, db_sessio
     negocio_da_reuniao = next(n for n in negocios if n["conta_id"] == conta.id and n["origem"] == "predator_reuniao")
 
     assert negocio_da_reuniao is not None
+    # Ganho de brinde: o contato que conduziu a reunião já vira o
+    # responsável pela oportunidade, sem precisar de ação manual.
+    assert negocio_da_reuniao["decisor_id"] == decisor.id

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
 import { api, ApiError, getBlob } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -60,27 +61,6 @@ interface ContaResumo {
   nome: string;
   nome_fantasia: string | null;
 }
-
-interface Atividade {
-  id: number;
-  conta_id: number | null;
-  negocio_id: number | null;
-  usuario_id: number | null;
-  tipo: string;
-  descricao: string;
-  criado_em: string;
-}
-
-const ICONES_TIPO_ATIVIDADE: Record<string, string> = {
-  ligacao: "📞",
-  nota: "📝",
-  reuniao: "📅",
-  email: "✉️",
-  whatsapp: "💬",
-  linkedin: "🔗",
-  tarefa: "✅",
-  sistema: "🤖",
-};
 
 interface Props {
   contaId: number;
@@ -504,18 +484,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
 
           {atividades.length > 0 && (
             <div className="mt-4">
-              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Atividades</div>
-              <div className="flex flex-col gap-1.5">
-                {atividades.map((atividade) => (
-                  <div key={atividade.id} className="flex items-start gap-2 border-b border-border py-1 text-[11px]">
-                    <span>{ICONES_TIPO_ATIVIDADE[atividade.tipo] ?? "•"}</span>
-                    <div className="flex-1">
-                      <div className="text-text">{atividade.descricao}</div>
-                      <div className="text-muted">{new Date(atividade.criado_em).toLocaleString("pt-BR")}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ListaAtividades atividades={atividades} />
             </div>
           )}
         </>
