@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.conta import Conta
 from app.models.icp import ICP
+from app.models.oferta import Oferta
 from app.schemas.icp import ICPCreateSchema
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado
@@ -121,6 +122,23 @@ def clonar(db: Session, tenant_id: str, ator_id: str | None, icp_id: int) -> ICP
     db.commit()
     db.refresh(clone)
     return clone
+
+
+def excluir(db: Session, tenant_id: str, ator_id: str | None, icp_id: int) -> None:
+    """Remove um ICP cadastrado errado/não mais usado, sem arrastar contas
+    ou ofertas reais junto — elas ficam sem ICP (mesmo tratamento de leads
+    avulsos, já suportado em toda a tela de Prospecção), em vez de serem
+    apagadas ou de bloquear a exclusão. ICPs clonados a partir deste
+    perdem a referência (`clonado_de_id`), mas continuam intactos."""
+    icp = obter(db, tenant_id, icp_id)
+
+    db.query(Conta).filter_by(tenant_id=tenant_id, icp_id=icp.id).update({"icp_id": None})
+    db.query(Oferta).filter_by(tenant_id=tenant_id, icp_id=icp.id).update({"icp_id": None})
+    db.query(ICP).filter_by(tenant_id=tenant_id, clonado_de_id=icp.id).update({"clonado_de_id": None})
+
+    auditoria_service.registrar(db, tenant_id, "icp_excluido", "icp", icp.id, ator_id, {"nome": icp.nome})
+    db.delete(icp)
+    db.commit()
 
 
 def performance(db: Session, tenant_id: str) -> list[dict]:

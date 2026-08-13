@@ -52,6 +52,44 @@ def test_clonagem_preserva_configuracao_original(client, criar_icp):
     assert original_ainda_existe.json()["ativo"] is True
 
 
+def test_excluir_icp_via_api(client, criar_icp):
+    icp = criar_icp()
+
+    resposta = client.delete(f"/api/v1/icp/{icp['id']}")
+
+    assert resposta.status_code == 204
+    assert client.get(f"/api/v1/icp/{icp['id']}").status_code == 404
+    # Reexcluir o mesmo id agora não encontra mais o ICP.
+    assert client.delete(f"/api/v1/icp/{icp['id']}").status_code == 404
+
+
+def test_excluir_icp_desvincula_contas_e_ofertas_em_vez_de_bloquear(client, criar_icp, criar_oferta):
+    """ICP criado errado precisa poder ser excluído mesmo já tendo gerado
+    contas/oferta — elas ficam sem ICP (mesmo tratamento de leads avulsos),
+    em vez de travar a exclusão ou serem apagadas junto."""
+    icp = criar_icp()
+    conta = client.post(f"/api/v1/icp/{icp['id']}/contas", json={"nome": "Conta Teste", "dominio": None}).json()
+    oferta = criar_oferta(icp_id=icp["id"])
+
+    resposta = client.delete(f"/api/v1/icp/{icp['id']}")
+
+    assert resposta.status_code == 204
+    assert client.get(f"/api/v1/contas/{conta['id']}").json()["icp_id"] is None
+    assert client.get("/api/v1/ofertas").json()[0]["id"] == oferta["id"]  # oferta preservada
+
+
+def test_excluir_icp_clonado_de_desvincula_clones(client, criar_icp):
+    icp = criar_icp()
+    clone = client.post(f"/api/v1/icp/{icp['id']}/clonar").json()
+    assert clone["clonado_de_id"] == icp["id"]
+
+    resposta = client.delete(f"/api/v1/icp/{icp['id']}")
+
+    assert resposta.status_code == 204
+    clone_apos = client.get(f"/api/v1/icp/{clone['id']}").json()
+    assert clone_apos["clonado_de_id"] is None
+
+
 def test_performance_compara_icps_ativos(client, criar_icp):
     """E1-H4: comparativo simples de performance entre ICPs ativos."""
     icp_a = criar_icp(nome="ICP A")

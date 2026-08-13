@@ -173,6 +173,8 @@ export function Prospeccao() {
   const [modalImportarAberto, setModalImportarAberto] = useState(false);
   const [contaSelecionadaId, setContaSelecionadaId] = useState<number | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [confirmandoExclusaoIcpId, setConfirmandoExclusaoIcpId] = useState<number | null>(null);
+  const [excluindoIcp, setExcluindoIcp] = useState(false);
 
   const icpSelecionado = icps.find((icp) => icp.id === icpSelecionadoId) ?? null;
 
@@ -259,6 +261,21 @@ export function Prospeccao() {
       setIcpSelecionadoId(clonado.id);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível clonar o ICP.");
+    }
+  }
+
+  async function excluirIcp(icp: ICP) {
+    if (excluindoIcp) return;
+    setExcluindoIcp(true);
+    try {
+      await api.delete(`/icp/${icp.id}`);
+      setConfirmandoExclusaoIcpId(null);
+      if (icpSelecionadoId === icp.id) setIcpSelecionadoId(null);
+      await carregarIcps();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir o ICP.");
+    } finally {
+      setExcluindoIcp(false);
     }
   }
 
@@ -403,6 +420,25 @@ export function Prospeccao() {
                   <Button size="sm" onClick={() => setModalGerarAberto(true)}>
                     Gerar lista
                   </Button>
+                  {confirmandoExclusaoIcpId === icpSelecionado.id ? (
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <span className="text-muted">Excluir "{icpSelecionado.nome}"?</span>
+                      <Button size="sm" variant="danger" disabled={excluindoIcp} onClick={() => excluirIcp(icpSelecionado)}>
+                        {excluindoIcp ? "Excluindo..." : "Confirmar"}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setConfirmandoExclusaoIcpId(null)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => setConfirmandoExclusaoIcpId(icpSelecionado.id)}
+                    >
+                      Excluir
+                    </Button>
+                  )}
                 </div>
               </div>
             )}

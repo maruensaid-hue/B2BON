@@ -64,6 +64,16 @@ def nova_versao_icp(
     return icp_service.nova_versao(db, tenant_id, ator_id, icp_id, dados)
 
 
+@router.delete("/{icp_id}", status_code=204)
+def excluir_icp(
+    icp_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    icp_service.excluir(db, tenant_id, ator_id, icp_id)
+
+
 @router.post("/{icp_id}/clonar", response_model=ICPSchema, status_code=201)
 def clonar_icp(
     icp_id: int,
