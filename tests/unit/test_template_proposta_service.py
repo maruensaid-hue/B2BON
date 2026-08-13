@@ -138,3 +138,24 @@ def test_gerar_pdf_respeita_toggle_desligado(db_session):
 def test_gerar_pdf_negocio_inexistente_falha(db_session):
     with pytest.raises(NaoEncontrado):
         template_proposta_service.gerar_pdf(db_session, TENANT_ID, 99999, [], [])
+
+
+def test_gerar_pdf_nao_quebra_com_caracteres_fora_de_latin1(db_session):
+    """Aspas curvas, travessão longo, reticências tipográficas e emoji —
+    comuns em texto colado do Word/WhatsApp — não são suportados pela
+    fonte core "Helvetica" do fpdf2 e antes derrubavam a geração inteira
+    com FPDFUnicodeEncodingException."""
+    negocio = _criar_negocio(db_session)
+    template_proposta_service.atualizar(
+        db_session, TENANT_ID, "1", "Texto com “aspas curvas” e reticências… 🚀", "Termo — com travessão longo", True, True
+    )
+
+    conteudo = template_proposta_service.gerar_pdf(
+        db_session,
+        TENANT_ID,
+        negocio.id,
+        [{"descricao": "Item “especial” — com aspas", "valor": 500.0}],
+        [],
+    )
+
+    assert conteudo.startswith(b"%PDF")

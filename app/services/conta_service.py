@@ -846,6 +846,14 @@ def grafo(db: Session, tenant_id: str, conta_id: int, graph: Neo4jClient) -> dic
     return graph.grafo_da_conta(tenant_id, conta_id)
 
 
+def _texto_seguro_pdf(texto: str) -> str:
+    """A fonte core "Helvetica" do fpdf2 só suporta Latin-1/cp1252 — nome de
+    empresa/decisor com aspas curvas, travessão longo etc. (comum em texto
+    colado do Word) derruba a exportação com `FPDFUnicodeEncodingException`.
+    Troca o que não é suportado por "?" em vez de deixar a exceção estourar."""
+    return texto.encode("latin-1", errors="replace").decode("latin-1")
+
+
 def exportar_pdf(db: Session, tenant_id: str, conta_id: int) -> bytes:
     """Exportação da ficha da conta em PDF (E2-H3)."""
     conta = obter(db, tenant_id, conta_id)
@@ -854,16 +862,16 @@ def exportar_pdf(db: Session, tenant_id: str, conta_id: int) -> bytes:
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=14)
-    pdf.cell(0, 10, text=conta.nome, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 10, text=_texto_seguro_pdf(conta.nome), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=11)
-    pdf.cell(0, 8, text=f"CNPJ: {conta.cnpj or '-'}", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 8, text=f"Porte: {conta.porte or '-'} | UF: {conta.regiao or '-'}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, text=_texto_seguro_pdf(f"CNPJ: {conta.cnpj or '-'}"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, text=_texto_seguro_pdf(f"Porte: {conta.porte or '-'} | UF: {conta.regiao or '-'}"), new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 8, text=f"Score de aderência: {conta.score_aderencia}", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
     pdf.set_font("Helvetica", size=12)
     pdf.cell(0, 8, text="Decisores", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=11)
     for decisor in decisores:
-        pdf.cell(0, 8, text=f"- {decisor.nome} ({decisor.cargo or '-'})", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, text=_texto_seguro_pdf(f"- {decisor.nome} ({decisor.cargo or '-'})"), new_x="LMARGIN", new_y="NEXT")
 
     return bytes(pdf.output())

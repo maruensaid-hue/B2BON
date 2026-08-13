@@ -13,6 +13,15 @@ TIPOS_LOGO_PERMITIDOS = {"image/png", "image/jpeg"}
 TAMANHO_MAXIMO_LOGO_BYTES = 2 * 1024 * 1024
 
 
+def _texto_seguro(texto: str) -> str:
+    """A fonte core "Helvetica" do fpdf2 só suporta Latin-1/cp1252 — texto
+    digitado ou colado pelo vendedor (Word, WhatsApp) frequentemente traz
+    aspas curvas, travessão longo, reticências etc. fora desse alcance, o
+    que derruba a geração inteira com `FPDFUnicodeEncodingException`. Troca
+    o que não é suportado por "?" em vez de deixar a exceção estourar."""
+    return texto.encode("latin-1", errors="replace").decode("latin-1")
+
+
 def obter_ou_criar(db: Session, tenant_id: str) -> TemplateProposta:
     template = db.query(TemplateProposta).filter_by(tenant_id=tenant_id).one_or_none()
     if template is None:
@@ -148,13 +157,13 @@ def gerar_pdf(
     pdf.cell(0, 10, text="Proposta Comercial", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=11)
     nome_cliente = (conta.nome_fantasia or conta.nome) if conta else negocio.conta_id
-    pdf.cell(0, 8, text=f"Cliente: {nome_cliente}", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 8, text=f"Oportunidade: {negocio.nome} - R${negocio.valor:,.2f}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, text=_texto_seguro(f"Cliente: {nome_cliente}"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, text=_texto_seguro(f"Oportunidade: {negocio.nome} - R${negocio.valor:,.2f}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
     if template.texto_introdutorio:
         pdf.set_font("Helvetica", size=11)
-        pdf.multi_cell(0, 6, text=template.texto_introdutorio)
+        pdf.multi_cell(0, 6, text=_texto_seguro(template.texto_introdutorio))
         pdf.ln(4)
 
     if template.mostrar_tabela_produtos and itens_produtos:
@@ -164,7 +173,7 @@ def gerar_pdf(
         for item in itens_produtos:
             valor = item.get("valor")
             linha = f"- {item.get('descricao', '')}" + (f" - R${valor:,.2f}" if valor is not None else "")
-            pdf.cell(0, 7, text=linha, new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 7, text=_texto_seguro(linha), new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
     if template.mostrar_tabela_servicos and itens_servicos:
@@ -174,13 +183,13 @@ def gerar_pdf(
         for item in itens_servicos:
             valor = item.get("valor")
             linha = f"- {item.get('descricao', '')}" + (f" - R${valor:,.2f}" if valor is not None else "")
-            pdf.cell(0, 7, text=linha, new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 7, text=_texto_seguro(linha), new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
     if template.termo_aceite:
         pdf.set_font("Helvetica", size=13)
         pdf.cell(0, 8, text="Termo de aceite", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", size=10)
-        pdf.multi_cell(0, 6, text=template.termo_aceite)
+        pdf.multi_cell(0, 6, text=_texto_seguro(template.termo_aceite))
 
     return bytes(pdf.output())

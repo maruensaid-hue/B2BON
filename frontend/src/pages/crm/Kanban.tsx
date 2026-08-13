@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
 import { api, ApiError, getBlob, postFile } from "@/lib/api";
 
 const MOTIVOS_PERDA = [
@@ -756,18 +757,12 @@ export function Kanban() {
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Propostas</div>
             <div className="mb-3 flex flex-col gap-2 rounded-lg border border-border p-2.5">
               {erroProposta && <div className="text-[11px] text-red">{erroProposta}</div>}
-              <input
-                type="file"
+              <SeletorArquivo
                 accept=".pdf,.docx"
                 disabled={enviandoProposta}
-                onChange={(event) => {
-                  const arquivo = event.target.files?.[0];
-                  if (arquivo) enviarProposta(arquivo);
-                  event.target.value = "";
-                }}
-                className="text-[11px] text-muted"
+                onSelecionar={enviarProposta}
+                rotulo={enviandoProposta ? "Enviando..." : "Selecionar arquivo"}
               />
-              {enviandoProposta && <div className="text-[11px] text-muted">Enviando...</div>}
               <Button type="button" size="sm" variant="ghost" onClick={abrirPreviaGeracao}>
                 Gerar proposta automática
               </Button>

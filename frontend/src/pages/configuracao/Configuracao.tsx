@@ -1,9 +1,10 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
+import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
 import { api, ApiError, getBlob, postFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -440,13 +441,7 @@ export function Configuracao() {
     await carregarTemplateProposta();
   }
 
-  function selecionarArquivoLinkedin(event: ChangeEvent<HTMLInputElement>) {
-    const arquivo = event.target.files?.[0];
-    if (!arquivo) {
-      setNomeArquivoLinkedin(null);
-      setConteudoCsvLinkedin(null);
-      return;
-    }
+  function selecionarArquivoLinkedin(arquivo: File) {
     const leitor = new FileReader();
     leitor.onload = () => {
       setNomeArquivoLinkedin(arquivo.name);
@@ -621,12 +616,7 @@ export function Configuracao() {
             : "Nenhuma conexão importada ainda."}
         </div>
         <div className="flex flex-col gap-3">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={selecionarArquivoLinkedin}
-            className="text-[12px] text-muted"
-          />
+          <SeletorArquivo accept=".csv" onSelecionar={selecionarArquivoLinkedin} />
           <Button
             type="button"
             disabled={!conteudoCsvLinkedin || importandoLinkedin}
@@ -691,16 +681,11 @@ export function Configuracao() {
           {logoPreviewUrl && (
             <img src={logoPreviewUrl} alt="Logo atual" className="h-10 w-auto rounded border border-border" />
           )}
-          <input
-            type="file"
+          <SeletorArquivo
             accept="image/png,image/jpeg"
             disabled={enviandoLogo}
-            onChange={(event) => {
-              const arquivo = event.target.files?.[0];
-              if (arquivo) enviarLogoTemplate(arquivo);
-              event.target.value = "";
-            }}
-            className="text-[11px] text-muted"
+            onSelecionar={enviarLogoTemplate}
+            rotulo={enviandoLogo ? "Enviando..." : "Selecionar logo"}
           />
         </div>
 
