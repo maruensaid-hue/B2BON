@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { InstallBanner } from "@/components/InstallBanner";
 import { cn } from "@/lib/cn";
@@ -14,12 +14,16 @@ interface NavItem {
 
 const NAV_ITEMS_PAGOS: NavItem[] = [
   { path: "/", label: "Dashboard", icon: "⬡", end: true },
-  { path: "/crm", label: "CRM", icon: "◈" },
   { path: "/map", label: "MAP", icon: "⚡" },
 ];
 
-// PREDATOR — motor de prospecção/cadências/campanhas. Grupo indentado
-// exibido logo abaixo do MAP, mesmo padrão de LEADS_NAV_ITEMS/ADMIN_NAV_ITEMS.
+// CRM — o board (Pipeline) continua sendo a própria rota /crm; "Criar
+// Proposta" é um submenu embaixo, revelado pela seta do NavGroup.
+const CRM_ITEM: NavItem = { path: "/crm", label: "CRM", icon: "◈", end: true };
+const CRM_SUBITENS: NavItem[] = [{ path: "/crm/propostas/nova", label: "Criar Proposta", icon: "📄" }];
+
+// PREDATOR — motor de prospecção/cadências/campanhas. Sem rota própria
+// (é só a categoria) — a seta expande/recolhe os módulos abaixo.
 const PREDATOR_NAV_ITEMS: NavItem[] = [
   { path: "/prospeccao", label: "Prospecção", icon: "🎯" },
   { path: "/cadencias", label: "Cadências", icon: "📨" },
@@ -47,21 +51,88 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { path: "/admin/planos", label: "Planos", icon: "💳" },
 ];
 
+const CLASSE_ITEM_BASE =
+  "mb-0.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] whitespace-nowrap text-muted transition-colors";
+const CLASSE_ITEM_ATIVO = "border-cyan bg-cyan/15 font-bold text-cyan";
+const CLASSE_ITEM_INATIVO = "hover:bg-white/3 hover:text-text";
+
 function NavButton({ path, label, icon, end }: NavItem) {
   return (
     <NavLink
       to={path}
       end={end}
-      className={({ isActive }) =>
-        cn(
-          "mb-0.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] whitespace-nowrap text-muted transition-colors",
-          isActive ? "border-cyan bg-cyan/15 font-bold text-cyan" : "hover:bg-white/3 hover:text-text",
-        )
-      }
+      className={({ isActive }) => cn(CLASSE_ITEM_BASE, isActive ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO)}
     >
       <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
       <span className="overflow-hidden text-ellipsis">{label}</span>
     </NavLink>
+  );
+}
+
+/** Menu com submenus revelados por seta — mesmo peso visual dos itens de
+ * topo (não mais um rótulo pequeno em uppercase). `path` é opcional: se
+ * informado, o cabeçalho também navega (ex.: CRM); se omitido, o
+ * cabeçalho só expande/recolhe (ex.: PREDATOR, que não é uma página). */
+function NavGroup({ label, icon, path, itens }: { label: string; icon: string; path?: string; itens: NavItem[] }) {
+  const location = useLocation();
+  const algumFilhoAtivo = itens.some(
+    (item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
+  );
+  const [aberto, setAberto] = useState(algumFilhoAtivo);
+
+  useEffect(() => {
+    if (algumFilhoAtivo) setAberto(true);
+  }, [algumFilhoAtivo]);
+
+  const seta = (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.preventDefault();
+        setAberto((atual) => !atual);
+      }}
+      aria-label={aberto ? "Recolher submenu" : "Expandir submenu"}
+      className="flex-shrink-0 rounded px-1 text-[10px] text-muted hover:text-text"
+    >
+      {aberto ? "▾" : "▸"}
+    </button>
+  );
+
+  return (
+    <div>
+      {path ? (
+        <div className="flex items-center gap-1">
+          <NavLink
+            to={path}
+            end
+            className={({ isActive }) =>
+              cn(CLASSE_ITEM_BASE, "mb-0 flex-1", isActive || algumFilhoAtivo ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO)
+            }
+          >
+            <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
+            <span className="flex-1 overflow-hidden text-ellipsis">{label}</span>
+          </NavLink>
+          {seta}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAberto((atual) => !atual)}
+          className={cn(CLASSE_ITEM_BASE, "w-full", algumFilhoAtivo ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO)}
+        >
+          <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
+          <span className="flex-1 overflow-hidden text-left text-ellipsis">{label}</span>
+          <span className="flex-shrink-0 text-[10px]">{aberto ? "▾" : "▸"}</span>
+        </button>
+      )}
+      {aberto && (
+        <div className="mt-0.5 ml-4 flex flex-col gap-0.5 border-l border-border pl-2">
+          {itens.map((item) => (
+            <NavButton key={item.path} {...item} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -71,7 +142,7 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const isSuperAdmin = usuario?.papel === "super_admin";
   const navItems = temLicencaAtiva
-    ? [...NAV_ITEMS_PAGOS, ...PREDATOR_NAV_ITEMS, NAV_ITEM_REDE_SOCIAL]
+    ? [NAV_ITEMS_PAGOS[0], CRM_ITEM, ...CRM_SUBITENS, NAV_ITEMS_PAGOS[1], ...PREDATOR_NAV_ITEMS, NAV_ITEM_REDE_SOCIAL]
     : [NAV_ITEM_REDE_SOCIAL];
 
   return (
@@ -99,17 +170,13 @@ export function AppShell() {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-1.5">
-          {temLicencaAtiva &&
-            NAV_ITEMS_PAGOS.map((item) => <NavButton key={item.path} {...item} />)}
+          {temLicencaAtiva && <NavButton {...NAV_ITEMS_PAGOS[0]} />}
 
-          {temLicencaAtiva && (
-            <>
-              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">Predator</div>
-              {PREDATOR_NAV_ITEMS.map((item) => (
-                <NavButton key={item.path} {...item} />
-              ))}
-            </>
-          )}
+          {temLicencaAtiva && <NavGroup label={CRM_ITEM.label} icon={CRM_ITEM.icon} path={CRM_ITEM.path} itens={CRM_SUBITENS} />}
+
+          {temLicencaAtiva && <NavButton {...NAV_ITEMS_PAGOS[1]} />}
+
+          {temLicencaAtiva && <NavGroup label="Predator" icon="🐾" itens={PREDATOR_NAV_ITEMS} />}
 
           <NavButton {...NAV_ITEM_REDE_SOCIAL} />
 

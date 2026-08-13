@@ -46,5 +46,12 @@ class ItemPropostaSchema(BaseModel):
 
 
 class GerarPropostaRequestSchema(BaseModel):
+    # Todos opcionais — quando omitidos, usa o que está salvo no modelo do
+    # tenant. Preenchidos, valem só para esta proposta (nunca gravam de
+    # volta no modelo).
+    texto_introdutorio: str | None = None
+    termo_aceite: str | None = None
+    mostrar_tabela_produtos: bool | None = None
+    mostrar_tabela_servicos: bool | None = None
     itens_produtos: list[ItemPropostaSchema] | None = None
     itens_servicos: list[ItemPropostaSchema] | None = None

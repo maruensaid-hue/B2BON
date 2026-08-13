@@ -217,7 +217,7 @@ function ListaItensTemplate({
           type="number"
           step="0.01"
           placeholder="R$"
-          className="w-24"
+          className="w-24 flex-shrink-0"
         />
         <Button type="button" size="sm" disabled={!descricao.trim() || salvando} onClick={adicionar}>
           +

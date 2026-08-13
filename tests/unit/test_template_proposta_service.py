@@ -140,6 +140,28 @@ def test_gerar_pdf_negocio_inexistente_falha(db_session):
         template_proposta_service.gerar_pdf(db_session, TENANT_ID, 99999, [], [])
 
 
+def test_gerar_pdf_override_por_proposta_nao_altera_o_modelo_salvo(db_session):
+    negocio = _criar_negocio(db_session)
+    template_proposta_service.atualizar(db_session, TENANT_ID, "1", "Texto do modelo", "Termo do modelo", True, True)
+
+    conteudo = template_proposta_service.gerar_pdf(
+        db_session,
+        TENANT_ID,
+        negocio.id,
+        [{"descricao": "Item avulso", "valor": 10.0}],
+        [],
+        texto_introdutorio="Texto só desta proposta",
+        termo_aceite="Termo só desta proposta",
+        mostrar_tabela_servicos=False,
+    )
+
+    assert conteudo.startswith(b"%PDF")
+    template_apos = template_proposta_service.obter_ou_criar(db_session, TENANT_ID)
+    assert template_apos.texto_introdutorio == "Texto do modelo"
+    assert template_apos.termo_aceite == "Termo do modelo"
+    assert template_apos.mostrar_tabela_servicos is True
+
+
 def test_gerar_pdf_nao_quebra_com_caracteres_fora_de_latin1(db_session):
     """Aspas curvas, travessão longo, reticências tipográficas e emoji —
     comuns em texto colado do Word/WhatsApp — não são suportados pela

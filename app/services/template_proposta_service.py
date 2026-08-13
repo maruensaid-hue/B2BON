@@ -137,14 +137,28 @@ def gerar_pdf(
     negocio_id: int,
     itens_produtos: list[dict],
     itens_servicos: list[dict],
+    texto_introdutorio: str | None = None,
+    termo_aceite: str | None = None,
+    mostrar_tabela_produtos: bool | None = None,
+    mostrar_tabela_servicos: bool | None = None,
 ) -> bytes:
-    """Monta o PDF da proposta a partir do modelo salvo (parte institucional
-    — logo/texto/termo, sempre do template) + os itens de produtos/serviços
-    passados por parâmetro (pré-preenchidos no frontend com os itens padrão
-    do template, mas editáveis por proposta — nunca gravam de volta aqui)."""
+    """Monta o PDF da proposta a partir do modelo salvo (logo sempre do
+    template) — texto introdutório, termo de aceite e os toggles de tabela
+    usam o valor passado por parâmetro quando informado (`None` cai no
+    valor salvo no modelo), assim como os itens de produtos/serviços.
+    Nada disso grava de volta no modelo — vale só para esta proposta."""
     template = obter_ou_criar(db, tenant_id)
     negocio = _obter_negocio(db, tenant_id, negocio_id)
     conta = db.query(Conta).filter_by(id=negocio.conta_id, tenant_id=tenant_id).one_or_none()
+
+    texto_final = texto_introdutorio if texto_introdutorio is not None else template.texto_introdutorio
+    termo_final = termo_aceite if termo_aceite is not None else template.termo_aceite
+    mostrar_produtos_final = (
+        mostrar_tabela_produtos if mostrar_tabela_produtos is not None else template.mostrar_tabela_produtos
+    )
+    mostrar_servicos_final = (
+        mostrar_tabela_servicos if mostrar_tabela_servicos is not None else template.mostrar_tabela_servicos
+    )
 
     pdf = FPDF()
     pdf.add_page()
@@ -161,12 +175,12 @@ def gerar_pdf(
     pdf.cell(0, 8, text=_texto_seguro(f"Oportunidade: {negocio.nome} - R${negocio.valor:,.2f}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
-    if template.texto_introdutorio:
+    if texto_final:
         pdf.set_font("Helvetica", size=11)
-        pdf.multi_cell(0, 6, text=_texto_seguro(template.texto_introdutorio))
+        pdf.multi_cell(0, 6, text=_texto_seguro(texto_final))
         pdf.ln(4)
 
-    if template.mostrar_tabela_produtos and itens_produtos:
+    if mostrar_produtos_final and itens_produtos:
         pdf.set_font("Helvetica", size=13)
         pdf.cell(0, 8, text="Produtos", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", size=11)
@@ -176,7 +190,7 @@ def gerar_pdf(
             pdf.cell(0, 7, text=_texto_seguro(linha), new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
-    if template.mostrar_tabela_servicos and itens_servicos:
+    if mostrar_servicos_final and itens_servicos:
         pdf.set_font("Helvetica", size=13)
         pdf.cell(0, 8, text="Serviços", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", size=11)
@@ -186,10 +200,10 @@ def gerar_pdf(
             pdf.cell(0, 7, text=_texto_seguro(linha), new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
-    if template.termo_aceite:
+    if termo_final:
         pdf.set_font("Helvetica", size=13)
         pdf.cell(0, 8, text="Termo de aceite", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", size=10)
-        pdf.multi_cell(0, 6, text=_texto_seguro(template.termo_aceite))
+        pdf.multi_cell(0, 6, text=_texto_seguro(termo_final))
 
     return bytes(pdf.output())

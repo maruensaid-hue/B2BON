@@ -462,10 +462,10 @@ export function Cadencias() {
                 <Input
                   type="number"
                   min={0}
-                  className="w-20"
                   value={toque.intervalo_dias_apos_anterior}
                   onChange={(event) => atualizarToque(indice, "intervalo_dias_apos_anterior", event.target.value)}
                   title="Dias após o toque anterior"
+                  className="w-20 flex-shrink-0"
                 />
                 <Button type="button" size="sm" variant="danger" onClick={() => removerToque(indice)}>
                   ✕

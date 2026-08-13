@@ -224,7 +224,17 @@ def gerar_proposta(
         {"descricao": item.descricao, "valor": item.valor}
         for item in template_proposta_service.listar_itens(db, tenant_id, "servico")
     ]
-    conteudo = template_proposta_service.gerar_pdf(db, tenant_id, negocio_id, itens_produtos, itens_servicos)
+    conteudo = template_proposta_service.gerar_pdf(
+        db,
+        tenant_id,
+        negocio_id,
+        itens_produtos,
+        itens_servicos,
+        texto_introdutorio=dados.texto_introdutorio,
+        termo_aceite=dados.termo_aceite,
+        mostrar_tabela_produtos=dados.mostrar_tabela_produtos,
+        mostrar_tabela_servicos=dados.mostrar_tabela_servicos,
+    )
     return proposta_service.anexar(
         db,
         tenant_id,

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 
 import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
 import { Button } from "@/components/ui/Button";
@@ -39,11 +40,6 @@ interface Negocio {
 interface DecisorResumo {
   id: number;
   nome: string;
-}
-
-interface ItemProposta {
-  descricao: string;
-  valor: number | null;
 }
 
 interface PropostaNegocio {
@@ -99,10 +95,6 @@ export function Kanban() {
   const [propostasDoNegocio, setPropostasDoNegocio] = useState<PropostaNegocio[]>([]);
   const [enviandoProposta, setEnviandoProposta] = useState(false);
   const [erroProposta, setErroProposta] = useState<string | null>(null);
-  const [prevaGeracaoAberta, setPrevaGeracaoAberta] = useState(false);
-  const [itensProdutosGerar, setItensProdutosGerar] = useState<ItemProposta[]>([]);
-  const [itensServicosGerar, setItensServicosGerar] = useState<ItemProposta[]>([]);
-  const [gerandoProposta, setGerandoProposta] = useState(false);
 
   // Defesa contra a duplicidade de estágios já corrigida no backend
   // (UniqueConstraint tenant_id+ordem) — se ainda houver dado antigo
@@ -182,7 +174,6 @@ export function Kanban() {
       setDecisoresDaContaEmEdicao([]);
       setAtividadesDoNegocio([]);
       setPropostasDoNegocio([]);
-      setPrevaGeracaoAberta(false);
       return;
     }
     api
@@ -227,58 +218,6 @@ export function Kanban() {
     } finally {
       setEnviandoProposta(false);
     }
-  }
-
-  async function abrirPreviaGeracao() {
-    setErroProposta(null);
-    try {
-      interface ItemTemplate {
-        tipo: "produto" | "servico";
-        descricao: string;
-        valor: number | null;
-      }
-      const [produtos, servicos] = await Promise.all([
-        api.get<ItemTemplate[]>("/template-proposta/itens?tipo=produto"),
-        api.get<ItemTemplate[]>("/template-proposta/itens?tipo=servico"),
-      ]);
-      setItensProdutosGerar(produtos.map((item) => ({ descricao: item.descricao, valor: item.valor })));
-      setItensServicosGerar(servicos.map((item) => ({ descricao: item.descricao, valor: item.valor })));
-      setPrevaGeracaoAberta(true);
-    } catch {
-      setErroProposta("Não foi possível carregar os itens padrão do modelo de proposta.");
-    }
-  }
-
-  async function confirmarGeracaoProposta() {
-    if (!negocioEmEdicao || gerandoProposta) return;
-    setGerandoProposta(true);
-    setErroProposta(null);
-    try {
-      await api.post(`/crm/negocios/${negocioEmEdicao.id}/propostas/gerar`, {
-        itens_produtos: itensProdutosGerar,
-        itens_servicos: itensServicosGerar,
-      });
-      setPrevaGeracaoAberta(false);
-      await carregarPropostasDoNegocio(negocioEmEdicao.id);
-    } catch (error) {
-      setErroProposta(error instanceof ApiError ? error.message : "Não foi possível gerar a proposta.");
-    } finally {
-      setGerandoProposta(false);
-    }
-  }
-
-  function atualizarItemGerar(
-    lista: "produtos" | "servicos",
-    indice: number,
-    campo: "descricao" | "valor",
-    valor: string,
-  ) {
-    const setter = lista === "produtos" ? setItensProdutosGerar : setItensServicosGerar;
-    setter((atual) =>
-      atual.map((item, i) =>
-        i === indice ? { ...item, [campo]: campo === "valor" ? (valor ? Number(valor) : null) : valor } : item,
-      ),
-    );
   }
 
   async function baixarProposta(proposta: PropostaNegocio) {
@@ -763,71 +702,13 @@ export function Kanban() {
                 onSelecionar={enviarProposta}
                 rotulo={enviandoProposta ? "Enviando..." : "Selecionar arquivo"}
               />
-              <Button type="button" size="sm" variant="ghost" onClick={abrirPreviaGeracao}>
-                Gerar proposta automática
-              </Button>
+              <Link
+                to={`/crm/propostas/nova?negocio_id=${negocioEmEdicao.id}`}
+                className="text-[11px] text-cyan hover:underline"
+              >
+                Gerar proposta automática →
+              </Link>
             </div>
-
-            {prevaGeracaoAberta && (
-              <div className="mb-3 flex flex-col gap-3 rounded-lg border border-cyan/30 bg-cyan/5 p-2.5">
-                <div className="text-[11px] text-muted">
-                  Texto, logo e termo de aceite vêm do modelo salvo em Configuração. Ajuste só os itens abaixo — a
-                  edição aqui não altera o modelo padrão.
-                </div>
-                <div>
-                  <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Produtos</div>
-                  {itensProdutosGerar.map((item, indice) => (
-                    <div key={indice} className="mb-1 flex gap-1.5">
-                      <Input
-                        value={item.descricao}
-                        onChange={(event) => atualizarItemGerar("produtos", indice, "descricao", event.target.value)}
-                        className="flex-1"
-                      />
-                      <Input
-                        value={item.valor ?? ""}
-                        type="number"
-                        step="0.01"
-                        onChange={(event) => atualizarItemGerar("produtos", indice, "valor", event.target.value)}
-                        className="w-24"
-                      />
-                    </div>
-                  ))}
-                  {itensProdutosGerar.length === 0 && (
-                    <div className="text-[11px] text-muted">Nenhum item de produto no modelo padrão.</div>
-                  )}
-                </div>
-                <div>
-                  <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Serviços</div>
-                  {itensServicosGerar.map((item, indice) => (
-                    <div key={indice} className="mb-1 flex gap-1.5">
-                      <Input
-                        value={item.descricao}
-                        onChange={(event) => atualizarItemGerar("servicos", indice, "descricao", event.target.value)}
-                        className="flex-1"
-                      />
-                      <Input
-                        value={item.valor ?? ""}
-                        type="number"
-                        step="0.01"
-                        onChange={(event) => atualizarItemGerar("servicos", indice, "valor", event.target.value)}
-                        className="w-24"
-                      />
-                    </div>
-                  ))}
-                  {itensServicosGerar.length === 0 && (
-                    <div className="text-[11px] text-muted">Nenhum item de serviço no modelo padrão.</div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" disabled={gerandoProposta} onClick={confirmarGeracaoProposta}>
-                    {gerandoProposta ? "Gerando..." : "Confirmar e gerar"}
-                  </Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setPrevaGeracaoAberta(false)}>
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
-            )}
 
             {propostasDoNegocio.length === 0 ? (
               <div className="text-[11px] text-muted">Nenhuma proposta anexada ainda.</div>

@@ -16,6 +16,7 @@ import { Aprovacoes } from "@/pages/aprovacoes/Aprovacoes";
 import { Cadencias } from "@/pages/cadencias/Cadencias";
 import { Campanhas } from "@/pages/campanhas/Campanhas";
 import { Configuracao } from "@/pages/configuracao/Configuracao";
+import { CriarProposta } from "@/pages/crm/CriarProposta";
 import { Kanban } from "@/pages/crm/Kanban";
 import { LeadsAcoesConta } from "@/pages/leads/LeadsAcoesConta";
 import { LeadsContatos } from "@/pages/leads/LeadsContatos";
@@ -38,6 +39,7 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route index element={<Dashboard />} />
           <Route path="crm" element={<Kanban />} />
+          <Route path="crm/propostas/nova" element={<CriarProposta />} />
           <Route path="leads/empresas" element={<LeadsEmpresas />} />
           <Route path="leads/contatos" element={<LeadsContatos />} />
           <Route path="leads/contas/:id" element={<LeadsAcoesConta />} />
