@@ -5,10 +5,22 @@ import { InstallBanner } from "@/components/InstallBanner";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth";
 
-const NAV_ITEMS_PAGOS = [
+interface NavItem {
+  path: string;
+  label: string;
+  icon: string;
+  end?: boolean;
+}
+
+const NAV_ITEMS_PAGOS: NavItem[] = [
   { path: "/", label: "Dashboard", icon: "⬡", end: true },
   { path: "/crm", label: "CRM", icon: "◈" },
   { path: "/map", label: "MAP", icon: "⚡" },
+];
+
+// PREDATOR — motor de prospecção/cadências/campanhas. Grupo indentado
+// exibido logo abaixo do MAP, mesmo padrão de LEADS_NAV_ITEMS/ADMIN_NAV_ITEMS.
+const PREDATOR_NAV_ITEMS: NavItem[] = [
   { path: "/prospeccao", label: "Prospecção", icon: "🎯" },
   { path: "/cadencias", label: "Cadências", icon: "📨" },
   { path: "/campanhas", label: "Campanhas", icon: "📣" },
@@ -19,23 +31,23 @@ const NAV_ITEMS_PAGOS = [
 
 // Leads (E-Leads) — clientes avulsos cadastrados direto no CRM, fora do
 // recorte de um ICP. Mesmo padrão de grupo indentado usado em ADMIN_NAV_ITEMS.
-const LEADS_NAV_ITEMS = [
+const LEADS_NAV_ITEMS: NavItem[] = [
   { path: "/leads/empresas", label: "Empresas", icon: "🏬" },
   { path: "/leads/contatos", label: "Contatos", icon: "🧑‍💼" },
 ];
 
 // Sempre visível — é o único módulo que uma conta sem licença ativa
 // (entrou via convite-vitrine, Onda H) tem acesso.
-const NAV_ITEM_REDE_SOCIAL = { path: "/rede-social", label: "Rede Social", icon: "◎", end: false };
+const NAV_ITEM_REDE_SOCIAL: NavItem = { path: "/rede-social", label: "Rede Social", icon: "◎", end: false };
 
-const ADMIN_NAV_ITEMS = [
+const ADMIN_NAV_ITEMS: NavItem[] = [
   { path: "/admin/tenants", label: "Tenants", icon: "🏢" },
   { path: "/admin/licencas", label: "Licenças", icon: "📋" },
   { path: "/admin/convites", label: "Convites", icon: "🔑" },
   { path: "/admin/planos", label: "Planos", icon: "💳" },
 ];
 
-function NavButton({ path, label, icon, end }: { path: string; label: string; icon: string; end?: boolean }) {
+function NavButton({ path, label, icon, end }: NavItem) {
   return (
     <NavLink
       to={path}
@@ -58,7 +70,9 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const isSuperAdmin = usuario?.papel === "super_admin";
-  const navItems = temLicencaAtiva ? [...NAV_ITEMS_PAGOS, NAV_ITEM_REDE_SOCIAL] : [NAV_ITEM_REDE_SOCIAL];
+  const navItems = temLicencaAtiva
+    ? [...NAV_ITEMS_PAGOS, ...PREDATOR_NAV_ITEMS, NAV_ITEM_REDE_SOCIAL]
+    : [NAV_ITEM_REDE_SOCIAL];
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -85,9 +99,19 @@ export function AppShell() {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-1.5">
-          {navItems.map((item) => (
-            <NavButton key={item.path} {...item} />
-          ))}
+          {temLicencaAtiva &&
+            NAV_ITEMS_PAGOS.map((item) => <NavButton key={item.path} {...item} />)}
+
+          {temLicencaAtiva && (
+            <>
+              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">Predator</div>
+              {PREDATOR_NAV_ITEMS.map((item) => (
+                <NavButton key={item.path} {...item} />
+              ))}
+            </>
+          )}
+
+          <NavButton {...NAV_ITEM_REDE_SOCIAL} />
 
           {temLicencaAtiva && (
             <>
