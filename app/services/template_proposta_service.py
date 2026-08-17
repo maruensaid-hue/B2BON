@@ -1,6 +1,7 @@
 from io import BytesIO
 
 from fpdf import FPDF
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.conta import Conta
@@ -23,12 +24,24 @@ def _texto_seguro(texto: str) -> str:
 
 
 def obter_ou_criar(db: Session, tenant_id: str) -> TemplateProposta:
+    """Get-or-create do modelo (1 por tenant, `UniqueConstraint` na coluna
+    `tenant_id`). A página "Criar Proposta" dispara 3 GETs em paralelo no
+    primeiro acesso do tenant (texto/logo/termo + itens de produto +
+    itens de serviço) — todos passam por aqui, e as duas primeiras
+    chamadas podem ver a tabela vazia ao mesmo tempo. Mesmo padrão de
+    `garantir_estagios_padrao`: quem perder a corrida recua e relê o que
+    a outra já gravou, em vez de estourar `IntegrityError` pro cliente."""
     template = db.query(TemplateProposta).filter_by(tenant_id=tenant_id).one_or_none()
-    if template is None:
-        template = TemplateProposta(tenant_id=tenant_id)
-        db.add(template)
+    if template is not None:
+        return template
+    template = TemplateProposta(tenant_id=tenant_id)
+    db.add(template)
+    try:
         db.commit()
-        db.refresh(template)
+    except IntegrityError:
+        db.rollback()
+        return db.query(TemplateProposta).filter_by(tenant_id=tenant_id).one()
+    db.refresh(template)
     return template
 
 

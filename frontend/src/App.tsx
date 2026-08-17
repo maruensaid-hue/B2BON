@@ -1,30 +1,43 @@
+import { lazy, Suspense } from "react";
 import { Route, Routes } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { AdminConvites } from "@/pages/admin/AdminConvites";
-import { AdminLicencas } from "@/pages/admin/AdminLicencas";
-import { AdminPlanos } from "@/pages/admin/AdminPlanos";
-import { AdminTenants } from "@/pages/admin/AdminTenants";
 import { ConviteVitrine } from "@/pages/ConviteVitrine";
-import { Dashboard } from "@/pages/Dashboard";
 import { Login } from "@/pages/Login";
 import { PagamentoRetorno } from "@/pages/PagamentoRetorno";
 import { Privacidade } from "@/pages/Privacidade";
 import { Termos } from "@/pages/Termos";
-import { Aprovacoes } from "@/pages/aprovacoes/Aprovacoes";
-import { Cadencias } from "@/pages/cadencias/Cadencias";
-import { Campanhas } from "@/pages/campanhas/Campanhas";
-import { Configuracao } from "@/pages/configuracao/Configuracao";
-import { CriarProposta } from "@/pages/crm/CriarProposta";
-import { Kanban } from "@/pages/crm/Kanban";
-import { LeadsAcoesConta } from "@/pages/leads/LeadsAcoesConta";
-import { LeadsContatos } from "@/pages/leads/LeadsContatos";
-import { LeadsEmpresas } from "@/pages/leads/LeadsEmpresas";
-import { Map } from "@/pages/map/Map";
-import { Prospeccao } from "@/pages/prospeccao/Prospeccao";
-import { RedeSocial } from "@/pages/rede-social/RedeSocial";
-import { Reunioes } from "@/pages/reunioes/Reunioes";
+
+// Rotas fora do bundle principal — cada uma vira seu próprio chunk, buscado
+// só quando o usuário realmente navega até ali (ex.: Admin, que só existe
+// pra super_admin, nunca precisa baixar pro resto dos usuários).
+const AdminConvites = lazy(() => import("@/pages/admin/AdminConvites").then((m) => ({ default: m.AdminConvites })));
+const AdminLicencas = lazy(() => import("@/pages/admin/AdminLicencas").then((m) => ({ default: m.AdminLicencas })));
+const AdminPlanos = lazy(() => import("@/pages/admin/AdminPlanos").then((m) => ({ default: m.AdminPlanos })));
+const AdminTenants = lazy(() => import("@/pages/admin/AdminTenants").then((m) => ({ default: m.AdminTenants })));
+const Aprovacoes = lazy(() => import("@/pages/aprovacoes/Aprovacoes").then((m) => ({ default: m.Aprovacoes })));
+const Cadencias = lazy(() => import("@/pages/cadencias/Cadencias").then((m) => ({ default: m.Cadencias })));
+const Campanhas = lazy(() => import("@/pages/campanhas/Campanhas").then((m) => ({ default: m.Campanhas })));
+// Dashboard puxa o recharts (biblioteca de gráfico pesada) — só ela usa
+// essa dependência, então separá-la em chunk próprio tira o peso do
+// gráfico do bundle principal mesmo sendo a rota inicial (o shell da
+// aplicação, com o menu, aparece antes do gráfico terminar de carregar).
+const Dashboard = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
+const Configuracao = lazy(() => import("@/pages/configuracao/Configuracao").then((m) => ({ default: m.Configuracao })));
+const CriarProposta = lazy(() => import("@/pages/crm/CriarProposta").then((m) => ({ default: m.CriarProposta })));
+const Kanban = lazy(() => import("@/pages/crm/Kanban").then((m) => ({ default: m.Kanban })));
+const LeadsAcoesConta = lazy(() => import("@/pages/leads/LeadsAcoesConta").then((m) => ({ default: m.LeadsAcoesConta })));
+const LeadsContatos = lazy(() => import("@/pages/leads/LeadsContatos").then((m) => ({ default: m.LeadsContatos })));
+const LeadsEmpresas = lazy(() => import("@/pages/leads/LeadsEmpresas").then((m) => ({ default: m.LeadsEmpresas })));
+const Map = lazy(() => import("@/pages/map/Map").then((m) => ({ default: m.Map })));
+const Prospeccao = lazy(() => import("@/pages/prospeccao/Prospeccao").then((m) => ({ default: m.Prospeccao })));
+const RedeSocial = lazy(() => import("@/pages/rede-social/RedeSocial").then((m) => ({ default: m.RedeSocial })));
+const Reunioes = lazy(() => import("@/pages/reunioes/Reunioes").then((m) => ({ default: m.Reunioes })));
+
+function CarregandoPagina() {
+  return <div className="p-5.5 text-[12px] text-muted">Carregando...</div>;
+}
 
 export default function App() {
   return (
@@ -37,24 +50,150 @@ export default function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
-          <Route index element={<Dashboard />} />
-          <Route path="crm" element={<Kanban />} />
-          <Route path="crm/propostas/nova" element={<CriarProposta />} />
-          <Route path="leads/empresas" element={<LeadsEmpresas />} />
-          <Route path="leads/contatos" element={<LeadsContatos />} />
-          <Route path="leads/contas/:id" element={<LeadsAcoesConta />} />
-          <Route path="rede-social" element={<RedeSocial />} />
-          <Route path="map" element={<Map />} />
-          <Route path="prospeccao" element={<Prospeccao />} />
-          <Route path="cadencias" element={<Cadencias />} />
-          <Route path="campanhas" element={<Campanhas />} />
-          <Route path="aprovacoes" element={<Aprovacoes />} />
-          <Route path="reunioes" element={<Reunioes />} />
-          <Route path="configuracao" element={<Configuracao />} />
-          <Route path="admin/tenants" element={<AdminTenants />} />
-          <Route path="admin/licencas" element={<AdminLicencas />} />
-          <Route path="admin/convites" element={<AdminConvites />} />
-          <Route path="admin/planos" element={<AdminPlanos />} />
+          <Route
+            index
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Dashboard />
+              </Suspense>
+            }
+          />
+          <Route
+            path="crm"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Kanban />
+              </Suspense>
+            }
+          />
+          <Route
+            path="crm/propostas/nova"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <CriarProposta />
+              </Suspense>
+            }
+          />
+          <Route
+            path="leads/empresas"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <LeadsEmpresas />
+              </Suspense>
+            }
+          />
+          <Route
+            path="leads/contatos"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <LeadsContatos />
+              </Suspense>
+            }
+          />
+          <Route
+            path="leads/contas/:id"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <LeadsAcoesConta />
+              </Suspense>
+            }
+          />
+          <Route
+            path="rede-social"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <RedeSocial />
+              </Suspense>
+            }
+          />
+          <Route
+            path="map"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Map />
+              </Suspense>
+            }
+          />
+          <Route
+            path="prospeccao"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Prospeccao />
+              </Suspense>
+            }
+          />
+          <Route
+            path="cadencias"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Cadencias />
+              </Suspense>
+            }
+          />
+          <Route
+            path="campanhas"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Campanhas />
+              </Suspense>
+            }
+          />
+          <Route
+            path="aprovacoes"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Aprovacoes />
+              </Suspense>
+            }
+          />
+          <Route
+            path="reunioes"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Reunioes />
+              </Suspense>
+            }
+          />
+          <Route
+            path="configuracao"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Configuracao />
+              </Suspense>
+            }
+          />
+          <Route
+            path="admin/tenants"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <AdminTenants />
+              </Suspense>
+            }
+          />
+          <Route
+            path="admin/licencas"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <AdminLicencas />
+              </Suspense>
+            }
+          />
+          <Route
+            path="admin/convites"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <AdminConvites />
+              </Suspense>
+            }
+          />
+          <Route
+            path="admin/planos"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <AdminPlanos />
+              </Suspense>
+            }
+          />
         </Route>
       </Route>
     </Routes>

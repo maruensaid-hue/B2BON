@@ -49,11 +49,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
 
   if (response.status === 401) {
-    limparSessao();
-    if (window.location.pathname !== "/login") {
-      window.location.href = "/login";
+    // Só é "sessão expirada" se havia um token sendo usado — um 401 numa
+    // chamada sem token (ex.: a própria tentativa de login) é só
+    // credencial errada, e quem chamou precisa ver a mensagem real do
+    // backend ("E-mail ou senha inválidos."), não um redirect enganoso.
+    if (token) {
+      limparSessao();
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+      throw new ApiError(401, "Sessão expirada — faça login novamente.");
     }
-    throw new ApiError(401, "Sessão expirada — faça login novamente.");
+    const corpo = await response.json().catch(() => ({}));
+    throw new ApiError(401, corpo.detalhe ?? "Não foi possível autenticar.");
   }
 
   if (!response.ok) {
@@ -101,11 +109,15 @@ export async function postFile<T>(path: string, file: File): Promise<T> {
   });
 
   if (response.status === 401) {
-    limparSessao();
-    if (window.location.pathname !== "/login") {
-      window.location.href = "/login";
+    if (token) {
+      limparSessao();
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+      throw new ApiError(401, "Sessão expirada — faça login novamente.");
     }
-    throw new ApiError(401, "Sessão expirada — faça login novamente.");
+    const corpo = await response.json().catch(() => ({}));
+    throw new ApiError(401, corpo.detalhe ?? "Não foi possível autenticar.");
   }
 
   if (!response.ok) {
