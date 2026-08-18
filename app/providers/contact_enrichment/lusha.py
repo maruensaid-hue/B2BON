@@ -9,13 +9,9 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
     revelação dos IDs encontrados (`POST /v3/contacts/enrich`, com
     e-mail/telefone), as duas síncronas (diferente do Apollo, cujo
     telefone só sai por webhook assíncrono — por isso a escolha pela
-    Lusha). Forma de `/prospecting` e o `emails`/`phones` de
-    `/enrich` conferidos direto na doc interativa (schema real, não
-    suposição); a forma exata dos demais campos da resposta de
-    `/enrich` foi inferida por analogia ao padrão usado em
-    `/v3/companies/enrich` (mesmo `emails: [{"email"}]`/
-    `phones: [{"number"}]`) — vale validar com uma chamada real na
-    primeira execução com chave de produção."""
+    Lusha). Formato de requisição/resposta dos dois endpoints conferido
+    direto no OpenAPI spec oficial da Lusha (`V3EnrichedContact`,
+    `V3EmailAddress`, `V3PhoneNumber`), não por suposição."""
 
     _BASE_URL = "https://api.lusha.com"
 
@@ -55,7 +51,9 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
         for contato in dados_enrich.get("results", []):
             if contato.get("error"):
                 continue
-            nome = " ".join(parte for parte in [contato.get("firstName"), contato.get("lastName")] if parte)
+            nome = contato.get("fullName") or " ".join(
+                parte for parte in [contato.get("firstName"), contato.get("lastName")] if parte
+            )
             if not nome:
                 continue
             candidatos.append(
