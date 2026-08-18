@@ -6,6 +6,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ConviteVitrine } from "@/pages/ConviteVitrine";
 import { Login } from "@/pages/Login";
 import { PagamentoRetorno } from "@/pages/PagamentoRetorno";
+import { RegistrarConvite } from "@/pages/RegistrarConvite";
 import { Privacidade } from "@/pages/Privacidade";
 import { Termos } from "@/pages/Termos";
 
@@ -44,6 +45,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/convite-vitrine/:codigo" element={<ConviteVitrine />} />
+      <Route path="/convite/:codigo" element={<RegistrarConvite />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/termos" element={<Termos />} />
       <Route path="/pagamento/retorno" element={<PagamentoRetorno />} />

@@ -29,6 +29,14 @@ interface DadosRegistroVitrine {
   plano_id: number;
 }
 
+interface DadosRegistroConvite {
+  codigo_convite: string;
+  nome: string;
+  email: string;
+  senha: string;
+  aceite_termos: boolean;
+}
+
 interface AuthContextValue {
   usuario: Usuario | null;
   autenticado: boolean;
@@ -36,6 +44,7 @@ interface AuthContextValue {
   entrar: (email: string, senha: string) => Promise<void>;
   entrarComGoogle: (idToken: string) => Promise<void>;
   registrarVitrine: (dados: DadosRegistroVitrine) => Promise<string | null>;
+  registrarComConvite: (dados: DadosRegistroConvite) => Promise<void>;
   sair: () => void;
 }
 
@@ -77,6 +86,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return resposta.checkout_url;
   }, []);
 
+  const registrarComConvite = useCallback(async (dados: DadosRegistroConvite) => {
+    const resposta = await api.post<TokenResponse>("/auth/registrar", dados);
+    setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
+    setUsuario(resposta.usuario);
+    setTemLicencaAtiva(resposta.tem_licenca_ativa);
+  }, []);
+
   const sair = useCallback(() => {
     limparSessao();
     setUsuario(null);
@@ -91,9 +107,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       entrar,
       entrarComGoogle,
       registrarVitrine,
+      registrarComConvite,
       sair,
     }),
-    [usuario, temLicencaAtiva, entrar, entrarComGoogle, registrarVitrine, sair],
+    [usuario, temLicencaAtiva, entrar, entrarComGoogle, registrarVitrine, registrarComConvite, sair],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

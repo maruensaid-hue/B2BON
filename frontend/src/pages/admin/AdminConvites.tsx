@@ -60,6 +60,10 @@ export function AdminConvites() {
     }
   }
 
+  function linkConvite(codigo: string): string {
+    return `${window.location.origin}/convite/${codigo}`;
+  }
+
   async function revogar(codigo: string) {
     try {
       await api.post(`/convites/${codigo}/revogar`);
@@ -75,8 +79,12 @@ export function AdminConvites() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Admin — Convites</div>
-          <div className="mt-0.5 text-[11px] text-muted">Códigos de acesso pré-autorizado do seu tenant</div>
+          <div className="font-head text-xl font-bold">Admin — Convidar colega para o seu tenant</div>
+          <div className="mt-0.5 text-[11px] text-muted">
+            Traz uma nova pessoa pra dentro da <strong>CyberFort</strong> (seu próprio tenant), com o papel que você
+            escolher. Não confundir com "Convidar empresa" (Rede Social) — aquele cadastra um cliente novo, com
+            plano e cobrança próprios.
+          </div>
         </div>
         <Button size="sm" variant="violet" onClick={() => setModalAberto(true)}>
           + Gerar convite
@@ -110,9 +118,14 @@ export function AdminConvites() {
                 </td>
                 <td className="p-2">
                   {convite.status === "disponivel" && (
-                    <Button size="sm" variant="danger" onClick={() => revogar(convite.codigo)}>
-                      Revogar
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(linkConvite(convite.codigo))}>
+                        Copiar link
+                      </Button>
+                      <Button size="sm" variant="danger" onClick={() => revogar(convite.codigo)}>
+                        Revogar
+                      </Button>
+                    </div>
                   )}
                 </td>
               </tr>
