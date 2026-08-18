@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.integrations.brasilapi_client import BrasilApiClient
-from app.integrations.site_fetcher import SiteFetcher
+from app.integrations.site_fetcher import HostNaoPublico, SiteFetcher
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.campo_enriquecido import CampoEnriquecido
@@ -398,20 +398,46 @@ def _normalizar_dominio(dominio: str | None) -> str | None:
 # Domínios que aparecem com frequência nos primeiros resultados de busca
 # mas nunca são o site institucional da empresa — descartados ao tentar
 # descobrir o domínio automaticamente (evita salvar o perfil do LinkedIn
-# da empresa como se fosse o site dela, por exemplo).
+# da empresa, ou um portal de agendamento/marketplace terceiro, como se
+# fosse o site dela).
 _DOMINIOS_IGNORADOS_BUSCA = {
     "linkedin.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
     "youtube.com", "wikipedia.org", "indeed.com", "glassdoor.com",
     "econodata.com.br", "cnpj.biz",
+    # Portais/marketplaces que listam empresas de terceiros — aparecem bem
+    # rankeados pra razão social completa mas nunca são o site da própria
+    # empresa (raio-X de produção: pegou "guia.agendarconsulta.com" no
+    # lugar do site real de uma clínica).
+    "agendarconsulta.com", "doctoralia.com.br", "boaconsulta.com",
+    "reclameaqui.com.br", "mercadolivre.com.br", "empresascnpj.com",
 }
+
+# Sufixos de natureza jurídica (com variações comuns de grafia) — a razão
+# social crua ("Empresa X Ltda ME") quase nunca aparece assim no próprio
+# site da empresa, então mandar isso pra busca faz mecanismos de busca
+# priorizarem diretórios/agregadores de terceiros (que listam pela razão
+# social completa) acima do site oficial (que usa o nome de marca).
+_SUFIXOS_NATUREZA_JURIDICA = re.compile(
+    r"\b(LTDA\.?|EIRELI|EPP|MEI|S\.?\s*/?\s*A\.?|SOCIEDADE\s+AN[ÔO]NIMA|"
+    r"SOCIEDADE\s+SIMPLES|ME)\b\.?",
+    re.IGNORECASE,
+)
+
+
+def _nome_para_busca(nome_empresa: str) -> str:
+    """Remove sufixos de natureza jurídica antes de montar a query de
+    busca — ver `_SUFIXOS_NATUREZA_JURIDICA`."""
+    limpo = _SUFIXOS_NATUREZA_JURIDICA.sub("", nome_empresa)
+    return re.sub(r"\s+", " ", limpo).strip() or nome_empresa
 
 
 def _descobrir_dominio(nome_empresa: str, web_search: WebSearchProvider) -> str | None:
     """Descoberta best-effort do site oficial via busca na web, usada
     quando a conta ainda não tem domínio cadastrado (E2-H2). Pega o
     primeiro resultado cujo domínio não é um dos conhecidos por não
-    serem o site institucional (redes sociais, diretórios de CNPJ etc.)."""
-    for resultado in web_search.buscar(f"{nome_empresa} site oficial"):
+    serem o site institucional (redes sociais, diretórios de CNPJ,
+    marketplaces etc.)."""
+    for resultado in web_search.buscar(f"{_nome_para_busca(nome_empresa)} site oficial"):
         dominio = _normalizar_dominio(resultado.url)
         if dominio and not any(dominio == d or dominio.endswith(f".{d}") for d in _DOMINIOS_IGNORADOS_BUSCA):
             return dominio
@@ -558,8 +584,22 @@ def enriquecer(
 
     try:
         texto_site = site_fetcher(conta.dominio)
+    except HostNaoPublico as erro:
+        raise RegraNegocioViolada(
+            f'Não conseguimos acessar "{conta.dominio}" — o domínio não existe ou não resolve. '
+            'Confirme o endereço em "Editar dados da conta".'
+        ) from erro
+    except httpx.HTTPStatusError as erro:
+        raise RegraNegocioViolada(
+            f'O site "{conta.dominio}" recusou o acesso (erro {erro.response.status_code}) — pode ser '
+            'proteção antibot do próprio site, ou o domínio pode não ser o correto. Confirme em '
+            '"Editar dados da conta" ou tente novamente mais tarde.'
+        ) from erro
     except httpx.HTTPError as erro:
-        raise RegraNegocioViolada(f"Não foi possível acessar o site institucional: {erro}") from erro
+        raise RegraNegocioViolada(
+            f'Não conseguimos acessar "{conta.dominio}" agora (site fora do ar ou muito lento). '
+            "Tente novamente mais tarde."
+        ) from erro
 
     resposta = llm_helpers.gerar(
         llm,

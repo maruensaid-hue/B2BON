@@ -1,5 +1,7 @@
+import httpx
 import pytest
 
+from app.integrations.site_fetcher import HostNaoPublico
 from app.models.conta import Conta
 from app.providers.web_search.base import ResultadoBusca
 from app.services import conta_service
@@ -85,3 +87,100 @@ def test_descobrir_dominio_ignora_dominio_bloqueado_e_pega_o_proximo(db_session)
     dominio = conta_service._descobrir_dominio("Alpha Tech", web_search)
 
     assert dominio == "alphatech.com.br"
+
+
+def test_descobrir_dominio_ignora_portal_de_agendamento_terceiro(db_session):
+    """Raio-X de produção: busca por razão social completa achava um
+    portal de agendamento de terceiros (não o site da própria clínica)."""
+    web_search = FakeWebSearchProvider(
+        [
+            ResultadoBusca(titulo="Santorius - AgendarConsulta", url="https://guia.agendarconsulta.com/clinica-x", descricao=""),
+            ResultadoBusca(titulo="Santorius Medicina", url="https://santoriusmedicina.com.br/", descricao=""),
+        ]
+    )
+
+    dominio = conta_service._descobrir_dominio("Santorius Medicina Cirurgica E Diagnostica Ltda", web_search)
+
+    assert dominio == "santoriusmedicina.com.br"
+
+
+@pytest.mark.parametrize(
+    ("razao_social", "esperado"),
+    [
+        ("Alpha Tech Ltda", "Alpha Tech"),
+        ("Alpha Tech Ltda.", "Alpha Tech"),
+        ("Alpha Tech S/A", "Alpha Tech"),
+        ("Alpha Tech S.A.", "Alpha Tech"),
+        ("Alpha Tech EIRELI", "Alpha Tech"),
+        ("Alpha Tech ME", "Alpha Tech"),
+        ("Alpha Tech EPP", "Alpha Tech"),
+        ("Alpha Tech Sociedade Simples", "Alpha Tech"),
+        ("Alpha Tech", "Alpha Tech"),  # sem sufixo, não mexe
+    ],
+)
+def test_nome_para_busca_remove_sufixo_de_natureza_juridica(razao_social, esperado):
+    assert conta_service._nome_para_busca(razao_social) == esperado
+
+
+def test_descobrir_dominio_busca_com_nome_limpo_de_sufixo_juridico(db_session):
+    web_search = FakeWebSearchProvider([ResultadoBusca(titulo="Alpha Tech", url="https://alphatech.com.br/", descricao="")])
+
+    conta_service._descobrir_dominio("Alpha Tech Ltda ME", web_search)
+
+    assert web_search.buscas == ["Alpha Tech site oficial"]
+
+
+def _site_fetcher_que_falha(excecao):
+    def _fetcher(dominio):
+        raise excecao
+
+    return _fetcher
+
+
+def test_enriquecer_com_dominio_que_nao_resolve_da_mensagem_amigavel(db_session):
+    conta = _criar_conta(db_session, dominio="dominio-inexistente-xyz.com.br")
+
+    with pytest.raises(RegraNegocioViolada) as excinfo:
+        conta_service.enriquecer(
+            db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["x"]),
+            _site_fetcher_que_falha(HostNaoPublico("Não foi possível resolver o domínio: x")),
+            FakeWebSearchProvider(),
+        )
+
+    mensagem = str(excinfo.value)
+    assert "não existe ou não resolve" in mensagem
+    assert "Editar dados da conta" in mensagem
+
+
+def test_enriquecer_com_site_bloqueando_acesso_da_mensagem_amigavel(db_session):
+    """Antes desta correção, o erro cru do httpx (com URL/link do MDN)
+    era mostrado direto pro usuário — raio-X de produção real (403 do
+    site institucional)."""
+    conta = _criar_conta(db_session, dominio="site-bloqueado.com.br")
+    request = httpx.Request("GET", "https://site-bloqueado.com.br")
+    resposta = httpx.Response(403, request=request)
+    erro = httpx.HTTPStatusError("403 Forbidden", request=request, response=resposta)
+
+    with pytest.raises(RegraNegocioViolada) as excinfo:
+        conta_service.enriquecer(
+            db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["x"]),
+            _site_fetcher_que_falha(erro),
+            FakeWebSearchProvider(),
+        )
+
+    mensagem = str(excinfo.value)
+    assert "erro 403" in mensagem
+    assert "developer.mozilla.org" not in mensagem
+
+
+def test_enriquecer_com_timeout_da_mensagem_amigavel(db_session):
+    conta = _criar_conta(db_session, dominio="site-lento.com.br")
+
+    with pytest.raises(RegraNegocioViolada) as excinfo:
+        conta_service.enriquecer(
+            db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["x"]),
+            _site_fetcher_que_falha(httpx.TimeoutException("timeout")),
+            FakeWebSearchProvider(),
+        )
+
+    assert "fora do ar ou muito lento" in str(excinfo.value)
