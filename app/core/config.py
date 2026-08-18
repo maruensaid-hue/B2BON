@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str = ""
     whatsapp_business_account_id: str = ""
 
+    # Verify token do handshake de Webhooks da Meta (Cloud API) — mesmo
+    # valor colado na Callback URL em Meta for Developers > WhatsApp >
+    # Step 2 (Production setup) > Configure Webhooks > Verify token.
+    whatsapp_webhook_verify_token: str = ""
+
     # SMTP — vazio usa StubEmailProvider em dev/teste.
     smtp_host: str = ""
     smtp_port: int = 587

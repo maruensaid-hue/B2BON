@@ -46,6 +46,12 @@ real percorrido (inclui os desvios da versão original do plano).
      dessa configuração).
    - `CORS_ORIGINS`: por ora, `["http://localhost:5173"]` — você
      atualiza no passo 5 com a URL real do frontend.
+   - `WHATSAPP_WEBHOOK_VERIFY_TOKEN`: gere com
+     `python -c "import secrets; print(secrets.token_urlsafe(32))"` — é o
+     valor colado em Meta for Developers > WhatsApp > Step 2 (Production
+     setup) > Configure Webhooks > **Verify token** (precisa ser
+     idêntico dos dois lados). A **Callback URL** correspondente é
+     `https://<seu-backend>/api/v1/webhooks/whatsapp/meta`.
 4. Deploy. O `CMD` do Docker roda `alembic upgrade head` sozinho antes
    de subir o Uvicorn — o schema completo é criado no Neon nesse
    primeiro deploy.
