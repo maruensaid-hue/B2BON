@@ -40,6 +40,7 @@ from app.providers.rede_social.base import RedeSocialProvider
 from app.providers.rede_social.nucleo import NucleoRedeSocialProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.providers.web_search.brave import BraveSearchProvider
+from app.providers.web_search.desativado import WebSearchDesativadoProvider
 from app.providers.web_search.stub import StubWebSearchProvider
 from app.services import auth_service
 from app.services.errors import NaoAutenticado, NaoAutorizado
@@ -83,6 +84,11 @@ def get_contact_enrichment_provider() -> ContactEnrichmentProvider:
 def get_web_search_provider() -> WebSearchProvider:
     if settings.brave_search_api_key:
         return BraveSearchProvider()
+    if settings.e_ambiente_producao:
+        # StubWebSearchProvider fabrica um domínio plausível a partir da
+        # query — em produção sem chave real, isso salvava um site
+        # inexistente na conta (ver WebSearchDesativadoProvider).
+        return WebSearchDesativadoProvider()
     return StubWebSearchProvider()
 
 

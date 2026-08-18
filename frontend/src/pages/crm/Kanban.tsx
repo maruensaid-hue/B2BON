@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
+import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { api, ApiError, getBlob, postFile } from "@/lib/api";
 
 const MOTIVOS_PERDA = [
@@ -95,6 +96,7 @@ export function Kanban() {
   const [propostasDoNegocio, setPropostasDoNegocio] = useState<PropostaNegocio[]>([]);
   const [enviandoProposta, setEnviandoProposta] = useState(false);
   const [erroProposta, setErroProposta] = useState<string | null>(null);
+  const [contaEmEdicaoModalAberta, setContaEmEdicaoModalAberta] = useState(false);
 
   // Defesa contra a duplicidade de estágios já corrigida no backend
   // (UniqueConstraint tenant_id+ordem) — se ainda houver dado antigo
@@ -169,6 +171,14 @@ export function Kanban() {
       .catch(() => setDecisoresDaContaSelecionada([]));
   }, [contaExistenteSelecionadaId]);
 
+  function recarregarDecisoresDaContaEmEdicao() {
+    if (!negocioEmEdicao) return;
+    api
+      .get<DecisorResumo[]>(`/contas/${negocioEmEdicao.conta_id}/decisores`)
+      .then(setDecisoresDaContaEmEdicao)
+      .catch(() => setDecisoresDaContaEmEdicao([]));
+  }
+
   useEffect(() => {
     if (!negocioEmEdicao) {
       setDecisoresDaContaEmEdicao([]);
@@ -176,10 +186,7 @@ export function Kanban() {
       setPropostasDoNegocio([]);
       return;
     }
-    api
-      .get<DecisorResumo[]>(`/contas/${negocioEmEdicao.conta_id}/decisores`)
-      .then(setDecisoresDaContaEmEdicao)
-      .catch(() => setDecisoresDaContaEmEdicao([]));
+    recarregarDecisoresDaContaEmEdicao();
     carregarAtividadesDoNegocio(negocioEmEdicao.id);
     carregarPropostasDoNegocio(negocioEmEdicao.id);
   }, [negocioEmEdicao]);
@@ -651,8 +658,17 @@ export function Kanban() {
         {negocioEmEdicao && (
           <div className="flex flex-col gap-4">
           <form onSubmit={salvarEdicaoNegocio} className="flex flex-col gap-3">
-            <div className="text-[11px] text-muted">
-              Empresa: <span className="font-semibold text-text">{negocioEmEdicao.conta_nome}</span>
+            <div className="flex items-center justify-between text-[11px] text-muted">
+              <span>
+                Empresa: <span className="font-semibold text-text">{negocioEmEdicao.conta_nome}</span>
+              </span>
+              <button
+                type="button"
+                className="text-cyan hover:underline"
+                onClick={() => setContaEmEdicaoModalAberta(true)}
+              >
+                Editar empresa / enriquecer contatos
+              </button>
             </div>
             <div>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome do negócio</div>
@@ -738,6 +754,14 @@ export function Kanban() {
           </div>
         )}
       </Modal>
+
+      {contaEmEdicaoModalAberta && negocioEmEdicao && (
+        <ContaDetalheModal
+          contaId={negocioEmEdicao.conta_id}
+          onClose={() => setContaEmEdicaoModalAberta(false)}
+          onAtualizado={recarregarDecisoresDaContaEmEdicao}
+        />
+      )}
 
       <Modal title="Motivo da perda" open={negocioParaMarcarPerdido !== null} onClose={() => setNegocioParaMarcarPerdido(null)}>
         {negocioParaMarcarPerdido && (

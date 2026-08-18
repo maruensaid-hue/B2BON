@@ -1,3 +1,5 @@
+import unicodedata
+
 from app.models.conta import Conta
 from app.models.usuario import Usuario
 from app.providers.account_data.base import ContaCandidata, DecisorCandidato
@@ -463,6 +465,67 @@ def test_export_pdf_gera_arquivo_valido(client, criar_icp, fake_account_data):
     assert resposta.status_code == 200
     assert resposta.headers["content-type"] == "application/pdf"
     assert resposta.content.startswith(b"%PDF")
+
+
+def test_export_pdf_inclui_email_e_telefone_do_decisor(client, criar_icp, fake_account_data, monkeypatch):
+    """Raio-X: a lista de decisores exportada precisa levar o contato
+    enriquecido (e-mail/telefone), não só nome e cargo."""
+    from fpdf import FPDF
+
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech")]
+    conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
+    client.post(
+        f"/api/v1/contas/{conta_id}/decisores",
+        json={"nome": "Ana Souza", "cargo": "CEO", "email": "ana@alphatech.com.br", "telefone": "+5511988887777"},
+    )
+
+    linhas_escritas = []
+    cell_original = FPDF.cell
+
+    def cell_espiao(self, *args, **kwargs):
+        if "text" in kwargs:
+            linhas_escritas.append(kwargs["text"])
+        return cell_original(self, *args, **kwargs)
+
+    monkeypatch.setattr(FPDF, "cell", cell_espiao)
+
+    resposta = client.get(f"/api/v1/contas/{conta_id}/export/pdf")
+
+    assert resposta.status_code == 200
+    linha_decisor = next(linha for linha in linhas_escritas if linha.startswith("- Ana Souza"))
+    assert "ana@alphatech.com.br" in linha_decisor
+    assert "+5511988887777" in linha_decisor
+
+
+def test_export_pdf_normaliza_acento_decomposto(client, criar_icp, fake_account_data, monkeypatch):
+    """Raio-X: nome vindo de fornecedor externo (Lusha) pode chegar com
+    acento em forma decomposta (NFD) — sem normalizar pra NFC antes do
+    encode Latin-1, "César" virava "Ce?sar" no PDF exportado."""
+    from fpdf import FPDF
+
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech")]
+    conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
+    nome_nfd = unicodedata.normalize("NFD", "Felipe César")
+    client.post(f"/api/v1/contas/{conta_id}/decisores", json={"nome": nome_nfd, "cargo": "Diretor"})
+
+    linhas_escritas = []
+    cell_original = FPDF.cell
+
+    def cell_espiao(self, *args, **kwargs):
+        if "text" in kwargs:
+            linhas_escritas.append(kwargs["text"])
+        return cell_original(self, *args, **kwargs)
+
+    monkeypatch.setattr(FPDF, "cell", cell_espiao)
+
+    resposta = client.get(f"/api/v1/contas/{conta_id}/export/pdf")
+
+    assert resposta.status_code == 200
+    linha_decisor = next(linha for linha in linhas_escritas if linha.startswith("- Felipe"))
+    assert "Felipe César" in linha_decisor
+    assert "?" not in linha_decisor
 
 
 def _id_do_usuario(db_session, email: str) -> int:

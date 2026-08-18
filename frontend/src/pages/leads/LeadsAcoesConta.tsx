@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -108,6 +109,7 @@ export function LeadsAcoesConta() {
   const [modalContato, setModalContato] = useState(false);
   const [modalNegocio, setModalNegocio] = useState(false);
   const [modalReuniao, setModalReuniao] = useState(false);
+  const [modalEnriquecimento, setModalEnriquecimento] = useState(false);
   const [cadenciaSelecionadaId, setCadenciaSelecionadaId] = useState<number | null>(null);
   const [gerandoCadencia, setGerandoCadencia] = useState(false);
 
@@ -330,9 +332,14 @@ export function LeadsAcoesConta() {
         ← Voltar para Empresas
       </button>
 
-      <div className="mb-5">
-        <div className="font-head text-xl font-bold">{conta.nome_fantasia || conta.nome}</div>
-        <div className="mt-0.5 text-[11px] text-muted">Lead avulso — fora do recorte de ICP</div>
+      <div className="mb-5 flex items-center justify-between">
+        <div>
+          <div className="font-head text-xl font-bold">{conta.nome_fantasia || conta.nome}</div>
+          <div className="mt-0.5 text-[11px] text-muted">Lead avulso — fora do recorte de ICP</div>
+        </div>
+        <Button size="sm" variant="ghost" onClick={() => setModalEnriquecimento(true)}>
+          Enriquecer / mapear decisores / exportar
+        </Button>
       </div>
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
@@ -636,6 +643,14 @@ export function LeadsAcoesConta() {
           </Button>
         </form>
       </Modal>
+
+      {modalEnriquecimento && (
+        <ContaDetalheModal
+          contaId={contaId}
+          onClose={() => setModalEnriquecimento(false)}
+          onAtualizado={carregar}
+        />
+      )}
     </div>
   );
 }

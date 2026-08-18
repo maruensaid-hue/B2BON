@@ -850,7 +850,14 @@ def _texto_seguro_pdf(texto: str) -> str:
     """A fonte core "Helvetica" do fpdf2 só suporta Latin-1/cp1252 — nome de
     empresa/decisor com aspas curvas, travessão longo etc. (comum em texto
     colado do Word) derruba a exportação com `FPDFUnicodeEncodingException`.
-    Troca o que não é suportado por "?" em vez de deixar a exceção estourar."""
+    Troca o que não é suportado por "?" em vez de deixar a exceção estourar.
+
+    Normaliza pra NFC antes: nome vindo de fornecedor externo (Lusha) pode
+    chegar com acento em forma decomposta (\"e\" + acento agudo combinante,
+    em vez de \"é\" pré-composto) — o acento combinante sozinho fica fora
+    do Latin-1 e virava \"?\" (ex.: \"César\" -> \"Ce?sar\"), mesmo o
+    caractere final sendo perfeitamente representável em Latin-1."""
+    texto = unicodedata.normalize("NFC", texto)
     return texto.encode("latin-1", errors="replace").decode("latin-1")
 
 
@@ -872,6 +879,8 @@ def exportar_pdf(db: Session, tenant_id: str, conta_id: int) -> bytes:
     pdf.cell(0, 8, text="Decisores", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=11)
     for decisor in decisores:
-        pdf.cell(0, 8, text=_texto_seguro_pdf(f"- {decisor.nome} ({decisor.cargo or '-'})"), new_x="LMARGIN", new_y="NEXT")
+        contato = " · ".join(valor for valor in (decisor.email, decisor.telefone) if valor)
+        linha = f"- {decisor.nome} ({decisor.cargo or '-'})" + (f" — {contato}" if contato else "")
+        pdf.cell(0, 8, text=_texto_seguro_pdf(linha), new_x="LMARGIN", new_y="NEXT")
 
     return bytes(pdf.output())
