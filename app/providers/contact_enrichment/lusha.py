@@ -4,15 +4,18 @@ from app.providers.contact_enrichment.base import ContactEnrichmentProvider, Con
 
 
 class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
-    """Integração real com a Prospecting API da Lusha — busca por
-    filtros (`/prospecting/contact/search`, sem PII) seguida de
-    revelação dos contatos encontrados (`/prospecting/contact/enrich`,
-    com e-mail/telefone), as duas síncronas (diferente do Apollo, cujo
+    """Integração real com a Prospecting API v3 da Lusha — busca por
+    filtros (`POST /v3/contacts/prospecting`, sem PII) seguida de
+    revelação dos IDs encontrados (`POST /v3/contacts/enrich`, com
+    e-mail/telefone), as duas síncronas (diferente do Apollo, cujo
     telefone só sai por webhook assíncrono — por isso a escolha pela
-    Lusha). Nomes de campo conferidos pela documentação pública; como o
-    site da Lusha é uma SPA que não expõe o texto completo pra scraping,
-    vale um teste de ponta a ponta com a chave real antes de confiar
-    cegamente — ajustar aqui se algum campo vier diferente."""
+    Lusha). Forma de `/prospecting` e o `emails`/`phones` de
+    `/enrich` conferidos direto na doc interativa (schema real, não
+    suposição); a forma exata dos demais campos da resposta de
+    `/enrich` foi inferida por analogia ao padrão usado em
+    `/v3/companies/enrich` (mesmo `emails: [{"email"}]`/
+    `phones: [{"number"}]`) — vale validar com uma chamada real na
+    primeira execução com chave de produção."""
 
     _BASE_URL = "https://api.lusha.com"
 
@@ -30,41 +33,38 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
             filtros_empresa["include"]["names"] = [filtro.nome_empresa]
 
         corpo_busca = {
-            "pages": {"page": 0, "size": 20},
+            "pagination": {"page": 0, "size": 20},
             "filters": {
                 "contacts": {"include": {"jobTitles": filtro.cargos_alvo}},
                 "companies": filtros_empresa,
             },
         }
-        dados_busca = self._chamar("/prospecting/contact/search", corpo_busca)
+        dados_busca = self._chamar("/v3/contacts/prospecting", corpo_busca)
         if dados_busca is None:
             return []
 
-        request_id = dados_busca.get("requestId")
-        contact_ids = [c.get("contactId") for c in dados_busca.get("contacts", []) if c.get("contactId")]
-        if not request_id or not contact_ids:
+        ids = [item.get("id") for item in dados_busca.get("results", []) if item.get("id")]
+        if not ids:
             return []
 
-        dados_enrich = self._chamar(
-            "/prospecting/contact/enrich", {"requestId": request_id, "contactIds": contact_ids}
-        )
+        dados_enrich = self._chamar("/v3/contacts/enrich", {"ids": ids, "reveal": ["emails", "phones"]})
         if dados_enrich is None:
             return []
 
         candidatos = []
-        for contato in dados_enrich.get("contacts", []):
-            nome = contato.get("fullName") or " ".join(
-                parte for parte in [contato.get("firstName"), contato.get("lastName")] if parte
-            )
+        for contato in dados_enrich.get("results", []):
+            if contato.get("error"):
+                continue
+            nome = " ".join(parte for parte in [contato.get("firstName"), contato.get("lastName")] if parte)
             if not nome:
                 continue
             candidatos.append(
                 ContatoCandidato(
                     nome=nome,
-                    cargo=contato.get("jobTitle", ""),
-                    email=self._primeiro_valor(contato.get("emailAddresses")),
-                    telefone=self._primeiro_valor(contato.get("phoneNumbers")),
-                    linkedin_url=contato.get("linkedinUrl"),
+                    cargo=(contato.get("jobTitle") or {}).get("title", ""),
+                    email=self._primeiro_valor(contato.get("emails"), "email"),
+                    telefone=self._primeiro_valor(contato.get("phones"), "number"),
+                    linkedin_url=(contato.get("socialLinks") or {}).get("linkedin"),
                     fonte="lusha",
                 )
             )
@@ -79,10 +79,7 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
             return None
 
     @staticmethod
-    def _primeiro_valor(itens: list | None) -> str | None:
+    def _primeiro_valor(itens: list | None, campo: str) -> str | None:
         if not itens:
             return None
-        primeiro = itens[0]
-        if isinstance(primeiro, dict):
-            return primeiro.get("email") or primeiro.get("phoneNumber") or primeiro.get("value")
-        return str(primeiro)
+        return itens[0].get(campo)

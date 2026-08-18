@@ -18,36 +18,46 @@ class _RespostaFalsa:
         return self._corpo
 
 
-def test_busca_encadeia_search_e_enrich_e_mapeia_campos(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_busca_encadeia_prospecting_e_enrich_e_mapeia_campos(monkeypatch: pytest.MonkeyPatch) -> None:
     chamadas = []
 
     def _post_falso(url: str, json: dict, headers: dict, timeout: float) -> _RespostaFalsa:
         chamadas.append((url, json, headers))
-        if url.endswith("/prospecting/contact/search"):
+        if url.endswith("/v3/contacts/prospecting"):
             assert headers["api_key"] == "chave-teste"
+            assert json["pagination"] == {"page": 0, "size": 20}
             assert json["filters"]["companies"]["include"]["domains"] == ["empresateste.com.br"]
             assert json["filters"]["contacts"]["include"]["jobTitles"] == ["CEO", "Diretor"]
             return _RespostaFalsa(
-                {"requestId": "req-1", "contacts": [{"contactId": "c1"}, {"contactId": "c2"}]}
+                {
+                    "requestId": "req-1",
+                    "results": [
+                        {"id": "c1", "firstName": "Ana", "lastName": "Souza"},
+                        {"id": "c2", "firstName": "Carlos", "lastName": "Lima"},
+                    ],
+                }
             )
-        assert url.endswith("/prospecting/contact/enrich")
-        assert json == {"requestId": "req-1", "contactIds": ["c1", "c2"]}
+        assert url.endswith("/v3/contacts/enrich")
+        assert json == {"ids": ["c1", "c2"], "reveal": ["emails", "phones"]}
         return _RespostaFalsa(
             {
-                "contacts": [
+                "results": [
                     {
-                        "fullName": "Ana Souza",
-                        "jobTitle": "CEO",
-                        "emailAddresses": [{"email": "ana@empresateste.com.br"}],
-                        "phoneNumbers": [{"phoneNumber": "+5511988887777"}],
-                        "linkedinUrl": "https://linkedin.com/in/ana-souza",
+                        "id": "c1",
+                        "firstName": "Ana",
+                        "lastName": "Souza",
+                        "jobTitle": {"title": "CEO", "departments": ["Executive"]},
+                        "emails": [{"email": "ana@empresateste.com.br"}],
+                        "phones": [{"number": "+5511988887777"}],
+                        "socialLinks": {"linkedin": "https://linkedin.com/in/ana-souza"},
                     },
                     {
+                        "id": "c2",
                         "firstName": "Carlos",
                         "lastName": "Lima",
-                        "jobTitle": "Diretor",
-                        "emailAddresses": [],
-                        "phoneNumbers": [],
+                        "jobTitle": {"title": "Diretor"},
+                        "emails": [],
+                        "phones": [],
                     },
                 ]
             }
@@ -63,6 +73,7 @@ def test_busca_encadeia_search_e_enrich_e_mapeia_campos(monkeypatch: pytest.Monk
     assert len(chamadas) == 2
     assert len(resultado) == 2
     assert resultado[0].nome == "Ana Souza"
+    assert resultado[0].cargo == "CEO"
     assert resultado[0].email == "ana@empresateste.com.br"
     assert resultado[0].telefone == "+5511988887777"
     assert resultado[0].linkedin_url == "https://linkedin.com/in/ana-souza"
@@ -74,10 +85,10 @@ def test_busca_encadeia_search_e_enrich_e_mapeia_campos(monkeypatch: pytest.Monk
 
 def test_busca_sem_dominio_filtra_por_nome_da_empresa(monkeypatch: pytest.MonkeyPatch) -> None:
     def _post_falso(url: str, json: dict, headers: dict, timeout: float) -> _RespostaFalsa:
-        if url.endswith("/search"):
+        if url.endswith("/prospecting"):
             assert json["filters"]["companies"]["include"]["names"] == ["Empresa Sem Dominio"]
-            return _RespostaFalsa({"requestId": "req-1", "contacts": []})
-        return _RespostaFalsa({"contacts": []})
+            return _RespostaFalsa({"requestId": "req-1", "results": []})
+        return _RespostaFalsa({"results": []})
 
     monkeypatch.setattr(httpx, "post", _post_falso)
 
@@ -92,7 +103,7 @@ def test_search_sem_resultados_nao_chama_enrich(monkeypatch: pytest.MonkeyPatch)
 
     def _post_falso(url: str, json: dict, headers: dict, timeout: float) -> _RespostaFalsa:
         chamadas.append(url)
-        return _RespostaFalsa({"requestId": "req-1", "contacts": []})
+        return _RespostaFalsa({"requestId": "req-1", "results": []})
 
     monkeypatch.setattr(httpx, "post", _post_falso)
 
@@ -101,6 +112,22 @@ def test_search_sem_resultados_nao_chama_enrich(monkeypatch: pytest.MonkeyPatch)
 
     assert resultado == []
     assert len(chamadas) == 1
+
+
+def test_contato_com_erro_no_enrich_e_ignorado(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _post_falso(url: str, json: dict, headers: dict, timeout: float) -> _RespostaFalsa:
+        if url.endswith("/prospecting"):
+            return _RespostaFalsa({"requestId": "req-1", "results": [{"id": "c1"}]})
+        return _RespostaFalsa(
+            {"results": [{"id": "c1", "error": {"code": "NOT_FOUND", "message": "Contact not found"}}]}
+        )
+
+    monkeypatch.setattr(httpx, "post", _post_falso)
+
+    provider = LushaContactEnrichmentProvider(api_key="chave-teste")
+    resultado = provider.buscar_contatos(FiltroContatos(nome_empresa="Empresa Teste"))
+
+    assert resultado == []
 
 
 def test_erro_http_na_busca_retorna_lista_vazia(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -117,8 +144,8 @@ def test_erro_http_na_busca_retorna_lista_vazia(monkeypatch: pytest.MonkeyPatch)
 
 def test_erro_http_no_enrich_retorna_lista_vazia(monkeypatch: pytest.MonkeyPatch) -> None:
     def _post_falso(url: str, json: dict, headers: dict, timeout: float) -> _RespostaFalsa:
-        if url.endswith("/search"):
-            return _RespostaFalsa({"requestId": "req-1", "contacts": [{"contactId": "c1"}]})
+        if url.endswith("/prospecting"):
+            return _RespostaFalsa({"requestId": "req-1", "results": [{"id": "c1"}]})
         return _RespostaFalsa({"erro": "falhou"}, status_code=500)
 
     monkeypatch.setattr(httpx, "post", _post_falso)
