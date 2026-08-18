@@ -53,6 +53,33 @@ def test_caminhos_candidatos_incluem_vagas_abertas():
     assert "/vagas" in _CAMINHOS_CANDIDATOS
 
 
+def test_buscar_conteudo_site_respeita_orcamento_de_tempo_para_paginas_extras():
+    """Raio-X de produção real: site institucional grande, com muitos
+    links batendo nas palavras-chave, fazia a busca tentar página atrás
+    de página até estourar o timeout do proxy do Render/Cloudflare — que
+    devolve uma resposta sem os cabeçalhos de CORS da nossa API, e
+    aparece pro usuário como "erro de CORS" (mascarando que o problema
+    real era demora). Sem orçamento de tempo, nenhuma página além da
+    home é tentada uma vez que o tempo já estourou."""
+    home_resposta = MagicMock(spec=httpx.Response)
+    home_resposta.is_redirect = False
+    home_resposta.text = '<html><a href="/sobre">Sobre</a></html>'
+    home_resposta.raise_for_status = MagicMock()
+
+    chamadas_get = MagicMock(return_value=home_resposta)
+    valores_tempo = iter([0.0, 100.0])
+
+    with (
+        patch("app.integrations.site_fetcher.socket.getaddrinfo", return_value=_addrinfo_para("93.184.216.34")),
+        patch("app.integrations.site_fetcher.httpx.get", chamadas_get),
+        patch("app.integrations.site_fetcher.time.monotonic", side_effect=lambda: next(valores_tempo)),
+    ):
+        resultado = buscar_conteudo_site("publico.com.br")
+
+    assert chamadas_get.call_count == 1  # só a home — orçamento já estourado antes do primeiro candidato
+    assert resultado.count("=== ") == 1
+
+
 def test_buscar_conteudo_site_bloqueia_redirect_para_ip_privado():
     """Um domínio público que resolve OK, mas cujo servidor redireciona
     (302) para um IP interno — não basta validar só a primeira resolução

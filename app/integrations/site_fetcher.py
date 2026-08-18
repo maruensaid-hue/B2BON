@@ -1,6 +1,7 @@
 import ipaddress
 import re
 import socket
+import time
 from collections.abc import Callable
 
 import httpx
@@ -10,6 +11,16 @@ SiteFetcher = Callable[[str], str]
 _MAX_PAGINAS = 8
 _MAX_CHARS_POR_PAGINA = 2500
 _MAX_REDIRECTS = 3
+_TIMEOUT_POR_REQUISICAO_SEGUNDOS = 5.0
+
+# Orçamento de tempo pra tentar páginas além da home — sem isto, um site
+# grande (muitos links batendo nas palavras-chave, ex.: raio-X real numa
+# empresa com site institucional denso) podia empilhar dezenas de
+# tentativas de ~20s cada (timeout x redirecionamentos) até estourar o
+# timeout do proxy do Render/Cloudflare, que devolve uma resposta sem os
+# cabeçalhos de CORS da nossa API — aparece pro usuário como erro de CORS,
+# mascarando que o problema real era demora, não a origem da chamada.
+_ORCAMENTO_PAGINAS_EXTRAS_SEGUNDOS = 15.0
 
 
 class HostNaoPublico(httpx.HTTPError):
@@ -74,7 +85,7 @@ def _get_seguro(url: str) -> httpx.Response:
     for _ in range(_MAX_REDIRECTS + 1):
         host = httpx.URL(url).host
         _validar_host_publico(host)
-        resposta = httpx.get(url, timeout=8.0, follow_redirects=False)
+        resposta = httpx.get(url, timeout=_TIMEOUT_POR_REQUISICAO_SEGUNDOS, follow_redirects=False)
         if resposta.is_redirect:
             proxima = resposta.headers.get("location")
             if not proxima:
@@ -124,8 +135,11 @@ def buscar_conteudo_site(dominio: str) -> str:
         if link not in caminhos_para_tentar:
             caminhos_para_tentar.append(link)
 
+    inicio_paginas_extras = time.monotonic()
     for caminho in caminhos_para_tentar:
         if len(paginas) >= _MAX_PAGINAS:
+            break
+        if time.monotonic() - inicio_paginas_extras >= _ORCAMENTO_PAGINAS_EXTRAS_SEGUNDOS:
             break
         url = f"{base_url}{caminho}"
         if url in paginas:
