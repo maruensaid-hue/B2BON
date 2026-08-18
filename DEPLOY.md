@@ -46,6 +46,11 @@ real percorrido (inclui os desvios da versão original do plano).
      dessa configuração).
    - `CORS_ORIGINS`: por ora, `["http://localhost:5173"]` — você
      atualiza no passo 5 com a URL real do frontend.
+   - `CONTACT_ENRICHMENT_API_KEY`: chave de API da Lusha (Prospecting
+     API) — usada em "Mapear decisores" pra achar C-levels/diretores
+     reais além do QSA da Receita Federal. Vazio usa dados fictícios em
+     dev/teste; sem preencher, produção também cai no fallback QSA-only
+     (sem quebrar nada).
    - `WHATSAPP_WEBHOOK_VERIFY_TOKEN`: gere com
      `python -c "import secrets; print(secrets.token_urlsafe(32))"` — é o
      valor colado em Meta for Developers > WhatsApp > Step 2 (Production

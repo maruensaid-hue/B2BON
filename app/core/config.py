@@ -73,9 +73,10 @@ class Settings(BaseSettings):
     google_calendar_access_token: str = ""
     google_calendar_id: str = "primary"
 
-    # Base B2B de contatos (Apollo/Hunter/Lusha etc., fornecedor ainda em
-    # avaliação comercial) — vazio usa StubContactEnrichmentProvider em
-    # dev/teste, mapeando decisores só via QSA da Receita Federal.
+    # Base B2B de contatos — Lusha (Prospecting API, decidido no raio-X de
+    # produção por revelar telefone direto de forma síncrona, diferente do
+    # Apollo). Vazio usa StubContactEnrichmentProvider em dev/teste,
+    # mapeando decisores só via QSA da Receita Federal.
     contact_enrichment_api_key: str = ""
 
     # Brave Search API — descobre o site oficial de uma conta sem domínio

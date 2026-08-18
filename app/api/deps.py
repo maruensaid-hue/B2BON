@@ -18,6 +18,8 @@ from app.providers.calendar.base import CalendarProvider
 from app.providers.calendar.google import GoogleCalendarProvider
 from app.providers.calendar.stub import StubCalendarProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
+from app.providers.contact_enrichment.desativado import ContactEnrichmentDesativadoProvider
+from app.providers.contact_enrichment.lusha import LushaContactEnrichmentProvider
 from app.providers.contact_enrichment.stub import StubContactEnrichmentProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.email.smtp import SmtpEmailProvider
@@ -68,10 +70,13 @@ def get_account_data_provider(db: Session = Depends(get_db)) -> AccountDataProvi
 
 
 def get_contact_enrichment_provider() -> ContactEnrichmentProvider:
-    # Fornecedor real (Apollo/Hunter/Lusha etc.) entra aqui quando a
-    # contratação for decidida; até lá, todo ambiente usa o stub.
     if settings.contact_enrichment_api_key:
-        raise NotImplementedError("Configure um fornecedor de enriquecimento de contatos.")
+        return LushaContactEnrichmentProvider(settings.contact_enrichment_api_key)
+    if settings.e_ambiente_producao:
+        # `mapear_decisores` chama `buscar_contatos` sem nenhuma trava — o
+        # stub de dados fictícios não pode vazar pra fora de dev/teste
+        # (ver ContactEnrichmentDesativadoProvider).
+        return ContactEnrichmentDesativadoProvider()
     return StubContactEnrichmentProvider()
 
 
