@@ -1,3 +1,4 @@
+import difflib
 import re
 import unicodedata
 from datetime import UTC, datetime
@@ -398,18 +399,20 @@ def _normalizar_dominio(dominio: str | None) -> str | None:
 # Domínios que aparecem com frequência nos primeiros resultados de busca
 # mas nunca são o site institucional da empresa — descartados ao tentar
 # descobrir o domínio automaticamente (evita salvar o perfil do LinkedIn
-# da empresa, ou um portal de agendamento/marketplace terceiro, como se
-# fosse o site dela).
+# da empresa, ou um portal de agendamento/marketplace/diretório terceiro,
+# como se fosse o site dela). Complementa (não substitui) a checagem de
+# similaridade em `_descobrir_dominio` — ver comentário lá.
 _DOMINIOS_IGNORADOS_BUSCA = {
     "linkedin.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
     "youtube.com", "wikipedia.org", "indeed.com", "glassdoor.com",
     "econodata.com.br", "cnpj.biz",
-    # Portais/marketplaces que listam empresas de terceiros — aparecem bem
-    # rankeados pra razão social completa mas nunca são o site da própria
-    # empresa (raio-X de produção: pegou "guia.agendarconsulta.com" no
-    # lugar do site real de uma clínica).
+    # Portais/marketplaces/diretórios que listam empresas de terceiros —
+    # aparecem bem rankeados pra razão social completa mas nunca são o
+    # site da própria empresa (raio-X de produção: pegaram
+    # "guia.agendarconsulta.com" e "dnb.com" no lugar do site real).
     "agendarconsulta.com", "doctoralia.com.br", "boaconsulta.com",
     "reclameaqui.com.br", "mercadolivre.com.br", "empresascnpj.com",
+    "dnb.com", "bloomberg.com", "crunchbase.com", "zoominfo.com", "manta.com",
 }
 
 # Sufixos de natureza jurídica (com variações comuns de grafia) — a razão
@@ -418,10 +421,16 @@ _DOMINIOS_IGNORADOS_BUSCA = {
 # priorizarem diretórios/agregadores de terceiros (que listam pela razão
 # social completa) acima do site oficial (que usa o nome de marca).
 _SUFIXOS_NATUREZA_JURIDICA = re.compile(
-    r"\b(LTDA\.?|EIRELI|EPP|MEI|S\.?\s*/?\s*A\.?|SOCIEDADE\s+AN[ÔO]NIMA|"
+    r"\b(LTDA\.?|EIRELI|EPP|MEI|SCP|S\.?\s*/?\s*A\.?|SOCIEDADE\s+AN[ÔO]NIMA|"
     r"SOCIEDADE\s+SIMPLES|ME)\b\.?",
     re.IGNORECASE,
 )
+
+# Abaixo desta similaridade (0-1, `difflib.SequenceMatcher.ratio`) entre o
+# nome da empresa e o domínio candidato, prefere não achar nada a arriscar
+# um diretório/agregador desconhecido — a lista acima nunca vai cobrir
+# todos eles (raio-X: "dnb.com" apareceu sem estar na lista até então).
+_SIMILARIDADE_MINIMA_DOMINIO = 0.3
 
 
 def _nome_para_busca(nome_empresa: str) -> str:
@@ -431,17 +440,47 @@ def _nome_para_busca(nome_empresa: str) -> str:
     return re.sub(r"\s+", " ", limpo).strip() or nome_empresa
 
 
+def _slug(texto: str) -> str:
+    """Só letras/números em minúsculo, sem acento — forma comparável entre
+    nome de empresa e núcleo de domínio (ambos tendem a virar isto na
+    prática: "Total Life" e "totallife.com.br" viram "totallife")."""
+    sem_acento = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]", "", sem_acento.lower())
+
+
+def _nucleo_dominio(dominio: str) -> str:
+    """Primeiro rótulo do domínio, sem "www." — "www.totallife.com.br"
+    vira "totallife", o pedaço que de fato costuma remeter à marca."""
+    sem_www = re.sub(r"^www\.", "", dominio, flags=re.IGNORECASE)
+    return sem_www.split(".")[0]
+
+
 def _descobrir_dominio(nome_empresa: str, web_search: WebSearchProvider) -> str | None:
     """Descoberta best-effort do site oficial via busca na web, usada
-    quando a conta ainda não tem domínio cadastrado (E2-H2). Pega o
-    primeiro resultado cujo domínio não é um dos conhecidos por não
-    serem o site institucional (redes sociais, diretórios de CNPJ,
-    marketplaces etc.)."""
-    for resultado in web_search.buscar(f"{_nome_para_busca(nome_empresa)} site oficial"):
+    quando a conta ainda não tem domínio cadastrado (E2-H2). Entre os
+    resultados que não são um domínio conhecido por nunca ser o site
+    institucional (`_DOMINIOS_IGNORADOS_BUSCA`), fica com o mais parecido
+    com o nome da empresa — não simplesmente o primeiro da lista.
+
+    A lista de bloqueio sozinha nunca cobre todo diretório/agregador que
+    existe (raio-X de produção: "dnb.com" veio antes de entrar na lista);
+    comparar o nome ajuda a rejeitar esse tipo de resultado mesmo sem
+    conhecê-lo de antemão — se nada bater o suficiente, prefere não achar
+    nada a arriscar um domínio errado (cai no aviso de cadastro manual)."""
+    nome_limpo = _nome_para_busca(nome_empresa)
+    nome_alvo = _slug(nome_limpo)
+    melhor_dominio: str | None = None
+    melhor_similaridade = 0.0
+    for resultado in web_search.buscar(f"{nome_limpo} site oficial"):
         dominio = _normalizar_dominio(resultado.url)
-        if dominio and not any(dominio == d or dominio.endswith(f".{d}") for d in _DOMINIOS_IGNORADOS_BUSCA):
-            return dominio
-    return None
+        if not dominio or any(dominio == d or dominio.endswith(f".{d}") for d in _DOMINIOS_IGNORADOS_BUSCA):
+            continue
+        similaridade = difflib.SequenceMatcher(None, nome_alvo, _slug(_nucleo_dominio(dominio))).ratio()
+        if similaridade > melhor_similaridade:
+            melhor_dominio, melhor_similaridade = dominio, similaridade
+    if melhor_dominio is None or melhor_similaridade < _SIMILARIDADE_MINIMA_DOMINIO:
+        return None
+    return melhor_dominio
 
 
 def atualizar(

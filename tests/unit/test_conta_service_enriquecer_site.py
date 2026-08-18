@@ -104,6 +104,45 @@ def test_descobrir_dominio_ignora_portal_de_agendamento_terceiro(db_session):
     assert dominio == "santoriusmedicina.com.br"
 
 
+def test_descobrir_dominio_rejeita_diretorio_desconhecido_por_similaridade(db_session):
+    """Raio-X de produção: "dnb.com" (Dun & Bradstreet, diretório global de
+    empresas) veio como resultado antes de entrar pra lista de bloqueio —
+    a checagem de similaridade rejeita mesmo sem conhecer o domínio de
+    antemão, porque "dnb" não se parece em nada com o nome da empresa."""
+    web_search = FakeWebSearchProvider(
+        [ResultadoBusca(titulo="Total Life na DNB", url="https://www.exemplo-diretorio-desconhecido.com/perfil", descricao="")]
+    )
+
+    dominio = conta_service._descobrir_dominio("Total Life Clinica Medica Ltda 416 - SCP", web_search)
+
+    assert dominio is None
+
+
+def test_descobrir_dominio_prefere_o_mais_parecido_entre_varios_candidatos(db_session):
+    web_search = FakeWebSearchProvider(
+        [
+            ResultadoBusca(titulo="Total Life no diretório", url="https://www.perfil-empresarial-x.com/total-life", descricao=""),
+            ResultadoBusca(titulo="Total Life Clínica", url="https://www.totallifeclinica.com.br/", descricao=""),
+        ]
+    )
+
+    dominio = conta_service._descobrir_dominio("Total Life Clinica Medica Ltda", web_search)
+
+    assert dominio == "www.totallifeclinica.com.br"
+
+
+def test_descobrir_dominio_aceita_marca_diferente_da_razao_social(db_session):
+    """Nome de marca costuma divergir da razão social no Brasil — a
+    similaridade não pode exigir bater 100%, só ficar acima do limiar."""
+    web_search = FakeWebSearchProvider(
+        [ResultadoBusca(titulo="Padaria do Silva", url="https://www.padariadosilva.com.br/", descricao="")]
+    )
+
+    dominio = conta_service._descobrir_dominio("Comercio De Alimentos Silva Ltda", web_search)
+
+    assert dominio == "www.padariadosilva.com.br"
+
+
 @pytest.mark.parametrize(
     ("razao_social", "esperado"),
     [
