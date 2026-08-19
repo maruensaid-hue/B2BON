@@ -23,6 +23,7 @@ from app.providers.contact_enrichment.lusha import LushaContactEnrichmentProvide
 from app.providers.contact_enrichment.stub import StubContactEnrichmentProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.email.desativado import EmailDesativadoProvider
+from app.providers.channels.email.sendgrid import SendGridEmailProvider
 from app.providers.channels.email.smtp import SmtpEmailProvider
 from app.providers.channels.email.stub import StubEmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
@@ -105,6 +106,10 @@ def get_plan_limits_provider(db: Session = Depends(get_db)) -> PlanLimitsProvide
 
 
 def get_email_provider() -> EmailProvider:
+    # SendGrid tem prioridade sobre SMTP — permite migrar sem precisar
+    # remover as env vars de SMTP do Render no mesmo passo.
+    if settings.sendgrid_api_key:
+        return SendGridEmailProvider()
     if settings.smtp_host:
         return SmtpEmailProvider()
     if settings.e_ambiente_producao:

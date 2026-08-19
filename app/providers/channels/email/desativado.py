@@ -15,6 +15,7 @@ class EmailDesativadoProvider(EmailProvider):
         corpo: str,
         remetente_nome: str,
         remetente_email: str,
+        tenant_id: str,
         pixel_url: str | None = None,
     ) -> ResultadoEnvio:
         return ResultadoEnvio(sucesso=False, motivo_falha="Envio de e-mail não está configurado no servidor.")

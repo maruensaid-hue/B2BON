@@ -14,7 +14,9 @@ def _mensagem_enviada(mock_smtp) -> object:
 def test_sem_pixel_envia_so_texto_puro(mock_smtp: MagicMock):
     provider = SmtpEmailProvider()
 
-    resultado = provider.enviar("dest@empresa.com", "Assunto", "Corpo do e-mail", "Vendas", "vendas@predator.com")
+    resultado = provider.enviar(
+        "dest@empresa.com", "Assunto", "Corpo do e-mail", "Vendas", "vendas@predator.com", "tenant-teste"
+    )
 
     assert resultado.sucesso is True
     mensagem = _mensagem_enviada(mock_smtp)
@@ -28,7 +30,7 @@ def test_com_pixel_envia_multipart_com_imagem_embutida(mock_smtp: MagicMock):
     pixel_url = "https://b2bon-api.onrender.com/api/v1/webhooks/email/aberto/abc123.png"
 
     provider.enviar(
-        "dest@empresa.com", "Assunto", "Corpo do e-mail", "Vendas", "vendas@predator.com", pixel_url=pixel_url
+        "dest@empresa.com", "Assunto", "Corpo do e-mail", "Vendas", "vendas@predator.com", "tenant-teste", pixel_url
     )
 
     mensagem = _mensagem_enviada(mock_smtp)
@@ -54,6 +56,7 @@ def test_pixel_url_com_caractere_html_e_escapado(mock_smtp: MagicMock):
         "Corpo com <tag> e & comercial",
         "Vendas",
         "vendas@predator.com",
+        "tenant-teste",
         pixel_url="https://x.com/a?b=1&c=2",
     )
 

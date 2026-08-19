@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.configuracao_envio import ConfiguracaoEnvio
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
@@ -52,10 +53,12 @@ def _processar_email(
     mensagem: Mensagem, decisor: Decisor, config: ConfiguracaoEnvio | None, provider: EmailProvider
 ) -> ResultadoEnvio:
     remetente_nome = config.remetente_nome if config else "PREDATOR"
-    remetente_email = config.remetente_email if config else "no-reply@predator.local"
+    remetente_email = config.remetente_email if config else settings.sendgrid_remetente_email
     corpo = f"{mensagem.conteudo}\n\n{config.assinatura}" if config else mensagem.conteudo
     pixel_url = rastreamento_service.url_pixel(mensagem.tenant_id, mensagem.id)
-    return provider.enviar(decisor.email, "Contato", corpo, remetente_nome, remetente_email, pixel_url)
+    return provider.enviar(
+        decisor.email, "Contato", corpo, remetente_nome, remetente_email, mensagem.tenant_id, pixel_url
+    )
 
 
 def processar_pendentes(

@@ -305,7 +305,9 @@ def _enviar_lembrete(
     if decisor.telefone:
         whatsapp.enviar_texto_livre(decisor.telefone, texto)
     elif decisor.email:
-        email.enviar(decisor.email, "Lembrete de reunião", texto, "PREDATOR", "no-reply@predator.local")
+        email.enviar(
+            decisor.email, "Lembrete de reunião", texto, "PREDATOR", settings.sendgrid_remetente_email, reuniao.tenant_id
+        )
 
 
 def processar_lembretes(

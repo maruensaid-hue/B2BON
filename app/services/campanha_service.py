@@ -16,7 +16,6 @@ from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFal
 _SEPARADOR = ":"
 
 _REMETENTE_NOME = "B2B ON"
-_REMETENTE_EMAIL = "no-reply@predator.local"
 
 
 def _validar_canais(canais: list[str], assunto: str | None, conteudo_email: str | None, template_whatsapp_id: str | None) -> None:
@@ -316,7 +315,14 @@ def _disparar_destinatario(
 
     if "email" in campanha.canais and destinatario.email:
         corpo = f"{campanha.conteudo_email}\n\n{_link_optout(campanha.tenant_id, destinatario.id)}"
-        resultado = email_provider.enviar(destinatario.email, campanha.assunto or "", corpo, _REMETENTE_NOME, _REMETENTE_EMAIL)
+        resultado = email_provider.enviar(
+            destinatario.email,
+            campanha.assunto or "",
+            corpo,
+            _REMETENTE_NOME,
+            settings.sendgrid_remetente_email,
+            campanha.tenant_id,
+        )
         if resultado.sucesso:
             enviou_algum = True
         else:

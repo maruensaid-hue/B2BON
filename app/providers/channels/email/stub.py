@@ -14,6 +14,7 @@ class StubEmailProvider(EmailProvider):
         corpo: str,
         remetente_nome: str,
         remetente_email: str,
+        tenant_id: str,
         pixel_url: str | None = None,
     ) -> ResultadoEnvio:
         self.envios.append(
@@ -23,6 +24,7 @@ class StubEmailProvider(EmailProvider):
                 "corpo": corpo,
                 "remetente_nome": remetente_nome,
                 "remetente_email": remetente_email,
+                "tenant_id": tenant_id,
                 "pixel_url": pixel_url,
             }
         )

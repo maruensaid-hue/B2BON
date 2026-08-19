@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from sqlalchemy.orm import Session
 
@@ -17,6 +19,7 @@ from app.services import (
     rastreamento_service,
     reputacao_service,
     resposta_service,
+    sendgrid_webhook_service,
 )
 from app.services.errors import NaoAutorizado, NaoEncontrado
 
@@ -170,6 +173,28 @@ def webhook_reputacao(dados: RegistrarEventoReputacaoRequestSchema, db: Session 
     return SaudeCanalSchema(
         **reputacao_service.registrar_evento(db, dados.tenant_id, dados.canal, dados.tipo_evento, dados.quantidade)
     )
+
+
+@router.post("/sendgrid/eventos")
+async def webhook_sendgrid_eventos(request: Request, db: Session = Depends(get_db)) -> dict:
+    """Event Webhook do SendGrid (delivered/bounce/dropped/spamreport)
+    alimentando `reputacao_service` de verdade (raio-X de produção — antes
+    só chegava evento via `/reputacao` chamado manualmente em teste).
+    Assinatura verificada **antes** de processar qualquer coisa, mesmo
+    raciocínio do webhook do Mercado Pago: sem isso, qualquer um poderia
+    forjar bounce/spam em massa e pausar o canal de e-mail de um tenant."""
+    corpo = await request.body()
+    assinatura_valida = sendgrid_webhook_service.verificar_assinatura(
+        corpo,
+        request.headers.get("x-twilio-email-event-webhook-signature"),
+        request.headers.get("x-twilio-email-event-webhook-timestamp"),
+        settings.sendgrid_webhook_verification_key,
+    )
+    if not assinatura_valida:
+        raise NaoAutorizado("Assinatura do webhook inválida.")
+
+    sendgrid_webhook_service.processar_eventos(db, json.loads(corpo))
+    return {"recebido": True}
 
 
 @router.post("/mercadopago")

@@ -39,6 +39,20 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
 
+    # SendGrid (ESP real, raio-X de produção) — tem prioridade sobre SMTP em
+    # get_email_provider quando preenchido. Domínio de sendgrid_remetente_email
+    # precisa estar com Domain Authentication (SPF/DKIM) feita no painel do
+    # SendGrid (ver DEPLOY.md), senão a entregabilidade fica ruim.
+    sendgrid_api_key: str = ""
+    sendgrid_remetente_email: str = ""
+    sendgrid_remetente_nome: str = "B2B ON"
+
+    # Chave pública (base64) do Signed Event Webhook do SendGrid — valida
+    # que POST /webhooks/sendgrid/eventos realmente veio do SendGrid antes
+    # de processar qualquer evento de bounce/spam (mesmo raciocínio do
+    # webhook do Mercado Pago, só que ECDSA em vez de HMAC).
+    sendgrid_webhook_verification_key: str = ""
+
     # Mercado Pago (cadastro self-service com escolha de plano) — vazio
     # usa StubPaymentProvider em dev/teste. Webhook secret é o "Secret
     # Key" configurado na seção de Webhooks do painel do Mercado Pago,

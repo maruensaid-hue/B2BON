@@ -148,6 +148,56 @@ abaixo em sequência):
 Efeito colateral útil: como o Render free "dorme" sem tráfego, esse
 ping a cada 15 minutos também mantém o serviço acordado.
 
+## 8. E-mail real — SendGrid (raio-X de produção)
+
+Sem isso, e-mail continua saindo só por SMTP genérico (se configurado) ou,
+em produção sem SMTP, nem sai — o sistema recusa honestamente em vez de
+fingir sucesso. Afeta convite de usuário/empresa, lembrete de reunião,
+pesquisa de NPS e principalmente o motor de prospecção fria (cadências).
+
+1. Crie uma conta em https://signup.sendgrid.com (não precisa cartão pro
+   free tier, 100 e-mails/dia).
+2. **Autenticar o domínio de envio** (Settings → Sender Authentication →
+   Authenticate Your Domain):
+   - Domínio: um subdomínio de `cyberfort.com.br` (ex.:
+     `mail.cyberfort.com.br`) — não usar o domínio raiz, pra isolar a
+     reputação de envio da caixa de e-mail principal da empresa.
+   - O SendGrid gera 3 registros CNAME. Adicione os três no provedor de
+     DNS de `cyberfort.com.br` exatamente como mostrados.
+   - Volte no painel do SendGrid e clique **"Verify"** — pode levar
+     alguns minutos pra propagar o DNS; se falhar na primeira tentativa,
+     espere 10-15 min e tente de novo antes de desconfiar de erro de
+     digitação.
+3. **Criar a API Key** (Settings → API Keys → Create API Key):
+   - Tipo **"Restricted Access"**, só com permissão de **"Mail Send"**
+     (não precisa de acesso total — reduz o estrago se a chave vazar).
+4. No Render, `b2bon-api` → **Environment**, adicione:
+   - `SENDGRID_API_KEY`: a chave gerada no passo 3.
+   - `SENDGRID_REMETENTE_EMAIL`: um endereço no domínio autenticado (ex.:
+     `contato@mail.cyberfort.com.br`) — é o envelope `From` de todo
+     e-mail que sai da plataforma, pra qualquer tenant (o nome de
+     exibição e o e-mail de resposta continuam customizáveis por tenant
+     via `ConfiguracaoEnvio`, só o envelope é fixo — não dá pra
+     autenticar um domínio por tenant sem um projeto à parte).
+   - `SENDGRID_REMETENTE_NOME`: opcional, padrão já é `B2B ON`.
+   - Assim que `SENDGRID_API_KEY` estiver preenchida, ela tem prioridade
+     automática sobre SMTP — não precisa remover as env vars de SMTP no
+     mesmo passo.
+5. **Event Webhook** (Settings → Mail Settings → Event Webhook), pra
+   alimentar a pausa automática de canal por bounce/spam de verdade:
+   - **HTTP Post URL**: `https://b2bon-api.onrender.com/api/v1/webhooks/sendgrid/eventos`
+   - Marque pelo menos: **Delivered**, **Bounce**, **Dropped**, **Spam
+     Report**.
+   - Ative **"Signed Event Webhook Requests"** — sem isso, qualquer um
+     poderia chamar essa URL forjando bounce/spam em massa pra pausar o
+     canal de e-mail de um tenant à força.
+   - Copie a chave pública gerada e cole em `SENDGRID_WEBHOOK_VERIFICATION_KEY`
+     no Render.
+6. Teste enviando um convite de verdade (tela de convites) e confirme
+   que chega numa caixa real com SPF/DKIM válidos — no Gmail, abra o
+   e-mail → menu "⋮" → **"Ver original"** → confira `SPF: PASS` e
+   `DKIM: PASS`.
+
 ## Verificação final
 
 Acesse a URL do Worker, faça login com o admin criado no passo 4,

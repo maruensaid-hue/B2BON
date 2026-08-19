@@ -1,9 +1,8 @@
-import html
 import smtplib
 from email.message import EmailMessage
 
 from app.core.config import settings
-from app.providers.channels.email.base import EmailProvider, ResultadoEnvio
+from app.providers.channels.email.base import EmailProvider, ResultadoEnvio, montar_html_com_pixel
 
 
 class SmtpEmailProvider(EmailProvider):
@@ -16,6 +15,7 @@ class SmtpEmailProvider(EmailProvider):
         corpo: str,
         remetente_nome: str,
         remetente_email: str,
+        tenant_id: str,
         pixel_url: str | None = None,
     ) -> ResultadoEnvio:
         mensagem = EmailMessage()
@@ -28,13 +28,7 @@ class SmtpEmailProvider(EmailProvider):
             # multipart/alternative: texto puro continua a parte principal
             # (clientes que preferem texto simples ignoram o HTML) — o
             # pixel só existe pra quem renderiza a parte HTML.
-            corpo_html = html.escape(corpo).replace("\n", "<br>")
-            mensagem.add_alternative(
-                f'<html><body>{corpo_html}'
-                f'<img src="{html.escape(pixel_url)}" width="1" height="1" '
-                f'alt="" style="display:none"></body></html>',
-                subtype="html",
-            )
+            mensagem.add_alternative(montar_html_com_pixel(corpo, pixel_url), subtype="html")
 
         try:
             with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as servidor:

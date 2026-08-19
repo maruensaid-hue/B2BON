@@ -210,7 +210,12 @@ def gerar_convite_vitrine(
             f"Este link expira {'em ' + str(validade_horas) + ' horas' if validade_horas else 'sem prazo definido'}."
         )
         resultado = email_provider.enviar(
-            email_destinatario, "Você foi convidado para a B2B ON", corpo, "B2B ON", "no-reply@predator.local"
+            email_destinatario,
+            "Você foi convidado para a B2B ON",
+            corpo,
+            "B2B ON",
+            settings.sendgrid_remetente_email,
+            tenant_id_origem,
         )
         convite.email_enviado = resultado.sucesso  # type: ignore[attr-defined]
 

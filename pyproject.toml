@@ -23,6 +23,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "alembic>=1.13",
     "sentry-sdk[fastapi]>=2.0",
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]

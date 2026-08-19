@@ -72,7 +72,9 @@ def _enviar_pesquisa(db: Session, tenant_id: str, pesquisa: PesquisaNps, decisor
     if decisor.telefone:
         whatsapp.enviar_texto_livre(decisor.telefone, link)
     elif decisor.email:
-        email.enviar(decisor.email, "Sua opinião é muito importante", link, "PREDATOR", "no-reply@predator.local")
+        email.enviar(
+            decisor.email, "Sua opinião é muito importante", link, "PREDATOR", settings.sendgrid_remetente_email, tenant_id
+        )
 
 
 def disparar_pendentes(db: Session, tenant_id: str, whatsapp: WhatsAppProvider, email: EmailProvider) -> dict:
