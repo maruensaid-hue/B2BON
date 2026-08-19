@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
@@ -26,12 +26,63 @@ interface Plano {
   preco_mensal: number;
 }
 
+interface NoArvore {
+  tenant: Tenant;
+  filhos: NoArvore[];
+}
+
+const COR_TIPO: Record<string, string> = {
+  distribuidor: "text-violet",
+  revendedor: "text-cyan",
+  cliente: "text-muted",
+};
+
+/** Monta a árvore a partir da lista plana que a API devolve — a "raiz" de
+ * cada visão é o próprio tenant logado (um Revendedor não enxerga o
+ * Distribuidor acima dele, só a própria subárvore, então o pai dele fica
+ * fora do conjunto e ele vira raiz aqui). */
+function construirArvore(tenants: Tenant[]): NoArvore[] {
+  const idsVisiveis = new Set(tenants.map((t) => t.id));
+  const filhosPorPai = new Map<string, Tenant[]>();
+  const raizes: Tenant[] = [];
+
+  for (const tenant of tenants) {
+    if (tenant.tenant_pai_id && idsVisiveis.has(tenant.tenant_pai_id)) {
+      const lista = filhosPorPai.get(tenant.tenant_pai_id) ?? [];
+      lista.push(tenant);
+      filhosPorPai.set(tenant.tenant_pai_id, lista);
+    } else {
+      raizes.push(tenant);
+    }
+  }
+
+  const montarNo = (tenant: Tenant): NoArvore => ({
+    tenant,
+    filhos: (filhosPorPai.get(tenant.id) ?? []).map(montarNo),
+  });
+
+  return raizes.map(montarNo);
+}
+
 export function AdminTenants() {
   const { usuario } = useAuth();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [modalAberto, setModalAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Recolhido é a exceção (guardamos só quem foi fechado) — assim um
+  // tenant novo criado depois já aparece expandido por padrão, sem
+  // precisar re-sincronizar esse estado com a lista toda vez que recarrega.
+  const [recolhidos, setRecolhidos] = useState<Set<string>>(new Set());
+
+  function alternarExpandido(tenantId: string) {
+    setRecolhidos((atual) => {
+      const proximo = new Set(atual);
+      if (proximo.has(tenantId)) proximo.delete(tenantId);
+      else proximo.add(tenantId);
+      return proximo;
+    });
+  }
 
   const isSuperAdmin = usuario?.papel === "super_admin";
   // Distribuidor/revendedor logados gerenciam a própria subárvore, igual a
@@ -43,6 +94,39 @@ export function AdminTenants() {
   // si mesmo (distribuidor cria revendedor, revendedor cria cliente) — só
   // super_admin escolhe o tipo livremente.
   const tipoFilho = usuario?.tenant_tipo === "distribuidor" ? "revendedor" : "cliente";
+
+  function renderNos(nos: NoArvore[], profundidade: number): ReactElement[] {
+    return nos.flatMap(({ tenant, filhos }) => {
+      const temFilhos = filhos.length > 0;
+      const recolhido = recolhidos.has(tenant.id);
+      const linha = (
+        <tr key={tenant.id} className="border-b border-border">
+          <td className="p-2 font-semibold">
+            <span style={{ paddingLeft: profundidade * 18 }} className="inline-flex items-center gap-1.5">
+              {temFilhos ? (
+                <button
+                  type="button"
+                  onClick={() => alternarExpandido(tenant.id)}
+                  className="w-3.5 text-muted hover:text-text"
+                  aria-label={recolhido ? "Expandir" : "Recolher"}
+                >
+                  {recolhido ? "▸" : "▾"}
+                </button>
+              ) : (
+                <span className="w-3.5" />
+              )}
+              {tenant.id}
+            </span>
+          </td>
+          <td className="p-2">{tenant.razao_social}</td>
+          <td className={`p-2 capitalize ${COR_TIPO[tenant.tipo] ?? "text-muted"}`}>{tenant.tipo}</td>
+          <td className="p-2 text-muted">{tenant.cnpj ?? "—"}</td>
+          <td className="p-2 text-muted">{new Date(tenant.criado_em).toLocaleDateString("pt-BR")}</td>
+        </tr>
+      );
+      return recolhido ? [linha] : [linha, ...renderNos(filhos, profundidade + 1)];
+    });
+  }
 
   async function carregar() {
     try {
@@ -107,25 +191,15 @@ export function AdminTenants() {
               <th className="p-2 text-left">ID</th>
               <th className="p-2 text-left">Razão social</th>
               <th className="p-2 text-left">Tipo</th>
-              <th className="p-2 text-left">Tenant pai</th>
               <th className="p-2 text-left">CNPJ</th>
               <th className="p-2 text-left">Criado em</th>
             </tr>
           </thead>
           <tbody>
-            {tenants.map((tenant) => (
-              <tr key={tenant.id} className="border-b border-border">
-                <td className="p-2 font-semibold">{tenant.id}</td>
-                <td className="p-2">{tenant.razao_social}</td>
-                <td className="p-2 text-muted capitalize">{tenant.tipo}</td>
-                <td className="p-2 text-muted">{tenant.tenant_pai_id ?? "—"}</td>
-                <td className="p-2 text-muted">{tenant.cnpj ?? "—"}</td>
-                <td className="p-2 text-muted">{new Date(tenant.criado_em).toLocaleDateString("pt-BR")}</td>
-              </tr>
-            ))}
+            {renderNos(construirArvore(tenants), 0)}
             {tenants.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-4 text-center text-muted">
+                <td colSpan={5} className="p-4 text-center text-muted">
                   Nenhum tenant cadastrado ainda.
                 </td>
               </tr>
