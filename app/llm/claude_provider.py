@@ -32,8 +32,20 @@ class ClaudeProvider(LLMProvider):
             )
         except anthropic.AnthropicError as erro:
             raise LLMIndisponivel(f"Falha ao chamar a IA: {erro}") from erro
+
+        # `message.content[0]` nem sempre é o texto final — em prompts mais
+        # complexos (ex.: site institucional denso) o modelo pode pensar
+        # antes de responder, e o primeiro bloco vira um `ThinkingBlock`
+        # (sem atributo `.text`), com a resposta de verdade só num bloco
+        # seguinte. Raio-X de produção real: `content[0].text` estourava
+        # `AttributeError` sempre que isso acontecia, virando um 500 cru
+        # em vez do resumo esperado.
+        texto = next((bloco.text for bloco in message.content if bloco.type == "text"), None)
+        if texto is None:
+            raise LLMIndisponivel("A IA não retornou texto na resposta.")
+
         return LLMResponse(
-            content=message.content[0].text,
+            content=texto,
             model=message.model,
             input_tokens=message.usage.input_tokens,
             output_tokens=message.usage.output_tokens,
