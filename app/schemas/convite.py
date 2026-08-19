@@ -36,3 +36,11 @@ class ConviteVitrineSchema(BaseModel):
 class GerarConviteVitrineRequestSchema(BaseModel):
     validade_horas: int | None = 168
     email_destinatario: str | None = None
+
+
+class ConviteVitrineCriadoSchema(ConviteVitrineSchema):
+    # None quando nenhum e-mail foi solicitado; True/False quando foi
+    # (StubEmailProvider sempre reportava sucesso mesmo sem SMTP
+    # configurado — sem este campo, o convite parecia enviado quando não
+    # saía nada de verdade em produção).
+    email_enviado: bool | None = None

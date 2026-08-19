@@ -15,6 +15,7 @@ from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFal
 from tests.fakes import (
     FakeAccountDataProvider,
     FakeContactEnrichmentProvider,
+    FakeEmailProvider,
     FakeGraphClient,
     FakeLLMProvider,
     FakeWebSearchProvider,
@@ -170,6 +171,81 @@ def test_convite_vitrine_revogado_bloqueia_aceite(db_session):
         tenant_service.criar_tenant_vitrine(
             db_session, convite.codigo, "Empresa C", "Admin C", "c@convidada.com.br", "senha123", True, plano.id, StubPaymentProvider(), *_deps_enriquecimento()
         )
+
+
+def test_gerar_convite_vitrine_com_email_enviado_com_sucesso(db_session):
+    email_provider = FakeEmailProvider()
+
+    convite = tenant_service.gerar_convite_vitrine(
+        db_session, TENANT_ID_ORIGEM, None, validade_horas=24,
+        email_destinatario="parceiro@empresa.com.br", email_provider=email_provider,
+    )
+
+    assert convite.email_enviado is True
+    assert len(email_provider.envios) == 1
+    assert email_provider.envios[0]["destinatario"] == "parceiro@empresa.com.br"
+
+
+def test_gerar_convite_vitrine_com_falha_no_envio_de_email(db_session):
+    """Raio-X de produção real: StubEmailProvider sempre reportava sucesso
+    mesmo sem enviar nada de verdade — o convite parecia enviado quando
+    não saía nada. `email_enviado` precisa refletir o resultado real."""
+    email_provider = FakeEmailProvider()
+    email_provider.falhar_proximos = 1
+
+    convite = tenant_service.gerar_convite_vitrine(
+        db_session, TENANT_ID_ORIGEM, None, validade_horas=24,
+        email_destinatario="parceiro@empresa.com.br", email_provider=email_provider,
+    )
+
+    assert convite.email_enviado is False
+
+
+def test_gerar_convite_vitrine_sem_email_nao_seta_email_enviado(db_session):
+    convite = tenant_service.gerar_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, validade_horas=24)
+
+    assert convite.email_enviado is None
+
+
+def test_reativar_convite_vitrine_revogado_volta_a_disponivel(db_session):
+    """Pedido do usuário: revogar por engano ou mudar de ideia não pode
+    obrigar a gerar um convite novo pra mesma empresa."""
+    convite = tenant_service.gerar_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, validade_horas=24)
+    tenant_service.revogar_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, convite.codigo)
+    plano = _plano(db_session)
+
+    reativado = tenant_service.reativar_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, convite.codigo)
+
+    assert reativado.status == "disponivel"
+    usuario, _ = tenant_service.criar_tenant_vitrine(
+        db_session, convite.codigo, "Empresa Reaproveitada", "Admin", "reaproveitado@convidada.com.br",
+        "senha123", True, plano.id, StubPaymentProvider(), *_deps_enriquecimento(),
+    )
+    assert usuario.email == "reaproveitado@convidada.com.br"
+
+
+def test_reativar_convite_vitrine_disponivel_falha(db_session):
+    convite = tenant_service.gerar_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, validade_horas=24)
+
+    with pytest.raises(RegraNegocioViolada):
+        tenant_service.reativar_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, convite.codigo)
+
+
+def test_excluir_convite_vitrine_revogado(db_session):
+    convite = tenant_service.gerar_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, validade_horas=24)
+    tenant_service.revogar_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, convite.codigo)
+
+    tenant_service.excluir_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, convite.codigo)
+
+    assert db_session.query(ConviteVitrine).filter_by(codigo=convite.codigo).one_or_none() is None
+
+
+def test_excluir_convite_vitrine_disponivel_falha(db_session):
+    """Nunca apagar um convite que alguém ainda possa usar."""
+    convite = tenant_service.gerar_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, validade_horas=24)
+
+    with pytest.raises(RegraNegocioViolada):
+        tenant_service.excluir_convite_vitrine(db_session, TENANT_ID_ORIGEM, None, convite.codigo)
 
 
 def test_convite_vitrine_expirado_bloqueia_aceite(db_session):

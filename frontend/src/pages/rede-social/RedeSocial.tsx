@@ -42,6 +42,7 @@ interface ConviteVitrine {
   validade_em: string | null;
   tenant_id_gerado: string | null;
   criado_em: string;
+  email_enviado: boolean | null;
 }
 
 function toneStatusConvite(status: string): "green" | "muted" | "red" {
@@ -60,6 +61,7 @@ export function RedeSocial() {
   const [conversaTenantId, setConversaTenantId] = useState<string | null>(null);
   const [convites, setConvites] = useState<ConviteVitrine[]>([]);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   async function carregarTudo() {
     try {
@@ -126,12 +128,20 @@ export function RedeSocial() {
   async function gerarConviteVitrine(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    setErro(null);
+    setAviso(null);
     try {
       const emailDestinatario = String(form.get("email_destinatario") ?? "").trim();
-      await api.post("/convites/vitrine", {
+      const criado = await api.post<ConviteVitrine>("/convites/vitrine", {
         validade_horas: Number(form.get("validade_horas")),
         email_destinatario: emailDestinatario || null,
       });
+      if (emailDestinatario && criado.email_enviado === false) {
+        setAviso(
+          `Convite criado, mas o e-mail não pôde ser enviado automaticamente (envio de e-mail não está ` +
+            `configurado no servidor). Use "Copiar link" e envie manualmente.`,
+        );
+      }
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível gerar o convite.");
@@ -144,6 +154,24 @@ export function RedeSocial() {
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível revogar o convite.");
+    }
+  }
+
+  async function reativarConviteVitrine(codigo: string) {
+    try {
+      await api.post(`/convites/vitrine/${codigo}/reativar`);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível reativar o convite.");
+    }
+  }
+
+  async function excluirConviteVitrine(codigo: string) {
+    try {
+      await api.delete(`/convites/vitrine/${codigo}`);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir o convite.");
     }
   }
 
@@ -161,6 +189,7 @@ export function RedeSocial() {
       </div>
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
+      {aviso && <div className="mb-4 text-[12px] text-amber">{aviso}</div>}
 
       <Card className="mb-4">
         <div className="flex items-start justify-between">
@@ -207,6 +236,16 @@ export function RedeSocial() {
                   </Button>
                   <Button size="sm" variant="danger" onClick={() => revogarConviteVitrine(convite.codigo)}>
                     Revogar
+                  </Button>
+                </div>
+              )}
+              {convite.status === "revogado" && (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => reativarConviteVitrine(convite.codigo)}>
+                    Reativar
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => excluirConviteVitrine(convite.codigo)}>
+                    Excluir
                   </Button>
                 </div>
               )}

@@ -17,14 +17,47 @@ _DIAS_LICENCA_POR_PAGAMENTO = 30
 
 def iniciar(
     db: Session, tenant_id: str, plano_id: int, email_pagador: str, payment_provider: PaymentProvider
-) -> tuple[PagamentoLicenca, str]:
+) -> tuple[PagamentoLicenca, str | None]:
     """Abre uma cobrança para formalizar a licença de um tenant recém-criado
     via cadastro self-service (convite-vitrine com escolha de plano).
     Devolve a URL de checkout junto — não é persistida (efêmera, só serve
-    pra redirecionar o navegador logo em seguida)."""
+    pra redirecionar o navegador logo em seguida). `None` quando o plano é
+    gratuito (ver abaixo) — não há checkout pra redirecionar."""
     plano = db.query(Plano).filter_by(id=plano_id).one_or_none()
     if plano is None:
         raise NaoEncontrado(f"Plano {plano_id} não encontrado")
+
+    if plano.preco_mensal <= 0:
+        # Plano gratuito (ex.: POC) — o Mercado Pago recusa criar uma
+        # preferência de cobrança de valor zero (400 Bad Request, raio-X
+        # de produção real). Sem cobrança pra fazer, ativa a licença na
+        # hora, sem passar pelo checkout.
+        pagamento = PagamentoLicenca(
+            tenant_id=tenant_id,
+            plano_id=plano_id,
+            preferencia_id_externo="",
+            status="aprovado",
+            valor=0,
+            confirmado_em=datetime.now(UTC),
+        )
+        db.add(pagamento)
+        db.flush()
+
+        licenca = db.query(Licenca).filter_by(tenant_id=tenant_id).one_or_none()
+        if licenca is None:
+            licenca = Licenca(tenant_id=tenant_id, plano_id=plano_id, status="ativa")
+            db.add(licenca)
+        licenca.plano_id = plano_id
+        licenca.status = "ativa"
+        licenca.data_expiracao = datetime.now(UTC) + timedelta(days=_DIAS_LICENCA_POR_PAGAMENTO)
+
+        auditoria_service.registrar(
+            db, tenant_id, "pagamento_licenca_gratuito_ativado", "pagamento_licenca", pagamento.id, None,
+            {"plano_id": plano_id},
+        )
+        db.commit()
+        db.refresh(pagamento)
+        return pagamento, None
 
     pagamento = PagamentoLicenca(
         tenant_id=tenant_id, plano_id=plano_id, preferencia_id_externo="", status="pendente", valor=plano.preco_mensal

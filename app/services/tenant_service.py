@@ -193,6 +193,12 @@ def gerar_convite_vitrine(
     db.commit()
     db.refresh(convite)
 
+    # Atributo dinâmico (não é coluna do modelo) — só pra carregar o
+    # resultado do envio até a resposta da rota (`ConviteVitrineCriadoSchema`).
+    # `StubEmailProvider` sempre reportava sucesso mesmo sem enviar nada
+    # de verdade, então sem checar `resultado.sucesso` aqui o convite
+    # parecia enviado quando não saía nada (raio-X de produção real).
+    convite.email_enviado = None  # type: ignore[attr-defined]
     if email_destinatario and email_provider is not None:
         tenant_origem = db.query(Tenant).filter_by(id=tenant_id_origem).one_or_none()
         nome_origem = tenant_origem.razao_social if tenant_origem else "Um parceiro"
@@ -203,7 +209,10 @@ def gerar_convite_vitrine(
             f"Para criar sua conta e escolher um plano, acesse:\n{link}\n\n"
             f"Este link expira {'em ' + str(validade_horas) + ' horas' if validade_horas else 'sem prazo definido'}."
         )
-        email_provider.enviar(email_destinatario, "Você foi convidado para a B2B ON", corpo, "B2B ON", "no-reply@predator.local")
+        resultado = email_provider.enviar(
+            email_destinatario, "Você foi convidado para a B2B ON", corpo, "B2B ON", "no-reply@predator.local"
+        )
+        convite.email_enviado = resultado.sucesso  # type: ignore[attr-defined]
 
     return convite
 
@@ -222,6 +231,41 @@ def revogar_convite_vitrine(db: Session, tenant_id_origem: str, ator_id: str | N
     db.commit()
     db.refresh(convite)
     return convite
+
+
+def reativar_convite_vitrine(db: Session, tenant_id_origem: str, ator_id: str | None, codigo: str) -> ConviteVitrine:
+    """Volta um convite revogado por engano pra "disponivel" — sem isto,
+    revogar por engano ou mudar de ideia obrigava gerar um convite novo
+    pra mesma empresa (pedido do usuário: evitar acumular convites)."""
+    convite = db.query(ConviteVitrine).filter_by(tenant_id_origem=tenant_id_origem, codigo=codigo).one_or_none()
+    if convite is None:
+        raise NaoEncontrado(f"Convite {codigo} não encontrado")
+    if convite.status != "revogado":
+        raise RegraNegocioViolada("Só é possível reativar convites revogados.")
+
+    convite.status = "disponivel"
+    auditoria_service.registrar(
+        db, tenant_id_origem, "convite_vitrine_reativado", "convite_vitrine", convite.id, ator_id, {}
+    )
+    db.commit()
+    db.refresh(convite)
+    return convite
+
+
+def excluir_convite_vitrine(db: Session, tenant_id_origem: str, ator_id: str | None, codigo: str) -> None:
+    """Remove um convite revogado da lista — só revogados, pra nunca
+    apagar um convite que alguém ainda possa usar."""
+    convite = db.query(ConviteVitrine).filter_by(tenant_id_origem=tenant_id_origem, codigo=codigo).one_or_none()
+    if convite is None:
+        raise NaoEncontrado(f"Convite {codigo} não encontrado")
+    if convite.status != "revogado":
+        raise RegraNegocioViolada("Só é possível excluir convites revogados.")
+
+    auditoria_service.registrar(
+        db, tenant_id_origem, "convite_vitrine_excluido", "convite_vitrine", convite.id, ator_id, {}
+    )
+    db.delete(convite)
+    db.commit()
 
 
 def listar_convites_vitrine(db: Session, tenant_id_origem: str) -> list[ConviteVitrine]:

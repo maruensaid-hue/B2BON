@@ -22,6 +22,7 @@ from app.providers.contact_enrichment.desativado import ContactEnrichmentDesativ
 from app.providers.contact_enrichment.lusha import LushaContactEnrichmentProvider
 from app.providers.contact_enrichment.stub import StubContactEnrichmentProvider
 from app.providers.channels.email.base import EmailProvider
+from app.providers.channels.email.desativado import EmailDesativadoProvider
 from app.providers.channels.email.smtp import SmtpEmailProvider
 from app.providers.channels.email.stub import StubEmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
@@ -106,6 +107,11 @@ def get_plan_limits_provider(db: Session = Depends(get_db)) -> PlanLimitsProvide
 def get_email_provider() -> EmailProvider:
     if settings.smtp_host:
         return SmtpEmailProvider()
+    if settings.e_ambiente_producao:
+        # StubEmailProvider sempre reporta sucesso mesmo sem enviar nada
+        # de verdade — em produção sem SMTP configurado, isso fazia o
+        # convite de empresa parecer enviado quando não saía nada.
+        return EmailDesativadoProvider()
     return StubEmailProvider()
 
 

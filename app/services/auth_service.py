@@ -169,6 +169,37 @@ def revogar_convite(db: Session, tenant_id: str, ator_id: str | None, codigo: st
     return convite
 
 
+def reativar_convite(db: Session, tenant_id: str, ator_id: str | None, codigo: str) -> ConviteCadastro:
+    """Volta um convite revogado por engano pra "disponivel" — sem isto,
+    revogar por engano ou mudar de ideia obrigava gerar um convite novo
+    pra mesma pessoa (pedido do usuário: evitar acumular convites)."""
+    convite = db.query(ConviteCadastro).filter_by(tenant_id=tenant_id, codigo=codigo).one_or_none()
+    if convite is None:
+        raise NaoEncontrado(f"Convite {codigo} não encontrado")
+    if convite.status != "revogado":
+        raise RegraNegocioViolada("Só é possível reativar convites revogados.")
+
+    convite.status = "disponivel"
+    auditoria_service.registrar(db, tenant_id, "convite_reativado", "convite_cadastro", convite.id, ator_id, {})
+    db.commit()
+    db.refresh(convite)
+    return convite
+
+
+def excluir_convite(db: Session, tenant_id: str, ator_id: str | None, codigo: str) -> None:
+    """Remove um convite revogado da lista — só revogados, pra nunca
+    apagar um convite que alguém ainda possa usar."""
+    convite = db.query(ConviteCadastro).filter_by(tenant_id=tenant_id, codigo=codigo).one_or_none()
+    if convite is None:
+        raise NaoEncontrado(f"Convite {codigo} não encontrado")
+    if convite.status != "revogado":
+        raise RegraNegocioViolada("Só é possível excluir convites revogados.")
+
+    auditoria_service.registrar(db, tenant_id, "convite_excluido", "convite_cadastro", convite.id, ator_id, {})
+    db.delete(convite)
+    db.commit()
+
+
 def listar_convites(db: Session, tenant_id: str) -> list[ConviteCadastro]:
     return db.query(ConviteCadastro).filter_by(tenant_id=tenant_id).order_by(ConviteCadastro.id.desc()).all()
 

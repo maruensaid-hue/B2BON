@@ -115,10 +115,22 @@ async def handle_erro_inesperado(request: Request, exc: Exception) -> JSONRespon
     logger.exception("Erro não tratado em %s %s", request.method, request.url.path)
     if settings.sentry_dsn:
         sentry_sdk.capture_exception(exc)
-    return JSONResponse(
+    resposta = JSONResponse(
         status_code=500,
         content={"detalhe": "Ocorreu um erro inesperado. Tente novamente em instantes."},
     )
+    # `ServerErrorMiddleware` do Starlette processa handlers de `Exception`
+    # numa camada por fora do `CORSMiddleware` (bug/gotcha conhecido do
+    # FastAPI) — sem isto, toda exceção não tratada em qualquer rota saía
+    # sem cabeçalhos de CORS, o navegador bloqueava a leitura da resposta
+    # e mostrava "erro de CORS" pro usuário em vez da mensagem de erro
+    # de verdade (raio-X de produção real: mascarou o dia inteiro qual
+    # era o problema em várias rotas diferentes, não só uma).
+    origem = request.headers.get("origin")
+    if origem in settings.origens_cors:
+        resposta.headers["Access-Control-Allow-Origin"] = origem
+        resposta.headers["Access-Control-Allow-Credentials"] = "true"
+    return resposta
 
 
 @app.get("/health")

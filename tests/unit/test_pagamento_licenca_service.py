@@ -32,6 +32,32 @@ def test_iniciar_cria_pagamento_pendente_e_devolve_checkout_url(db_session):
     assert checkout_url == f"https://checkout.stub.local/{pagamento.preferencia_id_externo}"
 
 
+def test_iniciar_com_plano_gratuito_ativa_na_hora_sem_checkout(db_session):
+    """Raio-X de produção real: o Mercado Pago recusa criar uma
+    preferência de cobrança de valor zero (400 Bad Request) — plano
+    gratuito (ex.: POC) não pode nem tentar passar pelo checkout."""
+    if db_session.query(Tenant).filter_by(id=TENANT_ID).one_or_none() is None:
+        db_session.add(Tenant(id=TENANT_ID, razao_social="Empresa Teste"))
+    plano_gratuito = Plano(nome="POC", franquia_contas_mes=50, max_usuarios=3, preco_mensal=0.0)
+    db_session.add(plano_gratuito)
+    db_session.commit()
+    provider = StubPaymentProvider()
+
+    pagamento, checkout_url = pagamento_licenca_service.iniciar(
+        db_session, TENANT_ID, plano_gratuito.id, "admin@teste.com.br", provider
+    )
+
+    assert checkout_url is None
+    assert pagamento.status == "aprovado"
+    assert pagamento.confirmado_em is not None
+    assert provider._contador == 0  # criar_preferencia nunca foi chamado
+
+    licenca = db_session.query(Licenca).filter_by(tenant_id=TENANT_ID).one()
+    assert licenca.status == "ativa"
+    assert licenca.plano_id == plano_gratuito.id
+    assert licenca.data_expiracao is not None
+
+
 def test_webhook_aprovado_ativa_a_licenca(db_session):
     plano = _tenant_e_plano(db_session)
     provider = StubPaymentProvider()

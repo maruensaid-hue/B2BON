@@ -73,6 +73,24 @@ export function AdminConvites() {
     }
   }
 
+  async function reativar(codigo: string) {
+    try {
+      await api.post(`/convites/${codigo}/reativar`);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível reativar o convite.");
+    }
+  }
+
+  async function excluir(codigo: string) {
+    try {
+      await api.delete(`/convites/${codigo}`);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir o convite.");
+    }
+  }
+
   if (!isSuperAdmin) return <AcessoRestrito />;
 
   return (
@@ -117,16 +135,28 @@ export function AdminConvites() {
                   {convite.validade_em ? new Date(convite.validade_em).toLocaleString("pt-BR") : "Sem expiração"}
                 </td>
                 <td className="p-2">
-                  {convite.status === "disponivel" && (
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(linkConvite(convite.codigo))}>
-                        Copiar link
-                      </Button>
-                      <Button size="sm" variant="danger" onClick={() => revogar(convite.codigo)}>
-                        Revogar
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex gap-2">
+                    {convite.status === "disponivel" && (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(linkConvite(convite.codigo))}>
+                          Copiar link
+                        </Button>
+                        <Button size="sm" variant="danger" onClick={() => revogar(convite.codigo)}>
+                          Revogar
+                        </Button>
+                      </>
+                    )}
+                    {convite.status === "revogado" && (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => reativar(convite.codigo)}>
+                          Reativar
+                        </Button>
+                        <Button size="sm" variant="danger" onClick={() => excluir(convite.codigo)}>
+                          Excluir
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

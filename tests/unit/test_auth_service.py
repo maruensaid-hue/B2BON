@@ -133,6 +133,45 @@ def test_convite_revogado_bloqueia_registro(db_session):
         )
 
 
+def test_reativar_convite_revogado_volta_a_disponivel(db_session):
+    """Pedido do usuário: revogar por engano ou mudar de ideia não pode
+    obrigar a gerar um convite novo pra mesma pessoa."""
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    auth_service.revogar_convite(db_session, TENANT_ID, None, convite.codigo)
+
+    reativado = auth_service.reativar_convite(db_session, TENANT_ID, None, convite.codigo)
+
+    assert reativado.status == "disponivel"
+    usuario = auth_service.registrar_com_convite(
+        db_session, convite.codigo, "Reaproveitado", "reaproveitado@teste.com.br", "senha123", aceite_termos=True
+    )
+    assert usuario.email == "reaproveitado@teste.com.br"
+
+
+def test_reativar_convite_disponivel_falha(db_session):
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+    with pytest.raises(RegraNegocioViolada):
+        auth_service.reativar_convite(db_session, TENANT_ID, None, convite.codigo)
+
+
+def test_excluir_convite_revogado(db_session):
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    auth_service.revogar_convite(db_session, TENANT_ID, None, convite.codigo)
+
+    auth_service.excluir_convite(db_session, TENANT_ID, None, convite.codigo)
+
+    assert db_session.query(ConviteCadastro).filter_by(codigo=convite.codigo).one_or_none() is None
+
+
+def test_excluir_convite_disponivel_falha(db_session):
+    """Nunca apagar um convite que alguém ainda possa usar."""
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+
+    with pytest.raises(RegraNegocioViolada):
+        auth_service.excluir_convite(db_session, TENANT_ID, None, convite.codigo)
+
+
 def test_convite_expirado_bloqueia_registro(db_session):
     convite = ConviteCadastro(
         tenant_id=TENANT_ID,
