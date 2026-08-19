@@ -9,7 +9,14 @@ class ClaudeProvider(LLMProvider):
     """Implementação da API Claude (Anthropic) para a camada de abstração de LLM."""
 
     def __init__(self) -> None:
-        self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        # Timeout explícito — sem isto, uma chamada lenta (prompt grande,
+        # ex.: enriquecimento de site com várias páginas) podia ficar
+        # pendurada além do timeout do proxy do Render, que devolve uma
+        # resposta sem os cabeçalhos de CORS da nossa API e aparece pro
+        # usuário como erro de CORS (raio-X de produção real) em vez do
+        # erro de negócio claro que `LLMIndisponivel`/`RegraNegocioViolada`
+        # já produzem.
+        self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=25.0)
         self._model = settings.anthropic_model
 
     def generate(self, request: LLMRequest) -> LLMResponse:

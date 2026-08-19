@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -198,6 +198,11 @@ export default function App() {
           />
         </Route>
       </Route>
+
+      {/* URL sem rota correspondente (ex.: link de convite colado errado,
+          duplicando o caminho) — antes disto o React não renderizava nada,
+          uma tela em branco sem nenhum aviso (raio-X de produção real). */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

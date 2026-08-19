@@ -31,9 +31,21 @@ export function Login() {
     }
   }
 
+  // O botão "Copiar link" (Rede Social) copia a URL inteira, não só o
+  // código — colar o link inteiro aqui (em vez de abrir ele direto) é um
+  // erro fácil de cometer, e sem isto virava uma URL duplicada
+  // (/convite-vitrine/https://.../convite-vitrine/CODIGO) que nenhuma
+  // rota reconhece, deixando a tela em branco sem nenhum aviso (raio-X
+  // de produção real).
+  function extrairCodigoConvite(valor: string): string {
+    const texto = valor.trim();
+    const correspondencia = texto.match(/convite-vitrine\/([^/?#\s]+)/);
+    return correspondencia ? correspondencia[1] : texto;
+  }
+
   function handleUsarCodigo(event: FormEvent) {
     event.preventDefault();
-    const codigo = codigoConvite.trim();
+    const codigo = extrairCodigoConvite(codigoConvite);
     if (codigo) navigate(`/convite-vitrine/${codigo}`);
   }
 
