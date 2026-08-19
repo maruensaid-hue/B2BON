@@ -1,15 +1,23 @@
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_email_provider, get_email_validation_provider, resolver_whatsapp_provider
+from app.api.deps import (
+    get_db,
+    get_email_provider,
+    get_email_validation_provider,
+    get_plan_limits_provider,
+    resolver_whatsapp_provider,
+)
 from app.core.config import settings
 from app.models.tenant import Tenant
 from app.providers.channels.email.base import EmailProvider
 from app.providers.email_validation.base import EmailVerificationProvider
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.services import (
     campanha_service,
     envio_service,
     nps_service,
+    relatorio_service,
     reuniao_service,
     tenant_service,
     titular_service,
@@ -131,3 +139,16 @@ def disparar_webhooks_parceiros(db: Session = Depends(get_db)) -> dict:
     configurado (Fase 2 da hierarquia, raio-X) — assinado (HMAC), com
     backoff e desistência depois de tentativas repetidas."""
     return webhook_parceiro_service.despachar_pendentes(db)
+
+
+@router.post("/disparar-relatorios-periodicos", dependencies=[Depends(_exigir_segredo_cron)])
+def disparar_relatorios_periodicos(
+    db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+) -> dict:
+    """Relatório periódico de volumetria/franquia/inadimplência/receita/
+    churn (Fase 3 da hierarquia, raio-X) — cadência configurável por quem
+    recebe (`ConfiguracaoRelatorio`), rodado 1x/dia (suficiente até pra
+    cadência diária, já que checar 1x/dia é o próprio significado disso)."""
+    return relatorio_service.disparar_periodicos(db, email, plan_limits)

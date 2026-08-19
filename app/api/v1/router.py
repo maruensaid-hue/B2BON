@@ -33,6 +33,7 @@ from app.api.v1.optout import router as optout_router
 from app.api.v1.painel import router as painel_router
 from app.api.v1.parceiros import router as parceiros_router
 from app.api.v1.planos import router as planos_router
+from app.api.v1.relatorios import router as relatorios_router
 from app.api.v1.qualificacao import router as qualificacao_router
 from app.api.v1.rede_social import router as rede_social_router
 from app.api.v1.reunioes import router as reunioes_router
@@ -94,6 +95,7 @@ router.include_router(admin_tenants_router)
 # não módulo pago do PREDATOR).
 router.include_router(integracoes_router)
 router.include_router(parceiros_router)
+router.include_router(relatorios_router)
 router.include_router(crm_router, dependencies=_exige_licenca)
 router.include_router(rede_social_router)
 router.include_router(motor_router, dependencies=_exige_licenca)

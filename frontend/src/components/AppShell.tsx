@@ -50,6 +50,7 @@ const NAV_ITEM_REDE_SOCIAL: NavItem = { path: "/rede-social", label: "Rede Socia
 const ADMIN_NAV_ITEMS_HIERARQUIA: NavItem[] = [
   { path: "/admin/tenants", label: "Tenants", icon: "🏢" },
   { path: "/admin/licencas", label: "Licenças", icon: "📋" },
+  { path: "/admin/relatorios", label: "Relatórios", icon: "📊" },
 ];
 const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
   { path: "/admin/convites", label: "Convites", icon: "🔑" },

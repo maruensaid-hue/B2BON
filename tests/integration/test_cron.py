@@ -97,3 +97,15 @@ def test_disparar_webhooks_parceiros_com_segredo_certo_retorna_resumo(client, co
 
     assert resposta.status_code == 200
     assert set(resposta.json()) == {"entregues", "com_nova_tentativa", "desistencias"}
+
+
+def test_disparar_relatorios_periodicos_sem_segredo_configurado_recusa(client):
+    resposta = client.post("/api/v1/cron/disparar-relatorios-periodicos")
+    assert resposta.status_code == 403
+
+
+def test_disparar_relatorios_periodicos_com_segredo_certo_retorna_resumo(client, com_segredo_cron):
+    resposta = client.post("/api/v1/cron/disparar-relatorios-periodicos", headers={"X-Cron-Secret": SEGREDO})
+
+    assert resposta.status_code == 200
+    assert set(resposta.json()) == {"tenants_processados", "emails_enviados"}
