@@ -122,6 +122,22 @@ def test_dashboard_agrega_contas_visiveis(client, db_session):
     assert corpo["total_contas"] == 2
 
 
+def test_dashboard_traz_roi_e_cs_score(client, db_session):
+    """Raio-X: ROI e CS são métricas que existiam numa versão anterior do
+    MAP, antes de integrar à B2B ON — pedido do usuário pra trazer de
+    volta. Sem nenhum dado de NPS/economia ainda, os dois vêm None em
+    vez de quebrar a rota."""
+    _criar_conta(db_session, nome="Conta 1")
+
+    resposta = client.get("/api/v1/saude-contas/dashboard")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert "roi" in corpo
+    assert "cs_score" in corpo
+    assert "nps_medio" in corpo
+
+
 def test_script_resgate_via_llm(client, db_session, fake_llm):
     conta = _criar_conta(db_session)
     fake_llm.definir_respostas(["Olá! Notei que faz um tempo desde nosso último contato..."])

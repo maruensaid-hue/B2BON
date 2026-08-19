@@ -169,7 +169,13 @@ def test_dashboard_economia_via_api(client):
     resposta = client.get("/api/v1/crm/dashboard/economia", params={"periodo": periodo_atual})
 
     assert resposta.status_code == 200
-    assert resposta.json()["periodo"] == periodo_atual
+    corpo = resposta.json()
+    assert corpo["periodo"] == periodo_atual
+    # Raio-X: ROI e CS existiam numa versão anterior do MAP, antes de
+    # integrar à B2B ON — pedido do usuário pra trazer de volta.
+    assert "roi" in corpo
+    assert "cs_score" in corpo
+    assert "nps_medio" in corpo
 
 
 def test_dashboard_flywheel_via_api(client):

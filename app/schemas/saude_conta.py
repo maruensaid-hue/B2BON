@@ -47,6 +47,9 @@ class DashboardSaudeContasSchema(BaseModel):
     atencao: int
     saudaveis: int
     valor_total_em_risco: float
+    roi: float | None
+    cs_score: float | None
+    nps_medio: float | None
 
 
 class ScriptResgateContaSchema(BaseModel):

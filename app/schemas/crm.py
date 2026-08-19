@@ -147,6 +147,9 @@ class DashboardEconomiaSchema(BaseModel):
     novos_clientes: int
     clientes_ativos_inicio_periodo: int
     clientes_cancelados_periodo: int
+    roi: float | None
+    cs_score: float | None
+    nps_medio: float | None
 
 
 class DashboardFlywheelSchema(BaseModel):

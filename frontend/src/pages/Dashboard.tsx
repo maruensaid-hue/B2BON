@@ -36,6 +36,9 @@ interface DashboardEconomia {
   novos_clientes: number;
   clientes_ativos_inicio_periodo: number;
   clientes_cancelados_periodo: number;
+  roi: number | null;
+  cs_score: number | null;
+  nps_medio: number | null;
 }
 
 function formatarMoeda(valor: number | null): string {
@@ -78,7 +81,7 @@ export function Dashboard() {
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
-      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         <KpiCard
           label="Reuniões qualificadas"
           value={metricaNorte?.valor_mes_atual ?? "—"}
@@ -92,6 +95,17 @@ export function Dashboard() {
         />
         <KpiCard label="LTV médio" value={formatarMoeda(economia?.ltv_medio ?? null)} colorClassName="text-green" />
         <KpiCard label="CAC" value={formatarMoeda(economia?.cac ?? null)} colorClassName="text-red" />
+        <KpiCard
+          label="ROI (LTV/CAC)"
+          value={economia?.roi != null ? `${economia.roi.toFixed(1)}x` : "—"}
+          colorClassName="text-violet"
+        />
+        <KpiCard
+          label="CS Score"
+          value={economia?.cs_score != null ? economia.cs_score.toFixed(0) : "—"}
+          sub={economia?.nps_medio != null ? `NPS médio ${economia.nps_medio.toFixed(1)}` : undefined}
+          colorClassName="text-cyan"
+        />
       </div>
 
       <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-2">

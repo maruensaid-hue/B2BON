@@ -11,7 +11,7 @@ from app.models.estagio_funil import EstagioFunil
 from app.models.interacao_conta import InteracaoConta
 from app.models.negocio import Negocio
 from app.models.usuario import Usuario
-from app.services import auditoria_service, llm_helpers
+from app.services import auditoria_service, llm_helpers, metricas_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 _TIPOS_VALIDOS = {
@@ -189,6 +189,24 @@ def dashboard_saude_contas(
 ) -> dict:
     ranking = ranking_saude_contas(db, tenant_id, usuario, vendedor_usuario_id)
     total = len(ranking)
+
+    cs = metricas_service.calcular_cs_score(
+        db,
+        tenant_id,
+        conta_ids=[item["conta_id"] for item in ranking],
+        scores_risco=[item["score"] for item in ranking],
+    )
+
+    # Import local (não no topo do arquivo) pra evitar dependência
+    # circular: `crm_service` também importa este módulo (pro CS do
+    # Dashboard) — por enquanto do ponto de vista de import, os dois só
+    # se enxergam dentro da chamada de função, nunca no carregamento do
+    # módulo em si.
+    from app.services import crm_service
+
+    periodo_atual = datetime.now(UTC).strftime("%Y-%m")
+    roi = crm_service.dashboard_economia(db, tenant_id, periodo_atual).get("roi")
+
     return {
         "score_medio": (sum(item["score"] for item in ranking) / total) if total else None,
         "total_contas": total,
@@ -198,6 +216,9 @@ def dashboard_saude_contas(
         "valor_total_em_risco": sum(
             item["valor_pipeline_aberto"] for item in ranking if item["classificacao"] != "saudavel"
         ),
+        "roi": roi,
+        "cs_score": cs["cs_score"],
+        "nps_medio": cs["nps_medio"],
     }
 
 

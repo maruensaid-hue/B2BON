@@ -16,6 +16,9 @@ interface DashboardSaudeContas {
   atencao: number;
   saudaveis: number;
   valor_total_em_risco: number;
+  roi: number | null;
+  cs_score: number | null;
+  nps_medio: number | null;
 }
 
 interface SaudeConta {
@@ -196,7 +199,7 @@ export function MapContas() {
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
-      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         <KpiCard label="Score médio" value={dashboard?.score_medio?.toFixed(0) ?? "—"} colorClassName="text-cyan" />
         <KpiCard label="Críticas" value={dashboard?.criticas ?? "—"} colorClassName="text-red" />
         <KpiCard label="Atenção" value={dashboard?.atencao ?? "—"} colorClassName="text-amber" />
@@ -204,6 +207,17 @@ export function MapContas() {
           label="Pipeline em risco"
           value={dashboard ? `R$${Math.round(dashboard.valor_total_em_risco / 1000)}k` : "—"}
           colorClassName="text-red"
+        />
+        <KpiCard
+          label="ROI (LTV/CAC)"
+          value={dashboard?.roi != null ? `${dashboard.roi.toFixed(1)}x` : "—"}
+          colorClassName="text-violet"
+        />
+        <KpiCard
+          label="CS Score"
+          value={dashboard?.cs_score != null ? dashboard.cs_score.toFixed(0) : "—"}
+          sub={dashboard?.nps_medio != null ? `NPS médio ${dashboard.nps_medio.toFixed(1)}` : undefined}
+          colorClassName="text-green"
         />
       </div>
 

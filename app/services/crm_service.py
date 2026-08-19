@@ -10,7 +10,7 @@ from app.models.decisor import Decisor
 from app.models.estagio_funil import EstagioFunil
 from app.models.negocio import Negocio
 from app.models.usuario import Usuario
-from app.services import atividade_service, auditoria_service, panel_service
+from app.services import atividade_service, auditoria_service, metricas_service, panel_service, saude_conta_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 # Padrão recomendado, não decisão comercial fechada — configurável depois
@@ -457,6 +457,12 @@ def dashboard_economia(db: Session, tenant_id: str, periodo: str) -> dict:
     ]
     taxa_churn = (len(cancelados_periodo) / len(ativos_inicio)) if ativos_inicio else None
 
+    roi = metricas_service.calcular_roi(ltv_medio, cac)
+    scores_risco = [saude_conta_service.calcular_score_risco(db, tenant_id, conta.id)["score"] for conta in contas]
+    cs = metricas_service.calcular_cs_score(
+        db, tenant_id, conta_ids=[conta.id for conta in contas], scores_risco=scores_risco
+    )
+
     return {
         "periodo": periodo,
         "ltv_medio": ltv_medio,
@@ -465,6 +471,9 @@ def dashboard_economia(db: Session, tenant_id: str, periodo: str) -> dict:
         "novos_clientes": len(novos_clientes),
         "clientes_ativos_inicio_periodo": len(ativos_inicio),
         "clientes_cancelados_periodo": len(cancelados_periodo),
+        "roi": roi,
+        "cs_score": cs["cs_score"],
+        "nps_medio": cs["nps_medio"],
     }
 
 
