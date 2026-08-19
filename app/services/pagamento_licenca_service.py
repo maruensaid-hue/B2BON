@@ -9,7 +9,7 @@ from app.models.pagamento_licenca import PagamentoLicenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
 from app.providers.payment.base import PaymentProvider
-from app.services import auditoria_service
+from app.services import auditoria_service, webhook_parceiro_service
 from app.services.errors import NaoEncontrado
 
 _DIAS_LICENCA_POR_PAGAMENTO = 30
@@ -140,6 +140,11 @@ def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagame
         None,
         {"status": pagamento.status},
     )
+    if pagamento.status == "aprovado":
+        webhook_parceiro_service.enfileirar_evento(
+            db, pagamento.tenant_id, "pagamento_confirmado",
+            {"tenant_id": pagamento.tenant_id, "plano_id": pagamento.plano_id, "valor": pagamento.valor},
+        )
     db.commit()
 
 

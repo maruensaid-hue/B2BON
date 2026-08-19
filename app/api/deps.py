@@ -1,4 +1,6 @@
+import hashlib
 from collections.abc import Generator
+from datetime import UTC, datetime
 
 from fastapi import Depends, Header
 from sqlalchemy.orm import Session
@@ -6,9 +8,11 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.graph.client import Neo4jClient
 from app.core.config import settings
+from app.core.rate_limit import limitador_parceiros
 from app.integrations.brasilapi_client import BrasilApiClient, consultar_cnpj_brasilapi
 from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.claude_provider import ClaudeProvider
+from app.models.chave_api_parceiro import ChaveApiParceiro
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.licenca import Licenca
 from app.models.tenant import Tenant
@@ -45,7 +49,7 @@ from app.providers.web_search.base import WebSearchProvider
 from app.providers.web_search.brave import BraveSearchProvider
 from app.providers.web_search.desativado import WebSearchDesativadoProvider
 from app.providers.web_search.stub import StubWebSearchProvider
-from app.services import auth_service
+from app.services import auth_service, tenant_service
 from app.services.errors import NaoAutenticado, NaoAutorizado
 
 
@@ -259,21 +263,6 @@ def exigir_papel(*papeis: str):
     return _dependencia
 
 
-def _e_ancestral(db: Session, possivel_ancestral_id: str, tenant_id: str) -> bool:
-    """Sobe a cadeia de `tenant_pai_id` a partir de `tenant_id` até achar
-    `possivel_ancestral_id` ou chegar ao topo da árvore. Teto de
-    profundidade evita loop infinito em caso de dado corrompido (ciclo) —
-    a hierarquia é rasa por design (3 níveis sob a CyberFort)."""
-    atual = db.query(Tenant).filter_by(id=tenant_id).one_or_none()
-    for _ in range(_PROFUNDIDADE_MAXIMA_HIERARQUIA):
-        if atual is None or atual.tenant_pai_id is None:
-            return False
-        if atual.tenant_pai_id == possivel_ancestral_id:
-            return True
-        atual = db.query(Tenant).filter_by(id=atual.tenant_pai_id).one_or_none()
-    return False
-
-
 def exigir_gestor_do_tenant(
     tenant_id: str,
     usuario: Usuario = Depends(get_usuario_atual),
@@ -287,7 +276,7 @@ def exigir_gestor_do_tenant(
     partir do path param de mesmo nome na rota."""
     if usuario.papel == "super_admin":
         return usuario
-    if usuario.papel == "admin" and (usuario.tenant_id == tenant_id or _e_ancestral(db, usuario.tenant_id, tenant_id)):
+    if usuario.papel == "admin" and (usuario.tenant_id == tenant_id or tenant_service.e_ancestral(db, usuario.tenant_id, tenant_id)):
         return usuario
     raise NaoAutorizado("Você não tem permissão para gerenciar este tenant.")
 
@@ -306,3 +295,46 @@ def permitir_gestao_hierarquica(
     if usuario.papel == "admin" and tenant_do_usuario is not None and tenant_do_usuario.tipo in {"distribuidor", "revendedor"}:
         return usuario
     raise NaoAutorizado("Você não tem permissão para gerenciar tenants.")
+
+
+def exigir_admin_distribuidor(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> Usuario:
+    """Chave de API e webhook de saída (Fase 2 da hierarquia, raio-X) são
+    exclusivos de admin de tenant `tipo="distribuidor"` — Revendedor
+    continua só no painel via `permitir_gestao_hierarquica` (decisão
+    validada com o usuário: reduz a superfície de risco desta primeira
+    entrega da API externa)."""
+    tenant = db.query(Tenant).filter_by(id=usuario.tenant_id).one_or_none()
+    if usuario.papel == "admin" and tenant is not None and tenant.tipo == "distribuidor":
+        return usuario
+    raise NaoAutorizado("Recurso exclusivo de administradores de tenant Distribuidor.")
+
+
+def get_chave_api_atual(
+    authorization: str | None = Header(None, alias="Authorization"),
+    db: Session = Depends(get_db),
+) -> ChaveApiParceiro:
+    """Autenticação de máquina (Fase 2 da hierarquia, raio-X) — o próprio
+    sistema do Distribuidor chamando `/parceiros/*`, sem humano logado.
+    Mesmo formato de header do JWT (`Bearer <segredo>`), mas resolvido por
+    hash de API key, não por `auth_service.validar_token`."""
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise NaoAutenticado("Cabeçalho Authorization deve ser 'Bearer <chave>'.")
+    chave_hash = hashlib.sha256(authorization[len("Bearer ") :].encode()).hexdigest()
+    chave = db.query(ChaveApiParceiro).filter_by(chave_hash=chave_hash, revogada_em=None).one_or_none()
+    if chave is None:
+        raise NaoAutenticado("Chave de API inválida ou revogada.")
+    chave.ultimo_uso_em = datetime.now(UTC)
+    db.commit()
+    return chave
+
+
+def limitar_por_chave_api(max_tentativas: int = 100, janela_segundos: int = 60):
+    """Chave do limite = id da credencial, não IP (tráfego de parceiro vem
+    de servidor fixo do lado deles, IP não distingue abuso de uso legítimo
+    em rajada) — mesmo `LimitadorEmMemoria` de `limitar_por_ip`, bucket
+    próprio (`limitador_parceiros`)."""
+
+    def _dependencia(chave: ChaveApiParceiro = Depends(get_chave_api_atual)) -> None:
+        limitador_parceiros.checar(f"chave-api:{chave.id}", max_tentativas, janela_segundos)
+
+    return _dependencia

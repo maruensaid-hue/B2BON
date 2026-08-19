@@ -21,6 +21,7 @@ from app.api.v1.envios import router as envios_router
 from app.api.v1.faq import router as faq_router
 from app.api.v1.icp import router as icp_router
 from app.api.v1.indicacoes import router as indicacoes_router
+from app.api.v1.integracoes import router as integracoes_router
 from app.api.v1.leads import router as leads_router
 from app.api.v1.linkedin import router as linkedin_router
 from app.api.v1.motor import router as motor_router
@@ -30,6 +31,7 @@ from app.api.v1.ofertas import router as oferta_router
 from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.optout import router as optout_router
 from app.api.v1.painel import router as painel_router
+from app.api.v1.parceiros import router as parceiros_router
 from app.api.v1.planos import router as planos_router
 from app.api.v1.qualificacao import router as qualificacao_router
 from app.api.v1.rede_social import router as rede_social_router
@@ -85,6 +87,13 @@ router.include_router(auth_router)
 router.include_router(convites_router)
 router.include_router(planos_router)
 router.include_router(admin_tenants_router)
+# Fase 2 da hierarquia (raio-X): /integracoes é JWT (Distribuidor logado
+# gerenciando chave/webhook próprios), /parceiros é chave de API (sistema
+# do Distribuidor chamando de fora) — nenhum dos dois passa por
+# exigir_licenca_ativa, mesmo raciocínio de /admin/tenants (administrativo,
+# não módulo pago do PREDATOR).
+router.include_router(integracoes_router)
+router.include_router(parceiros_router)
 router.include_router(crm_router, dependencies=_exige_licenca)
 router.include_router(rede_social_router)
 router.include_router(motor_router, dependencies=_exige_licenca)

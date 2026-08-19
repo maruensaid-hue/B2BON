@@ -20,7 +20,14 @@ from app.providers.channels.email.base import EmailProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.payment.base import PaymentProvider
 from app.providers.web_search.base import WebSearchProvider
-from app.services import auditoria_service, auth_service, conta_service, pagamento_licenca_service, rede_social_service
+from app.services import (
+    auditoria_service,
+    auth_service,
+    conta_service,
+    pagamento_licenca_service,
+    rede_social_service,
+    webhook_parceiro_service,
+)
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 logger = logging.getLogger(__name__)
@@ -124,6 +131,11 @@ def criar_tenant_inicial(
     auditoria_service.registrar(
         db, tenant.id, "tenant_criado", "tenant", 0, None, {"razao_social": razao_social}
     )
+    if tenant_pai_id is not None:
+        webhook_parceiro_service.enfileirar_evento(
+            db, tenant.id, "tenant_provisionado",
+            {"tenant_id": tenant.id, "razao_social": razao_social, "tipo": tipo, "tenant_pai_id": tenant_pai_id, "plano_id": plano_id},
+        )
     db.commit()
     db.refresh(usuario)
     return usuario
@@ -134,16 +146,32 @@ def listar_tenants(db: Session) -> list[Tenant]:
     return db.query(Tenant).order_by(Tenant.id).all()
 
 
-def listar_tenants_visiveis(db: Session, usuario: Usuario) -> list[Tenant]:
-    """super_admin enxerga tudo; admin de um tenant distribuidor/revendedor
-    enxerga o próprio tenant + toda a subárvore abaixo dele (BFS limitado
-    em profundidade — a hierarquia é rasa por design, 3 níveis sob a
-    CyberFort). Admin de um tenant "cliente" (folha) só enxerga a si mesmo."""
-    if usuario.papel == "super_admin":
-        return listar_tenants(db)
+def e_ancestral(db: Session, possivel_ancestral_id: str, tenant_id: str) -> bool:
+    """Sobe a cadeia de `tenant_pai_id` a partir de `tenant_id` até achar
+    `possivel_ancestral_id` ou chegar ao topo da árvore. Teto de
+    profundidade evita loop infinito em caso de dado corrompido (ciclo) —
+    a hierarquia é rasa por design (3 níveis sob a CyberFort). Compartilhado
+    entre `deps.exigir_gestor_do_tenant` (JWT) e a API de parceiros (chave
+    de API, Fase 2 da hierarquia)."""
+    atual = db.query(Tenant).filter_by(id=tenant_id).one_or_none()
+    for _ in range(_PROFUNDIDADE_MAXIMA_HIERARQUIA):
+        if atual is None or atual.tenant_pai_id is None:
+            return False
+        if atual.tenant_pai_id == possivel_ancestral_id:
+            return True
+        atual = db.query(Tenant).filter_by(id=atual.tenant_pai_id).one_or_none()
+    return False
 
-    visiveis = [usuario.tenant_id]
-    fronteira = [usuario.tenant_id]
+
+def listar_subarvore(db: Session, tenant_id_raiz: str) -> list[Tenant]:
+    """`tenant_id_raiz` + toda a subárvore abaixo dele (BFS limitado em
+    profundidade — a hierarquia é rasa por design, 3 níveis sob a
+    CyberFort). Compartilhado entre `listar_tenants_visiveis` (chamador
+    humano, JWT) e a API de parceiros (chamador de máquina, chave de API,
+    Fase 2 da hierarquia) — nenhum dos dois tem noção de super_admin aqui,
+    isso é decidido por quem chama."""
+    visiveis = [tenant_id_raiz]
+    fronteira = [tenant_id_raiz]
     for _ in range(_PROFUNDIDADE_MAXIMA_HIERARQUIA):
         filhos = db.query(Tenant).filter(Tenant.tenant_pai_id.in_(fronteira)).all()
         if not filhos:
@@ -152,6 +180,15 @@ def listar_tenants_visiveis(db: Session, usuario: Usuario) -> list[Tenant]:
         visiveis.extend(fronteira)
 
     return db.query(Tenant).filter(Tenant.id.in_(visiveis)).order_by(Tenant.id).all()
+
+
+def listar_tenants_visiveis(db: Session, usuario: Usuario) -> list[Tenant]:
+    """super_admin enxerga tudo; admin de um tenant distribuidor/revendedor
+    enxerga o próprio tenant + toda a subárvore abaixo dele. Admin de um
+    tenant "cliente" (folha) só enxerga a si mesmo."""
+    if usuario.papel == "super_admin":
+        return listar_tenants(db)
+    return listar_subarvore(db, usuario.tenant_id)
 
 
 def suspender_licencas_vencidas(db: Session) -> list[str]:
@@ -181,6 +218,10 @@ def suspender_licencas_vencidas(db: Session) -> list[str]:
         auditoria_service.registrar(
             db, licenca.tenant_id, "licenca_suspensa_automaticamente", "licenca", licenca.id, None,
             {"data_expiracao": licenca.data_expiracao.isoformat()},
+        )
+        webhook_parceiro_service.enfileirar_evento(
+            db, licenca.tenant_id, "licenca_suspensa",
+            {"tenant_id": licenca.tenant_id, "data_expiracao": licenca.data_expiracao.isoformat()},
         )
         tenants_suspensos.append(licenca.tenant_id)
 
@@ -225,6 +266,9 @@ def atualizar_licenca(
         auditoria_service.registrar(
             db, tenant_id, "licenca_criada", "licenca", licenca.id, ator_id, {"plano_id": plano_id, "status": licenca.status}
         )
+        webhook_parceiro_service.enfileirar_evento(
+            db, tenant_id, "licenca_atualizada", {"tenant_id": tenant_id, "plano_id": plano_id, "status": licenca.status}
+        )
         db.commit()
         db.refresh(licenca)
         return licenca
@@ -246,6 +290,9 @@ def atualizar_licenca(
         licenca.id,
         ator_id,
         {"plano_id": plano_id, "status": status},
+    )
+    webhook_parceiro_service.enfileirar_evento(
+        db, tenant_id, "licenca_atualizada", {"tenant_id": tenant_id, "plano_id": licenca.plano_id, "status": licenca.status}
     )
     db.commit()
     db.refresh(licenca)

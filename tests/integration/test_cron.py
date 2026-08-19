@@ -85,3 +85,15 @@ def test_suspender_licencas_vencidas_com_segredo_certo_retorna_lista(client, com
 
     assert resposta.status_code == 200
     assert "tenants_suspensos" in resposta.json()
+
+
+def test_disparar_webhooks_parceiros_sem_segredo_configurado_recusa(client):
+    resposta = client.post("/api/v1/cron/disparar-webhooks-parceiros")
+    assert resposta.status_code == 403
+
+
+def test_disparar_webhooks_parceiros_com_segredo_certo_retorna_resumo(client, com_segredo_cron):
+    resposta = client.post("/api/v1/cron/disparar-webhooks-parceiros", headers={"X-Cron-Secret": SEGREDO})
+
+    assert resposta.status_code == 200
+    assert set(resposta.json()) == {"entregues", "com_nova_tentativa", "desistencias"}

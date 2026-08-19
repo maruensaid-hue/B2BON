@@ -6,7 +6,15 @@ from app.core.config import settings
 from app.models.tenant import Tenant
 from app.providers.channels.email.base import EmailProvider
 from app.providers.email_validation.base import EmailVerificationProvider
-from app.services import campanha_service, envio_service, nps_service, reuniao_service, tenant_service, titular_service
+from app.services import (
+    campanha_service,
+    envio_service,
+    nps_service,
+    reuniao_service,
+    tenant_service,
+    titular_service,
+    webhook_parceiro_service,
+)
 from app.services.errors import NaoAutorizado
 
 router = APIRouter(prefix="/cron", tags=["cron"])
@@ -115,3 +123,11 @@ def suspender_licencas_vencidas(db: Session = Depends(get_db)) -> dict:
     vencida continuava dando acesso total até um humano mudar o status
     manualmente pela tela de Admin."""
     return {"tenants_suspensos": tenant_service.suspender_licencas_vencidas(db)}
+
+
+@router.post("/disparar-webhooks-parceiros", dependencies=[Depends(_exigir_segredo_cron)])
+def disparar_webhooks_parceiros(db: Session = Depends(get_db)) -> dict:
+    """Entrega os eventos enfileirados pra Distribuidores com webhook
+    configurado (Fase 2 da hierarquia, raio-X) — assinado (HMAC), com
+    backoff e desistência depois de tentativas repetidas."""
+    return webhook_parceiro_service.despachar_pendentes(db)

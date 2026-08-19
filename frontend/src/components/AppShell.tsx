@@ -55,6 +55,9 @@ const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
   { path: "/admin/convites", label: "Convites", icon: "🔑" },
   { path: "/admin/planos", label: "Planos", icon: "💳" },
 ];
+// API de provisionamento/billing (Fase 2 da hierarquia, raio-X) — exclusivo
+// de admin de tenant tipo="distribuidor" (decisão validada com o usuário).
+const ADMIN_NAV_ITEM_INTEGRACOES: NavItem = { path: "/admin/integracoes", label: "Integrações", icon: "🔌" };
 
 const CLASSE_ITEM_BASE =
   "mb-0.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] whitespace-nowrap text-muted transition-colors";
@@ -147,6 +150,7 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const isSuperAdmin = usuario?.papel === "super_admin";
   const ehGestorHierarquico = usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo);
+  const ehAdminDistribuidor = usuario?.papel === "admin" && usuario.tenant_tipo === "distribuidor";
   const navItems = temLicencaAtiva
     ? [NAV_ITEMS_PAGOS[0], CRM_ITEM, ...CRM_SUBITENS, NAV_ITEMS_PAGOS[1], ...PREDATOR_NAV_ITEMS, NAV_ITEM_REDE_SOCIAL]
     : [NAV_ITEM_REDE_SOCIAL];
@@ -201,6 +205,7 @@ export function AppShell() {
               {ADMIN_NAV_ITEMS_HIERARQUIA.map((item) => (
                 <NavButton key={item.path} {...item} />
               ))}
+              {ehAdminDistribuidor && <NavButton {...ADMIN_NAV_ITEM_INTEGRACOES} />}
               {isSuperAdmin && ADMIN_NAV_ITEMS_SUPER_ADMIN.map((item) => <NavButton key={item.path} {...item} />)}
             </>
           )}

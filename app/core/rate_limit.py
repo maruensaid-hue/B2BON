@@ -36,6 +36,11 @@ class LimitadorEmMemoria:
 
 limitador_auth = LimitadorEmMemoria()
 
+# Bucket separado do de auth (Fase 2 da hierarquia, raio-X) — tráfego de
+# parceiro (chave de API) não deve competir por cota com tentativas de
+# login/registro, são naturezas de abuso bem diferentes.
+limitador_parceiros = LimitadorEmMemoria()
+
 
 def limitar_por_ip(max_tentativas: int = 5, janela_segundos: int = 300):
     """Dependency factory — protege rotas públicas de autenticação contra

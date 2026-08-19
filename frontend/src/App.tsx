@@ -17,6 +17,7 @@ const AdminConvites = lazy(() => import("@/pages/admin/AdminConvites").then((m) 
 const AdminLicencas = lazy(() => import("@/pages/admin/AdminLicencas").then((m) => ({ default: m.AdminLicencas })));
 const AdminPlanos = lazy(() => import("@/pages/admin/AdminPlanos").then((m) => ({ default: m.AdminPlanos })));
 const AdminTenants = lazy(() => import("@/pages/admin/AdminTenants").then((m) => ({ default: m.AdminTenants })));
+const Integracoes = lazy(() => import("@/pages/admin/Integracoes").then((m) => ({ default: m.Integracoes })));
 const Aprovacoes = lazy(() => import("@/pages/aprovacoes/Aprovacoes").then((m) => ({ default: m.Aprovacoes })));
 const Cadencias = lazy(() => import("@/pages/cadencias/Cadencias").then((m) => ({ default: m.Cadencias })));
 const Campanhas = lazy(() => import("@/pages/campanhas/Campanhas").then((m) => ({ default: m.Campanhas })));
@@ -177,6 +178,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <AdminLicencas />
+              </Suspense>
+            }
+          />
+          <Route
+            path="admin/integracoes"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Integracoes />
               </Suspense>
             }
           />
