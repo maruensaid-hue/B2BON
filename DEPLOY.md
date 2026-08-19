@@ -159,9 +159,14 @@ pesquisa de NPS e principalmente o motor de prospecção fria (cadências).
    free tier, 100 e-mails/dia).
 2. **Autenticar o domínio de envio** (Settings → Sender Authentication →
    Authenticate Your Domain):
-   - Domínio: um subdomínio de `cyberfort.com.br` (ex.:
-     `mail.cyberfort.com.br`) — não usar o domínio raiz, pra isolar a
-     reputação de envio da caixa de e-mail principal da empresa.
+   - Domínio: um subdomínio de `cyberfort.com.br` — não usar o domínio
+     raiz, pra isolar a reputação de envio da caixa de e-mail principal
+     da empresa. Na prática, o próprio SendGrid sugere/gera um
+     subdomínio no formato `emNNNN.cyberfort.com.br` (ex.:
+     `em238.cyberfort.com.br`, o que está configurado hoje) — não precisa
+     ser `mail.cyberfort.com.br` como sugerido inicialmente, qualquer
+     subdomínio autenticado serve, só manter `SENDGRID_REMETENTE_EMAIL`
+     (passo 4) igual ao domínio que aparece **Verified** nessa tela.
    - O SendGrid gera 3 registros CNAME. Adicione os três no provedor de
      DNS de `cyberfort.com.br` exatamente como mostrados.
    - Volte no painel do SendGrid e clique **"Verify"** — pode levar
@@ -173,11 +178,14 @@ pesquisa de NPS e principalmente o motor de prospecção fria (cadências).
      (não precisa de acesso total — reduz o estrago se a chave vazar).
 4. No Render, `b2bon-api` → **Environment**, adicione:
    - `SENDGRID_API_KEY`: a chave gerada no passo 3.
-   - `SENDGRID_REMETENTE_EMAIL`: um endereço no domínio autenticado (ex.:
-     `contato@mail.cyberfort.com.br`) — é o envelope `From` de todo
-     e-mail que sai da plataforma, pra qualquer tenant (o nome de
-     exibição e o e-mail de resposta continuam customizáveis por tenant
-     via `ConfiguracaoEnvio`, só o envelope é fixo — não dá pra
+   - `SENDGRID_REMETENTE_EMAIL`: um endereço no domínio autenticado —
+     hoje `contato@em238.cyberfort.com.br` (confirme o domínio exato em
+     Settings → Sender Authentication, coluna "Verified", antes de
+     colar; um domínio errado aqui faz o e-mail sair sem SPF/DKIM válido
+     e não aparecer nem no Activity Log do SendGrid). É o envelope
+     `From` de todo e-mail que sai da plataforma, pra qualquer tenant (o
+     nome de exibição e o e-mail de resposta continuam customizáveis por
+     tenant via `ConfiguracaoEnvio`, só o envelope é fixo — não dá pra
      autenticar um domínio por tenant sem um projeto à parte).
    - `SENDGRID_REMETENTE_NOME`: opcional, padrão já é `B2B ON`.
    - Assim que `SENDGRID_API_KEY` estiver preenchida, ela tem prioridade
