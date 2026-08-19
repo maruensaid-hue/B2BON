@@ -25,9 +25,43 @@ from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFal
 
 logger = logging.getLogger(__name__)
 
+# Hierarquia de tenants (raio-X: fundação pra API de provisionamento/billing
+# dos distribuidores). "distribuidor" só existe direto sob a CyberFort (sem
+# pai); "revendedor" exige pai "distribuidor"; "cliente" pode ter pai
+# "revendedor"/"distribuidor" ou nenhum (caso de todo tenant já existente,
+# cliente direto da CyberFort sem revenda).
+TIPOS_TENANT_VALIDOS = {"distribuidor", "revendedor", "cliente"}
+MODOS_COBRANCA_VALIDOS = {"direta", "consolidada"}
+_PROFUNDIDADE_MAXIMA_HIERARQUIA = 5
+
 
 def listar_planos(db: Session) -> list[Plano]:
     return db.query(Plano).order_by(Plano.preco_mensal).all()
+
+
+def _validar_hierarquia(db: Session, tipo: str, tenant_pai_id: str | None, modo_cobranca: str) -> None:
+    if tipo not in TIPOS_TENANT_VALIDOS:
+        raise ValidacaoFalhou(f"tipo inválido: {tipo!r}. Use um de {sorted(TIPOS_TENANT_VALIDOS)}.")
+    if modo_cobranca not in MODOS_COBRANCA_VALIDOS:
+        raise ValidacaoFalhou(f"modo_cobranca inválido: {modo_cobranca!r}. Use um de {sorted(MODOS_COBRANCA_VALIDOS)}.")
+
+    if tipo == "distribuidor":
+        if tenant_pai_id is not None:
+            raise RegraNegocioViolada("Um distribuidor não pode ter tenant pai — fica direto sob a CyberFort.")
+        return
+
+    if tenant_pai_id is None:
+        if tipo == "revendedor":
+            raise RegraNegocioViolada("Um revendedor precisa de um distribuidor pai.")
+        return  # tipo == "cliente" sem pai: cliente direto da CyberFort, sem revenda.
+
+    pai = db.query(Tenant).filter_by(id=tenant_pai_id).one_or_none()
+    if pai is None:
+        raise NaoEncontrado(f"Tenant pai {tenant_pai_id} não encontrado.")
+    if tipo == "revendedor" and pai.tipo != "distribuidor":
+        raise RegraNegocioViolada("O pai de um revendedor precisa ser um distribuidor.")
+    if tipo == "cliente" and pai.tipo not in {"revendedor", "distribuidor"}:
+        raise RegraNegocioViolada("O pai de um cliente precisa ser um revendedor ou distribuidor.")
 
 
 def criar_tenant_inicial(
@@ -39,13 +73,21 @@ def criar_tenant_inicial(
     email_admin: str,
     senha_admin: str,
     cnpj: str | None = None,
+    tenant_pai_id: str | None = None,
+    tipo: str = "cliente",
+    modo_cobranca: str = "direta",
+    papel_primeiro_usuario: str = "super_admin",
 ) -> Usuario:
-    """Bootstrap: cria Tenant + Licença ativa + primeiro usuário super_admin.
+    """Cria Tenant + Licença ativa + primeiro usuário.
 
-    Exposto só por script (`scripts/bootstrap_tenant.py`) — nunca por
-    endpoint HTTP, para não expor uma rota de criação de tenant sem
-    autenticação (Onda A).
+    `papel_primeiro_usuario` default `"super_admin"` preserva o bootstrap
+    original (`scripts/bootstrap_tenant.py`, que não passa esse argumento).
+    A rota HTTP (`POST /admin/tenants`) sempre passa `"admin"` explicitamente
+    — com a hierarquia, deixar essa rota mintar novos `super_admin` livremente
+    quebraria o isolamento (qualquer Distribuidor/Revendedor ganharia acesso
+    cross-*toda* a plataforma, não só à própria árvore).
     """
+    _validar_hierarquia(db, tipo, tenant_pai_id, modo_cobranca)
     if db.query(Tenant).filter_by(id=tenant_id).one_or_none() is not None:
         raise RegraNegocioViolada(f"Tenant {tenant_id} já existe.")
     if db.query(Plano).filter_by(id=plano_id).one_or_none() is None:
@@ -53,7 +95,14 @@ def criar_tenant_inicial(
     if db.query(Usuario).filter_by(email=email_admin).one_or_none() is not None:
         raise RegraNegocioViolada("E-mail já cadastrado.")
 
-    tenant = Tenant(id=tenant_id, razao_social=razao_social, cnpj=cnpj)
+    tenant = Tenant(
+        id=tenant_id,
+        razao_social=razao_social,
+        cnpj=cnpj,
+        tenant_pai_id=tenant_pai_id,
+        tipo=tipo,
+        modo_cobranca=modo_cobranca,
+    )
     db.add(tenant)
     db.flush()
 
@@ -67,7 +116,7 @@ def criar_tenant_inicial(
         nome=nome_admin,
         email=email_admin,
         senha_hash=auth_service.hash_senha(senha_admin),
-        papel="super_admin",
+        papel=papel_primeiro_usuario,
     )
     db.add(usuario)
     db.flush()
@@ -81,8 +130,62 @@ def criar_tenant_inicial(
 
 
 def listar_tenants(db: Session) -> list[Tenant]:
-    """Visão cross-tenant — só para super_admin (Onda A)."""
+    """Visão cross-tenant sem escopo — só para super_admin (Onda A)."""
     return db.query(Tenant).order_by(Tenant.id).all()
+
+
+def listar_tenants_visiveis(db: Session, usuario: Usuario) -> list[Tenant]:
+    """super_admin enxerga tudo; admin de um tenant distribuidor/revendedor
+    enxerga o próprio tenant + toda a subárvore abaixo dele (BFS limitado
+    em profundidade — a hierarquia é rasa por design, 3 níveis sob a
+    CyberFort). Admin de um tenant "cliente" (folha) só enxerga a si mesmo."""
+    if usuario.papel == "super_admin":
+        return listar_tenants(db)
+
+    visiveis = [usuario.tenant_id]
+    fronteira = [usuario.tenant_id]
+    for _ in range(_PROFUNDIDADE_MAXIMA_HIERARQUIA):
+        filhos = db.query(Tenant).filter(Tenant.tenant_pai_id.in_(fronteira)).all()
+        if not filhos:
+            break
+        fronteira = [filho.id for filho in filhos]
+        visiveis.extend(fronteira)
+
+    return db.query(Tenant).filter(Tenant.id.in_(visiveis)).order_by(Tenant.id).all()
+
+
+def suspender_licencas_vencidas(db: Session) -> list[str]:
+    """Suspensão automática por inadimplência (raio-X) — antes disso,
+    `data_expiracao` nunca era comparado com a data atual em lugar nenhum
+    do código; uma licença vencida continuava dando acesso total até um
+    humano mudar o status manualmente. Só afeta tenants `modo_cobranca ==
+    "direta"` — um tenant "consolidada" não tem `data_expiracao` própria
+    relevante, o status de pagamento vem do tenant pai (ver
+    `exigir_licenca_ativa`)."""
+    agora = datetime.now(UTC)
+    licencas_vencidas = (
+        db.query(Licenca)
+        .join(Tenant, Tenant.id == Licenca.tenant_id)
+        .filter(
+            Licenca.status == "ativa",
+            Licenca.data_expiracao.isnot(None),
+            Licenca.data_expiracao < agora,
+            Tenant.modo_cobranca == "direta",
+        )
+        .all()
+    )
+
+    tenants_suspensos = []
+    for licenca in licencas_vencidas:
+        licenca.status = "suspensa"
+        auditoria_service.registrar(
+            db, licenca.tenant_id, "licenca_suspensa_automaticamente", "licenca", licenca.id, None,
+            {"data_expiracao": licenca.data_expiracao.isoformat()},
+        )
+        tenants_suspensos.append(licenca.tenant_id)
+
+    db.commit()
+    return tenants_suspensos
 
 
 def obter_licenca(db: Session, tenant_id: str) -> Licenca:

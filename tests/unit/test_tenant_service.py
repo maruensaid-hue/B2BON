@@ -9,6 +9,7 @@ from app.models.decisor import Decisor
 from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
+from app.models.usuario import Usuario
 from app.providers.payment.stub import StubPaymentProvider
 from app.services import tenant_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
@@ -325,3 +326,157 @@ def test_criar_tenant_vitrine_tolera_falha_no_enriquecimento(db_session):
     assert checkout_url.startswith("https://checkout.stub.local/")
     conta = db_session.query(Conta).filter_by(tenant_id=TENANT_ID_ORIGEM, nome="Empresa Falha Enriquecimento").one()
     assert conta.origem == "rede_social_convite"
+
+
+# --- Hierarquia de tenants (raio-X: fundação da API de provisionamento) ---
+
+
+def _criar_tenant_inicial(db_session, tenant_id: str, email: str, **overrides) -> Usuario:
+    plano = _plano(db_session)
+    kwargs = {
+        "tenant_id": tenant_id,
+        "razao_social": f"Empresa {tenant_id}",
+        "plano_id": plano.id,
+        "nome_admin": "Admin",
+        "email_admin": email,
+        "senha_admin": "senha123",
+    }
+    kwargs.update(overrides)
+    return tenant_service.criar_tenant_inicial(db_session, **kwargs)
+
+
+def test_criar_tenant_inicial_default_preserva_bootstrap_super_admin(db_session):
+    """scripts/bootstrap_tenant.py não passa `papel_primeiro_usuario` —
+    o default precisa continuar criando um super_admin de verdade."""
+    usuario = _criar_tenant_inicial(db_session, "cyberfort-boot", "boot@cyberfort.com.br")
+
+    assert usuario.papel == "super_admin"
+    tenant = db_session.query(Tenant).filter_by(id="cyberfort-boot").one()
+    assert tenant.tipo == "cliente"
+    assert tenant.tenant_pai_id is None
+    assert tenant.modo_cobranca == "direta"
+
+
+def test_criar_tenant_inicial_via_http_nunca_cria_super_admin(db_session):
+    """POST /admin/tenants sempre passa papel_primeiro_usuario="admin" —
+    sem isso, Distribuidor/Revendedor conseguiria mintar acesso cross-*toda*
+    a plataforma ao criar um tenant novo."""
+    usuario = _criar_tenant_inicial(
+        db_session, "empresa-via-http", "admin@empresahttp.com.br", papel_primeiro_usuario="admin"
+    )
+
+    assert usuario.papel == "admin"
+
+
+def test_criar_tenant_inicial_cadeia_distribuidor_revendedor_cliente(db_session):
+    distribuidor = _criar_tenant_inicial(
+        db_session, "distribuidora-a", "dist@a.com.br", tipo="distribuidor", papel_primeiro_usuario="admin"
+    )
+    revendedor = _criar_tenant_inicial(
+        db_session, "revenda-a1", "rev@a1.com.br", tipo="revendedor",
+        tenant_pai_id=distribuidor.tenant_id, papel_primeiro_usuario="admin",
+    )
+    cliente = _criar_tenant_inicial(
+        db_session, "cliente-a1x", "cli@a1x.com.br", tipo="cliente",
+        tenant_pai_id=revendedor.tenant_id, papel_primeiro_usuario="admin",
+    )
+
+    assert db_session.query(Tenant).filter_by(id="distribuidora-a").one().tenant_pai_id is None
+    assert db_session.query(Tenant).filter_by(id="revenda-a1").one().tenant_pai_id == "distribuidora-a"
+    assert db_session.query(Tenant).filter_by(id="cliente-a1x").one().tenant_pai_id == "revenda-a1"
+    assert cliente.papel == "admin"
+
+
+def test_criar_tenant_inicial_revendedor_sem_pai_distribuidor_falha(db_session):
+    with pytest.raises(RegraNegocioViolada):
+        _criar_tenant_inicial(db_session, "revenda-orfa", "orfa@revenda.com.br", tipo="revendedor")
+
+
+def test_criar_tenant_inicial_revendedor_com_pai_do_tipo_errado_falha(db_session):
+    cliente = _criar_tenant_inicial(db_session, "cliente-base", "base@cliente.com.br")
+
+    with pytest.raises(RegraNegocioViolada):
+        _criar_tenant_inicial(
+            db_session, "revenda-com-pai-errado", "errado@revenda.com.br",
+            tipo="revendedor", tenant_pai_id=cliente.tenant_id,
+        )
+
+
+def test_criar_tenant_inicial_distribuidor_com_pai_falha(db_session):
+    outro = _criar_tenant_inicial(db_session, "outro-distribuidor", "outro@distribuidor.com.br", tipo="distribuidor")
+
+    with pytest.raises(RegraNegocioViolada):
+        _criar_tenant_inicial(
+            db_session, "distribuidor-com-pai", "compai@distribuidor.com.br",
+            tipo="distribuidor", tenant_pai_id=outro.tenant_id,
+        )
+
+
+def test_criar_tenant_inicial_tipo_invalido_falha(db_session):
+    with pytest.raises(ValidacaoFalhou):
+        _criar_tenant_inicial(db_session, "tipo-invalido", "x@invalido.com.br", tipo="franqueado")
+
+
+def test_listar_tenants_visiveis_super_admin_ve_tudo(db_session):
+    super_admin_usuario = _criar_tenant_inicial(db_session, "raiz-super", "raiz@super.com.br")
+    _criar_tenant_inicial(db_session, "outro-qualquer", "outro@qualquer.com.br")
+
+    visiveis = tenant_service.listar_tenants_visiveis(db_session, super_admin_usuario)
+
+    ids = {t.id for t in visiveis}
+    assert {"raiz-super", "outro-qualquer"}.issubset(ids)
+
+
+def test_listar_tenants_visiveis_distribuidor_ve_so_a_propria_subarvore(db_session):
+    distribuidor_a = _criar_tenant_inicial(
+        db_session, "distribuidora-b", "dist@b.com.br", tipo="distribuidor", papel_primeiro_usuario="admin"
+    )
+    revendedor_a = _criar_tenant_inicial(
+        db_session, "revenda-b1", "rev@b1.com.br", tipo="revendedor",
+        tenant_pai_id=distribuidor_a.tenant_id, papel_primeiro_usuario="admin",
+    )
+    _criar_tenant_inicial(
+        db_session, "cliente-b1x", "cli@b1x.com.br", tipo="cliente",
+        tenant_pai_id=revendedor_a.tenant_id, papel_primeiro_usuario="admin",
+    )
+    # Árvore irmã — distribuidor_a não deveria enxergar nada aqui dentro.
+    distribuidor_c = _criar_tenant_inicial(
+        db_session, "distribuidora-c", "dist@c.com.br", tipo="distribuidor", papel_primeiro_usuario="admin"
+    )
+    _criar_tenant_inicial(
+        db_session, "revenda-c1", "rev@c1.com.br", tipo="revendedor",
+        tenant_pai_id=distribuidor_c.tenant_id, papel_primeiro_usuario="admin",
+    )
+
+    visiveis = tenant_service.listar_tenants_visiveis(db_session, distribuidor_a)
+
+    ids = {t.id for t in visiveis}
+    assert ids == {"distribuidora-b", "revenda-b1", "cliente-b1x"}
+
+
+def test_suspender_licencas_vencidas_suspende_so_direta_e_vencida(db_session):
+    plano = _plano(db_session)
+    tenant_vencido = Tenant(id="tenant-vencido", razao_social="Vencido", modo_cobranca="direta")
+    tenant_consolidado_vencido = Tenant(
+        id="tenant-consolidado-vencido", razao_social="Consolidado Vencido",
+        tenant_pai_id="tenant-vencido", modo_cobranca="consolidada",
+    )
+    tenant_em_dia = Tenant(id="tenant-em-dia", razao_social="Em dia", modo_cobranca="direta")
+    db_session.add_all([tenant_vencido, tenant_consolidado_vencido, tenant_em_dia])
+    db_session.flush()
+
+    ontem = datetime.now(UTC) - timedelta(days=1)
+    amanha = datetime.now(UTC) + timedelta(days=1)
+    db_session.add_all([
+        Licenca(tenant_id="tenant-vencido", plano_id=plano.id, status="ativa", data_expiracao=ontem),
+        Licenca(tenant_id="tenant-consolidado-vencido", plano_id=plano.id, status="ativa", data_expiracao=ontem),
+        Licenca(tenant_id="tenant-em-dia", plano_id=plano.id, status="ativa", data_expiracao=amanha),
+    ])
+    db_session.commit()
+
+    suspensos = tenant_service.suspender_licencas_vencidas(db_session)
+
+    assert suspensos == ["tenant-vencido"]
+    assert db_session.query(Licenca).filter_by(tenant_id="tenant-vencido").one().status == "suspensa"
+    assert db_session.query(Licenca).filter_by(tenant_id="tenant-consolidado-vencido").one().status == "ativa"
+    assert db_session.query(Licenca).filter_by(tenant_id="tenant-em-dia").one().status == "ativa"

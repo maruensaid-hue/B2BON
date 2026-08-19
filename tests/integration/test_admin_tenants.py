@@ -1,7 +1,29 @@
+from datetime import UTC, datetime
+
+from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
+from app.models.usuario import Usuario
+from app.services import auth_service
 
 TENANT_ID = "tenant-teste"
+
+
+def _criar_admin_hierarquico(db_session, tenant_id: str, tipo: str, tenant_pai_id: str | None = None) -> dict[str, str]:
+    """Cria um tenant com hierarquia + seu admin, direto no banco (não via
+    rota) — pensado pros testes de hierarquia, que precisam controlar
+    `tipo`/`tenant_pai_id`, algo que `criar_usuario_autenticado` não expõe."""
+    plano_id = _criar_plano(db_session, nome=f"Plano {tenant_id}", franquia=500)
+    db_session.add(Tenant(id=tenant_id, razao_social=f"Empresa {tenant_id}", tipo=tipo, tenant_pai_id=tenant_pai_id))
+    db_session.add(Licenca(tenant_id=tenant_id, plano_id=plano_id, status="ativa"))
+    db_session.flush()
+    usuario = Usuario(
+        tenant_id=tenant_id, nome=f"Admin {tenant_id}", email=f"admin@{tenant_id}.com.br", papel="admin", ativo=True
+    )
+    db_session.add(usuario)
+    db_session.commit()
+    token = auth_service.gerar_token(usuario)
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _criar_plano(db_session, nome: str = "Starter", franquia: int = 200) -> int:
@@ -63,7 +85,12 @@ def test_novo_admin_de_tenant_consegue_logar(client, db_session):
 
     assert resposta.status_code == 200
     assert resposta.json()["usuario"]["tenant_id"] == "empresa-login"
-    assert resposta.json()["usuario"]["papel"] == "super_admin"
+    # Raio-X (hierarquia de distribuidores): o primeiro usuário de um tenant
+    # criado via HTTP agora sempre nasce "admin", nunca mais "super_admin"
+    # — senão qualquer Distribuidor/Revendedor mintaria acesso cross-*toda*
+    # a plataforma ao criar um tenant novo. "super_admin" de verdade só
+    # nasce por scripts/bootstrap_tenant.py (ovo-e-galinha da CyberFort).
+    assert resposta.json()["usuario"]["papel"] == "admin"
 
 
 def test_atualizar_licenca_do_tenant(client, db_session):
@@ -140,3 +167,153 @@ def test_criar_tenant_bloqueado_para_nao_super_admin(client, criar_usuario_auten
     )
 
     assert resposta.status_code == 403
+
+
+# --- Hierarquia de tenants (raio-X: fundação da API de provisionamento) ---
+
+
+def test_distribuidor_cria_revendedor_que_cria_cliente(client, db_session):
+    plano_id = _criar_plano(db_session, nome="Revenda", franquia=200)
+    headers_distribuidor = _criar_admin_hierarquico(db_session, "distribuidora-x", tipo="distribuidor")
+
+    resposta_revendedor = client.post(
+        "/api/v1/admin/tenants",
+        json={
+            "tenant_id": "revenda-x1",
+            "razao_social": "Revenda X1",
+            "plano_id": plano_id,
+            "nome_admin": "Admin Revenda",
+            "email_admin": "admin@revendax1.com.br",
+            "senha_admin": "senha123",
+            "tenant_pai_id": "distribuidora-x",
+            "tipo": "revendedor",
+        },
+        headers=headers_distribuidor,
+    )
+    assert resposta_revendedor.status_code == 201
+    assert resposta_revendedor.json()["tipo"] == "revendedor"
+    assert resposta_revendedor.json()["tenant_pai_id"] == "distribuidora-x"
+
+    login_revendedor = client.post(
+        "/api/v1/auth/login", json={"email": "admin@revendax1.com.br", "senha": "senha123"}
+    )
+    headers_revendedor = {"Authorization": f"Bearer {login_revendedor.json()['access_token']}"}
+    assert login_revendedor.json()["usuario"]["papel"] == "admin"
+    assert login_revendedor.json()["usuario"]["tenant_tipo"] == "revendedor"
+
+    resposta_cliente = client.post(
+        "/api/v1/admin/tenants",
+        json={
+            "tenant_id": "cliente-x1a",
+            "razao_social": "Cliente X1A",
+            "plano_id": plano_id,
+            "nome_admin": "Admin Cliente",
+            "email_admin": "admin@clientex1a.com.br",
+            "senha_admin": "senha123",
+            "tenant_pai_id": "revenda-x1",
+            "tipo": "cliente",
+        },
+        headers=headers_revendedor,
+    )
+    assert resposta_cliente.status_code == 201
+
+    # Distribuidor enxerga a árvore inteira (si mesmo + revendedor + cliente).
+    tenants_do_distribuidor = client.get("/api/v1/admin/tenants", headers=headers_distribuidor).json()
+    assert {t["id"] for t in tenants_do_distribuidor} == {"distribuidora-x", "revenda-x1", "cliente-x1a"}
+
+
+def test_revendedor_nao_consegue_criar_tenant_fora_do_proprio(client, db_session):
+    _criar_plano(db_session, nome="Fora", franquia=200)
+    plano_id = _criar_plano(db_session, nome="Fora2", franquia=200)
+    headers_revendedor_a = _criar_admin_hierarquico(db_session, "revenda-y1", tipo="revendedor")
+
+    resposta = client.post(
+        "/api/v1/admin/tenants",
+        json={
+            "tenant_id": "cliente-invasor",
+            "razao_social": "Invasor",
+            "plano_id": plano_id,
+            "nome_admin": "X",
+            "email_admin": "invasor@x.com.br",
+            "senha_admin": "senha123",
+            "tenant_pai_id": "outro-tenant-que-nao-e-o-meu",
+            "tipo": "cliente",
+        },
+        headers=headers_revendedor_a,
+    )
+
+    assert resposta.status_code == 403
+
+
+def test_revendedor_nao_ve_licenca_de_tenant_fora_da_propria_arvore(client, db_session):
+    headers_revendedor_a = _criar_admin_hierarquico(db_session, "revenda-z1", tipo="revendedor")
+    _criar_admin_hierarquico(db_session, "revenda-z2", tipo="revendedor")  # árvore irmã
+
+    resposta = client.get("/api/v1/admin/tenants/revenda-z2/licenca", headers=headers_revendedor_a)
+
+    assert resposta.status_code == 403
+
+
+def test_revendedor_ve_licenca_do_proprio_cliente(client, db_session):
+    headers_revendedor = _criar_admin_hierarquico(db_session, "revenda-w1", tipo="revendedor")
+    _criar_admin_hierarquico(db_session, "cliente-w1a", tipo="cliente", tenant_pai_id="revenda-w1")
+
+    resposta = client.get("/api/v1/admin/tenants/cliente-w1a/licenca", headers=headers_revendedor)
+
+    assert resposta.status_code == 200
+
+
+def test_admin_de_cliente_comum_nao_acessa_admin_tenants(client, db_session):
+    """Admin de um tenant tipo="cliente" (o caso de toda conta comum de
+    hoje) continua sem acesso a /admin/tenants — só distribuidor/revendedor
+    e super_admin ganham a visão hierárquica."""
+    headers_cliente = _criar_admin_hierarquico(db_session, "cliente-comum-w", tipo="cliente")
+
+    resposta = client.get("/api/v1/admin/tenants", headers=headers_cliente)
+
+    assert resposta.status_code == 403
+
+
+def test_licenca_consolidada_herda_status_do_tenant_pai(client, db_session, criar_usuario_autenticado):
+    """raio-X: modo_cobranca="consolidada" — o cliente não tem cobrança
+    própria, o status de pagamento vem do tenant pai."""
+    plano_id = _criar_plano(db_session, nome="Consolidado", franquia=200)
+    db_session.add(Tenant(id="pai-pagante", razao_social="Pai Pagante"))
+    db_session.add(Licenca(tenant_id="pai-pagante", plano_id=plano_id, status="ativa"))
+    db_session.add(
+        Tenant(id="filho-consolidado", razao_social="Filho Consolidado", tenant_pai_id="pai-pagante", modo_cobranca="consolidada")
+    )
+    # Filho tem sua própria licença (limites/plano), mas com status que
+    # SERIA recusado se fosse checado isoladamente — a consolidação deve
+    # ignorar esse status e olhar pro pai.
+    db_session.add(Licenca(tenant_id="filho-consolidado", plano_id=plano_id, status="suspensa"))
+    db_session.commit()
+
+    headers_filho = criar_usuario_autenticado("filho-consolidado", papel="user")
+
+    resposta = client.get("/api/v1/icp", headers=headers_filho)
+
+    assert resposta.status_code == 200
+
+
+def test_cron_suspende_licencas_vencidas(client, db_session, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "cron_secret", "segredo-teste-licenca")
+    plano_id = _criar_plano(db_session, nome="Vencido", franquia=200)
+    db_session.add(Tenant(id="tenant-vencido-cron", razao_social="Vencido"))
+    db_session.add(
+        Licenca(
+            tenant_id="tenant-vencido-cron", plano_id=plano_id, status="ativa",
+            data_expiracao=datetime(2020, 1, 1, tzinfo=UTC),
+        )
+    )
+    db_session.commit()
+
+    resposta = client.post(
+        "/api/v1/cron/suspender-licencas-vencidas", headers={"X-Cron-Secret": "segredo-teste-licenca"}
+    )
+
+    assert resposta.status_code == 200
+    assert "tenant-vencido-cron" in resposta.json()["tenants_suspensos"]
+    assert db_session.query(Licenca).filter_by(tenant_id="tenant-vencido-cron").one().status == "suspensa"

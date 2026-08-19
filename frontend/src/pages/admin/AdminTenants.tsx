@@ -13,6 +13,9 @@ interface Tenant {
   razao_social: string;
   cnpj: string | null;
   criado_em: string;
+  tipo: string;
+  tenant_pai_id: string | null;
+  modo_cobranca: string;
 }
 
 interface Plano {
@@ -31,6 +34,15 @@ export function AdminTenants() {
   const [erro, setErro] = useState<string | null>(null);
 
   const isSuperAdmin = usuario?.papel === "super_admin";
+  // Distribuidor/revendedor logados gerenciam a própria subárvore, igual a
+  // um super_admin só que escopado — o backend (listar_tenants_visiveis)
+  // já filtra o que essa mesma tela recebe (raio-X: hierarquia).
+  const ehGestorHierarquico = usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo);
+  const podeGerenciar = isSuperAdmin || ehGestorHierarquico;
+  // Tipo do tenant que este gestor tem permissão de criar diretamente sob
+  // si mesmo (distribuidor cria revendedor, revendedor cria cliente) — só
+  // super_admin escolhe o tipo livremente.
+  const tipoFilho = usuario?.tenant_tipo === "distribuidor" ? "revendedor" : "cliente";
 
   async function carregar() {
     try {
@@ -46,8 +58,8 @@ export function AdminTenants() {
   }
 
   useEffect(() => {
-    if (isSuperAdmin) carregar();
-  }, [isSuperAdmin]);
+    if (podeGerenciar) carregar();
+  }, [podeGerenciar]);
 
   async function criarTenant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,6 +73,8 @@ export function AdminTenants() {
         nome_admin: String(form.get("nome_admin")),
         email_admin: String(form.get("email_admin")),
         senha_admin: String(form.get("senha_admin")),
+        tenant_pai_id: isSuperAdmin ? String(form.get("tenant_pai_id") || "") || null : usuario!.tenant_id,
+        tipo: isSuperAdmin ? String(form.get("tipo") || "cliente") : tipoFilho,
       });
       setModalAberto(false);
       await carregar();
@@ -69,7 +83,7 @@ export function AdminTenants() {
     }
   }
 
-  if (!isSuperAdmin) return <AcessoRestrito />;
+  if (!podeGerenciar) return <AcessoRestrito />;
 
   return (
     <div className="p-5.5">
@@ -92,6 +106,8 @@ export function AdminTenants() {
             <tr className="border-b border-border text-[9.5px] tracking-wide text-muted uppercase">
               <th className="p-2 text-left">ID</th>
               <th className="p-2 text-left">Razão social</th>
+              <th className="p-2 text-left">Tipo</th>
+              <th className="p-2 text-left">Tenant pai</th>
               <th className="p-2 text-left">CNPJ</th>
               <th className="p-2 text-left">Criado em</th>
             </tr>
@@ -101,13 +117,15 @@ export function AdminTenants() {
               <tr key={tenant.id} className="border-b border-border">
                 <td className="p-2 font-semibold">{tenant.id}</td>
                 <td className="p-2">{tenant.razao_social}</td>
+                <td className="p-2 text-muted capitalize">{tenant.tipo}</td>
+                <td className="p-2 text-muted">{tenant.tenant_pai_id ?? "—"}</td>
                 <td className="p-2 text-muted">{tenant.cnpj ?? "—"}</td>
                 <td className="p-2 text-muted">{new Date(tenant.criado_em).toLocaleDateString("pt-BR")}</td>
               </tr>
             ))}
             {tenants.length === 0 && (
               <tr>
-                <td colSpan={4} className="p-4 text-center text-muted">
+                <td colSpan={6} className="p-4 text-center text-muted">
                   Nenhum tenant cadastrado ainda.
                 </td>
               </tr>
@@ -130,6 +148,27 @@ export function AdminTenants() {
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">CNPJ (opcional)</div>
             <Input name="cnpj" />
           </div>
+          {isSuperAdmin ? (
+            <>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Tipo</div>
+                <Select name="tipo" defaultValue="cliente">
+                  <option value="distribuidor">Distribuidor</option>
+                  <option value="cliente">Cliente (direto, sem revenda)</option>
+                </Select>
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+                  Tenant pai (opcional — id do distribuidor/revendedor)
+                </div>
+                <Input name="tenant_pai_id" placeholder="deixe em branco pra tenant top-level" />
+              </div>
+            </>
+          ) : (
+            <div className="text-[11px] text-muted">
+              Criado como <span className="capitalize">{tipoFilho}</span> sob o seu tenant ({usuario!.tenant_id}).
+            </div>
+          )}
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Plano</div>
             <Select name="plano_id" required defaultValue="">

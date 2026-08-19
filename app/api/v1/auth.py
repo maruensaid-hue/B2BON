@@ -17,6 +17,7 @@ from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
 from app.models.licenca import Licenca
+from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
@@ -38,9 +39,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 def _resposta_token(usuario: Usuario, db: Session, checkout_url: str | None = None) -> TokenResponseSchema:
     licenca = db.query(Licenca).filter_by(tenant_id=usuario.tenant_id).one_or_none()
+    tenant = db.query(Tenant).filter_by(id=usuario.tenant_id).one_or_none()
+    usuario_schema = UsuarioSchema.model_validate(usuario).model_copy(
+        update={"tenant_tipo": tenant.tipo if tenant is not None else "cliente"}
+    )
     return TokenResponseSchema(
         access_token=auth_service.gerar_token(usuario),
-        usuario=UsuarioSchema.model_validate(usuario),
+        usuario=usuario_schema,
         tem_licenca_ativa=licenca is not None and licenca.status == "ativa",
         checkout_url=checkout_url,
     )

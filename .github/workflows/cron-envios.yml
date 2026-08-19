@@ -50,3 +50,12 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Chamar POST /cron/suspender-licencas-vencidas (inadimplência, 1x/dia)
+        if: github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${API_BASE_URL}/cron/suspender-licencas-vencidas" \
+            -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

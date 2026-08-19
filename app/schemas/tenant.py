@@ -21,6 +21,9 @@ class TenantSchema(BaseModel):
     razao_social: str
     cnpj: str | None
     criado_em: datetime
+    tipo: str
+    tenant_pai_id: str | None
+    modo_cobranca: str
 
 
 class TenantComLicencaSchema(BaseModel):
@@ -36,6 +39,9 @@ class CriarTenantRequestSchema(BaseModel):
     nome_admin: str
     email_admin: EmailStr
     senha_admin: str = Field(min_length=8, max_length=72)
+    tenant_pai_id: str | None = None
+    tipo: str = "cliente"
+    modo_cobranca: str = "direta"
 
 
 class DefinirLicencaRequestSchema(BaseModel):

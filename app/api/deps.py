@@ -11,6 +11,7 @@ from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.claude_provider import ClaudeProvider
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.licenca import Licenca
+from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.account_data.receita_federal import ReceitaFederalCNPJProvider
@@ -218,6 +219,9 @@ def get_ator_id(usuario: Usuario = Depends(get_usuario_atual)) -> str | None:
     return str(usuario.id)
 
 
+_PROFUNDIDADE_MAXIMA_HIERARQUIA = 5
+
+
 def exigir_licenca_ativa(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
@@ -225,8 +229,20 @@ def exigir_licenca_ativa(
     """Trava os módulos pagos (PREDATOR/CRM/MAP) para tenants sem licença
     ativa — é o que distingue um cliente de uma empresa que só entrou pela
     Rede Social via convite (Onda H). `/rede-social/*` fica de fora
-    deliberadamente: é a única coisa que uma conta sem licença pode usar."""
-    licenca = db.query(Licenca).filter_by(tenant_id=tenant_id).one_or_none()
+    deliberadamente: é a única coisa que uma conta sem licença pode usar.
+
+    Tenant `modo_cobranca == "consolidada"` (raio-X: hierarquia de
+    distribuidores) não tem `data_expiracao` própria relevante — sobe a
+    cadeia de `tenant_pai_id` até achar quem realmente paga (`"direta"`
+    ou sem pai) e checa a licença desse tenant."""
+    tenant_a_checar_id = tenant_id
+    for _ in range(_PROFUNDIDADE_MAXIMA_HIERARQUIA):
+        tenant = db.query(Tenant).filter_by(id=tenant_a_checar_id).one_or_none()
+        if tenant is None or tenant.modo_cobranca != "consolidada" or tenant.tenant_pai_id is None:
+            break
+        tenant_a_checar_id = tenant.tenant_pai_id
+
+    licenca = db.query(Licenca).filter_by(tenant_id=tenant_a_checar_id).one_or_none()
     if licenca is None or licenca.status != "ativa":
         raise NaoAutorizado("Este recurso exige uma licença ativa.")
 
@@ -241,3 +257,52 @@ def exigir_papel(*papeis: str):
         return usuario
 
     return _dependencia
+
+
+def _e_ancestral(db: Session, possivel_ancestral_id: str, tenant_id: str) -> bool:
+    """Sobe a cadeia de `tenant_pai_id` a partir de `tenant_id` até achar
+    `possivel_ancestral_id` ou chegar ao topo da árvore. Teto de
+    profundidade evita loop infinito em caso de dado corrompido (ciclo) —
+    a hierarquia é rasa por design (3 níveis sob a CyberFort)."""
+    atual = db.query(Tenant).filter_by(id=tenant_id).one_or_none()
+    for _ in range(_PROFUNDIDADE_MAXIMA_HIERARQUIA):
+        if atual is None or atual.tenant_pai_id is None:
+            return False
+        if atual.tenant_pai_id == possivel_ancestral_id:
+            return True
+        atual = db.query(Tenant).filter_by(id=atual.tenant_pai_id).one_or_none()
+    return False
+
+
+def exigir_gestor_do_tenant(
+    tenant_id: str,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> Usuario:
+    """Autoriza super_admin (sempre) ou um admin do próprio tenant alvo ou
+    de um tenant ancestral dele (Distribuidor gerenciando um Revendedor/
+    Cliente abaixo, Revendedor gerenciando seu Cliente) — generaliza
+    `exigir_papel`, que só sabe checar papel plano, sem noção de hierarquia
+    entre tenants. `tenant_id` é injetado automaticamente pelo FastAPI a
+    partir do path param de mesmo nome na rota."""
+    if usuario.papel == "super_admin":
+        return usuario
+    if usuario.papel == "admin" and (usuario.tenant_id == tenant_id or _e_ancestral(db, usuario.tenant_id, tenant_id)):
+        return usuario
+    raise NaoAutorizado("Você não tem permissão para gerenciar este tenant.")
+
+
+def permitir_gestao_hierarquica(
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> Usuario:
+    """Nível de router, sem `{tenant_id}` no path ainda (ex.: listagem
+    cross-tenant) — só filtra quem PODE entrar; o escopo real (quais
+    tenants aparecem) é aplicado dentro do handler via
+    `tenant_service.listar_tenants_visiveis`."""
+    if usuario.papel == "super_admin":
+        return usuario
+    tenant_do_usuario = db.query(Tenant).filter_by(id=usuario.tenant_id).one_or_none()
+    if usuario.papel == "admin" and tenant_do_usuario is not None and tenant_do_usuario.tipo in {"distribuidor", "revendedor"}:
+        return usuario
+    raise NaoAutorizado("Você não tem permissão para gerenciar tenants.")

@@ -40,6 +40,10 @@ export function AdminLicencas() {
   const [erro, setErro] = useState<string | null>(null);
 
   const isSuperAdmin = usuario?.papel === "super_admin";
+  // Distribuidor/revendedor gerenciam a licença da própria subárvore —
+  // /admin/tenants já vem filtrado pelo backend (raio-X: hierarquia).
+  const podeGerenciar =
+    isSuperAdmin || (usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo));
 
   async function carregar() {
     try {
@@ -65,8 +69,8 @@ export function AdminLicencas() {
   }
 
   useEffect(() => {
-    if (isSuperAdmin) carregar();
-  }, [isSuperAdmin]);
+    if (podeGerenciar) carregar();
+  }, [podeGerenciar]);
 
   async function salvarLicenca(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,7 +90,7 @@ export function AdminLicencas() {
     }
   }
 
-  if (!isSuperAdmin) return <AcessoRestrito />;
+  if (!podeGerenciar) return <AcessoRestrito />;
 
   return (
     <div className="p-5.5">

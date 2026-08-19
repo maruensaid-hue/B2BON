@@ -44,9 +44,14 @@ const LEADS_NAV_ITEMS: NavItem[] = [
 // (entrou via convite-vitrine, Onda H) tem acesso.
 const NAV_ITEM_REDE_SOCIAL: NavItem = { path: "/rede-social", label: "Rede Social", icon: "◎", end: false };
 
-const ADMIN_NAV_ITEMS: NavItem[] = [
+// Tenants/Licenças: super_admin OU admin de um tenant distribuidor/
+// revendedor gerenciando a própria subárvore (raio-X: hierarquia). Convites/
+// Planos continuam exclusivos de super_admin — fora do escopo desta fase.
+const ADMIN_NAV_ITEMS_HIERARQUIA: NavItem[] = [
   { path: "/admin/tenants", label: "Tenants", icon: "🏢" },
   { path: "/admin/licencas", label: "Licenças", icon: "📋" },
+];
+const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
   { path: "/admin/convites", label: "Convites", icon: "🔑" },
   { path: "/admin/planos", label: "Planos", icon: "💳" },
 ];
@@ -141,6 +146,7 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const isSuperAdmin = usuario?.papel === "super_admin";
+  const ehGestorHierarquico = usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo);
   const navItems = temLicencaAtiva
     ? [NAV_ITEMS_PAGOS[0], CRM_ITEM, ...CRM_SUBITENS, NAV_ITEMS_PAGOS[1], ...PREDATOR_NAV_ITEMS, NAV_ITEM_REDE_SOCIAL]
     : [NAV_ITEM_REDE_SOCIAL];
@@ -189,12 +195,13 @@ export function AppShell() {
             </>
           )}
 
-          {isSuperAdmin && (
+          {(isSuperAdmin || ehGestorHierarquico) && (
             <>
               <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">Admin</div>
-              {ADMIN_NAV_ITEMS.map((item) => (
+              {ADMIN_NAV_ITEMS_HIERARQUIA.map((item) => (
                 <NavButton key={item.path} {...item} />
               ))}
+              {isSuperAdmin && ADMIN_NAV_ITEMS_SUPER_ADMIN.map((item) => <NavButton key={item.path} {...item} />)}
             </>
           )}
         </nav>

@@ -15,6 +15,11 @@ class UsuarioSchema(BaseModel):
     criado_em: datetime
     ultimo_login_em: datetime | None
     termos_aceitos_em: datetime | None
+    # Tipo do tenant do usuário (distribuidor|revendedor|cliente) — raio-X:
+    # hierarquia de distribuidores. Não vem de `Usuario` (from_attributes) —
+    # default aqui só permite `model_validate` passar sem o atributo; o
+    # valor real é preenchido em `_resposta_token` via query em `Tenant`.
+    tenant_tipo: str = "cliente"
 
 
 class LoginRequestSchema(BaseModel):

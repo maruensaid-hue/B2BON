@@ -9,6 +9,8 @@ export interface Usuario {
   email: string;
   papel: string;
   ativo: boolean;
+  /** distribuidor | revendedor | cliente — raio-X: hierarquia de distribuidores. */
+  tenant_tipo: string;
 }
 
 interface TokenResponse {

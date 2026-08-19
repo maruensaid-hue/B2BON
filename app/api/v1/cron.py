@@ -6,7 +6,7 @@ from app.core.config import settings
 from app.models.tenant import Tenant
 from app.providers.channels.email.base import EmailProvider
 from app.providers.email_validation.base import EmailVerificationProvider
-from app.services import campanha_service, envio_service, nps_service, reuniao_service, titular_service
+from app.services import campanha_service, envio_service, nps_service, reuniao_service, tenant_service, titular_service
 from app.services.errors import NaoAutorizado
 
 router = APIRouter(prefix="/cron", tags=["cron"])
@@ -105,3 +105,13 @@ def expirar_titulares_todos_os_tenants(db: Session = Depends(get_db)) -> dict:
         total_expirados += resultado["decisores_expirados"]
 
     return {"total_decisores_expirados": total_expirados, "por_tenant": resultado_por_tenant}
+
+
+@router.post("/suspender-licencas-vencidas", dependencies=[Depends(_exigir_segredo_cron)])
+def suspender_licencas_vencidas(db: Session = Depends(get_db)) -> dict:
+    """Suspensão automática por inadimplência (raio-X: hierarquia de
+    distribuidores) — antes disto, `Licenca.data_expiracao` nunca era
+    comparado com a data atual em lugar nenhum do código; uma licença
+    vencida continuava dando acesso total até um humano mudar o status
+    manualmente pela tela de Admin."""
+    return {"tenants_suspensos": tenant_service.suspender_licencas_vencidas(db)}
