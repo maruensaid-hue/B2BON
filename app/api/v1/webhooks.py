@@ -17,6 +17,7 @@ from app.services import (
     pagamento_licenca_service,
     qualificacao_service,
     rastreamento_service,
+    recall_webhook_service,
     reputacao_service,
     resposta_service,
     sendgrid_webhook_service,
@@ -194,6 +195,26 @@ async def webhook_sendgrid_eventos(request: Request, db: Session = Depends(get_d
         raise NaoAutorizado("Assinatura do webhook inválida.")
 
     sendgrid_webhook_service.processar_eventos(db, json.loads(corpo))
+    return {"recebido": True}
+
+
+@router.post("/recall/eventos")
+async def webhook_recall_eventos(
+    request: Request, db: Session = Depends(get_db), llm: LLMProvider = Depends(get_llm_provider)
+) -> dict:
+    """Callback do bot de reunião/transcrição de terceiro (raio-X: vídeo +
+    transcrição — tipo Recall.ai) quando a transcrição fica pronta. Mesmo
+    raciocínio dos outros webhooks assinados deste arquivo: assinatura
+    verificada **antes** de tocar no corpo, senão qualquer um poderia
+    forjar uma transcrição falsa pra uma reunião."""
+    corpo = await request.body()
+    assinatura_valida = recall_webhook_service.verificar_assinatura(
+        corpo, request.headers.get("x-recall-signature"), settings.recall_webhook_secret
+    )
+    if not assinatura_valida:
+        raise NaoAutorizado("Assinatura do webhook inválida.")
+
+    recall_webhook_service.processar_evento(db, llm, json.loads(corpo))
     return {"recebido": True}
 
 

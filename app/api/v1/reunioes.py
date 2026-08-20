@@ -8,14 +8,19 @@ from app.api.deps import (
     get_db,
     get_email_provider,
     get_graph_client,
+    get_llm_provider,
+    get_meeting_bot_provider,
     get_tenant_id,
     get_whatsapp_provider,
 )
 from app.graph.client import Neo4jClient
+from app.llm.base import LLMProvider
+from app.models.reuniao import Reuniao
 from app.providers.calendar.base import CalendarProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.crm.base import CrmProvider
+from app.providers.meeting_bot.base import MeetingBotProvider
 from app.schemas.dossie import DossieSchema
 from app.schemas.reuniao import (
     ConfirmarQualificacaoRequestSchema,
@@ -26,7 +31,8 @@ from app.schemas.reuniao import (
     ReuniaoListaItemSchema,
     ReuniaoSchema,
 )
-from app.services import dossie_service, reuniao_service
+from app.services import dossie_service, meeting_bot_service, reuniao_service
+from app.services.errors import NaoEncontrado
 
 router = APIRouter(prefix="/reunioes", tags=["reunioes"])
 
@@ -83,11 +89,17 @@ def confirmar(
     calendar: CalendarProvider = Depends(get_calendar_provider),
     crm: CrmProvider = Depends(get_crm_provider),
     graph: Neo4jClient = Depends(get_graph_client),
+    meeting_bot: MeetingBotProvider = Depends(get_meeting_bot_provider),
 ) -> ReuniaoSchema:
     """Nenhuma reunião do motor sem registro automático no CRM (E6-H2)."""
-    return reuniao_service.confirmar(
+    reuniao = reuniao_service.confirmar(
         db, tenant_id, ator_id, reuniao_id, dados.horario_escolhido, calendar, crm, graph
     )
+    # Fora do serviço de confirmação de propósito (raio-X: vídeo +
+    # transcrição) — a reunião já está confirmada aqui, o bot é
+    # melhor-esforço e não pode derrubar a confirmação se falhar.
+    meeting_bot_service.agendar_transcricao_pos_confirmacao(db, reuniao, meeting_bot)
+    return reuniao
 
 
 @router.post("/{reuniao_id}/marcar-resultado", response_model=ReuniaoSchema)
@@ -113,6 +125,25 @@ def confirmar_qualificacao(
     return reuniao_service.confirmar_qualificacao(
         db, tenant_id, ator_id, reuniao_id, dados.qualificada, dados.motivo
     )
+
+
+@router.post("/{reuniao_id}/reprocessar-transcricao", response_model=ReuniaoSchema)
+def reprocessar_transcricao(
+    reuniao_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+    llm: LLMProvider = Depends(get_llm_provider),
+) -> ReuniaoSchema:
+    """Rede de segurança manual (raio-X: vídeo + transcrição) — reroda o
+    resumo por IA e a `Atividade` a partir da transcrição já recebida, pra
+    quando o resultado do webhook precisar ser regerado. Não busca a
+    transcrição de novo no fornecedor: se o webhook nunca chegou (bot não
+    respondeu), não há nada aqui pra reprocessar ainda."""
+    reuniao: Reuniao = reuniao_service.obter(db, tenant_id, reuniao_id)
+    if not reuniao.transcricao:
+        raise NaoEncontrado("Esta reunião ainda não tem transcrição registrada.")
+    meeting_bot_service.processar_transcricao(db, reuniao, llm, reuniao.transcricao)
+    return reuniao
 
 
 @router.get("/{reuniao_id}/dossie", response_model=DossieSchema)

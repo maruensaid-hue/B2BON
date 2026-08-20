@@ -87,6 +87,14 @@ class Settings(BaseSettings):
     google_calendar_access_token: str = ""
     google_calendar_id: str = "primary"
 
+    # Bot de reunião/transcrição de terceiro (raio-X — tipo Recall.ai).
+    # Vazio usa StubMeetingBotProvider em dev/teste.
+    recall_api_key: str = ""
+    # Segredo compartilhado (HMAC) pra verificar o webhook de callback do
+    # bot — igual ao padrão do Mercado Pago, não uma chave pública ECDSA
+    # como o SendGrid.
+    recall_webhook_secret: str = ""
+
     # Base B2B de contatos — Lusha (Prospecting API, decidido no raio-X de
     # produção por revelar telefone direto de forma síncrona, diferente do
     # Apollo). Vazio usa StubContactEnrichmentProvider em dev/teste,

@@ -206,6 +206,33 @@ pesquisa de NPS e principalmente o motor de prospecção fria (cadências).
    e-mail → menu "⋮" → **"Ver original"** → confira `SPF: PASS` e
    `DKIM: PASS`.
 
+## 9. Vídeo + transcrição automática — bot de reunião (raio-X)
+
+Sem isso, reuniões continuam confirmando normalmente (com link do Google
+Meet), só sem gravação/transcrição automática — o campo `bot_id` fica
+vazio e nada é agendado.
+
+1. Crie uma conta no fornecedor de "meeting bot" escolhido (Recall.ai ou
+   equivalente — o código assume um formato de API parecido com o deles;
+   confira o formato exato de request/resposta e o esquema de assinatura
+   do webhook contra a documentação real do fornecedor antes de ativar em
+   produção, `app/providers/meeting_bot/recall.py` documenta isso).
+2. Gere uma API key no painel do fornecedor.
+3. No Render, `b2bon-api` → **Environment**, adicione:
+   - `RECALL_API_KEY`: a chave gerada no passo 2.
+   - `RECALL_WEBHOOK_SECRET`: um segredo forte (`secrets.token_urlsafe(32)`),
+     colado também na configuração de webhook do fornecedor (passo 4) —
+     assim que `RECALL_API_KEY` estiver preenchida, ela tem prioridade
+     automática sobre o `StubMeetingBotProvider`.
+4. No painel do fornecedor, configure o webhook de callback (transcrição
+   pronta) apontando pra `https://b2bon-api.onrender.com/api/v1/webhooks/recall/eventos`,
+   assinado com o mesmo segredo do passo 3.
+5. Teste confirmando uma reunião de verdade (com Google Meet configurado,
+   seção 7) e aguardando o bot processar — confira em `GET
+   /api/v1/reunioes` que `bot_id` foi preenchido, e depois que a
+   transcrição chegar, confira que uma nova atividade "reunião" aparece
+   tanto no cadastro da conta quanto no da oportunidade relacionada.
+
 ## Verificação final
 
 Acesse a URL do Worker, faça login com o admin criado no passo 4,

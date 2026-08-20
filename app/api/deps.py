@@ -22,6 +22,9 @@ from app.providers.account_data.receita_federal import ReceitaFederalCNPJProvide
 from app.providers.calendar.base import CalendarProvider
 from app.providers.calendar.google import GoogleCalendarProvider
 from app.providers.calendar.stub import StubCalendarProvider
+from app.providers.meeting_bot.base import MeetingBotProvider
+from app.providers.meeting_bot.recall import RecallMeetingBotProvider
+from app.providers.meeting_bot.stub import StubMeetingBotProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.contact_enrichment.desativado import ContactEnrichmentDesativadoProvider
 from app.providers.contact_enrichment.lusha import LushaContactEnrichmentProvider
@@ -137,6 +140,12 @@ def get_calendar_provider() -> CalendarProvider:
     if settings.google_calendar_access_token:
         return GoogleCalendarProvider()
     return StubCalendarProvider()
+
+
+def get_meeting_bot_provider() -> MeetingBotProvider:
+    if settings.recall_api_key:
+        return RecallMeetingBotProvider()
+    return StubMeetingBotProvider()
 
 
 def get_crm_provider(db: Session = Depends(get_db)) -> CrmProvider:

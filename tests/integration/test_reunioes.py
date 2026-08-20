@@ -143,3 +143,43 @@ def test_dossie_apos_reuniao_realizada(client, criar_conta_com_decisor):
     corpo = resposta.json()
     assert corpo["decisor_nome"] == decisor.nome
     assert corpo["conta_nome"] == conta.nome
+
+
+def test_confirmar_com_link_de_stub_nao_agenda_bot_de_transcricao(client, criar_conta_com_decisor, db_session):
+    """Raio-X (vídeo + transcrição): StubCalendarProvider gera link
+    'https://meet.stub/...' — não é uma reunião de verdade, então o bot de
+    transcrição não deve ser agendado (nem erro, nem bot_id gravado)."""
+    conta, decisor = criar_conta_com_decisor()
+
+    confirmada = _propor_e_confirmar(client, decisor.id)
+
+    reuniao = db_session.query(Reuniao).filter_by(id=confirmada["id"]).one()
+    assert reuniao.bot_id is None
+    assert reuniao.status_transcricao is None
+
+
+def test_reprocessar_transcricao_sem_transcricao_ainda_e_404(client, criar_conta_com_decisor):
+    conta, decisor = criar_conta_com_decisor()
+    confirmada = _propor_e_confirmar(client, decisor.id)
+
+    resposta = client.post(f"/api/v1/reunioes/{confirmada['id']}/reprocessar-transcricao")
+
+    assert resposta.status_code == 404
+
+
+def test_reprocessar_transcricao_com_transcricao_existente_regera_resumo(
+    client, criar_conta_com_decisor, db_session, fake_llm
+):
+    conta, decisor = criar_conta_com_decisor()
+    confirmada = _propor_e_confirmar(client, decisor.id)
+    reuniao = db_session.query(Reuniao).filter_by(id=confirmada["id"]).one()
+    reuniao.transcricao = "transcrição já recebida antes"
+    db_session.commit()
+    fake_llm.definir_respostas(["Resumo regerado."])
+
+    resposta = client.post(f"/api/v1/reunioes/{confirmada['id']}/reprocessar-transcricao")
+
+    assert resposta.status_code == 200
+    db_session.refresh(reuniao)
+    assert reuniao.resumo_ia == "Resumo regerado."
+    assert reuniao.status_transcricao == "concluida"

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -28,3 +28,16 @@ class Reuniao(Base):
     qualificada_confirmada: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     motivo_qualificacao: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # Vídeo + transcrição automática (raio-X: bot de reunião de terceiro,
+    # tipo Recall.ai — entra no link do Meet sem depender do Google
+    # Workspace de quem organiza). Nulo em toda reunião confirmada antes
+    # desta feature, e em toda reunião via StubCalendarProvider (dev/teste).
+    bot_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # agendado | gravando | concluida | falhou
+    status_transcricao: Mapped[str | None] = mapped_column(String, nullable=True)
+    transcricao: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Resumo gerado por LLM a partir da transcrição — o mesmo texto que vira
+    # a Atividade da conta/negócio; guardado aqui pra não precisar reprocessar
+    # só pra consultar de novo.
+    resumo_ia: Mapped[str | None] = mapped_column(Text, nullable=True)
