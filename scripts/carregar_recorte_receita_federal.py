@@ -1,6 +1,13 @@
 """Carrega no staging local o recorte de CNPJ da Receita Federal exigido
 pelos ICPs ativos de um tenant (Onda E).
 
+FALLBACK MANUAL/DEV: em produção, esse carregamento já roda sozinho via
+`POST /cron/atualizar-recorte-cnpj` (`app/services/cnpj_recorte_service.py`,
+disparado 1x/dia pelo GitHub Actions — ver DEPLOY.md seção 7.1), baixando
+os arquivos direto da Receita Federal, sem passo humano. Este script
+continua existindo só pra depurar localmente sem depender do cron, ou
+como plano B se o download automático falhar.
+
 Uso: python scripts/carregar_recorte_receita_federal.py
 
 Os arquivos públicos de dados abertos de CNPJ da Receita Federal

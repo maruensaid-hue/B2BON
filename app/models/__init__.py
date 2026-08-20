@@ -44,6 +44,7 @@ from app.models.plano import Plano
 from app.models.proposta_negocio import PropostaNegocio
 from app.models.template_proposta import ItemTemplateProposta, TemplateProposta
 from app.models.qualificacao import QualificacaoScore
+from app.models.recorte_cnpj_estado import RecorteCnpjEstado
 from app.models.registro_envio_diario import RegistroEnvioDiario
 from app.models.registro_reputacao_canal import RegistroReputacaoCanal
 from app.models.registro_supressao_permanente import RegistroSupressaoPermanente
@@ -120,4 +121,5 @@ __all__ = [
     "InteracaoConta",
     "CnpjEstabelecimento",
     "CnpjSocio",
+    "RecorteCnpjEstado",
 ]

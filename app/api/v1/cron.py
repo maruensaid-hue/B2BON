@@ -15,6 +15,7 @@ from app.providers.email_validation.base import EmailVerificationProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.services import (
     campanha_service,
+    cnpj_recorte_service,
     envio_service,
     nps_service,
     relatorio_service,
@@ -139,6 +140,16 @@ def disparar_webhooks_parceiros(db: Session = Depends(get_db)) -> dict:
     configurado (Fase 2 da hierarquia, raio-X) — assinado (HMAC), com
     backoff e desistência depois de tentativas repetidas."""
     return webhook_parceiro_service.despachar_pendentes(db)
+
+
+@router.post("/atualizar-recorte-cnpj", dependencies=[Depends(_exigir_segredo_cron)])
+def atualizar_recorte_cnpj(db: Session = Depends(get_db)) -> dict:
+    """Substitui o carregamento manual do recorte de CNPJ (raio-X: usuário
+    comum criando ICP não pode depender de alguém rodar um script à mão)
+    — baixa da própria Receita Federal, automaticamente, só o que os ICPs
+    ativos de todos os tenants ainda não têm carregado. Idempotente: rodar
+    de novo sem nenhum ICP novo não baixa nada (`cnpj_recorte_service`)."""
+    return cnpj_recorte_service.atualizar_recorte_automatico(db)
 
 
 @router.post("/disparar-relatorios-periodicos", dependencies=[Depends(_exigir_segredo_cron)])

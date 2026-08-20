@@ -22,14 +22,21 @@ _PORTE_EMPRESA = {
 }
 
 
-def _linhas(caminho: str):
-    """Streama o CSV linha a linha em vez de materializar o arquivo inteiro
-    em memória — os arquivos públicos de CNPJ da Receita Federal chegam a
-    dezenas de GB (base nacional completa); carregar tudo de uma vez antes
-    de filtrar esgota a memória da máquina (ou trava por minutos/horas
-    fazendo swap) mesmo quando o recorte final é pequeno."""
-    with open(caminho, encoding="latin-1", newline="") as arquivo:
-        yield from csv.reader(arquivo, delimiter=";")
+def _linhas(caminhos: str | list[str]):
+    """Streama o(s) CSV(s) linha a linha em vez de materializar o arquivo
+    inteiro em memória — os arquivos públicos de CNPJ da Receita Federal
+    chegam a dezenas de GB (base nacional completa); carregar tudo de uma
+    vez antes de filtrar esgota a memória da máquina (ou trava por
+    minutos/horas fazendo swap) mesmo quando o recorte final é pequeno.
+
+    Aceita um único caminho (uso manual/script, layout antigo de arquivo
+    único) ou uma lista de caminhos (layout público atual da Receita
+    Federal, particionado em até 10 arquivos por tipo —
+    `receita_federal_downloader`), encadeados como se fosse um só CSV."""
+    lista_caminhos = [caminhos] if isinstance(caminhos, str) else caminhos
+    for caminho in lista_caminhos:
+        with open(caminho, encoding="latin-1", newline="") as arquivo:
+            yield from csv.reader(arquivo, delimiter=";")
 
 
 def _em_lotes(itens, tamanho: int = 500):
@@ -64,18 +71,21 @@ def carregar_recorte(
     db: Session,
     cnae_codigos: list[str],
     ufs: list[str],
-    caminho_empresas: str,
-    caminho_estabelecimentos: str,
-    caminho_socios: str,
+    caminho_empresas: str | list[str],
+    caminho_estabelecimentos: str | list[str],
+    caminho_socios: str | list[str],
 ) -> int:
     """Carrega no staging local só o recorte de CNAE+UF exigido pelos ICPs
     ativos — nunca a base pública completa (Seção 11 da especificação).
 
     Espera o layout público de dados abertos da Receita Federal: arquivos
-    `;`-delimitados, codificação latin-1, sem cabeçalho. Imprime progresso
-    a cada etapa — os arquivos nacionais têm dezenas de milhões de linhas
-    e a carga real leva minutos, sem isso parece travado (nenhuma saída
-    até o fim).
+    `;`-delimitados, codificação latin-1, sem cabeçalho. Cada `caminho_*`
+    aceita um único arquivo ou uma lista (o layout público atual vem
+    particionado em até 10 arquivos por tipo — ver
+    `receita_federal_downloader.baixar_shards`). Imprime progresso a cada
+    etapa — os arquivos nacionais têm dezenas de milhões de linhas e a
+    carga real leva minutos, sem isso parece travado (nenhuma saída até o
+    fim).
     """
     cnae_set = set(cnae_codigos)
     uf_set = {uf.upper() for uf in ufs}

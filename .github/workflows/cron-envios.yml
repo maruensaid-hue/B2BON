@@ -76,3 +76,18 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Chamar POST /cron/atualizar-recorte-cnpj (recorte automático de CNPJ, 1x/dia)
+        if: github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch'
+        # Pode baixar alguns GB da Receita Federal quando há ICP novo — sem
+        # --max-time explícito, deixa o job (limite padrão de 6h do GitHub
+        # Actions) decidir; --fail sozinho não aborta por lentidão. Se o
+        # proxy do Render matar a conexão antes disso (raio-X: risco não
+        # validado em produção ainda), o próximo disparo diário tenta de
+        # novo sozinho — idempotente, sem intervenção humana.
+        run: |
+          curl --fail --show-error --silent --max-time 3000 \
+            -X POST "${API_BASE_URL}/cron/atualizar-recorte-cnpj" \
+            -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
