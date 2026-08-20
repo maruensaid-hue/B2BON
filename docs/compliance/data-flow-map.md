@@ -101,11 +101,11 @@ EU sem revisão específica.
 
 | Serviço | Função | Região configurada |
 |---|---|---|
-| Neon (Postgres) | Banco relacional principal — praticamente todos os modelos, incluindo blob de anexos (materiais de oferta, propostas, logo) | **Não determinável pelo código** — escolhida na criação do projeto no painel Neon. **Ação pendente: confirmar em Neon → Project → Settings antes de fechar este documento.** |
-| Render | Hospedagem do backend (`b2bon-api`) | **Não declarada no `render.yaml`** (campo `region` ausente do blueprint) — default do Render ou escolha manual no primeiro deploy. **Ação pendente: confirmar em Render → serviço → Settings.** |
-| Neo4j AuraDB Free | Grafo de relacionamento | **Não determinável pelo código.** **Ação pendente: confirmar em Neo4j Aura → instância → Details.** |
+| Neon (Postgres) | Banco relacional principal — praticamente todos os modelos, incluindo blob de anexos (materiais de oferta, propostas, logo) | **Confirmado em 2026-08-20: `aws-us-east-2` (AWS US East, Ohio, EUA).** Não é EU. Neon não permite trocar região de um projeto existente — migrar pra EU (`aws-eu-central-1` Frankfurt ou `aws-eu-west-2` Londres) exige criar projeto novo e portar os dados. |
+| Render | Hospedagem do backend (`b2bon-api`) | **Confirmado em 2026-08-20: Oregon (US West).** Não é EU. Combinado com o DPA (processamento primário sempre nos EUA independente da região), migrar a região do serviço pra EU reduziria latência mas não resolveria sozinho a exposição ao CLOUD Act. |
+| Neo4j AuraDB Free | Grafo de relacionamento | **Confirmado em 2026-08-20: Google Cloud, `us-east1` (South Carolina, EUA).** Não é EU. |
 
-Sem essas 3 confirmações, nenhuma alegação de "EU-only" ou "dado permanece no Brasil" pode ser feita com segurança — mesma ressalva da matriz de compliance (§1, conclusão executiva).
+**Achado 2026-08-20 — quadro completo confirmado nos 3 painéis**: Neon em `aws-us-east-2` (Ohio), Render em Oregon (US West), Neo4j Aura em Google Cloud `us-east1` (South Carolina). **Nenhum dos três está na Europa hoje.** Isso muda o ponto 2 da conclusão executiva da matriz de "confirmar" para "migrar, se a Frente 4 avançar de fato": Neon exige projeto novo + portada de dados (não troca região in-place); Neo4j Aura, mesma restrição; Render permite trocar a região do serviço nas Settings sem recriar o projeto, mas isso sozinho não resolve o CLOUD Act (DPA confirma processamento primário sempre nos EUA, independente da região do serviço). Sem cliente europeu real confirmado ainda, não há gatilho pra essa migração agora — fica registrado como pré-requisito técnico conhecido, não como próximo passo imediato.
 
 ## 9. Fluxos que cruzam fronteira de tenant (por design, não falha)
 
