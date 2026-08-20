@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.crypto import TextoCriptografado
 from app.db.base import Base
 
 
@@ -12,15 +13,20 @@ class ConfiguracaoWhatsApp(Base):
     (`settings.whatsapp_access_token`), e um cliente prospectando mal
     podia fazer a Meta restringir o número de todo mundo junto. Tenant
     sem linha aqui cai no fallback legado (número compartilhado) em
-    `get_whatsapp_provider`, até migrar pro próprio."""
+    `get_whatsapp_provider`, até migrar pro próprio.
+
+    Credenciais Meta (access_token/phone_number_id/business_account_id)
+    ficam criptografadas em repouso (`TextoCriptografado`, achado de
+    segurança do raio-X de compliance) — o ORM continua lendo/gravando
+    texto puro em memória, só o banco vê o valor cifrado."""
 
     __tablename__ = "configuracao_whatsapp"
     __table_args__ = (UniqueConstraint("tenant_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, index=True)
-    access_token: Mapped[str] = mapped_column(String)
-    phone_number_id: Mapped[str] = mapped_column(String)
-    business_account_id: Mapped[str] = mapped_column(String)
+    access_token: Mapped[str] = mapped_column(TextoCriptografado)
+    phone_number_id: Mapped[str] = mapped_column(TextoCriptografado)
+    business_account_id: Mapped[str] = mapped_column(TextoCriptografado)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
