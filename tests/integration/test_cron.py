@@ -109,3 +109,18 @@ def test_disparar_relatorios_periodicos_com_segredo_certo_retorna_resumo(client,
 
     assert resposta.status_code == 200
     assert set(resposta.json()) == {"tenants_processados", "emails_enviados"}
+
+
+def test_atualizar_recorte_cnpj_sem_segredo_configurado_recusa(client):
+    resposta = client.post("/api/v1/cron/atualizar-recorte-cnpj")
+    assert resposta.status_code == 403
+
+
+def test_atualizar_recorte_cnpj_sem_icp_ativo_nao_executa(client, com_segredo_cron):
+    """Sem ICP ativo em nenhum tenant, nem tenta baixar nada da Receita
+    Federal — só o caso feliz sem rede é coberto na integração; a lógica
+    de download/skip fica em test_cnpj_recorte_service.py (mockada)."""
+    resposta = client.post("/api/v1/cron/atualizar-recorte-cnpj", headers={"X-Cron-Secret": SEGREDO})
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"executado": False, "motivo": "nenhum ICP ativo em nenhum tenant"}

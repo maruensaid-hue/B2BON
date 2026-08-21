@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str = ""
     whatsapp_business_account_id: str = ""
 
+    # Chave de criptografia (Fernet) dos campos sensíveis de
+    # `ConfiguracaoWhatsApp` (access_token/phone_number_id/business_account_id
+    # — credenciais Meta próprias do tenant, achado de segurança do raio-X de
+    # compliance). Gerar com `python -c "from cryptography.fernet import
+    # Fernet; print(Fernet.generate_key().decode())"`; vazio em produção
+    # recusa subir (ver `app/core/crypto.py`), mesmo raciocínio do `cron_secret`.
+    configuracao_whatsapp_encryption_key: str = ""
+
     # Verify token do handshake de Webhooks da Meta (Cloud API) — mesmo
     # valor colado na Callback URL em Meta for Developers > WhatsApp >
     # Step 2 (Production setup) > Configure Webhooks > Verify token.

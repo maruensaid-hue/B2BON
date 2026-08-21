@@ -1,3 +1,5 @@
+from sqlalchemy import text
+
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 
 TENANT_ID = "tenant-teste"
@@ -34,6 +36,36 @@ def test_salvar_configuracao_whatsapp_cria_e_mascara_token(client, db_session):
 
     config = db_session.query(ConfiguracaoWhatsApp).filter_by(tenant_id=TENANT_ID).one()
     assert config.access_token == "segredo-super-longo"
+
+
+def test_salvar_configuracao_whatsapp_criptografa_credenciais_no_banco(client, db_session):
+    """Achado de segurança do raio-X de compliance: access_token,
+    phone_number_id e business_account_id não podem ficar em texto puro
+    no Postgres — só o ORM (via `TextoCriptografado`) deve conseguir ler
+    o valor original; a linha crua da tabela tem que ser o token Fernet
+    cifrado."""
+    client.put(
+        "/api/v1/configuracao-whatsapp",
+        json={"phone_number_id": "123", "business_account_id": "456", "access_token": "segredo-super-longo"},
+    )
+
+    linha_crua = db_session.execute(
+        text(
+            "SELECT access_token, phone_number_id, business_account_id "
+            "FROM configuracao_whatsapp WHERE tenant_id = :tenant_id"
+        ),
+        {"tenant_id": TENANT_ID},
+    ).one()
+
+    assert linha_crua.access_token != "segredo-super-longo"
+    assert linha_crua.phone_number_id != "123"
+    assert linha_crua.business_account_id != "456"
+
+    # e o ORM continua enxergando o valor original, transparente
+    config = db_session.query(ConfiguracaoWhatsApp).filter_by(tenant_id=TENANT_ID).one()
+    assert config.access_token == "segredo-super-longo"
+    assert config.phone_number_id == "123"
+    assert config.business_account_id == "456"
 
 
 def test_obter_configuracao_whatsapp_apos_salvar_nunca_expoe_token_puro(client):

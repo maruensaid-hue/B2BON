@@ -148,6 +148,41 @@ abaixo em sequência):
 Efeito colateral útil: como o Render free "dorme" sem tráfego, esse
 ping a cada 15 minutos também mantém o serviço acordado.
 
+### 7.1. Recorte de CNPJ automático (busca de contas-alvo por ICP)
+
+A busca de contas-alvo de um ICP (`POST /icp` → `POST /contas/gerar-lista`)
+depende de um staging local (`cnpj_estabelecimento`) carregado a partir dos
+dados públicos de CNPJ da Receita Federal — **nunca a base nacional
+completa**, só o recorte (CNAE+UF) exigido pelos ICPs ativos. Esse
+carregamento agora é automático: o mesmo workflow do passo 7
+(`cron-envios.yml`, disparo diário `0 6 * * *`) chama
+`POST /cron/atualizar-recorte-cnpj`, que:
+
+1. Calcula a união de CNAE+UF de todos os ICPs ativos de todos os tenants.
+2. Se já cobre tudo desde a última execução (mesmo mês de competência da
+   Receita Federal, nenhum CNAE/UF novo), não faz nada.
+3. Senão, baixa da própria Receita Federal (`dadosabertos.rfb.gov.br`) só
+   os arquivos necessários e recarrega o staging — sem passo manual, sem
+   `scripts/carregar_recorte_receita_federal.py` (que continua existindo
+   só como fallback pra debug local).
+
+Efeito prático: um ICP criado hoje só tem candidatos a partir do próximo
+disparo diário (não instantâneo), sem nenhuma intervenção humana depois
+disso.
+
+**Riscos ainda não validados em produção** (sinalizando explicitamente,
+não testado num deploy real ainda):
+- **Timeout do proxy do Render**: o download pode levar alguns minutos
+  (a Receita Federal publica os arquivos em ~10 partes por tipo, cada uma
+  com centenas de MB). Se o proxy do Render matar a conexão antes do fim,
+  o disparo do dia seguinte tenta de novo do zero (idempotente — não
+  corrompe nada), mas o recorte fica desatualizado até um disparo
+  completar dentro do tempo permitido. Se isso acontecer na prática, a
+  correção provável é mover esse disparo específico pra fora do request
+  HTTP síncrono (worker/fila) — não implementado nesta rodada.
+- **Alcançabilidade de `dadosabertos.rfb.gov.br` a partir do Render**: não
+  testado a partir da rede do Render nesta rodada.
+
 ## 8. E-mail real — SendGrid (raio-X de produção)
 
 Sem isso, e-mail continua saindo só por SMTP genérico (se configurado) ou,
