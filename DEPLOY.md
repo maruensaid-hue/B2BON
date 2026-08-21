@@ -193,28 +193,35 @@ pesquisa de NPS e principalmente o motor de prospecção fria (cadências).
 1. Crie uma conta em https://signup.sendgrid.com (não precisa cartão pro
    free tier, 100 e-mails/dia).
 2. **Autenticar o domínio de envio** (Settings → Sender Authentication →
-   Authenticate Your Domain):
-   - Domínio: um subdomínio de `cyberfort.com.br` — não usar o domínio
-     raiz, pra isolar a reputação de envio da caixa de e-mail principal
-     da empresa. Na prática, o próprio SendGrid sugere/gera um
-     subdomínio no formato `emNNNN.cyberfort.com.br` (ex.:
-     `em238.cyberfort.com.br`, o que está configurado hoje) — não precisa
-     ser `mail.cyberfort.com.br` como sugerido inicialmente, qualquer
-     subdomínio autenticado serve, só manter `SENDGRID_REMETENTE_EMAIL`
-     (passo 4) igual ao domínio que aparece **Verified** nessa tela.
-   - O SendGrid gera 3 registros CNAME. Adicione os três no provedor de
-     DNS de `cyberfort.com.br` exatamente como mostrados.
+   Authenticate Your Domain) — **não confundir com "Single Sender
+   Verification"** (verificação de um único endereço, sem SPF/DKIM
+   próprio): já causou entrega quebrada em produção (raio-X real,
+   2026-08-21) porque só o Single Sender tinha sido feito — e-mail saía
+   e "parecia" enviado, mas chegava só no Gmail (mais tolerante),
+   silenciosamente rejeitado ou parando em spam em qualquer outro
+   provedor.
+   - Domínio a autenticar: `cyberfort.com.br` (raiz, não um subdomínio à
+     parte). O SendGrid gera internamente um subdomínio técnico (ex.
+     `em1235.cyberfort.com.br`) só pro CNAME de Return-Path/DKIM — isso
+     não aparece no endereço de remetente, que continua no domínio raiz.
+   - O SendGrid gera 5 registros CNAME (varia por conta/versão — pode
+     ser 3). Adicione todos no DNS de `cyberfort.com.br` (hoje: **Wix**)
+     exatamente como mostrados.
    - Volte no painel do SendGrid e clique **"Verify"** — pode levar
      alguns minutos pra propagar o DNS; se falhar na primeira tentativa,
      espere 10-15 min e tente de novo antes de desconfiar de erro de
      digitação.
+   - Confirme **DMARC** também (`_dmarc.cyberfort.com.br`, TXT
+     `v=DMARC1; p=none;` no mínimo) — sem isso, provedores mais
+     rigorosos (Outlook/Microsoft) penalizam a colocação na caixa de
+     entrada mesmo com SPF/DKIM corretos.
 3. **Criar a API Key** (Settings → API Keys → Create API Key):
    - Tipo **"Restricted Access"**, só com permissão de **"Mail Send"**
      (não precisa de acesso total — reduz o estrago se a chave vazar).
 4. No Render, `b2bon-api` → **Environment**, adicione:
    - `SENDGRID_API_KEY`: a chave gerada no passo 3.
    - `SENDGRID_REMETENTE_EMAIL`: um endereço no domínio autenticado —
-     hoje `contato@em238.cyberfort.com.br` (confirme o domínio exato em
+     hoje `nao-responda@cyberfort.com.br` (domínio raiz — confirme em
      Settings → Sender Authentication, coluna "Verified", antes de
      colar; um domínio errado aqui faz o e-mail sair sem SPF/DKIM válido
      e não aparecer nem no Activity Log do SendGrid). É o envelope
@@ -223,6 +230,10 @@ pesquisa de NPS e principalmente o motor de prospecção fria (cadências).
      tenant via `ConfiguracaoEnvio`, só o envelope é fixo — não dá pra
      autenticar um domínio por tenant sem um projeto à parte).
    - `SENDGRID_REMETENTE_NOME`: opcional, padrão já é `B2B ON`.
+   - **Mesmo com SPF/DKIM/DMARC corretos, um domínio novo ainda pode
+     cair em spam ocasionalmente** — isso é reputação de envio se
+     construindo com o tempo/volume real, não falta de configuração;
+     não existe atalho técnico pra isso.
    - Assim que `SENDGRID_API_KEY` estiver preenchida, ela tem prioridade
      automática sobre SMTP — não precisa remover as env vars de SMTP no
      mesmo passo.
