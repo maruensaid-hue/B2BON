@@ -155,20 +155,22 @@ depende de um staging local (`cnpj_estabelecimento`) carregado a partir dos
 dados públicos de CNPJ da Receita Federal — **nunca a base nacional
 completa**, só o recorte (CNAE+UF) exigido pelos ICPs ativos. Esse
 carregamento agora é automático: o mesmo workflow do passo 7
-(`cron-envios.yml`, disparo diário `0 6 * * *`) chama
-`POST /cron/atualizar-recorte-cnpj`, que:
+(`cron-envios.yml`, job `atualizar-recorte-cnpj`, disparo a cada 30 min)
+chama `POST /cron/atualizar-recorte-cnpj`, que:
 
 1. Calcula a união de CNAE+UF de todos os ICPs ativos de todos os tenants.
 2. Se já cobre tudo desde a última execução (mesmo mês de competência da
-   Receita Federal, nenhum CNAE/UF novo), não faz nada.
+   Receita Federal, nenhum CNAE/UF novo), não faz nada — é por isso que
+   rodar a cada 30 min é seguro/barato, não só 1x/dia.
 3. Senão, baixa da própria Receita Federal (`dadosabertos.rfb.gov.br`) só
    os arquivos necessários e recarrega o staging — sem passo manual, sem
    `scripts/carregar_recorte_receita_federal.py` (que continua existindo
    só como fallback pra debug local).
 
-Efeito prático: um ICP criado hoje só tem candidatos a partir do próximo
-disparo diário (não instantâneo), sem nenhuma intervenção humana depois
-disso.
+Efeito prático: um ICP criado hoje tem candidatos em até 30 minutos (não
+instantâneo, mas não mais 1 dia inteiro), sem nenhuma intervenção humana.
+O job tem `concurrency` própria (fila, não paralelo) — um download longo
+ainda em andamento não é interrompido pelo disparo seguinte.
 
 **Riscos ainda não validados em produção** (sinalizando explicitamente,
 não testado num deploy real ainda):

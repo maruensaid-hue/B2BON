@@ -11,6 +11,12 @@ on:
     # Retenção de titulares (raio-X/LGPD) não é tempo-sensível como
     # envio/lembrete — 1x/dia basta. Schedule separado, mesmo workflow.
     - cron: "0 6 * * *"
+    # Recorte de CNPJ (E2/E1): ICP novo esperava até 24h pelo próximo
+    # disparo diário pra ter candidatos — pedido do usuário pra reduzir
+    # essa espera. 30 min é seguro porque o serviço é idempotente (sem
+    # CNAE/UF novo, só confere e não baixa nada) — job separado abaixo,
+    # com concurrency, pra não sobrepor downloads longos.
+    - cron: "*/30 * * * *"
   workflow_dispatch: {}
 
 jobs:
@@ -76,14 +82,26 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-      - name: Chamar POST /cron/atualizar-recorte-cnpj (recorte automático de CNPJ, 1x/dia)
-        if: github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch'
+
+  atualizar-recorte-cnpj:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '*/30 * * * *' || github.event_name == 'workflow_dispatch'
+    # Job separado (não step dentro de processar-envios) pra ter
+    # concurrency própria — sem isso, um download longo ainda rodando no
+    # disparo dos 30 min anterior colidiria com o próximo, os dois
+    # tentando escrever no mesmo staging ao mesmo tempo. `group` fixo +
+    # cancel-in-progress:false enfileira em vez de rodar em paralelo.
+    concurrency:
+      group: cron-recorte-cnpj
+      cancel-in-progress: false
+    steps:
+      - name: Chamar POST /cron/atualizar-recorte-cnpj (recorte automático de CNPJ)
         # Pode baixar alguns GB da Receita Federal quando há ICP novo — sem
-        # --max-time explícito, deixa o job (limite padrão de 6h do GitHub
-        # Actions) decidir; --fail sozinho não aborta por lentidão. Se o
-        # proxy do Render matar a conexão antes disso (raio-X: risco não
-        # validado em produção ainda), o próximo disparo diário tenta de
-        # novo sozinho — idempotente, sem intervenção humana.
+        # CNAE/UF novo, o serviço só confere e não baixa nada (idempotente,
+        # por isso é seguro rodar a cada 30 min). Se o proxy do Render
+        # matar a conexão num download longo (raio-X: risco não validado
+        # em produção ainda), o próximo disparo de 30 min tenta de novo
+        # sozinho, sem intervenção humana.
         run: |
           curl --fail --show-error --silent --max-time 3000 \
             -X POST "${API_BASE_URL}/cron/atualizar-recorte-cnpj" \
