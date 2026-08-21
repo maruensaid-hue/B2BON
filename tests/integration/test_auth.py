@@ -341,6 +341,111 @@ def test_convite_vitrine_usado_duas_vezes_via_api_falha(client, criar_plano):
     assert resposta.status_code == 409
 
 
+def test_gerar_convite_gratuito_por_usuario_comum_e_negado(client, criar_usuario_autenticado):
+    """Raio-X: só admin/super_admin pode gerar convite gratuito — sem
+    essa trava, qualquer usuário comum poderia conceder plano "Teste"
+    (sem checkout, sem expiração) pra terceiros à vontade."""
+    headers_user = criar_usuario_autenticado(TENANT_ID, papel="user", email="comum@teste.com.br")
+
+    resposta = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24, "gratuito": True}, headers=headers_user)
+
+    assert resposta.status_code == 403
+
+
+def test_gerar_convite_gratuito_por_admin_funciona(client):
+    """Client de teste já é super_admin por padrão."""
+    resposta = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24, "gratuito": True})
+
+    assert resposta.status_code == 201
+    assert resposta.json()["gratuito"] is True
+
+
+def test_info_convite_vitrine_expoe_se_e_gratuito(client):
+    normal = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+    gratuito = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24, "gratuito": True}).json()
+
+    info_normal = client.get(f"/api/v1/convites/vitrine/{normal['codigo']}/info")
+    info_gratuito = client.get(f"/api/v1/convites/vitrine/{gratuito['codigo']}/info")
+
+    assert info_normal.status_code == 200
+    assert info_normal.json() == {"status": "disponivel", "gratuito": False}
+    assert info_gratuito.json() == {"status": "disponivel", "gratuito": True}
+
+
+def test_info_convite_vitrine_inexistente_e_404(client):
+    resposta = client.get("/api/v1/convites/vitrine/CODIGO-INEXISTENTE/info")
+    assert resposta.status_code == 404
+
+
+def test_aceitar_convite_gratuito_cria_licenca_ativa_sem_checkout_nem_expiracao(client, db_session, criar_plano):
+    """O coração do raio-X: convite gratuito vira Licença "Teste" ativa,
+    sem passar pelo checkout — e ignora qualquer plano_id que o cliente
+    mande, pra ninguém conseguir se auto-conceder um plano pago de graça
+    chamando a rota direto com um plano_id diferente."""
+    plano_teste = criar_plano(nome="Teste", preco_mensal=0.0, visivel_self_service=False)
+    plano_pago = criar_plano(nome="Starter Pago", preco_mensal=490.0)
+    convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24, "gratuito": True}).json()
+
+    resposta = client.post(
+        "/api/v1/auth/registrar-vitrine",
+        json={
+            "codigo_convite": convite["codigo"],
+            "razao_social": "Empresa Teste Gratis Ltda",
+            "nome_admin": "Admin Teste",
+            "email_admin": "admin@testegratis.com.br",
+            "senha_admin": "senha123",
+            "aceite_termos": True,
+            "plano_id": plano_pago.id,  # tentativa de burlar — deve ser ignorado
+        },
+    )
+
+    assert resposta.status_code == 201
+    corpo = resposta.json()
+    assert corpo["tem_licenca_ativa"] is True
+    assert corpo["checkout_url"] is None
+
+    from app.models.licenca import Licenca
+
+    licenca = db_session.query(Licenca).filter_by(tenant_id=corpo["usuario"]["tenant_id"]).one()
+    assert licenca.status == "ativa"
+    assert licenca.plano_id == plano_teste.id
+    assert licenca.data_expiracao is None
+
+
+def test_registrar_vitrine_com_plano_nao_self_service_e_negado(client, criar_plano):
+    """Mesmo num convite normal (não gratuito), o plano "Teste" não pode
+    ser escolhido livremente — só via convite gratuito."""
+    plano_teste = criar_plano(nome="Teste", preco_mensal=0.0, visivel_self_service=False)
+    convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+
+    resposta = client.post(
+        "/api/v1/auth/registrar-vitrine",
+        json={
+            "codigo_convite": convite["codigo"],
+            "razao_social": "Tentativa Furar Fila Ltda",
+            "nome_admin": "Admin",
+            "email_admin": "furafila@teste.com.br",
+            "senha_admin": "senha123",
+            "aceite_termos": True,
+            "plano_id": plano_teste.id,
+        },
+    )
+
+    assert resposta.status_code == 409
+
+
+def test_planos_apenas_self_service_esconde_plano_teste(client, criar_plano):
+    criar_plano(nome="Teste", preco_mensal=0.0, visivel_self_service=False)
+    criar_plano(nome="Starter Visivel", preco_mensal=490.0)
+
+    todos = client.get("/api/v1/planos").json()
+    so_self_service = client.get("/api/v1/planos", params={"apenas_self_service": True}).json()
+
+    assert any(p["nome"] == "Teste" for p in todos)
+    assert not any(p["nome"] == "Teste" for p in so_self_service)
+    assert any(p["nome"] == "Starter Visivel" for p in so_self_service)
+
+
 def _assinatura_valida(payment_id: str, request_id: str, ts: str, segredo: str) -> str:
     manifest = f"id:{payment_id.lower()};request-id:{request_id};ts:{ts};"
     v1 = hmac.new(segredo.encode(), manifest.encode(), hashlib.sha256).hexdigest()

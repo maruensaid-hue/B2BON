@@ -20,7 +20,7 @@ from app.services.errors import ErroServico
 
 PLANOS_PADRAO = [
     {"nome": "POC", "franquia_contas_mes": 50, "max_usuarios": 3, "preco_mensal": 0.0},
-    {"nome": "Teste", "franquia_contas_mes": 200, "max_usuarios": 10, "preco_mensal": 0.0},
+    {"nome": "Teste", "franquia_contas_mes": 200, "max_usuarios": 10, "preco_mensal": 0.0, "visivel_self_service": False},
     {"nome": "Starter", "franquia_contas_mes": 200, "max_usuarios": 10, "preco_mensal": 490.0},
     {"nome": "Professional", "franquia_contas_mes": 800, "max_usuarios": 25, "preco_mensal": 990.0},
     {"nome": "Enterprise", "franquia_contas_mes": 5000, "max_usuarios": 999, "preco_mensal": 2490.0},

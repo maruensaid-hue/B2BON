@@ -47,7 +47,10 @@ class RegistrarVitrineRequestSchema(BaseModel):
     email_admin: EmailStr
     senha_admin: str = Field(min_length=8, max_length=72)
     aceite_termos: bool
-    plano_id: int
+    # None quando o convite é gratuito (o servidor decide o plano
+    # sozinho, ignorando qualquer plano_id enviado — ver
+    # tenant_service.criar_tenant_vitrine).
+    plano_id: int | None = None
 
 
 class TokenResponseSchema(BaseModel):

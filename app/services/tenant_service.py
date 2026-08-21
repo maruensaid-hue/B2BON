@@ -42,8 +42,25 @@ MODOS_COBRANCA_VALIDOS = {"direta", "consolidada"}
 _PROFUNDIDADE_MAXIMA_HIERARQUIA = 5
 
 
-def listar_planos(db: Session) -> list[Plano]:
-    return db.query(Plano).order_by(Plano.preco_mensal).all()
+def listar_planos(db: Session, apenas_self_service: bool = False) -> list[Plano]:
+    """`apenas_self_service=True` esconde planos como "Teste" — só podem
+    ser concedidos por convite gratuito administrativo, nunca escolhidos
+    livremente em `POST /auth/registrar-vitrine` (raio-X: mesmo filtro é
+    reforçado no servidor em `criar_tenant_vitrine`, não só aqui — a
+    listagem sozinha não impede alguém de mandar o `plano_id` direto)."""
+    query = db.query(Plano)
+    if apenas_self_service:
+        query = query.filter_by(visivel_self_service=True)
+    return query.order_by(Plano.preco_mensal).all()
+
+
+def _obter_plano_teste(db: Session) -> Plano:
+    plano = db.query(Plano).filter_by(nome="Teste").one_or_none()
+    if plano is None:
+        raise RegraNegocioViolada(
+            "Plano \"Teste\" não encontrado — crie-o antes de gerar convites gratuitos."
+        )
+    return plano
 
 
 def _validar_hierarquia(db: Session, tipo: str, tenant_pai_id: str | None, modo_cobranca: str) -> None:
@@ -84,6 +101,7 @@ def criar_tenant_inicial(
     tipo: str = "cliente",
     modo_cobranca: str = "direta",
     papel_primeiro_usuario: str = "super_admin",
+    email_provider: EmailProvider | None = None,
 ) -> Usuario:
     """Cria Tenant + Licença ativa + primeiro usuário.
 
@@ -138,6 +156,27 @@ def criar_tenant_inicial(
         )
     db.commit()
     db.refresh(usuario)
+
+    # Best-effort: e-mail de boas-vindas não pode travar a criação do
+    # tenant (mesmo espírito de `sincronizar_com_tolerancia`) — se o
+    # provedor falhar, só loga; a conta já existe e já pode ser usada
+    # mesmo sem o e-mail chegar.
+    if email_provider is not None:
+        try:
+            corpo = (
+                f"Olá, {nome_admin}!\n\n"
+                f"Sua conta na B2B ON está pronta — {razao_social} já tem acesso ao CRM, "
+                f"prospecção automatizada e MAP (Motor de Alta Performance).\n\n"
+                f"Acesse com seu e-mail cadastrado ({email_admin}) em:\n"
+                f"{settings.url_base_frontend}/login"
+            )
+            email_provider.enviar(
+                email_admin, "Sua conta na B2B ON está pronta", corpo, "B2B ON",
+                settings.sendgrid_remetente_email, tenant.id,
+            )
+        except Exception:
+            logger.warning("Falha ao enviar e-mail de boas-vindas pro tenant %s", tenant.id, exc_info=True)
+
     return usuario
 
 
@@ -318,10 +357,14 @@ def gerar_convite_vitrine(
     validade_horas: int | None,
     email_destinatario: str | None = None,
     email_provider: EmailProvider | None = None,
+    gratuito: bool = False,
 ) -> ConviteVitrine:
     """Qualquer usuário de um tenant já existente pode convidar uma
     empresa nova para a Rede Social (Onda H) — não exige papel admin,
     diferente do convite de usuário (`auth_service.gerar_convite`).
+    `gratuito=True` é a exceção: a rota (`app/api/v1/convites.py`) só
+    permite isso pra admin/super_admin — vira Licença "Teste" ativa sem
+    prazo de expiração, sem passar pelo checkout (raio-X).
 
     Antes disto, o único jeito de "enviar" o convite era copiar o link
     manualmente (nada era enviado de verdade) — bug real relatado pelo
@@ -333,6 +376,7 @@ def gerar_convite_vitrine(
         codigo=secrets.token_hex(8).upper(),
         criado_por_usuario_id=int(ator_id) if ator_id else None,
         validade_em=validade_em,
+        gratuito=gratuito,
     )
     db.add(convite)
     db.flush()
@@ -432,6 +476,16 @@ def listar_convites_vitrine(db: Session, tenant_id_origem: str) -> list[ConviteV
     )
 
 
+def obter_info_convite_vitrine(db: Session, codigo: str) -> ConviteVitrine:
+    """Info pública mínima pra tela de cadastro (`ConviteVitrine.tsx`)
+    saber, antes de renderizar o formulário, se é um convite gratuito
+    (esconde o seletor de plano e a cópia de checkout) ou normal."""
+    convite = db.query(ConviteVitrine).filter_by(codigo=codigo).one_or_none()
+    if convite is None:
+        raise NaoEncontrado(f"Convite {codigo} não encontrado")
+    return convite
+
+
 def _validar_convite_vitrine_disponivel(
     db: Session, convite: ConviteVitrine | None, codigo: str
 ) -> ConviteVitrine:
@@ -461,7 +515,7 @@ def criar_tenant_vitrine(
     email_admin: str,
     senha_admin: str,
     aceite_termos: bool,
-    plano_id: int,
+    plano_id: int | None,
     payment_provider: PaymentProvider,
     llm: LLMProvider,
     site_fetcher: SiteFetcher,
@@ -470,23 +524,37 @@ def criar_tenant_vitrine(
     contact_enrichment: ContactEnrichmentProvider,
     graph: Neo4jClient,
     cnpj: str | None = None,
-) -> tuple[Usuario, str]:
+) -> tuple[Usuario, str | None]:
     """Aceite de convite-vitrine: cria Tenant + Usuario (papel `admin`,
     nunca `super_admin` — isso evitaria acesso a `/admin/tenants`
-    cross-tenant) + Perfil de Rede Social + Licença `pendente_pagamento`
-    do plano escolhido. A licença só vira `ativa` quando o webhook do
-    Mercado Pago confirmar o pagamento (`pagamento_licenca_service`) —
-    até lá o tenant fica restrito à Rede Social, igual ao comportamento
-    anterior de "vitrine sem licença" (Onda H), só que agora com uma
-    cobrança em andamento em vez de ficar assim para sempre."""
+    cross-tenant) + Perfil de Rede Social + Licença.
+
+    Convite normal (`convite.gratuito=False`): licença nasce
+    `pendente_pagamento` do plano escolhido (precisa ser
+    `visivel_self_service`) e só vira `ativa` quando o webhook do
+    Mercado Pago confirmar (`pagamento_licenca_service`) — até lá o
+    tenant fica restrito à Rede Social.
+
+    Convite gratuito (`convite.gratuito=True`, raio-X): `plano_id`
+    recebido é **ignorado** — o servidor decide sozinho o plano "Teste",
+    nunca confia no que o cliente mandou, porque é exatamente o controle
+    que evita alguém contornar o pagamento chamando a rota direto com
+    outro `plano_id`. Licença nasce `ativa` sem `data_expiracao`, sem
+    checkout nenhum."""
     if not aceite_termos:
         raise ValidacaoFalhou("É preciso aceitar a Política de Privacidade e os Termos de Uso para se cadastrar.")
 
-    if db.query(Plano).filter_by(id=plano_id).one_or_none() is None:
-        raise NaoEncontrado(f"Plano {plano_id} não encontrado")
-
     convite = db.query(ConviteVitrine).filter_by(codigo=codigo_convite).one_or_none()
     convite = _validar_convite_vitrine_disponivel(db, convite, codigo_convite)
+
+    if convite.gratuito:
+        plano_id = _obter_plano_teste(db).id
+    else:
+        plano = db.query(Plano).filter_by(id=plano_id).one_or_none() if plano_id is not None else None
+        if plano is None:
+            raise NaoEncontrado(f"Plano {plano_id} não encontrado")
+        if not plano.visivel_self_service:
+            raise RegraNegocioViolada("Este plano não está disponível para cadastro self-service.")
 
     if db.query(Usuario).filter_by(email=email_admin).one_or_none() is not None:
         raise RegraNegocioViolada("E-mail já cadastrado.")
@@ -509,7 +577,10 @@ def criar_tenant_vitrine(
     db.add(usuario)
     db.flush()
 
-    db.add(Licenca(tenant_id=tenant.id, plano_id=plano_id, status="pendente_pagamento"))
+    if convite.gratuito:
+        db.add(Licenca(tenant_id=tenant.id, plano_id=plano_id, status="ativa"))
+    else:
+        db.add(Licenca(tenant_id=tenant.id, plano_id=plano_id, status="pendente_pagamento"))
 
     convite.status = "usado"
     convite.tenant_id_gerado = tenant.id
@@ -549,6 +620,9 @@ def criar_tenant_vitrine(
 
     db.commit()
     db.refresh(usuario)
+
+    if convite.gratuito:
+        return usuario, None
 
     _, url_checkout = pagamento_licenca_service.iniciar(db, tenant.id, plano_id, email_admin, payment_provider)
     return usuario, url_checkout

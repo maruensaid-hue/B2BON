@@ -28,7 +28,8 @@ interface DadosRegistroVitrine {
   email_admin: string;
   senha_admin: string;
   aceite_termos: boolean;
-  plano_id: number;
+  /** Ausente/null em convite gratuito — o servidor decide o plano "Teste" sozinho. */
+  plano_id?: number;
 }
 
 interface DadosRegistroConvite {

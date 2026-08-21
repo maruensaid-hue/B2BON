@@ -15,6 +15,11 @@ interface Plano {
   preco_mensal: number;
 }
 
+interface InfoConvite {
+  status: string;
+  gratuito: boolean;
+}
+
 export function ConviteVitrine() {
   const { codigo } = useParams<{ codigo: string }>();
   const { registrarVitrine } = useAuth();
@@ -23,20 +28,27 @@ export function ConviteVitrine() {
   const [aceiteTermos, setAceiteTermos] = useState(false);
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [planoId, setPlanoId] = useState<number | null>(null);
+  const [info, setInfo] = useState<InfoConvite | null>(null);
 
   useEffect(() => {
+    if (!codigo) return;
     api
-      .get<Plano[]>("/planos")
+      .get<InfoConvite>(`/convites/vitrine/${codigo}/info`)
       .then((resposta) => {
-        setPlanos(resposta);
-        if (resposta.length > 0) setPlanoId(resposta[0].id);
+        setInfo(resposta);
+        if (resposta.status !== "disponivel" || resposta.gratuito) return;
+        return api.get<Plano[]>("/planos?apenas_self_service=true").then((planosResp) => {
+          setPlanos(planosResp);
+          if (planosResp.length > 0) setPlanoId(planosResp[0].id);
+        });
       })
-      .catch(() => setErro("Não foi possível carregar os planos disponíveis."));
-  }, []);
+      .catch(() => setErro("Este link de convite não é mais válido."));
+  }, [codigo]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!codigo || planoId === null) return;
+    if (!codigo) return;
+    if (!info?.gratuito && planoId === null) return;
     setErro(null);
     setCarregando(true);
     const form = new FormData(event.currentTarget);
@@ -49,7 +61,7 @@ export function ConviteVitrine() {
         email_admin: String(form.get("email_admin")),
         senha_admin: String(form.get("senha_admin")),
         aceite_termos: aceiteTermos,
-        plano_id: planoId,
+        plano_id: info?.gratuito ? undefined : planoId ?? undefined,
       });
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
@@ -60,6 +72,31 @@ export function ConviteVitrine() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível aceitar o convite.");
       setCarregando(false);
     }
+  }
+
+  if (erro && !info) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card glow className="w-full max-w-md text-center text-[13px] text-muted">
+          {erro}
+        </Card>
+      </div>
+    );
+  }
+
+  if (info && info.status !== "disponivel") {
+    const mensagens: Record<string, string> = {
+      usado: "Este convite já foi utilizado.",
+      revogado: "Este convite foi revogado por quem o enviou.",
+      expirado: "Este convite expirou.",
+    };
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card glow className="w-full max-w-md text-center text-[13px] text-muted">
+          {mensagens[info.status] ?? "Este convite não está mais disponível."}
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -73,7 +110,9 @@ export function ConviteVitrine() {
             B2B <span className="text-cyan">ON</span>
           </div>
           <div className="mt-1 text-[11px] text-muted">
-            Cadastre sua empresa, escolha um plano e comece a usar CRM, MAP e PREDATOR.
+            {info?.gratuito
+              ? "Cadastre sua empresa e comece a usar o plano de teste gratuito, sem cartão de crédito."
+              : "Cadastre sua empresa, escolha um plano e comece a usar CRM, MAP e PREDATOR."}
           </div>
         </div>
 
@@ -99,35 +138,42 @@ export function ConviteVitrine() {
             <Input name="senha_admin" type="password" required minLength={8} placeholder="Mínimo 8 caracteres" />
           </div>
 
-          <div>
-            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Escolha um plano</div>
-            <div className="flex flex-col gap-2">
-              {planos.map((plano) => (
-                <button
-                  key={plano.id}
-                  type="button"
-                  onClick={() => setPlanoId(plano.id)}
-                  className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-[12px] transition-colors ${
-                    planoId === plano.id ? "border-cyan bg-cyan/10" : "border-border hover:bg-surf2"
-                  }`}
-                >
-                  <div>
-                    <div className="font-semibold">{plano.nome}</div>
-                    <div className="text-[10.5px] text-muted">
-                      Até {plano.max_usuarios} usuários · {plano.franquia_contas_mes} contas/mês
-                    </div>
-                  </div>
-                  <div className="font-head text-[13px] font-bold text-cyan">
-                    R${plano.preco_mensal.toFixed(0)}
-                    <span className="text-[9.5px] font-normal text-muted">/mês</span>
-                  </div>
-                </button>
-              ))}
-              {planos.length === 0 && !erro && (
-                <div className="text-[11px] text-muted">Carregando planos...</div>
-              )}
+          {info?.gratuito ? (
+            <div className="rounded-lg border border-cyan/40 bg-cyan/10 px-3 py-2 text-[12px]">
+              <div className="font-semibold text-cyan">Plano de teste gratuito</div>
+              <div className="text-[10.5px] text-muted">Sem custo, sem cartão de crédito — acesso liberado na hora.</div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Escolha um plano</div>
+              <div className="flex flex-col gap-2">
+                {planos.map((plano) => (
+                  <button
+                    key={plano.id}
+                    type="button"
+                    onClick={() => setPlanoId(plano.id)}
+                    className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-[12px] transition-colors ${
+                      planoId === plano.id ? "border-cyan bg-cyan/10" : "border-border hover:bg-surf2"
+                    }`}
+                  >
+                    <div>
+                      <div className="font-semibold">{plano.nome}</div>
+                      <div className="text-[10.5px] text-muted">
+                        Até {plano.max_usuarios} usuários · {plano.franquia_contas_mes} contas/mês
+                      </div>
+                    </div>
+                    <div className="font-head text-[13px] font-bold text-cyan">
+                      R${plano.preco_mensal.toFixed(0)}
+                      <span className="text-[9.5px] font-normal text-muted">/mês</span>
+                    </div>
+                  </button>
+                ))}
+                {planos.length === 0 && !erro && (
+                  <div className="text-[11px] text-muted">Carregando planos...</div>
+                )}
+              </div>
+            </div>
+          )}
 
           <label className="flex items-start gap-2 text-[11px] text-muted">
             <input
@@ -153,10 +199,16 @@ export function ConviteVitrine() {
 
           <Button
             type="submit"
-            disabled={carregando || !aceiteTermos || planoId === null}
+            disabled={carregando || !aceiteTermos || (!info?.gratuito && planoId === null)}
             className="mt-1 w-full justify-center"
           >
-            {carregando ? "Indo para o pagamento..." : "Continuar para o pagamento"}
+            {info?.gratuito
+              ? carregando
+                ? "Criando sua conta..."
+                : "Criar minha conta grátis"
+              : carregando
+                ? "Indo para o pagamento..."
+                : "Continuar para o pagamento"}
           </Button>
         </form>
       </Card>

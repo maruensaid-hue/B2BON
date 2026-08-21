@@ -1,4 +1,4 @@
-from sqlalchemy import Float, Integer, String
+from sqlalchemy import Boolean, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -19,3 +19,7 @@ class Plano(Base):
     franquia_contas_mes: Mapped[int] = mapped_column(Integer)
     max_usuarios: Mapped[int] = mapped_column(Integer)
     preco_mensal: Mapped[float] = mapped_column(Float)
+    # False só pro plano "Teste" (raio-X): esse plano só pode ser
+    # concedido por convite gratuito administrativo, nunca escolhido
+    # livremente no cadastro self-service (POST /auth/registrar-vitrine).
+    visivel_self_service: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")

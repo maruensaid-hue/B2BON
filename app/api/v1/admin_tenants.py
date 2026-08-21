@@ -1,9 +1,17 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_gestor_do_tenant, get_ator_id, get_db, get_usuario_atual, permitir_gestao_hierarquica
+from app.api.deps import (
+    exigir_gestor_do_tenant,
+    get_ator_id,
+    get_db,
+    get_email_provider,
+    get_usuario_atual,
+    permitir_gestao_hierarquica,
+)
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
+from app.providers.channels.email.base import EmailProvider
 from app.schemas.tenant import (
     CriarTenantRequestSchema,
     DefinirLicencaRequestSchema,
@@ -25,7 +33,10 @@ def listar_tenants(db: Session = Depends(get_db), usuario: Usuario = Depends(get
 
 @router.post("", response_model=TenantSchema, status_code=201)
 def criar_tenant(
-    dados: CriarTenantRequestSchema, db: Session = Depends(get_db), usuario: Usuario = Depends(get_usuario_atual)
+    dados: CriarTenantRequestSchema,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+    email: EmailProvider = Depends(get_email_provider),
 ) -> TenantSchema:
     """Onboarding de um novo tenant por um gestor já autenticado — distinto
     do bootstrap do primeiro tenant (script, sem essa exigência circular de
@@ -54,6 +65,7 @@ def criar_tenant(
         tipo=dados.tipo,
         modo_cobranca=dados.modo_cobranca,
         papel_primeiro_usuario="admin",
+        email_provider=email,
     )
     return db.query(Tenant).filter_by(id=usuario_admin.tenant_id).one()
 

@@ -65,6 +65,30 @@ def test_super_admin_cria_novo_tenant(client, db_session):
     assert any(t["id"] == "novo-tenant" for t in tenants)
 
 
+def test_criar_tenant_dispara_email_de_boas_vindas(client, db_session, fake_email):
+    """Antes disto, criar um tenant pelo Admin não avisava ninguém — o
+    primeiro admin só descobria que a conta existia se alguém contasse
+    de viva voz (bug real relatado pelo usuário)."""
+    plano_id = _criar_plano(db_session, nome="Enterprise Boas Vindas", franquia=5000)
+
+    client.post(
+        "/api/v1/admin/tenants",
+        json={
+            "tenant_id": "tenant-boas-vindas",
+            "razao_social": "Empresa Boas Vindas Ltda",
+            "plano_id": plano_id,
+            "nome_admin": "Admin Boas Vindas",
+            "email_admin": "admin@boasvindas.com.br",
+            "senha_admin": "senha123",
+        },
+    )
+
+    assert len(fake_email.envios) == 1
+    envio = fake_email.envios[0]
+    assert envio["destinatario"] == "admin@boasvindas.com.br"
+    assert "B2B ON" in envio["assunto"]
+
+
 def test_novo_admin_de_tenant_consegue_logar(client, db_session):
     plano_id = _criar_plano(db_session, nome="Starter2", franquia=200)
     client.post(

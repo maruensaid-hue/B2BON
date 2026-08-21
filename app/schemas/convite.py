@@ -30,12 +30,16 @@ class ConviteVitrineSchema(BaseModel):
     status: str
     validade_em: datetime | None
     tenant_id_gerado: str | None
+    gratuito: bool
     criado_em: datetime
 
 
 class GerarConviteVitrineRequestSchema(BaseModel):
     validade_horas: int | None = 168
     email_destinatario: str | None = None
+    # Só admin/super_admin pode marcar True — validado na rota, não aqui
+    # (ver app/api/v1/convites.py). Concede o plano "Teste" sem checkout.
+    gratuito: bool = False
 
 
 class ConviteVitrineCriadoSchema(ConviteVitrineSchema):
@@ -44,3 +48,13 @@ class ConviteVitrineCriadoSchema(ConviteVitrineSchema):
     # configurado — sem este campo, o convite parecia enviado quando não
     # saía nada de verdade em produção).
     email_enviado: bool | None = None
+
+
+class ConviteVitrineInfoSchema(BaseModel):
+    """Info pública mínima pra tela de cadastro decidir o que renderizar
+    antes de aceitar o convite — não expõe tenant_id_origem/quem criou."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    status: str
+    gratuito: bool

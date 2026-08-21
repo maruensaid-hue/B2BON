@@ -43,6 +43,7 @@ interface ConviteVitrine {
   tenant_id_gerado: string | null;
   criado_em: string;
   email_enviado: boolean | null;
+  gratuito: boolean;
 }
 
 function toneStatusConvite(status: string): "green" | "muted" | "red" {
@@ -135,6 +136,7 @@ export function RedeSocial() {
       const criado = await api.post<ConviteVitrine>("/convites/vitrine", {
         validade_horas: Number(form.get("validade_horas")),
         email_destinatario: emailDestinatario || null,
+        gratuito: form.get("gratuito") === "on",
       });
       if (emailDestinatario && criado.email_enviado === false) {
         setAviso(
@@ -224,6 +226,7 @@ export function RedeSocial() {
               <div className="flex items-center gap-2">
                 <span className="font-head font-bold tracking-wide">{convite.codigo}</span>
                 <Badge tone={toneStatusConvite(convite.status)}>{convite.status}</Badge>
+                {convite.gratuito && <Badge tone="violet">gratuito</Badge>}
               </div>
               {convite.status === "disponivel" && (
                 <div className="flex gap-2">
@@ -386,6 +389,15 @@ export function RedeSocial() {
               Preenchendo, o convite é enviado por e-mail automaticamente. Deixe em branco para só copiar o link.
             </div>
           </div>
+          {(usuario?.papel === "super_admin" || usuario?.papel === "admin") && (
+            <label className="flex items-start gap-2 text-[11px] text-muted">
+              <input type="checkbox" name="gratuito" className="mt-0.5" />
+              <span>
+                Convite gratuito — pula pagamento, cria a conta já no plano "Teste" sem prazo de expiração. Use só
+                pra demonstração/teste, não pra cliente pagante.
+              </span>
+            </label>
+          )}
           <Button type="submit" className="w-full justify-center">
             Gerar convite
           </Button>
