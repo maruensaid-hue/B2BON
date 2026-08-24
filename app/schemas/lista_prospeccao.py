@@ -18,3 +18,15 @@ class ListaProspeccaoCreateSchema(BaseModel):
     nome: str
     icp_id: int | None = None
     cargos_alvo: list[str] | None = None
+
+
+class ContaBloqueadaSchema(BaseModel):
+    conta_id: int
+    nome: str
+    motivo: str
+
+
+class ExcluirContasResponseSchema(BaseModel):
+    apagadas: int
+    bloqueadas: int
+    detalhes_bloqueadas: list[ContaBloqueadaSchema]

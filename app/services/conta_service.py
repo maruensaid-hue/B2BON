@@ -13,11 +13,27 @@ from app.integrations.brasilapi_client import BrasilApiClient
 from app.integrations.site_fetcher import HostNaoPublico, SiteFetcher
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
+from app.models.alerta_detrator import AlertaDetrator
+from app.models.atividade import Atividade
+from app.models.cadencia import Cadencia
+from app.models.campanha import CampanhaDestinatario
 from app.models.campo_enriquecido import CampoEnriquecido
 from app.models.conta import Conta
+from app.models.conta_franquia_consumo import ContaFranquiaConsumo
+from app.models.conversa_qualificacao import ConversaQualificacao
 from app.models.decisor import Decisor
+from app.models.descarte_conta import DescarteConta
+from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
 from app.models.icp import ICP
+from app.models.indicacao import Indicacao
+from app.models.interacao_conta import InteracaoConta
 from app.models.lista_prospeccao import ListaProspeccao
+from app.models.mensagem import Mensagem
+from app.models.negocio import Negocio
+from app.models.pesquisa_nps import PesquisaNps
+from app.models.qualificacao import QualificacaoScore
+from app.models.reuniao import Reuniao
+from app.models.tarefa_linkedin import TarefaLinkedin
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, DecisorCandidato, FiltroBusca
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
@@ -418,6 +434,96 @@ def obter(db: Session, tenant_id: str, conta_id: int) -> Conta:
     if conta is None:
         raise NaoEncontrado(f"Conta {conta_id} não encontrada")
     return conta
+
+
+def _sinais_de_trabalho_real(db: Session, tenant_id: str, conta: Conta, decisor_ids: list[int]) -> list[str]:
+    """Levanta o que já aconteceu de verdade nesta conta — usado por
+    `excluir` pra recusar apagar quando há qualquer sinal de trabalho
+    (mesmo que pequeno). Não é uma exclusão genérica de conta com
+    qualquer histórico: é especificamente pra desfazer uma importação de
+    planilha malfeita antes de mexer nela (pedido do usuário), então erra
+    pro lado de bloquear, não de apagar em cascata dado real."""
+    sinais = []
+    if db.query(Negocio).filter_by(tenant_id=tenant_id, conta_id=conta.id).first() is not None:
+        sinais.append("negócio no CRM")
+    if db.query(Atividade).filter_by(tenant_id=tenant_id, conta_id=conta.id).first() is not None:
+        sinais.append("atividade registrada")
+    if db.query(Cadencia).filter_by(tenant_id=tenant_id, conta_id=conta.id).first() is not None:
+        sinais.append("cadência de prospecção")
+    if decisor_ids:
+        if db.query(Mensagem).filter(Mensagem.decisor_id.in_(decisor_ids)).first() is not None:
+            sinais.append("mensagem enviada")
+        if db.query(Reuniao).filter(Reuniao.decisor_id.in_(decisor_ids)).first() is not None:
+            sinais.append("reunião agendada")
+        if db.query(ConversaQualificacao).filter(ConversaQualificacao.decisor_id.in_(decisor_ids)).first() is not None:
+            sinais.append("conversa de qualificação")
+        if db.query(PesquisaNps).filter(PesquisaNps.decisor_id.in_(decisor_ids)).first() is not None:
+            sinais.append("pesquisa de NPS")
+        if db.query(TarefaLinkedin).filter(TarefaLinkedin.decisor_id.in_(decisor_ids)).first() is not None:
+            sinais.append("tarefa de LinkedIn")
+        if db.query(Indicacao).filter(Indicacao.promotor_decisor_id.in_(decisor_ids)).first() is not None:
+            sinais.append("indicação")
+        if db.query(CampanhaDestinatario).filter(CampanhaDestinatario.decisor_id.in_(decisor_ids)).first() is not None:
+            sinais.append("campanha de e-mail/WhatsApp")
+        if db.query(AlertaDetrator).filter(AlertaDetrator.decisor_id.in_(decisor_ids)).first() is not None:
+            sinais.append("alerta de detrator")
+        if db.query(QualificacaoScore).filter(QualificacaoScore.decisor_id.in_(decisor_ids)).first() is not None:
+            sinais.append("score de qualificação")
+    return sinais
+
+
+def excluir(db: Session, tenant_id: str, ator_id: str | None, conta_id: int) -> None:
+    """Apaga uma conta de verdade — diferente de `icp_service.excluir`,
+    que só desvincula (`icp_id = None`) em vez de apagar: aqui o objetivo
+    é corrigir uma importação de planilha malfeita e poder reimportar do
+    zero com as funcionalidades novas (cargo-alvo, fila de
+    enriquecimento, mapeamento de coluna) — reimportar só funciona se a
+    conta antiga sumir de verdade, senão o dedupe por nome reaproveita a
+    conta velha em vez de criar uma nova.
+
+    Recusa apagar (`RegraNegocioViolada`) se houver qualquer sinal de
+    trabalho real já feito na conta — negócio, mensagem, reunião etc.
+    (ver `_sinais_de_trabalho_real`). Só contas recém-importadas e nunca
+    trabalhadas podem ser removidas por aqui."""
+    conta = obter(db, tenant_id, conta_id)
+    decisor_ids = [
+        decisor_id for (decisor_id,) in db.query(Decisor.id).filter_by(tenant_id=tenant_id, conta_id=conta.id).all()
+    ]
+
+    sinais = _sinais_de_trabalho_real(db, tenant_id, conta, decisor_ids)
+    if sinais:
+        raise RegraNegocioViolada(
+            f'"{conta.nome}" já tem {", ".join(sinais)} — só contas recém-importadas, sem histórico de '
+            f"trabalho, podem ser apagadas pra reimportar."
+        )
+
+    db.query(CampoEnriquecido).filter_by(conta_id=conta.id).delete(synchronize_session=False)
+    db.query(FilaEnriquecimentoConta).filter_by(tenant_id=tenant_id, conta_id=conta.id).delete(synchronize_session=False)
+    db.query(InteracaoConta).filter_by(tenant_id=tenant_id, conta_id=conta.id).delete(synchronize_session=False)
+    db.query(ContaFranquiaConsumo).filter_by(tenant_id=tenant_id, conta_id=conta.id).delete(synchronize_session=False)
+    db.query(DescarteConta).filter_by(tenant_id=tenant_id, conta_id=conta.id).delete(synchronize_session=False)
+    if decisor_ids:
+        db.query(Decisor).filter(Decisor.id.in_(decisor_ids)).delete(synchronize_session=False)
+
+    auditoria_service.registrar(db, tenant_id, "conta_excluida", "conta", conta.id, ator_id, {"nome": conta.nome})
+    db.delete(conta)
+    db.commit()
+
+
+def excluir_lote_por_lista(db: Session, tenant_id: str, ator_id: str | None, lista_prospeccao_id: int) -> dict:
+    """Apaga em lote todas as contas de uma Lista de Prospecção — cada
+    conta passa pelo mesmo crivo de `excluir` (recusa individual não
+    aborta o lote inteiro, só aquela conta continua existindo)."""
+    contas = listar_por_lista(db, tenant_id, lista_prospeccao_id)
+    apagadas = 0
+    bloqueadas: list[dict] = []
+    for conta in contas:
+        try:
+            excluir(db, tenant_id, ator_id, conta.id)
+            apagadas += 1
+        except RegraNegocioViolada as erro:
+            bloqueadas.append({"conta_id": conta.id, "nome": conta.nome, "motivo": str(erro)})
+    return {"apagadas": apagadas, "bloqueadas": len(bloqueadas), "detalhes_bloqueadas": bloqueadas}
 
 
 def _normalizar_dominio(dominio: str | None) -> str | None:

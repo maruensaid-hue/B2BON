@@ -224,6 +224,9 @@ export function Prospeccao() {
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [confirmandoExclusaoIcpId, setConfirmandoExclusaoIcpId] = useState<number | null>(null);
   const [excluindoIcp, setExcluindoIcp] = useState(false);
+  const [confirmandoExclusaoContaId, setConfirmandoExclusaoContaId] = useState<number | null>(null);
+  const [confirmandoExclusaoLoteLista, setConfirmandoExclusaoLoteLista] = useState(false);
+  const [excluindoConta, setExcluindoConta] = useState(false);
 
   const [textoParticipantes, setTextoParticipantes] = useState("");
   const [colunasDetectadas, setColunasDetectadas] = useState<string[]>([]);
@@ -434,6 +437,47 @@ export function Prospeccao() {
 
   const contasVisiveis = origemContas === "icp" ? contas : origemContas === "lista" ? contasDaLista : leads;
 
+  async function recarregarContasVisiveis() {
+    if (origemContas === "icp" && icpSelecionadoId !== null) await carregarContas(icpSelecionadoId);
+    else if (origemContas === "lista" && listaSelecionadaId !== null) await carregarContasDaLista(listaSelecionadaId);
+    else if (origemContas === "leads") await carregarLeads();
+  }
+
+  async function excluirConta(contaId: number) {
+    if (excluindoConta) return;
+    setExcluindoConta(true);
+    try {
+      await api.delete(`/contas/${contaId}`);
+      setConfirmandoExclusaoContaId(null);
+      await recarregarContasVisiveis();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir a conta.");
+    } finally {
+      setExcluindoConta(false);
+    }
+  }
+
+  async function excluirLoteDaLista() {
+    if (listaSelecionadaId === null || excluindoConta) return;
+    setExcluindoConta(true);
+    try {
+      const resultado = await api.delete<{ apagadas: number; bloqueadas: number }>(
+        `/listas-prospeccao/${listaSelecionadaId}/contas`,
+      );
+      setConfirmandoExclusaoLoteLista(false);
+      const avisoBloqueio =
+        resultado.bloqueadas > 0
+          ? ` ${resultado.bloqueadas} não foram apagadas por já ter histórico de trabalho (negócio, mensagem, reunião etc.).`
+          : "";
+      setMensagem(`${resultado.apagadas} conta(s) apagada(s).${avisoBloqueio}`);
+      await carregarContasDaLista(listaSelecionadaId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir as contas da lista.");
+    } finally {
+      setExcluindoConta(false);
+    }
+  }
+
   return (
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
@@ -595,10 +639,26 @@ export function Prospeccao() {
                   {listaSelecionada.icp_id ? "Vinculada a um ICP" : "Sem ICP vinculado"} · Cargos-alvo:{" "}
                   {listaSelecionada.cargos_alvo?.join(", ") || "padrão (C-Level, Diretoria, Gerência, Head)"}
                 </div>
-                <div className="ml-auto flex gap-2">
+                <div className="ml-auto flex items-center gap-2">
                   <Button size="sm" onClick={() => setModalImportarAberto(true)}>
                     Importar participantes
                   </Button>
+                  {contasDaLista.length > 0 &&
+                    (confirmandoExclusaoLoteLista ? (
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <span className="text-muted">Apagar todas as {contasDaLista.length} conta(s)?</span>
+                        <Button size="sm" variant="danger" disabled={excluindoConta} onClick={excluirLoteDaLista}>
+                          {excluindoConta ? "Excluindo..." : "Confirmar"}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setConfirmandoExclusaoLoteLista(false)}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button size="sm" variant="danger" onClick={() => setConfirmandoExclusaoLoteLista(true)}>
+                        Excluir todas
+                      </Button>
+                    ))}
                 </div>
               </div>
             )}
@@ -644,9 +704,25 @@ export function Prospeccao() {
                   <Badge tone={statusTone(conta.status)}>{conta.status}</Badge>
                 </td>
                 <td className="p-2">
-                  <Button size="sm" variant="ghost" onClick={() => setContaSelecionadaId(conta.id)}>
-                    Ver detalhes
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => setContaSelecionadaId(conta.id)}>
+                      Ver detalhes
+                    </Button>
+                    {confirmandoExclusaoContaId === conta.id ? (
+                      <>
+                        <Button size="sm" variant="danger" disabled={excluindoConta} onClick={() => excluirConta(conta.id)}>
+                          {excluindoConta ? "Excluindo..." : "Confirmar"}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setConfirmandoExclusaoContaId(null)}>
+                          Cancelar
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="danger" onClick={() => setConfirmandoExclusaoContaId(conta.id)}>
+                        Excluir
+                      </Button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

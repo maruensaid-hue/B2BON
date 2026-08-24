@@ -4,7 +4,11 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_ator_id, get_db, get_graph_client, get_tenant_id
 from app.graph.client import Neo4jClient
 from app.schemas.conta import ContaSchema, ImportarParticipantesRequestSchema, ImportarParticipantesResponseSchema
-from app.schemas.lista_prospeccao import ListaProspeccaoCreateSchema, ListaProspeccaoSchema
+from app.schemas.lista_prospeccao import (
+    ExcluirContasResponseSchema,
+    ListaProspeccaoCreateSchema,
+    ListaProspeccaoSchema,
+)
 from app.services import conta_service, lista_prospeccao_service
 
 router = APIRouter(prefix="/listas-prospeccao", tags=["listas-prospeccao"])
@@ -46,3 +50,21 @@ def importar_participantes(
 ) -> ImportarParticipantesResponseSchema:
     resultado = conta_service.importar_participantes(db, tenant_id, ator_id, lista_id, dados.participantes, graph)
     return ImportarParticipantesResponseSchema(**resultado)
+
+
+@router.delete("/{lista_id}/contas", response_model=ExcluirContasResponseSchema)
+def excluir_contas_da_lista(
+    lista_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ExcluirContasResponseSchema:
+    """Apaga em lote as contas desta lista que ainda não têm nenhum sinal
+    de trabalho real — pra corrigir uma importação malfeita e poder
+    reimportar do zero com cargo-alvo/mapeamento de coluna. Conta com
+    negócio/mensagem/reunião etc. já registrado não é apagada; volta na
+    resposta em `detalhes_bloqueadas`, o lote inteiro não é abortado por
+    causa de uma conta bloqueada."""
+    lista_prospeccao_service.obter(db, tenant_id, lista_id)  # 404 se não existir/não for do tenant
+    resultado = conta_service.excluir_lote_por_lista(db, tenant_id, ator_id, lista_id)
+    return ExcluirContasResponseSchema(**resultado)

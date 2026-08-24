@@ -273,6 +273,21 @@ def descartar_conta(
     return descarte_service.descartar(db, tenant_id, ator_id, conta_id, dados.motivo)
 
 
+@router.delete("/contas/{conta_id}", status_code=204)
+def excluir_conta(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Apaga a conta de verdade (não confundir com descartar) — só
+    permite se a conta ainda não tiver nenhum sinal de trabalho real
+    (negócio, mensagem, reunião etc.); pensado pra corrigir uma
+    importação de planilha malfeita e poder reimportar do zero."""
+    conta_service.excluir(db, tenant_id, ator_id, conta_id)
+    return Response(status_code=204)
+
+
 @router.get("/contas/{conta_id}/export/pdf")
 def exportar_conta_pdf(
     conta_id: int,
