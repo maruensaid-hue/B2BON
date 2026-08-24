@@ -1,6 +1,8 @@
 import unicodedata
 
 from app.models.conta import Conta
+from app.models.estagio_funil import EstagioFunil
+from app.models.negocio import Negocio
 from app.models.usuario import Usuario
 from app.providers.account_data.base import ContaCandidata, DecisorCandidato
 from app.providers.contact_enrichment.base import ContatoCandidato
@@ -560,6 +562,77 @@ def test_listar_leads_nao_traz_contas_de_icp(client, criar_icp, fake_account_dat
     leads = client.get("/api/v1/leads/contas").json()
 
     assert [lead["nome"] for lead in leads] == ["Lead Avulso"]
+
+
+def test_listar_leads_nao_traz_contas_de_lista_prospeccao(client):
+    """Mesma partição de test_listar_leads_nao_traz_contas_de_icp, agora
+    pra Lista de Prospecção: uma conta importada por planilha sem ICP
+    vinculado não pode aparecer duas vezes (na aba da lista e em
+    "Clientes Cadastrados")."""
+    lista = client.post("/api/v1/listas-prospeccao", json={"nome": "Evento Teste"}).json()
+    client.post(
+        f"/api/v1/listas-prospeccao/{lista['id']}/contas/importar-participantes",
+        json={"participantes": [{"nome": "Joana Silva", "empresa": "Alpha Tech"}]},
+    )
+    client.post("/api/v1/leads/contas", json={"nome": "Lead Avulso"})
+
+    leads = client.get("/api/v1/leads/contas").json()
+
+    assert [lead["nome"] for lead in leads] == ["Lead Avulso"]
+
+
+def test_excluir_todos_os_leads_via_api_super_admin(client):
+    """Client de teste já é super_admin por padrão."""
+    client.post("/api/v1/leads/contas", json={"nome": "Lead A"})
+    client.post("/api/v1/leads/contas", json={"nome": "Lead B"})
+
+    resposta = client.delete("/api/v1/leads/contas")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["apagadas"] == 2
+    assert corpo["bloqueadas"] == 0
+    assert client.get("/api/v1/leads/contas").json() == []
+
+
+def test_excluir_todos_os_leads_bloqueia_lead_com_negocio(client, db_session):
+    client.post("/api/v1/leads/contas", json={"nome": "Lead Livre"})
+    lead_com_negocio = client.post("/api/v1/leads/contas", json={"nome": "Lead Com Negocio"}).json()
+    estagio = EstagioFunil(tenant_id=TENANT_ID, nome="Descoberta", ordem=1, tipo="aberto")
+    db_session.add(estagio)
+    db_session.flush()
+    db_session.add(
+        Negocio(
+            tenant_id=TENANT_ID, conta_id=lead_com_negocio["id"], estagio_id=estagio.id,
+            nome="Oportunidade Z", valor=100.0, origem="manual",
+        )
+    )
+    db_session.commit()
+
+    resposta = client.delete("/api/v1/leads/contas")
+
+    corpo = resposta.json()
+    assert corpo["apagadas"] == 1
+    assert corpo["bloqueadas"] == 1
+    assert corpo["detalhes_bloqueadas"][0]["nome"] == "Lead Com Negocio"
+    restantes = client.get("/api/v1/leads/contas").json()
+    assert [c["nome"] for c in restantes] == ["Lead Com Negocio"]
+
+
+def test_excluir_todos_os_leads_negado_para_admin(client, criar_usuario_autenticado):
+    headers_admin = criar_usuario_autenticado(TENANT_ID, papel="admin", email="admin-nao-super@teste.com.br")
+
+    resposta = client.delete("/api/v1/leads/contas", headers=headers_admin)
+
+    assert resposta.status_code == 403
+
+
+def test_excluir_todos_os_leads_negado_para_user(client, criar_usuario_autenticado):
+    headers_user = criar_usuario_autenticado(TENANT_ID, papel="user", email="user-nao-super@teste.com.br")
+
+    resposta = client.delete("/api/v1/leads/contas", headers=headers_user)
+
+    assert resposta.status_code == 403
 
 
 def test_user_so_ve_seus_proprios_leads(client, db_session, criar_usuario_autenticado):

@@ -8,6 +8,7 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { Modal } from "@/components/ui/Modal";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export interface ICP {
   id: number;
@@ -204,6 +205,7 @@ function statusTone(status: string): "cyan" | "green" | "muted" {
 }
 
 export function Prospeccao() {
+  const { usuario } = useAuth();
   const [icps, setIcps] = useState<ICP[]>([]);
   const [icpSelecionadoId, setIcpSelecionadoId] = useState<number | null>(null);
   const [contas, setContas] = useState<Conta[]>([]);
@@ -226,6 +228,7 @@ export function Prospeccao() {
   const [excluindoIcp, setExcluindoIcp] = useState(false);
   const [confirmandoExclusaoContaId, setConfirmandoExclusaoContaId] = useState<number | null>(null);
   const [confirmandoExclusaoLoteLista, setConfirmandoExclusaoLoteLista] = useState(false);
+  const [confirmandoExclusaoLoteLeads, setConfirmandoExclusaoLoteLeads] = useState(false);
   const [excluindoConta, setExcluindoConta] = useState(false);
 
   const [textoParticipantes, setTextoParticipantes] = useState("");
@@ -478,6 +481,25 @@ export function Prospeccao() {
     }
   }
 
+  async function excluirLoteDeLeads() {
+    if (excluindoConta) return;
+    setExcluindoConta(true);
+    try {
+      const resultado = await api.delete<{ apagadas: number; bloqueadas: number }>("/leads/contas");
+      setConfirmandoExclusaoLoteLeads(false);
+      const avisoBloqueio =
+        resultado.bloqueadas > 0
+          ? ` ${resultado.bloqueadas} não foram apagadas por já ter histórico de trabalho (negócio, mensagem, reunião etc.).`
+          : "";
+      setMensagem(`${resultado.apagadas} conta(s) apagada(s).${avisoBloqueio}`);
+      await carregarLeads();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir os clientes cadastrados.");
+    } finally {
+      setExcluindoConta(false);
+    }
+  }
+
   return (
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
@@ -664,9 +686,30 @@ export function Prospeccao() {
             )}
           </>
         ) : (
-          <div className="text-[11px] text-muted">
-            Clientes já cadastrados no CRM sem estar vinculados a um ICP (indicação, evento, contato pessoal) —
-            cadastrados pela tela de Leads.
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-[11px] text-muted">
+              Clientes já cadastrados no CRM sem estar vinculados a um ICP (indicação, evento, contato pessoal) —
+              cadastrados pela tela de Leads.
+            </div>
+            {usuario?.papel === "super_admin" && leads.length > 0 && (
+              <div className="ml-auto">
+                {confirmandoExclusaoLoteLeads ? (
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    <span className="text-muted">Apagar todos os {leads.length} cliente(s) cadastrado(s)?</span>
+                    <Button size="sm" variant="danger" disabled={excluindoConta} onClick={excluirLoteDeLeads}>
+                      {excluindoConta ? "Excluindo..." : "Confirmar"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmandoExclusaoLoteLeads(false)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="danger" onClick={() => setConfirmandoExclusaoLoteLeads(true)}>
+                    Excluir todos
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </Card>

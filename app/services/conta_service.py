@@ -244,8 +244,16 @@ def criar_a_partir_de_convite_rede_social(
 def _leads_visiveis(db: Session, tenant_id: str, usuario: Usuario, vendedor_usuario_id: int | None):
     """Mesma regra de escopo por papel de `saude_conta_service._contas_visiveis`
     (user só vê as próprias contas; admin/super_admin veem todas e podem
-    filtrar por vendedor), restrita a contas sem ICP (leads avulsos)."""
-    query = db.query(Conta).filter_by(tenant_id=tenant_id).filter(Conta.icp_id.is_(None))
+    filtrar por vendedor), restrita a contas sem ICP (leads avulsos) e sem
+    Lista de Prospecção — senão uma conta importada por planilha sem ICP
+    vinculado apareceria duas vezes (na aba da lista e em "Clientes
+    Cadastrados"), e "excluir todos os leads" varreria contas que já têm
+    seu próprio botão de exclusão em lote na aba da lista."""
+    query = (
+        db.query(Conta)
+        .filter_by(tenant_id=tenant_id)
+        .filter(Conta.icp_id.is_(None), Conta.lista_prospeccao_id.is_(None))
+    )
     if usuario.papel == "user":
         query = query.filter_by(vendedor_usuario_id=usuario.id)
     elif vendedor_usuario_id is not None:
@@ -515,6 +523,24 @@ def excluir_lote_por_lista(db: Session, tenant_id: str, ator_id: str | None, lis
     conta passa pelo mesmo crivo de `excluir` (recusa individual não
     aborta o lote inteiro, só aquela conta continua existindo)."""
     contas = listar_por_lista(db, tenant_id, lista_prospeccao_id)
+    apagadas = 0
+    bloqueadas: list[dict] = []
+    for conta in contas:
+        try:
+            excluir(db, tenant_id, ator_id, conta.id)
+            apagadas += 1
+        except RegraNegocioViolada as erro:
+            bloqueadas.append({"conta_id": conta.id, "nome": conta.nome, "motivo": str(erro)})
+    return {"apagadas": apagadas, "bloqueadas": len(bloqueadas), "detalhes_bloqueadas": bloqueadas}
+
+
+def excluir_lote_leads(db: Session, tenant_id: str, ator_id: str | None, usuario: Usuario) -> dict:
+    """Apaga em lote todos os leads avulsos (sem ICP, sem Lista de
+    Prospecção) — restrito a super_admin na rota (`app/api/v1/leads.py`),
+    pedido do usuário: só ele pode limpar tudo de uma vez em "Clientes
+    Cadastrados". Mesmo crivo de `excluir`, mesmo raciocínio de
+    `excluir_lote_por_lista` (bloqueio individual não aborta o lote)."""
+    contas = listar_leads(db, tenant_id, usuario)
     apagadas = 0
     bloqueadas: list[dict] = []
     for conta in contas:
