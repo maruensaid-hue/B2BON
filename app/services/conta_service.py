@@ -477,7 +477,158 @@ def _sinais_de_trabalho_real(db: Session, tenant_id: str, conta: Conta, decisor_
             sinais.append("alerta de detrator")
         if db.query(QualificacaoScore).filter(QualificacaoScore.decisor_id.in_(decisor_ids)).first() is not None:
             sinais.append("score de qualificação")
+    if db.query(Indicacao).filter(Indicacao.promotor_conta_id == conta.id).first() is not None:
+        sinais.append("indicação (como promotora)")
+    if db.query(Indicacao).filter(Indicacao.conta_gerada_id == conta.id).first() is not None:
+        sinais.append("indicação (conta gerada por indicação)")
     return sinais
+
+
+def _mapear_bloqueios_em_lote(db: Session, contas: list[Conta]) -> dict[int, list[str]]:
+    """Mesmo critério de `_sinais_de_trabalho_real`, mas para muitas contas de
+    uma vez só, com poucas queries em lote (`IN`) em vez de uma rodada de ~13
+    queries POR conta. Necessário pra lotes de milhares de contas (ex.:
+    "excluir todos os leads" com 6 mil contas) não estourarem o tempo do
+    request — a versão conta-por-conta escala em rodadas de ida-e-volta ao
+    banco, não em quantidade de dado."""
+    conta_ids = [conta.id for conta in contas]
+    bloqueios: dict[int, list[str]] = {conta_id: [] for conta_id in conta_ids}
+    if not conta_ids:
+        return bloqueios
+
+    def marcar_por_conta(ids_conta_afetadas, rotulo: str) -> None:
+        for conta_id in ids_conta_afetadas:
+            if conta_id in bloqueios:
+                bloqueios[conta_id].append(rotulo)
+
+    marcar_por_conta(
+        {c for (c,) in db.query(Negocio.conta_id).filter(Negocio.conta_id.in_(conta_ids)).distinct()},
+        "negócio no CRM",
+    )
+    marcar_por_conta(
+        {c for (c,) in db.query(Atividade.conta_id).filter(Atividade.conta_id.in_(conta_ids)).distinct()},
+        "atividade registrada",
+    )
+    marcar_por_conta(
+        {c for (c,) in db.query(Cadencia.conta_id).filter(Cadencia.conta_id.in_(conta_ids)).distinct()},
+        "cadência de prospecção",
+    )
+    marcar_por_conta(
+        {
+            c
+            for (c,) in db.query(Indicacao.promotor_conta_id)
+            .filter(Indicacao.promotor_conta_id.in_(conta_ids))
+            .distinct()
+        },
+        "indicação (como promotora)",
+    )
+    marcar_por_conta(
+        {
+            c
+            for (c,) in db.query(Indicacao.conta_gerada_id)
+            .filter(Indicacao.conta_gerada_id.in_(conta_ids))
+            .distinct()
+        },
+        "indicação (conta gerada por indicação)",
+    )
+
+    decisores = db.query(Decisor.id, Decisor.conta_id).filter(Decisor.conta_id.in_(conta_ids)).all()
+    decisor_para_conta = dict(decisores)
+    decisor_ids = list(decisor_para_conta.keys())
+
+    if decisor_ids:
+
+        def marcar_por_decisor(ids_decisor_afetados, rotulo: str) -> None:
+            contas_afetadas = {decisor_para_conta[d] for d in ids_decisor_afetados if d in decisor_para_conta}
+            marcar_por_conta(contas_afetadas, rotulo)
+
+        marcar_por_decisor(
+            {d for (d,) in db.query(Mensagem.decisor_id).filter(Mensagem.decisor_id.in_(decisor_ids)).distinct()},
+            "mensagem enviada",
+        )
+        marcar_por_decisor(
+            {d for (d,) in db.query(Reuniao.decisor_id).filter(Reuniao.decisor_id.in_(decisor_ids)).distinct()},
+            "reunião agendada",
+        )
+        marcar_por_decisor(
+            {
+                d
+                for (d,) in db.query(ConversaQualificacao.decisor_id)
+                .filter(ConversaQualificacao.decisor_id.in_(decisor_ids))
+                .distinct()
+            },
+            "conversa de qualificação",
+        )
+        marcar_por_decisor(
+            {
+                d
+                for (d,) in db.query(PesquisaNps.decisor_id).filter(PesquisaNps.decisor_id.in_(decisor_ids)).distinct()
+            },
+            "pesquisa de NPS",
+        )
+        marcar_por_decisor(
+            {
+                d
+                for (d,) in db.query(TarefaLinkedin.decisor_id)
+                .filter(TarefaLinkedin.decisor_id.in_(decisor_ids))
+                .distinct()
+            },
+            "tarefa de LinkedIn",
+        )
+        marcar_por_decisor(
+            {
+                d
+                for (d,) in db.query(Indicacao.promotor_decisor_id)
+                .filter(Indicacao.promotor_decisor_id.in_(decisor_ids))
+                .distinct()
+            },
+            "indicação",
+        )
+        marcar_por_decisor(
+            {
+                d
+                for (d,) in db.query(CampanhaDestinatario.decisor_id)
+                .filter(CampanhaDestinatario.decisor_id.in_(decisor_ids))
+                .distinct()
+            },
+            "campanha de e-mail/WhatsApp",
+        )
+        marcar_por_decisor(
+            {
+                d
+                for (d,) in db.query(AlertaDetrator.decisor_id)
+                .filter(AlertaDetrator.decisor_id.in_(decisor_ids))
+                .distinct()
+            },
+            "alerta de detrator",
+        )
+        marcar_por_decisor(
+            {
+                d
+                for (d,) in db.query(QualificacaoScore.decisor_id)
+                .filter(QualificacaoScore.decisor_id.in_(decisor_ids))
+                .distinct()
+            },
+            "score de qualificação",
+        )
+
+    return bloqueios
+
+
+def mapear_elegibilidade_exclusao(db: Session, contas: list[Conta]) -> list[dict]:
+    """Pré-visualização pro frontend: pra cada conta, diz se ela pode ser
+    apagada ou não (e por quê), sem apagar nada — usado pra montar a lista
+    com caixas de seleção antes de confirmar uma exclusão em lote."""
+    bloqueios = _mapear_bloqueios_em_lote(db, contas)
+    return [
+        {
+            "conta_id": conta.id,
+            "nome": conta.nome,
+            "bloqueada": bool(bloqueios[conta.id]),
+            "motivo": ", ".join(bloqueios[conta.id]) if bloqueios[conta.id] else None,
+        }
+        for conta in contas
+    ]
 
 
 def excluir(db: Session, tenant_id: str, ator_id: str | None, conta_id: int) -> None:
@@ -518,38 +669,158 @@ def excluir(db: Session, tenant_id: str, ator_id: str | None, conta_id: int) -> 
     db.commit()
 
 
-def excluir_lote_por_lista(db: Session, tenant_id: str, ator_id: str | None, lista_prospeccao_id: int) -> dict:
-    """Apaga em lote todas as contas de uma Lista de Prospecção — cada
-    conta passa pelo mesmo crivo de `excluir` (recusa individual não
-    aborta o lote inteiro, só aquela conta continua existindo)."""
+_TAMANHO_LOTE_EXCLUSAO = 500
+
+
+def _excluir_contas_com_bloqueios(
+    db: Session, tenant_id: str, ator_id: str | None, contas: list[Conta], bloqueios: dict[int, list[str]]
+) -> dict:
+    """Motor comum de exclusão em lote: dado um mapa pronto de bloqueios
+    (conta_id -> lista de motivos, vazia = elegível), apaga as elegíveis em
+    lotes de `_TAMANHO_LOTE_EXCLUSAO` com `DELETE ... WHERE id IN (...)`,
+    não um `db.delete()`+`commit()` por conta — com milhares de contas, o
+    caminho conta-por-conta multiplica idas-e-voltas ao banco a ponto de
+    estourar o tempo do request (foi o que aconteceu com 6200 leads: o
+    request nem chegava a terminar). O critério de bloqueio em si fica por
+    conta de quem chama (`_mapear_bloqueios_em_lote` pro crivo padrão do
+    produto, ou um critério pontual mais solto como
+    `_mapear_protecao_para_limpeza_leads`)."""
+    elegiveis = [conta for conta in contas if not bloqueios[conta.id]]
+    bloqueadas = [
+        {
+            "conta_id": conta.id,
+            "nome": conta.nome,
+            "motivo": f'"{conta.nome}" já tem {", ".join(bloqueios[conta.id])}.',
+        }
+        for conta in contas
+        if bloqueios[conta.id]
+    ]
+
+    apagadas = 0
+    for inicio in range(0, len(elegiveis), _TAMANHO_LOTE_EXCLUSAO):
+        lote = elegiveis[inicio : inicio + _TAMANHO_LOTE_EXCLUSAO]
+        ids_lote = [conta.id for conta in lote]
+        decisor_ids_lote = [
+            decisor_id for (decisor_id,) in db.query(Decisor.id).filter(Decisor.conta_id.in_(ids_lote)).all()
+        ]
+
+        db.query(CampoEnriquecido).filter(CampoEnriquecido.conta_id.in_(ids_lote)).delete(synchronize_session=False)
+        db.query(FilaEnriquecimentoConta).filter(FilaEnriquecimentoConta.conta_id.in_(ids_lote)).delete(
+            synchronize_session=False
+        )
+        db.query(InteracaoConta).filter(InteracaoConta.conta_id.in_(ids_lote)).delete(synchronize_session=False)
+        db.query(ContaFranquiaConsumo).filter(ContaFranquiaConsumo.conta_id.in_(ids_lote)).delete(
+            synchronize_session=False
+        )
+        db.query(DescarteConta).filter(DescarteConta.conta_id.in_(ids_lote)).delete(synchronize_session=False)
+        if decisor_ids_lote:
+            db.query(Decisor).filter(Decisor.id.in_(decisor_ids_lote)).delete(synchronize_session="evaluate")
+
+        for conta in lote:
+            auditoria_service.registrar(db, tenant_id, "conta_excluida", "conta", conta.id, ator_id, {"nome": conta.nome})
+        db.query(Conta).filter(Conta.id.in_(ids_lote)).delete(synchronize_session="evaluate")
+        db.commit()
+        apagadas += len(lote)
+
+    return {"apagadas": apagadas, "bloqueadas": len(bloqueadas), "detalhes_bloqueadas": bloqueadas}
+
+
+def _excluir_contas_em_lote(db: Session, tenant_id: str, ator_id: str | None, contas: list[Conta]) -> dict:
+    """Aplica o crivo padrão do produto (`_mapear_bloqueios_em_lote`) antes de
+    apagar — usado por `excluir_lote_por_lista`/`excluir_lote_leads`."""
+    bloqueios = _mapear_bloqueios_em_lote(db, contas)
+    return _excluir_contas_com_bloqueios(db, tenant_id, ator_id, contas, bloqueios)
+
+
+def excluir_lote_por_lista(
+    db: Session, tenant_id: str, ator_id: str | None, lista_prospeccao_id: int, conta_ids: list[int] | None = None
+) -> dict:
+    """Apaga em lote as contas de uma Lista de Prospecção. Se `conta_ids` for
+    informado (seleção manual feita no frontend a partir da pré-visualização
+    de `mapear_elegibilidade_exclusao`), restringe às contas escolhidas —
+    senão, tenta todas as contas da lista."""
     contas = listar_por_lista(db, tenant_id, lista_prospeccao_id)
-    apagadas = 0
-    bloqueadas: list[dict] = []
-    for conta in contas:
-        try:
-            excluir(db, tenant_id, ator_id, conta.id)
-            apagadas += 1
-        except RegraNegocioViolada as erro:
-            bloqueadas.append({"conta_id": conta.id, "nome": conta.nome, "motivo": str(erro)})
-    return {"apagadas": apagadas, "bloqueadas": len(bloqueadas), "detalhes_bloqueadas": bloqueadas}
+    if conta_ids is not None:
+        ids_selecionados = set(conta_ids)
+        contas = [conta for conta in contas if conta.id in ids_selecionados]
+    return _excluir_contas_em_lote(db, tenant_id, ator_id, contas)
 
 
-def excluir_lote_leads(db: Session, tenant_id: str, ator_id: str | None, usuario: Usuario) -> dict:
-    """Apaga em lote todos os leads avulsos (sem ICP, sem Lista de
-    Prospecção) — restrito a super_admin na rota (`app/api/v1/leads.py`),
-    pedido do usuário: só ele pode limpar tudo de uma vez em "Clientes
-    Cadastrados". Mesmo crivo de `excluir`, mesmo raciocínio de
-    `excluir_lote_por_lista` (bloqueio individual não aborta o lote)."""
+def excluir_lote_leads(
+    db: Session, tenant_id: str, ator_id: str | None, usuario: Usuario, conta_ids: list[int] | None = None
+) -> dict:
+    """Apaga em lote os leads avulsos (sem ICP, sem Lista de Prospecção) —
+    restrito a super_admin na rota (`app/api/v1/leads.py`), pedido do
+    usuário: só ele pode limpar tudo de uma vez em "Clientes Cadastrados".
+    Se `conta_ids` for informado (seleção manual feita no frontend a partir
+    da pré-visualização de `mapear_elegibilidade_exclusao`), restringe às
+    contas escolhidas — senão, tenta todos os leads visíveis."""
     contas = listar_leads(db, tenant_id, usuario)
-    apagadas = 0
-    bloqueadas: list[dict] = []
-    for conta in contas:
-        try:
-            excluir(db, tenant_id, ator_id, conta.id)
-            apagadas += 1
-        except RegraNegocioViolada as erro:
-            bloqueadas.append({"conta_id": conta.id, "nome": conta.nome, "motivo": str(erro)})
-    return {"apagadas": apagadas, "bloqueadas": len(bloqueadas), "detalhes_bloqueadas": bloqueadas}
+    if conta_ids is not None:
+        ids_selecionados = set(conta_ids)
+        contas = [conta for conta in contas if conta.id in ids_selecionados]
+    return _excluir_contas_em_lote(db, tenant_id, ator_id, contas)
+
+
+def _mapear_protecao_para_limpeza_leads(db: Session, contas: list[Conta]) -> dict[int, list[str]]:
+    """Critério pontual e mais solto que `_mapear_bloqueios_em_lote`, só pra
+    a limpeza avulsa de "Clientes Cadastrados" pedida em 2026-08-24: só
+    protege (não apaga) quem já tem oportunidade no CRM OU já foi
+    enriquecida (dado de site via `CampoEnriquecido`, ou qualquer
+    contato/decisor vinculado). Atividade/mensagem/reunião/cadência
+    isoladas, que bloqueariam em `_mapear_bloqueios_em_lote`, NÃO protegem
+    aqui de propósito — é uma limpeza deliberadamente mais agressiva pra
+    zerar volume de import malfeito rápido, não o crivo padrão do produto
+    usado por `excluir`/`excluir_lote_leads`."""
+    conta_ids = [conta.id for conta in contas]
+    protecoes: dict[int, list[str]] = {conta_id: [] for conta_id in conta_ids}
+    if not conta_ids:
+        return protecoes
+
+    def marcar(ids_afetadas, rotulo: str) -> None:
+        for conta_id in ids_afetadas:
+            if conta_id in protecoes:
+                protecoes[conta_id].append(rotulo)
+
+    marcar(
+        {c for (c,) in db.query(Negocio.conta_id).filter(Negocio.conta_id.in_(conta_ids)).distinct()},
+        "oportunidade no CRM",
+    )
+    marcar(
+        {
+            c
+            for (c,) in db.query(CampoEnriquecido.conta_id)
+            .filter(CampoEnriquecido.conta_id.in_(conta_ids))
+            .distinct()
+        },
+        "dados do site",
+    )
+    marcar(
+        {c for (c,) in db.query(Decisor.conta_id).filter(Decisor.conta_id.in_(conta_ids)).distinct()},
+        "contato/decisor",
+    )
+    return protecoes
+
+
+def prever_limpeza_leads_nao_trabalhados(db: Session, tenant_id: str, usuario: Usuario) -> dict:
+    """Pré-visualização (sem apagar nada) de quantos leads seriam apagados
+    pela limpeza avulsa e quantos ficariam protegidos."""
+    contas = listar_leads(db, tenant_id, usuario)
+    protecoes = _mapear_protecao_para_limpeza_leads(db, contas)
+    serao_apagadas = sum(1 for conta in contas if not protecoes[conta.id])
+    return {"total": len(contas), "serao_apagadas": serao_apagadas, "protegidas": len(contas) - serao_apagadas}
+
+
+def executar_limpeza_leads_nao_trabalhados(db: Session, tenant_id: str, ator_id: str | None, usuario: Usuario) -> dict:
+    """Executa a limpeza avulsa com o critério mais solto de
+    `_mapear_protecao_para_limpeza_leads` — pedido explícito do usuário
+    2026-08-24 pra zerar rápido o volume de "Clientes Cadastrados" mal
+    importado, mantendo só quem já tem oportunidade ou já foi enriquecida.
+    Não confundir com `excluir_lote_leads` (crivo padrão do produto, mais
+    restritivo, permanente) numa sessão futura."""
+    contas = listar_leads(db, tenant_id, usuario)
+    protecoes = _mapear_protecao_para_limpeza_leads(db, contas)
+    return _excluir_contas_com_bloqueios(db, tenant_id, ator_id, contas, protecoes)
 
 
 def _normalizar_dominio(dominio: str | None) -> str | None:

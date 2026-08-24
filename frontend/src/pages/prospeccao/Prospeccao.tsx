@@ -43,6 +43,19 @@ export interface ListaProspeccao {
   cargos_alvo: string[] | null;
 }
 
+interface ElegibilidadeConta {
+  conta_id: number;
+  nome: string;
+  bloqueada: boolean;
+  motivo: string | null;
+}
+
+interface PreviaLimpezaLeads {
+  total: number;
+  serao_apagadas: number;
+  protegidas: number;
+}
+
 interface Franquia {
   limite: number;
   usado: number;
@@ -228,8 +241,17 @@ export function Prospeccao() {
   const [excluindoIcp, setExcluindoIcp] = useState(false);
   const [confirmandoExclusaoContaId, setConfirmandoExclusaoContaId] = useState<number | null>(null);
   const [confirmandoExclusaoLoteLista, setConfirmandoExclusaoLoteLista] = useState(false);
-  const [confirmandoExclusaoLoteLeads, setConfirmandoExclusaoLoteLeads] = useState(false);
   const [excluindoConta, setExcluindoConta] = useState(false);
+
+  const [modalExclusaoLeadsAberto, setModalExclusaoLeadsAberto] = useState(false);
+  const [carregandoElegibilidadeLeads, setCarregandoElegibilidadeLeads] = useState(false);
+  const [elegibilidadeLeads, setElegibilidadeLeads] = useState<ElegibilidadeConta[]>([]);
+  const [selecaoExclusaoLeads, setSelecaoExclusaoLeads] = useState<Set<number>>(new Set());
+
+  const [modalLimpezaAberto, setModalLimpezaAberto] = useState(false);
+  const [carregandoPreviaLimpeza, setCarregandoPreviaLimpeza] = useState(false);
+  const [previaLimpeza, setPreviaLimpeza] = useState<PreviaLimpezaLeads | null>(null);
+  const [executandoLimpeza, setExecutandoLimpeza] = useState(false);
 
   const [textoParticipantes, setTextoParticipantes] = useState("");
   const [colunasDetectadas, setColunasDetectadas] = useState<string[]>([]);
@@ -481,15 +503,41 @@ export function Prospeccao() {
     }
   }
 
-  async function excluirLoteDeLeads() {
-    if (excluindoConta) return;
+  async function abrirModalExclusaoLeads() {
+    setModalExclusaoLeadsAberto(true);
+    setCarregandoElegibilidadeLeads(true);
+    try {
+      const itens = await api.get<ElegibilidadeConta[]>("/leads/contas/elegibilidade-exclusao");
+      setElegibilidadeLeads(itens);
+      setSelecaoExclusaoLeads(new Set(itens.filter((item) => !item.bloqueada).map((item) => item.conta_id)));
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível carregar os clientes para exclusão.");
+      setModalExclusaoLeadsAberto(false);
+    } finally {
+      setCarregandoElegibilidadeLeads(false);
+    }
+  }
+
+  function alternarSelecaoLead(contaId: number) {
+    setSelecaoExclusaoLeads((atual) => {
+      const proximo = new Set(atual);
+      if (proximo.has(contaId)) proximo.delete(contaId);
+      else proximo.add(contaId);
+      return proximo;
+    });
+  }
+
+  async function confirmarExclusaoLeadsSelecionados() {
+    if (excluindoConta || selecaoExclusaoLeads.size === 0) return;
     setExcluindoConta(true);
     try {
-      const resultado = await api.delete<{ apagadas: number; bloqueadas: number }>("/leads/contas");
-      setConfirmandoExclusaoLoteLeads(false);
+      const resultado = await api.delete<{ apagadas: number; bloqueadas: number }>("/leads/contas", {
+        conta_ids: Array.from(selecaoExclusaoLeads),
+      });
+      setModalExclusaoLeadsAberto(false);
       const avisoBloqueio =
         resultado.bloqueadas > 0
-          ? ` ${resultado.bloqueadas} não foram apagadas por já ter histórico de trabalho (negócio, mensagem, reunião etc.).`
+          ? ` ${resultado.bloqueadas} não foram apagadas por já ter histórico de trabalho vinculado (negócio, mensagem, reunião, indicação etc.).`
           : "";
       setMensagem(`${resultado.apagadas} conta(s) apagada(s).${avisoBloqueio}`);
       await carregarLeads();
@@ -497,6 +545,37 @@ export function Prospeccao() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível excluir os clientes cadastrados.");
     } finally {
       setExcluindoConta(false);
+    }
+  }
+
+  const totalElegiveisLeads = elegibilidadeLeads.filter((item) => !item.bloqueada).length;
+  const totalBloqueadosLeads = elegibilidadeLeads.filter((item) => item.bloqueada).length;
+
+  async function abrirModalLimpeza() {
+    setModalLimpezaAberto(true);
+    setCarregandoPreviaLimpeza(true);
+    try {
+      setPreviaLimpeza(await api.get<PreviaLimpezaLeads>("/leads/contas/preview-limpeza-nao-trabalhados"));
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível calcular a prévia da limpeza.");
+      setModalLimpezaAberto(false);
+    } finally {
+      setCarregandoPreviaLimpeza(false);
+    }
+  }
+
+  async function confirmarLimpeza() {
+    if (executandoLimpeza) return;
+    setExecutandoLimpeza(true);
+    try {
+      const resultado = await api.post<{ apagadas: number; bloqueadas: number }>("/leads/contas/limpeza-nao-trabalhados");
+      setModalLimpezaAberto(false);
+      setMensagem(`${resultado.apagadas} conta(s) apagada(s). ${resultado.bloqueadas} mantida(s) (oportunidade ou já enriquecida).`);
+      await carregarLeads();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível executar a limpeza.");
+    } finally {
+      setExecutandoLimpeza(false);
     }
   }
 
@@ -692,22 +771,13 @@ export function Prospeccao() {
               cadastrados pela tela de Leads.
             </div>
             {usuario?.papel === "super_admin" && leads.length > 0 && (
-              <div className="ml-auto">
-                {confirmandoExclusaoLoteLeads ? (
-                  <div className="flex items-center gap-1.5 text-[11px]">
-                    <span className="text-muted">Apagar todos os {leads.length} cliente(s) cadastrado(s)?</span>
-                    <Button size="sm" variant="danger" disabled={excluindoConta} onClick={excluirLoteDeLeads}>
-                      {excluindoConta ? "Excluindo..." : "Confirmar"}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setConfirmandoExclusaoLoteLeads(false)}>
-                      Cancelar
-                    </Button>
-                  </div>
-                ) : (
-                  <Button size="sm" variant="danger" onClick={() => setConfirmandoExclusaoLoteLeads(true)}>
-                    Excluir todos
-                  </Button>
-                )}
+              <div className="ml-auto flex gap-2">
+                <Button size="sm" variant="ghost" onClick={abrirModalLimpeza}>
+                  Limpeza rápida (mantém oportunidade/enriquecidas)
+                </Button>
+                <Button size="sm" variant="danger" onClick={abrirModalExclusaoLeads}>
+                  Excluir todos
+                </Button>
               </div>
             )}
           </div>
@@ -887,6 +957,102 @@ export function Prospeccao() {
             Criar lista
           </Button>
         </form>
+      </Modal>
+
+      <Modal title="Limpeza rápida de clientes cadastrados" open={modalLimpezaAberto} onClose={() => setModalLimpezaAberto(false)}>
+        {carregandoPreviaLimpeza || !previaLimpeza ? (
+          <div className="p-4 text-center text-[12px] text-muted">Calculando prévia...</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className="text-[11px] text-muted">
+              Critério mais solto que o "Excluir todos" normal: mantém só quem já tem <b>oportunidade no CRM</b> ou
+              já foi <b>enriquecida</b> (dado de site ou algum contato/decisor vinculado). Diferente do "Excluir
+              todos", aqui atividade, mensagem ou reunião registradas <b>sozinhas não protegem</b> a conta — se não
+              tiver oportunidade nem enriquecimento, é apagada mesmo assim.
+            </div>
+            <div className="rounded-md border border-border bg-surf2 p-3 text-[12px]">
+              <div>
+                Total de clientes cadastrados: <b>{previaLimpeza.total}</b>
+              </div>
+              <div className="text-red">
+                Serão apagados: <b>{previaLimpeza.serao_apagadas}</b>
+              </div>
+              <div className="text-green">
+                Vão ficar (oportunidade ou enriquecida): <b>{previaLimpeza.protegidas}</b>
+              </div>
+            </div>
+            <Button
+              variant="danger"
+              className="w-full justify-center"
+              disabled={executandoLimpeza || previaLimpeza.serao_apagadas === 0}
+              onClick={confirmarLimpeza}
+            >
+              {executandoLimpeza ? "Executando..." : `Apagar ${previaLimpeza.serao_apagadas} conta(s) agora`}
+            </Button>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        title="Excluir clientes cadastrados"
+        open={modalExclusaoLeadsAberto}
+        onClose={() => setModalExclusaoLeadsAberto(false)}
+      >
+        {carregandoElegibilidadeLeads ? (
+          <div className="p-4 text-center text-[12px] text-muted">Verificando o que pode ser apagado...</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className="text-[11px] text-muted">
+              {totalElegiveisLeads} podem ser apagados agora. {totalBloqueadosLeads} já têm negócio, mensagem,
+              reunião, indicação ou outro histórico vinculado — vêm desmarcados abaixo e não são apagados mesmo que
+              você marque a caixa. Desmarque quem você quiser manter mesmo estando elegível.
+            </div>
+            <div className="flex items-center gap-2 border-b border-border pb-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setSelecaoExclusaoLeads(
+                    new Set(elegibilidadeLeads.filter((item) => !item.bloqueada).map((item) => item.conta_id)),
+                  )
+                }
+              >
+                Selecionar elegíveis
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelecaoExclusaoLeads(new Set())}>
+                Limpar seleção
+              </Button>
+            </div>
+            <div className="flex max-h-72 flex-col gap-1 overflow-y-auto">
+              {elegibilidadeLeads.map((item) => (
+                <label
+                  key={item.conta_id}
+                  className={`flex items-start gap-2 rounded-md p-1.5 text-[12px] ${item.bloqueada ? "opacity-60" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    disabled={item.bloqueada}
+                    checked={selecaoExclusaoLeads.has(item.conta_id)}
+                    onChange={() => alternarSelecaoLead(item.conta_id)}
+                  />
+                  <span className="flex flex-col">
+                    <span className="font-semibold">{item.nome}</span>
+                    {item.bloqueada && <span className="text-[10px] text-muted">🔒 {item.motivo}</span>}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <Button
+              variant="danger"
+              className="w-full justify-center"
+              disabled={excluindoConta || selecaoExclusaoLeads.size === 0}
+              onClick={confirmarExclusaoLeadsSelecionados}
+            >
+              {excluindoConta ? "Excluindo..." : `Excluir ${selecaoExclusaoLeads.size} conta(s) selecionada(s)`}
+            </Button>
+          </div>
+        )}
       </Modal>
 
       <Modal

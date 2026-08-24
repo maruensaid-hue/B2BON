@@ -619,6 +619,84 @@ def test_excluir_todos_os_leads_bloqueia_lead_com_negocio(client, db_session):
     assert [c["nome"] for c in restantes] == ["Lead Com Negocio"]
 
 
+def test_elegibilidade_exclusao_leads_marca_bloqueados_sem_apagar(client, db_session):
+    client.post("/api/v1/leads/contas", json={"nome": "Lead Livre"})
+    lead_com_negocio = client.post("/api/v1/leads/contas", json={"nome": "Lead Com Negocio"}).json()
+    estagio = EstagioFunil(tenant_id=TENANT_ID, nome="Descoberta", ordem=1, tipo="aberto")
+    db_session.add(estagio)
+    db_session.flush()
+    db_session.add(
+        Negocio(
+            tenant_id=TENANT_ID, conta_id=lead_com_negocio["id"], estagio_id=estagio.id,
+            nome="Oportunidade W", valor=100.0, origem="manual",
+        )
+    )
+    db_session.commit()
+
+    resposta = client.get("/api/v1/leads/contas/elegibilidade-exclusao")
+
+    assert resposta.status_code == 200
+    itens = {item["nome"]: item for item in resposta.json()}
+    assert itens["Lead Livre"]["bloqueada"] is False
+    assert itens["Lead Com Negocio"]["bloqueada"] is True
+    assert "negócio" in itens["Lead Com Negocio"]["motivo"]
+    # Nada foi apagado — é só pré-visualização.
+    assert len(client.get("/api/v1/leads/contas").json()) == 2
+
+
+def test_excluir_todos_os_leads_com_selecao_manual_restringe_lote(client):
+    """Seleção manual (caixas de seleção no frontend) — só os ids enviados
+    são tentados, mesmo que outro lead elegível continue existindo."""
+    lead_a = client.post("/api/v1/leads/contas", json={"nome": "Lead A"}).json()
+    client.post("/api/v1/leads/contas", json={"nome": "Lead B"})
+
+    resposta = client.request("DELETE", "/api/v1/leads/contas", json={"conta_ids": [lead_a["id"]]})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["apagadas"] == 1
+    restantes = [c["nome"] for c in client.get("/api/v1/leads/contas").json()]
+    assert restantes == ["Lead B"]
+
+
+def test_limpeza_leads_nao_trabalhados_preview_e_execucao(client, db_session):
+    """Regra pontual pedida pelo usuário (2026-08-24): mais solta que
+    `DELETE /leads/contas` — só protege quem tem oportunidade OU já foi
+    enriquecida (site ou contato)."""
+    livre = client.post("/api/v1/leads/contas", json={"nome": "Livre Ltda"}).json()
+    com_negocio = client.post("/api/v1/leads/contas", json={"nome": "Com Negocio Ltda"}).json()
+    estagio = EstagioFunil(tenant_id=TENANT_ID, nome="Descoberta", ordem=1, tipo="aberto")
+    db_session.add(estagio)
+    db_session.flush()
+    db_session.add(
+        Negocio(
+            tenant_id=TENANT_ID, conta_id=com_negocio["id"], estagio_id=estagio.id,
+            nome="Oportunidade Limpeza", valor=100.0, origem="manual",
+        )
+    )
+    db_session.commit()
+
+    previa = client.get("/api/v1/leads/contas/preview-limpeza-nao-trabalhados").json()
+    assert previa == {"total": 2, "serao_apagadas": 1, "protegidas": 1}
+
+    resposta = client.post("/api/v1/leads/contas/limpeza-nao-trabalhados")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["apagadas"] == 1
+    assert corpo["bloqueadas"] == 1
+    restantes = [c["nome"] for c in client.get("/api/v1/leads/contas").json()]
+    assert restantes == ["Com Negocio Ltda"]
+    assert livre["id"] not in [c["id"] for c in client.get("/api/v1/leads/contas").json()]
+
+
+def test_limpeza_leads_nao_trabalhados_negada_para_admin(client, criar_usuario_autenticado):
+    headers_admin = criar_usuario_autenticado(TENANT_ID, papel="admin", email="admin-limpeza@teste.com.br")
+
+    assert client.get("/api/v1/leads/contas/preview-limpeza-nao-trabalhados", headers=headers_admin).status_code == 403
+    assert client.post("/api/v1/leads/contas/limpeza-nao-trabalhados", headers=headers_admin).status_code == 403
+
+
 def test_excluir_todos_os_leads_negado_para_admin(client, criar_usuario_autenticado):
     headers_admin = criar_usuario_autenticado(TENANT_ID, papel="admin", email="admin-nao-super@teste.com.br")
 

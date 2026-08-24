@@ -30,3 +30,24 @@ class ExcluirContasResponseSchema(BaseModel):
     apagadas: int
     bloqueadas: int
     detalhes_bloqueadas: list[ContaBloqueadaSchema]
+
+
+class ElegibilidadeContaSchema(BaseModel):
+    conta_id: int
+    nome: str
+    bloqueada: bool
+    motivo: str | None
+
+
+class ExcluirContasRequestSchema(BaseModel):
+    """Seleção manual opcional (caixas de seleção no frontend) — quando
+    omitido/`None`, tenta apagar todas as contas visíveis no escopo (todos
+    os leads, ou todas as contas da lista)."""
+
+    conta_ids: list[int] | None = None
+
+
+class PreviaLimpezaLeadsSchema(BaseModel):
+    total: int
+    serao_apagadas: int
+    protegidas: int
