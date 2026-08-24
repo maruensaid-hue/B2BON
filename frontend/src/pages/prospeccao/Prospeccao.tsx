@@ -53,6 +53,7 @@ interface ImportarParticipantesResponse {
   contas_criadas: number;
   contas_reaproveitadas: number;
   decisores_criados: number;
+  contas_enfileiradas_para_enriquecimento: number;
   contas: Conta[];
 }
 
@@ -307,8 +308,12 @@ export function Prospeccao() {
         { participantes },
       );
       setModalImportarAberto(false);
+      const avisoEnriquecimento =
+        resultado.contas_enfileiradas_para_enriquecimento > 0
+          ? ` ${resultado.contas_enfileiradas_para_enriquecimento} empresa(s) nova(s) entraram na fila de enriquecimento automático (site + contatos) — os dados aparecem aos poucos nos próximos minutos.`
+          : "";
       setMensagem(
-        `${resultado.contas_criadas} empresa(s) nova(s), ${resultado.contas_reaproveitadas} já existente(s) reaproveitada(s), ${resultado.decisores_criados} contato(s) adicionado(s).`,
+        `${resultado.contas_criadas} empresa(s) nova(s), ${resultado.contas_reaproveitadas} já existente(s) reaproveitada(s), ${resultado.decisores_criados} contato(s) adicionado(s).${avisoEnriquecimento}`,
       );
       await carregarContas(icpSelecionadoId);
     } catch (error) {

@@ -288,6 +288,7 @@ def importar_participantes_evento(
     contas_reaproveitadas: set[int] = set()
     decisores_criados = 0
     contas_tocadas: dict[int, Conta] = {}
+    ids_contas_novas: list[int] = []
 
     for participante in participantes:
         chave_empresa = _normalizar_nome(participante.empresa)
@@ -308,6 +309,7 @@ def importar_participantes_evento(
                 conta.neo4j_node_id = str(conta.id)
             contas_por_nome[chave_empresa] = conta
             contas_criadas += 1
+            ids_contas_novas.append(conta.id)
         elif conta.id not in contas_tocadas:
             contas_reaproveitadas.add(conta.id)
 
@@ -349,11 +351,23 @@ def importar_participantes_evento(
     for conta in contas_tocadas.values():
         db.refresh(conta)
 
+    if ids_contas_novas:
+        # Import local pra evitar ciclo de import entre os dois módulos
+        # (enriquecimento_fila_service chama de volta funções deste
+        # arquivo). Enriquecimento roda em lote pelo cron depois, nunca
+        # aqui — uma planilha grande travando o request esperando LLM/
+        # busca web/Lusha por empresa estouraria o timeout do proxy do
+        # Render (raio-X, mesmo raciocínio do recorte de CNPJ).
+        from app.services import enriquecimento_fila_service
+
+        enriquecimento_fila_service.enfileirar(db, tenant_id, ids_contas_novas)
+
     return {
         "contas_criadas": contas_criadas,
         "contas_reaproveitadas": len(contas_reaproveitadas),
         "decisores_criados": decisores_criados,
         "contas": list(contas_tocadas.values()),
+        "contas_enfileiradas_para_enriquecimento": len(ids_contas_novas),
     }
 
 

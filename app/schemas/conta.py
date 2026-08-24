@@ -101,6 +101,9 @@ class ImportarParticipantesResponseSchema(BaseModel):
     contas_reaproveitadas: int
     decisores_criados: int
     contas: list[ContaSchema]
+    # Só as contas novas entram na fila — as reaproveitadas presumivelmente
+    # já passaram por enriquecimento antes.
+    contas_enfileiradas_para_enriquecimento: int
 
 
 class CampoEnriquecidoSchema(BaseModel):

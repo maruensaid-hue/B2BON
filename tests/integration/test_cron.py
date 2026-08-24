@@ -1,6 +1,7 @@
 import pytest
 
 from app.core.config import settings
+from app.providers.web_search.base import ResultadoBusca
 
 SEGREDO = "segredo-de-teste-super-secreto"
 
@@ -124,3 +125,35 @@ def test_atualizar_recorte_cnpj_sem_icp_ativo_nao_executa(client, com_segredo_cr
 
     assert resposta.status_code == 200
     assert resposta.json() == {"executado": False, "motivo": "nenhum ICP ativo em nenhum tenant"}
+
+
+def test_processar_fila_enriquecimento_sem_segredo_configurado_recusa(client):
+    resposta = client.post("/api/v1/cron/processar-fila-enriquecimento")
+    assert resposta.status_code == 403
+
+
+def test_processar_fila_enriquecimento_sem_itens_pendentes(client, com_segredo_cron):
+    resposta = client.post("/api/v1/cron/processar-fila-enriquecimento", headers={"X-Cron-Secret": SEGREDO})
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"processados": 0, "concluidos": 0, "falhas": 0}
+
+
+def test_processar_fila_enriquecimento_processa_conta_importada(client, criar_icp, com_segredo_cron, fake_llm, fake_web_search):
+    """Fim a fim: importar planilha enfileira, o cron processa e enriquece
+    de verdade (mesma cadeia usada pelo botão "Enriquecer" de uma conta
+    só, só que disparada em lote)."""
+    icp = criar_icp()
+    client.post(
+        f"/api/v1/icp/{icp['id']}/contas/importar-participantes",
+        json={"participantes": [{"nome": "Joana Silva", "empresa": "Alpha Tech"}]},
+    )
+    fake_web_search.resultados = [ResultadoBusca(titulo="Alpha Tech", url="https://www.alphatech.com.br/", descricao="")]
+    fake_llm.definir_respostas(["porte: media"])
+
+    resposta = client.post("/api/v1/cron/processar-fila-enriquecimento", headers={"X-Cron-Secret": SEGREDO})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["processados"] == 1
+    assert corpo["concluidos"] == 1

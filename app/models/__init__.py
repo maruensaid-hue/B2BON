@@ -25,6 +25,7 @@ from app.models.decisor import Decisor
 from app.models.descarte_conta import DescarteConta
 from app.models.estagio_funil import EstagioFunil
 from app.models.faq_item import FaqItem
+from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
 from app.models.icp import ICP
 from app.models.indicacao import Indicacao
 from app.models.interacao_conta import InteracaoConta
@@ -122,4 +123,5 @@ __all__ = [
     "CnpjEstabelecimento",
     "CnpjSocio",
     "RecorteCnpjEstado",
+    "FilaEnriquecimentoConta",
 ]
