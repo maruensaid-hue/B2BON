@@ -14,6 +14,9 @@ class Conta(Base):
     # Nulo para leads avulsos (E-Leads) — cadastrados direto no CRM, fora do
     # recorte de um ICP (indicação, evento, contato pessoal).
     icp_id: Mapped[int | None] = mapped_column(ForeignKey("icp.id"), nullable=True)
+    # Lote de importação de planilha que originou esta conta (ex.: "Evento
+    # Febraban 2026") — nulo pra contas geradas por ICP/leads manuais.
+    lista_prospeccao_id: Mapped[int | None] = mapped_column(ForeignKey("lista_prospeccao.id"), nullable=True)
     cnpj: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     nome: Mapped[str] = mapped_column(String)
     nome_fantasia: Mapped[str | None] = mapped_column(String, nullable=True)

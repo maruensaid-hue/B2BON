@@ -17,6 +17,7 @@ from app.models.campo_enriquecido import CampoEnriquecido
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.icp import ICP
+from app.models.lista_prospeccao import ListaProspeccao
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, DecisorCandidato, FiltroBusca
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
@@ -255,25 +256,38 @@ def _normalizar_nome(nome: str) -> str:
     return " ".join(nome.split()).lower()
 
 
-def importar_participantes_evento(
+def _acrescentar_observacao(conta: Conta, texto: str | None) -> None:
+    """Acumula observação vinda da planilha no campo livre da conta — várias
+    linhas da mesma empresa podem trazer textos diferentes; não duplica se
+    o mesmo texto já estiver lá (participante repetido, ou reimportação)."""
+    texto = (texto or "").strip()
+    if not texto:
+        return
+    if conta.observacoes and texto in conta.observacoes:
+        return
+    conta.observacoes = f"{conta.observacoes}\n{texto}" if conta.observacoes else texto
+
+
+def importar_participantes(
     db: Session,
     tenant_id: str,
     ator_id: str | None,
-    icp_id: int,
+    lista_id: int,
     participantes: list[ParticipanteEventoSchema],
     graph: Neo4jClient,
 ) -> dict:
-    """Cria contas a partir de uma listagem de participantes de evento —
-    sem CNPJ, então a empresa é reconhecida pelo nome (normalizado), não
-    por dado da Receita Federal. Cada linha vira um decisor dentro da
-    conta da sua empresa; empresas repetidas na lista (ou já existentes
-    no tenant) são reaproveitadas em vez de duplicadas. Não passa pelo
-    score de aderência do ICP (não há CNAE/UF/porte reais para comparar)
-    nem consome franquia — mesmo raciocínio de `gerar_lista`: só consome
-    quando a conta entra numa cadência ativada."""
-    icp = db.query(ICP).filter_by(id=icp_id, tenant_id=tenant_id).one_or_none()
-    if icp is None:
-        raise NaoEncontrado(f"ICP {icp_id} não encontrado")
+    """Cria contas a partir de uma listagem de participantes (planilha
+    colada) de uma Lista de Prospecção — sem CNPJ, então a empresa é
+    reconhecida pelo nome (normalizado), não por dado da Receita Federal.
+    Cada linha vira um decisor dentro da conta da sua empresa; empresas
+    repetidas na lista (ou já existentes no tenant) são reaproveitadas em
+    vez de duplicadas. `icp_id` da conta vem da lista (opcional — pode
+    ficar sem ICP, mesmo tratamento de lead avulso). Não passa pelo score
+    de aderência do ICP nem consome franquia — mesmo raciocínio de
+    `gerar_lista`: só consome quando a conta entra numa cadência ativada."""
+    lista = db.query(ListaProspeccao).filter_by(id=lista_id, tenant_id=tenant_id).one_or_none()
+    if lista is None:
+        raise NaoEncontrado(f"Lista de prospecção {lista_id} não encontrada")
 
     contas_por_nome: dict[str, Conta] = {
         _normalizar_nome(conta.nome): conta
@@ -296,10 +310,11 @@ def importar_participantes_evento(
         if conta is None:
             conta = Conta(
                 tenant_id=tenant_id,
-                icp_id=icp_id,
+                icp_id=lista.icp_id,
+                lista_prospeccao_id=lista.id,
                 nome=participante.empresa.strip(),
                 status="prospectada",
-                origem="evento",
+                origem="lista_prospeccao",
             )
             db.add(conta)
             db.flush()
@@ -314,6 +329,7 @@ def importar_participantes_evento(
             contas_reaproveitadas.add(conta.id)
 
         contas_tocadas[conta.id] = conta
+        _acrescentar_observacao(conta, participante.observacoes)
 
         existentes = decisores_por_conta.setdefault(conta.id, [])
         nome_participante = _normalizar_nome(participante.nome)
@@ -341,9 +357,9 @@ def importar_participantes_evento(
     auditoria_service.registrar(
         db,
         tenant_id,
-        "participantes_evento_importados",
-        "icp",
-        icp.id,
+        "participantes_lista_importados",
+        "lista_prospeccao",
+        lista.id,
         ator_id,
         {"contas_criadas": contas_criadas, "decisores_criados": decisores_criados},
     )
@@ -376,6 +392,17 @@ def listar_por_icp(db: Session, tenant_id: str, icp_id: int) -> list[Conta]:
     sobreviver a um refresh sem depender só da resposta pontual de
     `gerar_lista` (Onda F2)."""
     return db.query(Conta).filter_by(tenant_id=tenant_id, icp_id=icp_id).order_by(Conta.criado_em.desc()).all()
+
+
+def listar_por_lista(db: Session, tenant_id: str, lista_prospeccao_id: int) -> list[Conta]:
+    """Contas de uma Lista de Prospecção específica — mesmo raciocínio de
+    `listar_por_icp`, mas pro agrupamento por lote de importação."""
+    return (
+        db.query(Conta)
+        .filter_by(tenant_id=tenant_id, lista_prospeccao_id=lista_prospeccao_id)
+        .order_by(Conta.criado_em.desc())
+        .all()
+    )
 
 
 def listar_todas(db: Session, tenant_id: str) -> list[Conta]:
@@ -831,17 +858,26 @@ def mapear_decisores(
     administradores formais, quando a conta tem CNPJ) com uma base de
     enriquecimento de contatos (C-Levels, Diretores, Gerentes e Heads que
     não aparecem no QSA por não terem participação societária),
-    persistidos no grafo (E2-H2)."""
+    persistidos no grafo (E2-H2).
+
+    Se a conta pertence a uma Lista de Prospecção com `cargos_alvo`
+    definido (ex.: só "CISO"/"Diretor de Segurança" pra um projeto de
+    cibersegurança), a busca no provedor de enriquecimento já sai
+    restrita a esses cargos — filtra na requisição, não depois de já ter
+    revelado o contato, economizando consulta de verdade. Sem lista (ou
+    lista sem cargos definidos), cai no default genérico do provider."""
     conta = obter(db, tenant_id, conta_id)
+
+    kwargs_filtro: dict = {"nome_empresa": conta.nome_fantasia or conta.nome, "dominio": conta.dominio, "cnpj": conta.cnpj}
+    if conta.lista_prospeccao_id:
+        lista = db.query(ListaProspeccao).filter_by(id=conta.lista_prospeccao_id).one_or_none()
+        if lista is not None and lista.cargos_alvo:
+            kwargs_filtro["cargos_alvo"] = lista.cargos_alvo
 
     candidatos: list[DecisorCandidato | ContatoCandidato] = []
     if conta.cnpj:
         candidatos.extend(account_data.buscar_decisores(conta.cnpj))
-    candidatos.extend(
-        contact_enrichment.buscar_contatos(
-            FiltroContatos(nome_empresa=conta.nome_fantasia or conta.nome, dominio=conta.dominio, cnpj=conta.cnpj)
-        )
-    )
+    candidatos.extend(contact_enrichment.buscar_contatos(FiltroContatos(**kwargs_filtro)))
 
     existentes = {_normalizar_nome_decisor(d.nome): d for d in decisores_da_conta(db, conta.id)}
     novos = 0

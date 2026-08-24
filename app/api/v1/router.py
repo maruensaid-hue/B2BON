@@ -12,6 +12,7 @@ from app.api.v1.comunicacao import router as comunicacao_router
 from app.api.v1.configuracao_envio import router as configuracao_envio_router
 from app.api.v1.configuracao_whatsapp import router as configuracao_whatsapp_router
 from app.api.v1.contas import router as contas_router
+from app.api.v1.listas_prospeccao import router as listas_prospeccao_router
 from app.api.v1.convites import router as convites_router
 from app.api.v1.crm import router as crm_router
 from app.api.v1.conversas import router as conversas_router
@@ -59,6 +60,7 @@ router.include_router(oferta_router, dependencies=_exige_licenca)
 router.include_router(comunicacao_router, dependencies=_exige_licenca)
 router.include_router(onboarding_router, dependencies=_exige_licenca)
 router.include_router(contas_router, dependencies=_exige_licenca)
+router.include_router(listas_prospeccao_router, dependencies=_exige_licenca)
 router.include_router(aprovacoes_router, dependencies=_exige_licenca)
 router.include_router(auditoria_router)
 router.include_router(ropa_router, dependencies=_exige_licenca)

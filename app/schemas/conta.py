@@ -90,6 +90,10 @@ class ParticipanteEventoSchema(BaseModel):
     cargo: str | None = None
     email: str | None = None
     telefone: str | None = None
+    # Coluna extra da planilha mapeada pra "Observações" na tela de
+    # importação — acumulada no campo observacoes da conta (empresa), não
+    # do decisor, já que é informação sobre a empresa, não sobre a pessoa.
+    observacoes: str | None = None
 
 
 class ImportarParticipantesRequestSchema(BaseModel):

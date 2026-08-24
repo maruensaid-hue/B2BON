@@ -31,6 +31,7 @@ from app.models.indicacao import Indicacao
 from app.models.interacao_conta import InteracaoConta
 from app.models.interacao_tenant import InteracaoTenant
 from app.models.licenca import Licenca
+from app.models.lista_prospeccao import ListaProspeccao
 from app.models.material_oferta import MaterialOferta
 from app.models.mensagem import Mensagem
 from app.models.mensagem_rede_social import MensagemRedeSocial
@@ -104,6 +105,7 @@ __all__ = [
     "Tenant",
     "Plano",
     "Licenca",
+    "ListaProspeccao",
     "PagamentoLicenca",
     "Usuario",
     "ConviteCadastro",

@@ -139,13 +139,13 @@ def test_processar_fila_enriquecimento_sem_itens_pendentes(client, com_segredo_c
     assert resposta.json() == {"processados": 0, "concluidos": 0, "falhas": 0}
 
 
-def test_processar_fila_enriquecimento_processa_conta_importada(client, criar_icp, com_segredo_cron, fake_llm, fake_web_search):
-    """Fim a fim: importar planilha enfileira, o cron processa e enriquece
-    de verdade (mesma cadeia usada pelo botão "Enriquecer" de uma conta
-    só, só que disparada em lote)."""
-    icp = criar_icp()
+def test_processar_fila_enriquecimento_processa_conta_importada(client, com_segredo_cron, fake_llm, fake_web_search):
+    """Fim a fim: importar planilha (via Lista de Prospecção) enfileira, o
+    cron processa e enriquece de verdade (mesma cadeia usada pelo botão
+    "Enriquecer" de uma conta só, só que disparada em lote)."""
+    lista = client.post("/api/v1/listas-prospeccao", json={"nome": "Evento Teste"}).json()
     client.post(
-        f"/api/v1/icp/{icp['id']}/contas/importar-participantes",
+        f"/api/v1/listas-prospeccao/{lista['id']}/contas/importar-participantes",
         json={"participantes": [{"nome": "Joana Silva", "empresa": "Alpha Tech"}]},
     )
     fake_web_search.resultados = [ResultadoBusca(titulo="Alpha Tech", url="https://www.alphatech.com.br/", descricao="")]
