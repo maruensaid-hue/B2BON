@@ -64,7 +64,7 @@ def processar_envios_todos_os_tenants(
     resultado_por_tenant: dict[str, dict] = {}
     totais = {"enviadas": 0, "falhas": 0, "adiadas": 0, "tarefas_linkedin_criadas": 0, "descartadas_email_invalido": 0}
 
-    for tenant in db.query(Tenant).order_by(Tenant.id).all():
+    for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
         whatsapp = resolver_whatsapp_provider(tenant.id, db)
         resultado = envio_service.processar_pendentes(db, tenant.id, whatsapp, email, email_validation)
         resultado_por_tenant[tenant.id] = resultado
@@ -86,7 +86,7 @@ def processar_retorno_todos_os_tenants(
     resultado_por_tenant: dict[str, dict] = {}
     totais = {"lembretes_d1_enviados": 0, "lembretes_h2_enviados": 0, "pesquisas_disparadas": 0}
 
-    for tenant in db.query(Tenant).order_by(Tenant.id).all():
+    for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
         whatsapp = resolver_whatsapp_provider(tenant.id, db)
         lembretes = reuniao_service.processar_lembretes(db, tenant.id, whatsapp, email)
         nps = nps_service.disparar_pendentes(db, tenant.id, whatsapp, email)
@@ -111,7 +111,7 @@ def processar_campanhas_todos_os_tenants(
     resultado_por_tenant: dict[str, dict] = {}
     totais = {"enviadas": 0, "falhas": 0}
 
-    for tenant in db.query(Tenant).order_by(Tenant.id).all():
+    for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
         whatsapp = resolver_whatsapp_provider(tenant.id, db)
         resultado = campanha_service.processar_pendentes(db, tenant.id, email, whatsapp)
         resultado_por_tenant[tenant.id] = resultado
@@ -129,7 +129,7 @@ def expirar_titulares_todos_os_tenants(db: Session = Depends(get_db)) -> dict:
     resultado_por_tenant: dict[str, dict] = {}
     total_expirados = 0
 
-    for tenant in db.query(Tenant).order_by(Tenant.id).all():
+    for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
         resultado = titular_service.expirar_inativos(db, tenant.id, settings.dias_retencao_titular_inativo)
         resultado_por_tenant[tenant.id] = resultado
         total_expirados += resultado["decisores_expirados"]

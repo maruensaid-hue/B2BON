@@ -15,11 +15,12 @@ from app.providers.channels.email.base import EmailProvider
 from app.schemas.tenant import (
     CriarTenantRequestSchema,
     DefinirLicencaRequestSchema,
+    ExcluirTenantRequestSchema,
     LicencaSchema,
     TenantSchema,
 )
 from app.services import tenant_service
-from app.services.errors import NaoAutorizado
+from app.services.errors import NaoAutorizado, ValidacaoFalhou
 
 router = APIRouter(prefix="/admin/tenants", tags=["admin"], dependencies=[Depends(permitir_gestao_hierarquica)])
 
@@ -85,3 +86,40 @@ def atualizar_licenca(
     return tenant_service.atualizar_licenca(
         db, tenant_id, ator_id, dados.plano_id, dados.status, dados.data_expiracao
     )
+
+
+@router.post("/{tenant_id}/desativar", response_model=TenantSchema)
+def desativar_tenant(
+    tenant_id: str,
+    ator: Usuario = Depends(exigir_gestor_do_tenant),
+    db: Session = Depends(get_db),
+) -> TenantSchema:
+    """Desativação reversível: bloqueia login e chave de API de parceiro
+    do tenant, mantém todo o dado — ver `tenant_service.desativar`."""
+    return tenant_service.desativar(db, tenant_id, ator)
+
+
+@router.post("/{tenant_id}/reativar", response_model=TenantSchema)
+def reativar_tenant(
+    tenant_id: str,
+    ator: Usuario = Depends(exigir_gestor_do_tenant),
+    db: Session = Depends(get_db),
+) -> TenantSchema:
+    return tenant_service.reativar(db, tenant_id, ator)
+
+
+@router.delete("/{tenant_id}", status_code=204)
+def excluir_tenant(
+    tenant_id: str,
+    dados: ExcluirTenantRequestSchema,
+    ator: Usuario = Depends(exigir_gestor_do_tenant),
+    db: Session = Depends(get_db),
+) -> None:
+    """Exclusão definitiva — apaga todo o dado do tenant em praticamente
+    todas as tabelas do sistema, sem volta. `confirmar_id` precisa bater
+    com o id do tenant (rede de segurança contra clique errado). Admin não
+    pode excluir o próprio tenant, só tenants abaixo dele na hierarquia —
+    ver `tenant_service.excluir_definitivamente`."""
+    if dados.confirmar_id != tenant_id:
+        raise ValidacaoFalhou("Digite o identificador do tenant exatamente para confirmar.")
+    tenant_service.excluir_definitivamente(db, tenant_id, ator)

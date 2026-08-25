@@ -320,6 +320,184 @@ def test_licenca_consolidada_herda_status_do_tenant_pai(client, db_session, cria
     assert resposta.status_code == 200
 
 
+# --- Desativação / reativação / exclusão definitiva ---
+
+
+def test_super_admin_desativa_e_reativa_qualquer_tenant(client, db_session, criar_usuario_autenticado):
+    headers_super = criar_usuario_autenticado("cyberfort-super", papel="super_admin")
+    plano_id = _criar_plano(db_session, nome="PlanoDesativar", franquia=200)
+    client.post(
+        "/api/v1/admin/tenants",
+        json={
+            "tenant_id": "empresa-desativar",
+            "razao_social": "Empresa Desativar",
+            "plano_id": plano_id,
+            "nome_admin": "Admin D",
+            "email_admin": "admin@desativar.com.br",
+            "senha_admin": "senha123",
+        },
+        headers=headers_super,
+    )
+
+    resposta = client.post("/api/v1/admin/tenants/empresa-desativar/desativar", headers=headers_super)
+    assert resposta.status_code == 200
+    assert resposta.json()["ativo"] is False
+
+    resposta_reativar = client.post("/api/v1/admin/tenants/empresa-desativar/reativar", headers=headers_super)
+    assert resposta_reativar.status_code == 200
+    assert resposta_reativar.json()["ativo"] is True
+
+
+def test_desativar_bloqueia_login_e_reativar_libera_de_novo(client, db_session, criar_usuario_autenticado):
+    headers_super = criar_usuario_autenticado("cyberfort-super2", papel="super_admin")
+    plano_id = _criar_plano(db_session, nome="PlanoLogin", franquia=200)
+    client.post(
+        "/api/v1/admin/tenants",
+        json={
+            "tenant_id": "empresa-login-bloqueio",
+            "razao_social": "Empresa Login Bloqueio",
+            "plano_id": plano_id,
+            "nome_admin": "Admin L",
+            "email_admin": "admin@loginbloqueio.com.br",
+            "senha_admin": "senha123",
+        },
+        headers=headers_super,
+    )
+
+    login_antes = client.post(
+        "/api/v1/auth/login", json={"email": "admin@loginbloqueio.com.br", "senha": "senha123"}
+    )
+    assert login_antes.status_code == 200
+
+    client.post("/api/v1/admin/tenants/empresa-login-bloqueio/desativar", headers=headers_super)
+
+    login_desativado = client.post(
+        "/api/v1/auth/login", json={"email": "admin@loginbloqueio.com.br", "senha": "senha123"}
+    )
+    assert login_desativado.status_code == 401
+
+    client.post("/api/v1/admin/tenants/empresa-login-bloqueio/reativar", headers=headers_super)
+
+    login_depois = client.post(
+        "/api/v1/auth/login", json={"email": "admin@loginbloqueio.com.br", "senha": "senha123"}
+    )
+    assert login_depois.status_code == 200
+
+
+def test_admin_distribuidor_desativa_proprio_revendedor_mas_nao_arvore_irma(client, db_session):
+    headers_distribuidor = _criar_admin_hierarquico(db_session, "distribuidora-des", tipo="distribuidor")
+    _criar_admin_hierarquico(db_session, "revenda-des-propria", tipo="revendedor", tenant_pai_id="distribuidora-des")
+    _criar_admin_hierarquico(db_session, "revenda-des-irma", tipo="revendedor")  # árvore irmã, sem pai comum
+
+    resposta_propria = client.post(
+        "/api/v1/admin/tenants/revenda-des-propria/desativar", headers=headers_distribuidor
+    )
+    assert resposta_propria.status_code == 200
+
+    resposta_irma = client.post("/api/v1/admin/tenants/revenda-des-irma/desativar", headers=headers_distribuidor)
+    assert resposta_irma.status_code == 403
+
+
+def test_admin_nao_desativa_tenant_do_super_admin(client, db_session, criar_usuario_autenticado):
+    criar_usuario_autenticado("cyberfort-raiz", papel="super_admin")
+    headers_distribuidor = _criar_admin_hierarquico(db_session, "distribuidora-vs-raiz", tipo="distribuidor")
+
+    resposta = client.post("/api/v1/admin/tenants/cyberfort-raiz/desativar", headers=headers_distribuidor)
+
+    assert resposta.status_code == 403
+
+
+def test_desativar_bloqueia_se_tenant_tem_filho(client, db_session):
+    headers_distribuidor = _criar_admin_hierarquico(db_session, "distribuidora-com-filho", tipo="distribuidor")
+    _criar_admin_hierarquico(db_session, "revenda-filha", tipo="revendedor", tenant_pai_id="distribuidora-com-filho")
+
+    resposta = client.post("/api/v1/admin/tenants/distribuidora-com-filho/desativar", headers=headers_distribuidor)
+
+    assert resposta.status_code == 409
+
+
+def test_admin_nao_exclui_o_proprio_tenant_mas_super_admin_pode(client, db_session, criar_usuario_autenticado):
+    headers_super = criar_usuario_autenticado("cyberfort-super3", papel="super_admin")
+    headers_distribuidor = _criar_admin_hierarquico(db_session, "distribuidora-autoexclusao", tipo="distribuidor")
+
+    resposta_admin = client.request(
+        "DELETE",
+        "/api/v1/admin/tenants/distribuidora-autoexclusao",
+        json={"confirmar_id": "distribuidora-autoexclusao"},
+        headers=headers_distribuidor,
+    )
+    assert resposta_admin.status_code == 403
+
+    resposta_super = client.request(
+        "DELETE",
+        "/api/v1/admin/tenants/distribuidora-autoexclusao",
+        json={"confirmar_id": "distribuidora-autoexclusao"},
+        headers=headers_super,
+    )
+    assert resposta_super.status_code == 204
+
+
+def test_excluir_com_confirmar_id_errado_nao_apaga_nada(client, db_session, criar_usuario_autenticado):
+    headers_super = criar_usuario_autenticado("cyberfort-super4", papel="super_admin")
+    plano_id = _criar_plano(db_session, nome="PlanoConfirmar", franquia=200)
+    client.post(
+        "/api/v1/admin/tenants",
+        json={
+            "tenant_id": "empresa-confirmar",
+            "razao_social": "Empresa Confirmar",
+            "plano_id": plano_id,
+            "nome_admin": "Admin C",
+            "email_admin": "admin@confirmar.com.br",
+            "senha_admin": "senha123",
+        },
+        headers=headers_super,
+    )
+
+    resposta = client.request(
+        "DELETE",
+        "/api/v1/admin/tenants/empresa-confirmar",
+        json={"confirmar_id": "id-errado"},
+        headers=headers_super,
+    )
+
+    assert resposta.status_code == 422
+    tenants = client.get("/api/v1/admin/tenants", headers=headers_super).json()
+    assert any(t["id"] == "empresa-confirmar" for t in tenants)
+
+
+def test_excluir_definitivamente_via_api_remove_o_tenant(client, db_session, criar_usuario_autenticado):
+    headers_super = criar_usuario_autenticado("cyberfort-super5", papel="super_admin")
+    plano_id = _criar_plano(db_session, nome="PlanoExcluirDefinitivo", franquia=200)
+    client.post(
+        "/api/v1/admin/tenants",
+        json={
+            "tenant_id": "empresa-excluir-definitivo",
+            "razao_social": "Empresa Excluir Definitivo",
+            "plano_id": plano_id,
+            "nome_admin": "Admin E",
+            "email_admin": "admin@excluirdefinitivo.com.br",
+            "senha_admin": "senha123",
+        },
+        headers=headers_super,
+    )
+
+    resposta = client.request(
+        "DELETE",
+        "/api/v1/admin/tenants/empresa-excluir-definitivo",
+        json={"confirmar_id": "empresa-excluir-definitivo"},
+        headers=headers_super,
+    )
+
+    assert resposta.status_code == 204
+    tenants = client.get("/api/v1/admin/tenants", headers=headers_super).json()
+    assert not any(t["id"] == "empresa-excluir-definitivo" for t in tenants)
+
+    login_depois = client.post(
+        "/api/v1/auth/login", json={"email": "admin@excluirdefinitivo.com.br", "senha": "senha123"}
+    )
+    assert login_depois.status_code == 401
+
+
 def test_cron_suspende_licencas_vencidas(client, db_session, monkeypatch):
     from app.core.config import settings
 

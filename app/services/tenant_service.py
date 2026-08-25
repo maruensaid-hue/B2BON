@@ -4,12 +4,16 @@ import secrets
 import unicodedata
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db.base import Base
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
+from app.models.auditoria import AuditLog
+from app.models.chave_api_parceiro import ChaveApiParceiro
 from app.models.convite_vitrine import ConviteVitrine
 from app.models.licenca import Licenca
 from app.models.plano import Plano
@@ -28,7 +32,7 @@ from app.services import (
     rede_social_service,
     webhook_parceiro_service,
 )
-from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
+from app.services.errors import NaoAutorizado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 logger = logging.getLogger(__name__)
 
@@ -336,6 +340,174 @@ def atualizar_licenca(
     db.commit()
     db.refresh(licenca)
     return licenca
+
+
+def _obter_tenant(db: Session, tenant_id: str) -> Tenant:
+    tenant = db.query(Tenant).filter_by(id=tenant_id).one_or_none()
+    if tenant is None:
+        raise NaoEncontrado(f"Tenant {tenant_id} não encontrado")
+    return tenant
+
+
+def _tem_filho(db: Session, tenant_id: str) -> bool:
+    """`tenant_pai_id` só aponta pro pai imediato — "sem filho direto" já
+    implica "sem descendente nenhum" (não precisa varrer a árvore)."""
+    return db.query(Tenant).filter_by(tenant_pai_id=tenant_id).first() is not None
+
+
+def desativar(db: Session, tenant_id: str, ator: Usuario) -> Tenant:
+    """Desativação reversível: bloqueia login e API de parceiro sem apagar
+    nada. Reaproveita a checagem `usuario.ativo` que `auth_service.
+    autenticar_senha`/`autenticar_google`/`validar_token` já fazem — não
+    precisa de nenhuma mudança nesses três lugares."""
+    tenant = _obter_tenant(db, tenant_id)
+    if not tenant.ativo:
+        raise RegraNegocioViolada(f'Tenant "{tenant_id}" já está desativado.')
+    if _tem_filho(db, tenant_id):
+        raise RegraNegocioViolada("Existem tenants abaixo deste — desative-os antes de desativar este.")
+
+    tenant.ativo = False
+
+    usuarios_ativos_antes = [
+        usuario_id for (usuario_id,) in db.query(Usuario.id).filter_by(tenant_id=tenant_id, ativo=True).all()
+    ]
+    db.query(Usuario).filter_by(tenant_id=tenant_id, ativo=True).update({"ativo": False})
+
+    # `get_chave_api_atual` (app/api/deps.py) já filtra por `revogada_em is
+    # None` — revogar aqui reaproveita essa checagem, sem tocar na
+    # dependency: sem isso, um Distribuidor desativado continuaria
+    # provisionando tenants via /parceiros/* com a chave antiga.
+    db.query(ChaveApiParceiro).filter_by(tenant_id=tenant_id, revogada_em=None).update(
+        {"revogada_em": datetime.now(UTC)}
+    )
+
+    auditoria_service.registrar(
+        db, tenant_id, "tenant_desativado", "tenant", 0, str(ator.id), {"usuarios_reativar": usuarios_ativos_antes}
+    )
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
+def reativar(db: Session, tenant_id: str, ator: Usuario) -> Tenant:
+    """Reverte `desativar` — só religa os usuários que estavam ativos
+    IMEDIATAMENTE antes da desativação (lista salva no audit log), pra não
+    ressuscitar alguém que já tinha sido desativado por outro motivo antes
+    disso. Chave de API de parceiro não volta sozinha — reemitir é ação
+    separada, mais sensível, feita pela tela de Integrações."""
+    tenant = _obter_tenant(db, tenant_id)
+    if tenant.ativo:
+        raise RegraNegocioViolada(f'Tenant "{tenant_id}" já está ativo.')
+
+    tenant.ativo = True
+
+    ultimo_evento = (
+        db.query(AuditLog)
+        .filter_by(tenant_id=tenant_id, evento_tipo="tenant_desativado")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    ids_para_reativar = ultimo_evento.detalhes.get("usuarios_reativar", []) if ultimo_evento else []
+    if ids_para_reativar:
+        db.query(Usuario).filter(Usuario.id.in_(ids_para_reativar)).update(
+            {"ativo": True}, synchronize_session=False
+        )
+
+    auditoria_service.registrar(db, tenant_id, "tenant_reativado", "tenant", 0, str(ator.id), {})
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
+# Tabelas que pertencem a um tenant só indiretamente (sem `tenant_id`
+# próprio) — mesmo gotcha de `CampoEnriquecido` já tratado em
+# `conta_service.excluir`. Sem isto, `excluir_definitivamente` deixaria
+# essas linhas órfãs (ou, pior, com FK real, bloquearia a exclusão da
+# tabela-pai com erro de integridade).
+def _condicoes_indiretas(metadata):
+    conta = metadata.tables["conta"]
+    assinatura = metadata.tables["assinatura_webhook_parceiro"]
+    return {
+        "campo_enriquecido": lambda t, tenant_id: t.c.conta_id.in_(
+            select(conta.c.id).where(conta.c.tenant_id == tenant_id)
+        ),
+        "evento_webhook_parceiro": lambda t, tenant_id: t.c.assinatura_id.in_(
+            select(assinatura.c.id).where(assinatura.c.tenant_id == tenant_id)
+        ),
+    }
+
+
+# Tabelas que TÊM `tenant_id`, mas ficam fora da varredura por razão
+# semântica/legal (não estrutural — não dá pra confiar só em "sem
+# tenant_id = pode ignorar" aqui):
+# - "plano": catálogo global, não é dado do tenant.
+# - "recorte_cnpj_estado": cache global de shard de CNPJ (não tem
+#   tenant_id de qualquer forma, listado aqui só por clareza).
+# - "registro_tratamento": ROPA/LGPD sobre o módulo, não por tenant.
+# - "registro_supressao_permanente": existe justamente PRA sobreviver a
+#   qualquer exclusão — apaga o PII, mantém a prova de opt-out, senão a
+#   garantia de "nunca mais recontatar" desaparece junto com o tenant.
+# - "pagamento_licenca": histórico de pagamento retido por obrigação
+#   fiscal/contábil (decisão confirmada com o usuário), mesmo com o
+#   tenant já apagado.
+_TABELAS_EXCLUIDAS_DA_VARREDURA = {
+    "tenant",
+    "plano",
+    "recorte_cnpj_estado",
+    "registro_tratamento",
+    "registro_supressao_permanente",
+    "pagamento_licenca",
+}
+
+
+def excluir_definitivamente(db: Session, tenant_id: str, ator: Usuario) -> None:
+    """Exclusão definitiva: varre TODO o schema (não uma lista de tabelas
+    escrita à mão) via `Base.metadata.sorted_tables` — ordenação
+    topológica automática do SQLAlchemy, que já considera todas as FKs do
+    schema (não só as que apontam pro tenant), em ordem reversa (filhos
+    antes dos pais). Nenhuma tabela tem `ondelete="CASCADE"` (tudo é
+    RESTRICT por padrão do Postgres) — se a varredura esquecer alguma
+    tabela, o DELETE da tabela-pai estoura `IntegrityError` em vez de
+    deixar dado órfão silenciosamente (rede de segurança "falha fechado").
+
+    Commit por tabela, não uma transação gigante única — mesmo raciocínio
+    de `conta_service._excluir_contas_em_lote` (documentado ali: exclusão
+    em lote sem chunking já estourou timeout de request com 6200 linhas;
+    um tenant inteiro pode ter volume bem maior). Isso também torna a
+    operação idempotente: se cair no meio, rodar de novo só continua de
+    onde parou."""
+    tenant = _obter_tenant(db, tenant_id)
+    if ator.papel == "admin" and ator.tenant_id == tenant_id:
+        raise NaoAutorizado("Você não pode excluir definitivamente o próprio tenant — peça a um gestor acima.")
+    if _tem_filho(db, tenant_id):
+        raise RegraNegocioViolada("Existem tenants abaixo deste — remova-os antes de excluir definitivamente.")
+
+    metadata = Base.metadata
+    condicoes_indiretas = _condicoes_indiretas(metadata)
+
+    for table in reversed(metadata.sorted_tables):
+        if table.name in _TABELAS_EXCLUIDAS_DA_VARREDURA:
+            continue
+        if table.name in condicoes_indiretas:
+            db.execute(table.delete().where(condicoes_indiretas[table.name](table, tenant_id)))
+            db.commit()
+            continue
+        colunas_tenant = [coluna for coluna in table.columns if coluna.name.startswith("tenant_id")]
+        if not colunas_tenant:
+            continue
+        db.execute(table.delete().where(or_(*(coluna == tenant_id for coluna in colunas_tenant))))
+        db.commit()
+
+    # Log sob o tenant de quem executou, não o que está sumindo — senão o
+    # próprio registro da exclusão desapareceria junto (admin nunca exclui
+    # o próprio tenant, ver checagem acima, então `ator.tenant_id` nunca é
+    # o tenant que acabou de sumir).
+    auditoria_service.registrar(
+        db, ator.tenant_id, "tenant_excluido_definitivamente", "tenant", 0, str(ator.id),
+        {"tenant_id": tenant_id, "razao_social": tenant.razao_social},
+    )
+    db.delete(tenant)
+    db.commit()
 
 
 def _gerar_tenant_id(db: Session, razao_social: str) -> str:

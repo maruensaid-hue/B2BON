@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
@@ -16,6 +17,7 @@ interface Tenant {
   tipo: string;
   tenant_pai_id: string | null;
   modo_cobranca: string;
+  ativo: boolean;
 }
 
 interface Plano {
@@ -75,6 +77,13 @@ export function AdminTenants() {
   // precisar re-sincronizar esse estado com a lista toda vez que recarrega.
   const [recolhidos, setRecolhidos] = useState<Set<string>>(new Set());
 
+  const [confirmandoDesativarId, setConfirmandoDesativarId] = useState<string | null>(null);
+  const [confirmandoReativarId, setConfirmandoReativarId] = useState<string | null>(null);
+  const [processandoTenantId, setProcessandoTenantId] = useState<string | null>(null);
+  const [tenantParaExcluir, setTenantParaExcluir] = useState<Tenant | null>(null);
+  const [textoConfirmacaoExclusao, setTextoConfirmacaoExclusao] = useState("");
+  const [excluindoTenant, setExcluindoTenant] = useState(false);
+
   function alternarExpandido(tenantId: string) {
     setRecolhidos((atual) => {
       const proximo = new Set(atual);
@@ -122,6 +131,57 @@ export function AdminTenants() {
           <td className={`p-2 capitalize ${COR_TIPO[tenant.tipo] ?? "text-muted"}`}>{tenant.tipo}</td>
           <td className="p-2 text-muted">{tenant.cnpj ?? "—"}</td>
           <td className="p-2 text-muted">{new Date(tenant.criado_em).toLocaleDateString("pt-BR")}</td>
+          <td className="p-2">
+            <Badge tone={tenant.ativo ? "green" : "muted"}>{tenant.ativo ? "Ativo" : "Inativo"}</Badge>
+          </td>
+          <td className="p-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {tenant.ativo ? (
+                confirmandoDesativarId === tenant.id ? (
+                  <>
+                    <span className="text-[11px] text-muted">Desativar?</span>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={processandoTenantId === tenant.id}
+                      onClick={() => desativarTenant(tenant.id)}
+                    >
+                      {processandoTenantId === tenant.id ? "..." : "Confirmar"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmandoDesativarId(null)}>
+                      Cancelar
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmandoDesativarId(tenant.id)}>
+                    Desativar
+                  </Button>
+                )
+              ) : confirmandoReativarId === tenant.id ? (
+                <>
+                  <span className="text-[11px] text-muted">Reativar?</span>
+                  <Button
+                    size="sm"
+                    variant="green"
+                    disabled={processandoTenantId === tenant.id}
+                    onClick={() => reativarTenant(tenant.id)}
+                  >
+                    {processandoTenantId === tenant.id ? "..." : "Confirmar"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmandoReativarId(null)}>
+                    Cancelar
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" variant="green" onClick={() => setConfirmandoReativarId(tenant.id)}>
+                  Reativar
+                </Button>
+              )}
+              <Button size="sm" variant="danger" onClick={() => setTenantParaExcluir(tenant)}>
+                Excluir definitivamente
+              </Button>
+            </div>
+          </td>
         </tr>
       );
       return recolhido ? [linha] : [linha, ...renderNos(filhos, profundidade + 1)];
@@ -167,6 +227,51 @@ export function AdminTenants() {
     }
   }
 
+  async function desativarTenant(tenantId: string) {
+    setProcessandoTenantId(tenantId);
+    try {
+      await api.post(`/admin/tenants/${tenantId}/desativar`);
+      setConfirmandoDesativarId(null);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível desativar o tenant.");
+    } finally {
+      setProcessandoTenantId(null);
+    }
+  }
+
+  async function reativarTenant(tenantId: string) {
+    setProcessandoTenantId(tenantId);
+    try {
+      await api.post(`/admin/tenants/${tenantId}/reativar`);
+      setConfirmandoReativarId(null);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível reativar o tenant.");
+    } finally {
+      setProcessandoTenantId(null);
+    }
+  }
+
+  function fecharModalExcluirTenant() {
+    setTenantParaExcluir(null);
+    setTextoConfirmacaoExclusao("");
+  }
+
+  async function confirmarExclusaoDefinitiva() {
+    if (!tenantParaExcluir || excluindoTenant) return;
+    setExcluindoTenant(true);
+    try {
+      await api.delete(`/admin/tenants/${tenantParaExcluir.id}`, { confirmar_id: textoConfirmacaoExclusao });
+      fecharModalExcluirTenant();
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir o tenant.");
+    } finally {
+      setExcluindoTenant(false);
+    }
+  }
+
   if (!podeGerenciar) return <AcessoRestrito />;
 
   return (
@@ -193,13 +298,15 @@ export function AdminTenants() {
               <th className="p-2 text-left">Tipo</th>
               <th className="p-2 text-left">CNPJ</th>
               <th className="p-2 text-left">Criado em</th>
+              <th className="p-2 text-left">Status</th>
+              <th className="p-2 text-left">Ações</th>
             </tr>
           </thead>
           <tbody>
             {renderNos(construirArvore(tenants), 0)}
             {tenants.length === 0 && (
               <tr>
-                <td colSpan={5} className="p-4 text-center text-muted">
+                <td colSpan={7} className="p-4 text-center text-muted">
                   Nenhum tenant cadastrado ainda.
                 </td>
               </tr>
@@ -272,6 +379,40 @@ export function AdminTenants() {
             Criar
           </Button>
         </form>
+      </Modal>
+
+      <Modal
+        title="Excluir tenant definitivamente"
+        open={tenantParaExcluir !== null}
+        onClose={fecharModalExcluirTenant}
+      >
+        {tenantParaExcluir && (
+          <div className="flex flex-col gap-3">
+            <div className="text-[11px] text-red">
+              Isso apaga <b>todo</b> o dado de "{tenantParaExcluir.razao_social}" — contas, negócios, usuários,
+              mensagens, tudo — em praticamente todas as tabelas do sistema, sem volta. Não é reversível como
+              "Desativar". Registros de pagamento ficam retidos por obrigação fiscal.
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+                Digite <b>{tenantParaExcluir.id}</b> para confirmar
+              </div>
+              <Input
+                value={textoConfirmacaoExclusao}
+                onChange={(event) => setTextoConfirmacaoExclusao(event.target.value)}
+                placeholder={tenantParaExcluir.id}
+              />
+            </div>
+            <Button
+              variant="danger"
+              className="w-full justify-center"
+              disabled={excluindoTenant || textoConfirmacaoExclusao !== tenantParaExcluir.id}
+              onClick={confirmarExclusaoDefinitiva}
+            >
+              {excluindoTenant ? "Excluindo..." : "Excluir definitivamente"}
+            </Button>
+          </div>
+        )}
       </Modal>
     </div>
   );

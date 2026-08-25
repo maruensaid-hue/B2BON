@@ -24,6 +24,7 @@ class TenantSchema(BaseModel):
     tipo: str
     tenant_pai_id: str | None
     modo_cobranca: str
+    ativo: bool
 
 
 class TenantComLicencaSchema(BaseModel):
@@ -48,3 +49,11 @@ class DefinirLicencaRequestSchema(BaseModel):
     plano_id: int | None = None
     status: str | None = None
     data_expiracao: datetime | None = None
+
+
+class ExcluirTenantRequestSchema(BaseModel):
+    """`confirmar_id` precisa bater exatamente com o id do tenant sendo
+    excluído — "digite pra confirmar", dada a severidade (apaga o
+    histórico inteiro de outra empresa, sem volta)."""
+
+    confirmar_id: str
