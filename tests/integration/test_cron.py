@@ -117,14 +117,16 @@ def test_atualizar_recorte_cnpj_sem_segredo_configurado_recusa(client):
     assert resposta.status_code == 403
 
 
-def test_atualizar_recorte_cnpj_sem_icp_ativo_nao_executa(client, com_segredo_cron):
-    """Sem ICP ativo em nenhum tenant, nem tenta baixar nada da Receita
-    Federal — só o caso feliz sem rede é coberto na integração; a lógica
-    de download/skip fica em test_cnpj_recorte_service.py (mockada)."""
+def test_atualizar_recorte_cnpj_dispara_em_segundo_plano(client, com_segredo_cron):
+    """Responde na hora (raio-X 2026-08-26: download+processamento de
+    vários GB facilmente passa do timeout do proxy do Render — a conexão
+    cortava com 502 e o processo morria junto) — a lógica de
+    executar/pular fica em `test_cnpj_recorte_service.py` (mockada), aqui
+    só confirma que a rota aceita e despacha a tarefa."""
     resposta = client.post("/api/v1/cron/atualizar-recorte-cnpj", headers={"X-Cron-Secret": SEGREDO})
 
     assert resposta.status_code == 200
-    assert resposta.json() == {"executado": False, "motivo": "nenhum ICP ativo em nenhum tenant"}
+    assert resposta.json() == {"disparado": True}
 
 
 def test_processar_fila_enriquecimento_sem_segredo_configurado_recusa(client):
