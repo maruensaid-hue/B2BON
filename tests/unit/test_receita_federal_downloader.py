@@ -1,5 +1,4 @@
 import zipfile
-from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -7,57 +6,29 @@ import pytest
 from app.providers.account_data import receita_federal_downloader as downloader
 
 
-def test_meses_candidatos_mes_atual_primeiro_recuando():
-    referencia = datetime(2026, 1, 15, tzinfo=timezone.utc)
+class _RespostaIndiceFalsa:
+    def __init__(self, texto: str) -> None:
+        self.text = texto
 
-    meses = downloader._meses_candidatos(referencia)
-
-    assert meses == ["2026-01", "2025-12", "2025-11", "2025-10"]
-
-
-def test_meses_candidatos_vira_o_ano_corretamente():
-    referencia = datetime(2026, 2, 10, tzinfo=timezone.utc)
-
-    meses = downloader._meses_candidatos(referencia)
-
-    assert meses == ["2026-02", "2026-01", "2025-12", "2025-11"]
+    def raise_for_status(self) -> None:
+        return None
 
 
-class _RespostaFalsa:
-    def __init__(self, status_code: int) -> None:
-        self.status_code = status_code
-
-
-def test_resolver_mes_competencia_usa_o_mes_mais_recente_disponivel(monkeypatch: pytest.MonkeyPatch):
-    chamadas = []
-
-    def _head_falso(url: str, timeout: float, follow_redirects: bool) -> _RespostaFalsa:
-        chamadas.append(url)
-        return _RespostaFalsa(200)
-
-    monkeypatch.setattr(httpx, "head", _head_falso)
+def test_resolver_mes_competencia_usa_a_pasta_mais_recente_do_indice(monkeypatch: pytest.MonkeyPatch):
+    html_indice = """
+    <a href="2026-06-15/">2026-06-15/</a>
+    <a href="2026-08-09/">2026-08-09/</a>
+    <a href="2026-07-12/">2026-07-12/</a>
+    """
+    monkeypatch.setattr(httpx, "get", lambda url, timeout, follow_redirects: _RespostaIndiceFalsa(html_indice))
 
     mes = downloader.resolver_mes_competencia()
 
-    assert mes == chamadas[0].split("/")[-2]
-    assert len(chamadas) == 1  # achou de primeira, não precisou recuar
+    assert mes == "2026-08-09"  # a mais recente, não a última do HTML nem a primeira
 
 
-def test_resolver_mes_competencia_recua_quando_mes_atual_ainda_nao_publicado(monkeypatch: pytest.MonkeyPatch):
-    respostas = iter([404, 200])
-
-    def _head_falso(url: str, timeout: float, follow_redirects: bool) -> _RespostaFalsa:
-        return _RespostaFalsa(next(respostas))
-
-    monkeypatch.setattr(httpx, "head", _head_falso)
-
-    mes = downloader.resolver_mes_competencia()
-
-    assert mes is not None
-
-
-def test_resolver_mes_competencia_sem_nenhum_mes_disponivel_levanta_erro(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(httpx, "head", lambda url, timeout, follow_redirects: _RespostaFalsa(404))
+def test_resolver_mes_competencia_sem_nenhuma_pasta_levanta_erro(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(httpx, "get", lambda url, timeout, follow_redirects: _RespostaIndiceFalsa("<html></html>"))
 
     with pytest.raises(downloader.MesCompetenciaIndisponivel):
         downloader.resolver_mes_competencia()

@@ -1,53 +1,44 @@
+import re
 import zipfile
-from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 
-# Layout público de dados abertos de CNPJ da Receita Federal: pasta datada
-# (AAAA-MM, publicada mensalmente, com atraso de alguns dias) contendo até
-# 10 arquivos por tipo (Empresas0..9.zip, Estabelecimentos0..9.zip,
-# Socios0..9.zip) — nunca um arquivo único.
-URL_BASE = "https://dadosabertos.rfb.gov.br/CNPJ/dados_abertos_cnpj"
+# O domínio oficial original (dadosabertos.rfb.gov.br) saiu do ar (raio-X
+# 2026-08-26: `httpx.ConnectTimeout` em produção E também não abre no
+# navegador comum do usuário — não é bloqueio de IP de nuvem, o domínio
+# mudou/saiu do ar de verdade). Usamos o espelho da Casa dos Dados
+# (CDN Cloudflare, atualizado mensalmente, mesmo layout de shards:
+# Empresas0..9.zip, Estabelecimentos0..9.zip, Socios0..9.zip) — fonte
+# declarada pelo próprio espelho: https://arquivos.receitafederal.gov.br
+# (novo endereço oficial, mas atrás de um compartilhamento tipo Nextcloud,
+# sem listagem simples de pastas como o layout antigo tinha).
+URL_BASE = "https://dados-abertos-rf-cnpj.casadosdados.com.br/arquivos"
 _QUANTIDADE_SHARDS = 10
-_MESES_DE_TOLERANCIA = 3
+_PADRAO_PASTA_DATA = re.compile(r'href="(\d{4}-\d{2}-\d{2})/"')
 
 
 class MesCompetenciaIndisponivel(RuntimeError):
-    """Nenhum mês dos últimos `_MESES_DE_TOLERANCIA` tem dados publicados —
-    ou a Receita Federal está atrasada além do normal, ou o layout/domínio
-    mudou (precisa investigação manual, não adianta tentar de novo sozinho)."""
-
-
-def _meses_candidatos(a_partir_de: datetime) -> list[str]:
-    """Mês atual primeiro, recuando até `_MESES_DE_TOLERANCIA` meses — a
-    RFB publica o snapshot do mês com alguns dias de atraso, então no
-    início do mês o mais recente disponível ainda é o anterior."""
-    meses = []
-    ano, mes = a_partir_de.year, a_partir_de.month
-    for _ in range(_MESES_DE_TOLERANCIA + 1):
-        meses.append(f"{ano:04d}-{mes:02d}")
-        mes -= 1
-        if mes == 0:
-            mes = 12
-            ano -= 1
-    return meses
+    """Nenhuma pasta de competência encontrada no índice do espelho — ou a
+    Receita Federal/o espelho está fora do ar, ou o layout/domínio mudou de
+    novo (precisa investigação manual, não adianta tentar de novo sozinho)."""
 
 
 def resolver_mes_competencia() -> str:
-    """Primeiro mês (mais recente primeiro) com `Estabelecimentos0.zip`
-    publicado — usado como sonda porque estabelecimentos é sempre o
-    primeiro tipo publicado dos três num dado mês."""
-    for mes in _meses_candidatos(datetime.now(UTC)):
-        url = f"{URL_BASE}/{mes}/Estabelecimentos0.zip"
-        resposta = httpx.head(url, timeout=30.0, follow_redirects=True)
-        if resposta.status_code == 200:
-            return mes
-    raise MesCompetenciaIndisponivel(
-        f"Nenhum mês de competência disponível em {URL_BASE} nos últimos "
-        f"{_MESES_DE_TOLERANCIA + 1} meses — verificar manualmente se a Receita "
-        "Federal mudou o layout/domínio de publicação."
-    )
+    """Pasta mais recente publicada pelo espelho — formato "AAAA-MM-DD"
+    (dia exato da publicação, não necessariamente o dia 1; a RFB publica em
+    datas variáveis a cada mês). Lê o índice (listagem HTML padrão de
+    servidor de arquivos) em vez de tentar adivinhar/sondar datas, porque
+    não há padrão fixo de dia de publicação."""
+    resposta = httpx.get(f"{URL_BASE}/", timeout=30.0, follow_redirects=True)
+    resposta.raise_for_status()
+    pastas = _PADRAO_PASTA_DATA.findall(resposta.text)
+    if not pastas:
+        raise MesCompetenciaIndisponivel(
+            f"Nenhuma pasta de competência encontrada em {URL_BASE} — verificar "
+            "manualmente se o espelho mudou de layout/domínio."
+        )
+    return max(pastas)
 
 
 def _baixar_arquivo(url: str, destino: Path) -> bool:
