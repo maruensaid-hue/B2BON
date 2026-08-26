@@ -228,10 +228,19 @@ def diagnostico_schema(db: Session = Depends(get_db)) -> dict:
             "WHERE table_name = 'tenant' AND column_name = 'ativo'"
         )
     ).scalar()
+    estado_recorte = db.execute(
+        text(
+            "SELECT mes_competencia, cnae_codigos_cobertos, ufs_cobertos, atualizado_em "
+            "FROM recorte_cnpj_estado WHERE id = 1"
+        )
+    ).mappings().first()
+    total_estabelecimentos = db.execute(text("SELECT count(*) FROM cnpj_estabelecimento")).scalar()
     return {
         "alembic_version": versao,
         "tabelas_existem": tabelas,
         "tenant_tem_coluna_ativo": coluna_tenant_ativo is not None,
+        "estado_recorte": dict(estado_recorte) if estado_recorte else None,
+        "total_cnpj_estabelecimento": total_estabelecimentos,
     }
 
 
