@@ -10,14 +10,13 @@ dependencies = [
     "pydantic>=2.8",
     "pydantic-settings>=2.4",
     "neo4j>=5.23",
-    # Piso levantado pra 0.120.2 (raio-X 2026-08-27): o Render cacheia a
-    # camada Docker de `pip install` enquanto pyproject.toml não muda —
-    # produção ficou presa numa versão antiga (resolvida num build de
-    # semanas atrás) cujo `messages.create()` não aceitava mais
-    # `temperature` do jeito que a SDK atual aceita, gerando TypeError não
-    # tratado (500 genérico) em qualquer enriquecimento por IA. Sem lock
-    # file no projeto, só subir o piso força a camada a reinstalar.
-    "anthropic>=0.120.2",
+    # Teto em <1.0 (raio-X 2026-08-27, corrigido de novo no mesmo dia): a
+    # SDK 1.0 removeu `temperature`/`top_k`/`top_p` de `messages.create()`
+    # — só subir o piso (tentativa anterior) não adiantava, porque sem
+    # teto o pip continuava resolvendo pra 1.x (mais novo que qualquer
+    # piso) e quebrando do mesmo jeito. 0.120.2 é a versão testada e
+    # confirmada funcionando com o `temperature` que este provider usa.
+    "anthropic>=0.120.2,<1.0",
     "python-dotenv>=1.0",
     "httpx>=0.27",
     "fpdf2>=2.7",
