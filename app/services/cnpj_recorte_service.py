@@ -55,6 +55,12 @@ def atualizar_recorte_automatico(db: Session) -> dict:
         return {"executado": False, "motivo": "nenhum ICP ativo em nenhum tenant"}
 
     estado = _obter_ou_criar_estado(db)
+    # Fecha a transação aqui, antes do download (que sozinho já passa de
+    # alguns minutos sem tráfego nenhum no banco) — sem isso, a transação
+    # aberta desde a leitura acima fica "idle in transaction" o tempo
+    # inteiro do download, e o Neon mata a conexão por conta disso antes
+    # mesmo da varredura do CSV começar (raio-X 2026-08-27).
+    db.commit()
     mes_competencia = resolver_mes_competencia()
 
     ja_coberto = (

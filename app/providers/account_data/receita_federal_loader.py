@@ -96,17 +96,21 @@ def carregar_recorte(
     for indice, linha in enumerate(_linhas(caminho_estabelecimentos), start=1):
         if linha[11] in cnae_set and linha[19].upper() in uf_set:
             estabelecimentos_no_recorte.append(linha)
-        if indice % 5_000_000 == 0:
+        if indice % 1_000_000 == 0:
             print(f"  {indice:,} linha(s) varrida(s), {len(estabelecimentos_no_recorte)} no recorte...", flush=True)
             # A varredura é só em Python (sem tocar o banco) e passa de 70
             # milhões de linhas na base nacional — uma conexão sem nenhum
             # tráfego por minutos é exatamente o gatilho de um provedor
             # serverless (Neon) suspender o compute, derrubando a conexão
-            # antes do commit final (raio-X 2026-08-27: "server conn
-            # crashed?" bem no fim de uma carga que já tinha filtrado tudo
-            # certo). Um ping barato aqui mantém o compute e a conexão
-            # vivos durante a varredura longa.
+            # antes do commit final. Um ping barato aqui mantém a conexão
+            # viva — mas precisa fechar a transação (`commit()`) na hora
+            # também: a primeira tentativa só com `execute` deixava uma
+            # transação aberta parada entre um checkpoint e o outro, e o
+            # Postgres do Neon mata isso de propósito
+            # (`IdleInTransactionSessionTimeout`) — descobrimos isso
+            # exatamente no meio desta varredura (raio-X 2026-08-27).
             db.execute(text("SELECT 1"))
+            db.commit()
     cnpjs_basicos_no_recorte = {linha[0] for linha in estabelecimentos_no_recorte}
     print(f"{len(estabelecimentos_no_recorte)} estabelecimento(s) no recorte.", flush=True)
 
