@@ -5,7 +5,11 @@ from sqlalchemy.orm import Session
 
 from app.models.icp import ICP
 from app.models.recorte_cnpj_estado import RecorteCnpjEstado
-from app.providers.account_data.receita_federal_downloader import baixar_shards, resolver_mes_competencia
+from app.providers.account_data.receita_federal_downloader import (
+    baixar_shards,
+    normalizar_cnae,
+    resolver_mes_competencia,
+)
 from app.providers.account_data.receita_federal_loader import carregar_recorte
 
 _ID_ESTADO = 1
@@ -19,7 +23,7 @@ def uniao_cnae_uf_ativos_todos_tenants(db: Session) -> tuple[list[str], list[str
     cnae_codigos: set[str] = set()
     ufs: set[str] = set()
     for icp in db.query(ICP).filter_by(ativo=True).all():
-        cnae_codigos.update(icp.cnae_codigos)
+        cnae_codigos.update(normalizar_cnae(codigo) for codigo in icp.cnae_codigos)
         ufs.update(icp.ufs)
     return sorted(cnae_codigos), sorted(ufs)
 

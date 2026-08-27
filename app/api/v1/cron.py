@@ -263,12 +263,24 @@ def diagnostico_schema(db: Session = Depends(get_db)) -> dict:
         )
     ).mappings().first()
     total_estabelecimentos = db.execute(text("SELECT count(*) FROM cnpj_estabelecimento")).scalar()
+    icps_ativos = [
+        dict(linha)
+        for linha in db.execute(
+            text("SELECT id, tenant_id, nome, cnae_codigos, ufs FROM icp WHERE ativo = true")
+        ).mappings()
+    ]
+    amostra_cnae_bruto = [
+        row[0]
+        for row in db.execute(text("SELECT DISTINCT cnae_principal FROM cnpj_estabelecimento LIMIT 5")).all()
+    ]
     return {
         "alembic_version": versao,
         "tabelas_existem": tabelas,
         "tenant_tem_coluna_ativo": coluna_tenant_ativo is not None,
         "estado_recorte": dict(estado_recorte) if estado_recorte else None,
         "total_cnpj_estabelecimento": total_estabelecimentos,
+        "icps_ativos": icps_ativos,
+        "amostra_cnae_bruto_no_csv": amostra_cnae_bruto,
     }
 
 

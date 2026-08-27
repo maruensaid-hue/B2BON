@@ -6,6 +6,7 @@ from app.providers.account_data.base import (
     DecisorCandidato,
     FiltroBusca,
 )
+from app.providers.account_data.receita_federal_downloader import normalizar_cnae
 from app.providers.account_data.receita_federal_models import CnpjEstabelecimento, CnpjSocio
 
 
@@ -20,7 +21,7 @@ class ReceitaFederalCNPJProvider(AccountDataProvider):
 
     def buscar_candidatos(self, filtro: FiltroBusca) -> list[ContaCandidata]:
         query = self._db.query(CnpjEstabelecimento).filter(
-            CnpjEstabelecimento.cnae_principal.in_(filtro.cnae_codigos),
+            CnpjEstabelecimento.cnae_principal.in_([normalizar_cnae(c) for c in filtro.cnae_codigos]),
             CnpjEstabelecimento.uf.in_([uf.upper() for uf in filtro.ufs]),
             CnpjEstabelecimento.situacao_cadastral == filtro.situacao_cadastral,
         )

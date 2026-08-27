@@ -34,6 +34,19 @@ def test_resolver_mes_competencia_sem_nenhuma_pasta_levanta_erro(monkeypatch: py
         downloader.resolver_mes_competencia()
 
 
+@pytest.mark.parametrize(
+    ("bruto", "esperado"),
+    [
+        ("6201500", "6201500"),  # já normalizado, não mexe
+        ("6201-5/00", "6201500"),  # formato humano das tabelas oficiais
+        ("62.01-5-00", "6201500"),
+        ("  6201500  ", "6201500"),
+    ],
+)
+def test_normalizar_cnae_remove_qualquer_pontuacao(bruto: str, esperado: str):
+    assert downloader.normalizar_cnae(bruto) == esperado
+
+
 class _StreamFalso:
     def __init__(self, status_code: int, conteudo: bytes = b"") -> None:
         self.status_code = status_code

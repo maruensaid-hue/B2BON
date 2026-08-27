@@ -1,6 +1,7 @@
 import csv
 from datetime import UTC, datetime
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.providers.account_data.receita_federal_models import CnpjEstabelecimento, CnpjSocio
@@ -97,6 +98,15 @@ def carregar_recorte(
             estabelecimentos_no_recorte.append(linha)
         if indice % 5_000_000 == 0:
             print(f"  {indice:,} linha(s) varrida(s), {len(estabelecimentos_no_recorte)} no recorte...", flush=True)
+            # A varredura é só em Python (sem tocar o banco) e passa de 70
+            # milhões de linhas na base nacional — uma conexão sem nenhum
+            # tráfego por minutos é exatamente o gatilho de um provedor
+            # serverless (Neon) suspender o compute, derrubando a conexão
+            # antes do commit final (raio-X 2026-08-27: "server conn
+            # crashed?" bem no fim de uma carga que já tinha filtrado tudo
+            # certo). Um ping barato aqui mantém o compute e a conexão
+            # vivos durante a varredura longa.
+            db.execute(text("SELECT 1"))
     cnpjs_basicos_no_recorte = {linha[0] for linha in estabelecimentos_no_recorte}
     print(f"{len(estabelecimentos_no_recorte)} estabelecimento(s) no recorte.", flush=True)
 

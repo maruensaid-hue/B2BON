@@ -16,6 +16,18 @@ import httpx
 URL_BASE = "https://dados-abertos-rf-cnpj.casadosdados.com.br/arquivos"
 _QUANTIDADE_SHARDS = 10
 _PADRAO_PASTA_DATA = re.compile(r'href="(\d{4}-\d{2}-\d{2})/"')
+_NAO_DIGITO = re.compile(r"\D")
+
+
+def normalizar_cnae(codigo: str) -> str:
+    """A RFB grava CNAE como string de dígitos puros (ex.: "6201501") no
+    arquivo público — mas é comum guardar/digitar o formato humano
+    pontuado (ex.: "6201-5/01", como aparece nas tabelas oficiais de
+    consulta). Sem normalizar os dois lados pro mesmo formato antes de
+    comparar, a busca nunca casa nada (raio-X 2026-08-27: 70 milhões de
+    linhas varridas na carga inicial, 0 no recorte — o ICP do usuário
+    tinha o CNAE pontuado)."""
+    return _NAO_DIGITO.sub("", codigo)
 
 
 class MesCompetenciaIndisponivel(RuntimeError):

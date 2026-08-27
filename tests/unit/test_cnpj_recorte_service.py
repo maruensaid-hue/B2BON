@@ -38,6 +38,19 @@ def test_uniao_cnae_uf_cobre_todos_os_tenants_sem_duplicatas(db_session):
     assert ufs == ["RJ", "SP"]
 
 
+def test_uniao_cnae_normaliza_formato_pontuado(db_session):
+    """Bug real (raio-X 2026-08-27): ICP guardado com CNAE no formato
+    humano pontuado (como aparece nas tabelas oficiais de consulta) nunca
+    batia com o formato puro-dígitos do CSV da Receita Federal — a
+    varredura completa (70 milhões de linhas em produção) sempre dava
+    zero resultado, mesmo com o download certo."""
+    _criar_icp(db_session, "tenant-a", ativo=True, cnae_codigos=["6201-5/00"], ufs=["SP"])
+
+    cnae_codigos, _ = cnpj_recorte_service.uniao_cnae_uf_ativos_todos_tenants(db_session)
+
+    assert cnae_codigos == ["6201500"]
+
+
 def test_sem_nenhum_icp_ativo_nao_executa(db_session):
     resultado = cnpj_recorte_service.atualizar_recorte_automatico(db_session)
 
@@ -87,6 +100,17 @@ def test_segunda_execucao_sem_icp_novo_nao_baixa_de_novo(db_session, monkeypatch
 
     assert resultado["executado"] is False
     assert chamadas == []  # nao baixou nada de novo
+
+
+def test_icp_com_cnae_pontuado_carrega_o_recorte_de_ponta_a_ponta(db_session, monkeypatch: pytest.MonkeyPatch):
+    _criar_icp(db_session, "tenant-a", ativo=True, cnae_codigos=["6201-5/00"], ufs=["SP"])
+    _mockar_download(monkeypatch)
+
+    resultado = cnpj_recorte_service.atualizar_recorte_automatico(db_session)
+
+    assert resultado["executado"] is True
+    assert resultado["estabelecimentos_carregados"] == 2
+    assert db_session.query(CnpjEstabelecimento).count() == 2
 
 
 def test_icp_novo_com_cnae_diferente_dispara_novo_download(db_session, monkeypatch: pytest.MonkeyPatch):
