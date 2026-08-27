@@ -1,7 +1,6 @@
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header
-from sqlalchemy import inspect as sa_inspect, text
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -226,73 +225,3 @@ def disparar_relatorios_periodicos(
     recebe (`ConfiguracaoRelatorio`), rodado 1x/dia (suficiente até pra
     cadência diária, já que checar 1x/dia é o próprio significado disso)."""
     return relatorio_service.disparar_periodicos(db, email, plan_limits)
-
-
-# --- Diagnóstico/reparo temporário (raio-X 2026-08-26) ---
-# `recorte_cnpj_estado` (e possivelmente outras tabelas) existe na migração
-# do Alembic mas não existia no banco de produção, mesmo com o deploy
-# rodando `alembic upgrade head` a cada subida — sinal de que
-# `alembic_version` em produção está "adiantado" (ou o `create_all`
-# nunca rodou de verdade) em relação ao schema real. Sem Shell disponível
-# no plano do Render pra investigar direto, essas duas rotas existem só
-# pra diagnosticar e destravar produção às pressas; REMOVER depois que o
-# desalinhamento for confirmado e corrigido.
-
-
-@router.get("/diagnostico-schema", dependencies=[Depends(_exigir_segredo_cron)])
-def diagnostico_schema(db: Session = Depends(get_db)) -> dict:
-    versao = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    tabelas_checar = [
-        "conta", "convite_vitrine", "recorte_cnpj_estado", "lista_prospeccao",
-        "fila_enriquecimento_conta", "tenant",
-    ]
-    tabelas = {
-        nome: db.execute(text("SELECT to_regclass(:nome)"), {"nome": nome}).scalar() is not None
-        for nome in tabelas_checar
-    }
-    coluna_tenant_ativo = db.execute(
-        text(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'tenant' AND column_name = 'ativo'"
-        )
-    ).scalar()
-    estado_recorte = db.execute(
-        text(
-            "SELECT mes_competencia, cnae_codigos_cobertos, ufs_cobertos, atualizado_em "
-            "FROM recorte_cnpj_estado WHERE id = 1"
-        )
-    ).mappings().first()
-    total_estabelecimentos = db.execute(text("SELECT count(*) FROM cnpj_estabelecimento")).scalar()
-    icps_ativos = [
-        dict(linha)
-        for linha in db.execute(
-            text("SELECT id, tenant_id, nome, cnae_codigos, ufs FROM icp WHERE ativo = true")
-        ).mappings()
-    ]
-    amostra_cnae_bruto = [
-        row[0]
-        for row in db.execute(text("SELECT DISTINCT cnae_principal FROM cnpj_estabelecimento LIMIT 5")).all()
-    ]
-    return {
-        "alembic_version": versao,
-        "tabelas_existem": tabelas,
-        "tenant_tem_coluna_ativo": coluna_tenant_ativo is not None,
-        "estado_recorte": dict(estado_recorte) if estado_recorte else None,
-        "total_cnpj_estabelecimento": total_estabelecimentos,
-        "icps_ativos": icps_ativos,
-        "amostra_cnae_bruto_no_csv": amostra_cnae_bruto,
-    }
-
-
-@router.post("/reparar-schema", dependencies=[Depends(_exigir_segredo_cron)])
-def reparar_schema(db: Session = Depends(get_db)) -> dict:
-    """`create_all` só cria tabelas que faltam — nunca altera/apaga o que
-    já existe. Destrava produção sem esperar a investigação completa da
-    causa raiz do `alembic_version` desalinhado."""
-    from app.db.base import Base
-
-    engine = db.get_bind()
-    antes = set(sa_inspect(engine).get_table_names())
-    Base.metadata.create_all(bind=engine)
-    depois = set(sa_inspect(engine).get_table_names())
-    return {"tabelas_criadas": sorted(depois - antes)}
