@@ -32,6 +32,16 @@ class ClaudeProvider(LLMProvider):
             )
         except anthropic.AnthropicError as erro:
             raise LLMIndisponivel(f"Falha ao chamar a IA: {erro}") from erro
+        except TypeError as erro:
+            # Sem lock file, a versão da SDK instalada em produção pode
+            # divergir da testada localmente (raio-X 2026-08-27: a camada
+            # Docker de `pip install` fica cacheada enquanto pyproject.toml
+            # não muda, então uma mudança de assinatura do `messages.create`
+            # numa versão nova só aparece depois de um build que force
+            # reinstalar) — sem isto, um `TypeError` de argumento
+            # inesperado escapava cru até o handler genérico de 500 em vez
+            # de virar o erro de negócio claro que já existe pra esse caso.
+            raise LLMIndisponivel(f"Falha ao chamar a IA (SDK incompatível): {erro}") from erro
 
         # `message.content[0]` nem sempre é o texto final — em prompts mais
         # complexos (ex.: site institucional denso) o modelo pode pensar
