@@ -1,0 +1,29 @@
+name: Carregar recorte de CNPJ (manual)
+
+# Fallback deliberado (raio-X 2026-08-27): a carga inicial pesada do
+# recorte de CNPJ (Estabelecimentos sozinho passa de 4GB baixados) estoura
+# a cota de 2GB do /tmp do Render, matando e recriando a instância no meio
+# do processo repetidas vezes. Este workflow roda a mesma carga num
+# runner do GitHub Actions (~14GB de disco livre), só sob disparo manual
+# — não é um cron recorrente, é só pra destravar a carga inicial. A
+# atualização mensal seguinte já cabe na rotina automática de 30 em 30
+# minutos do próprio Render (POST /cron/atualizar-recorte-cnpj), que só
+# baixa o que mudou desde a última carga.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  carregar-recorte:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependências
+        run: pip install -e .
+      - name: Rodar carga do recorte de CNPJ
+        run: python scripts/carregar_recorte_ci.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
