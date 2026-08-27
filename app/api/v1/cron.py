@@ -1,5 +1,6 @@
 import logging
 
+import sentry_sdk
 from fastapi import APIRouter, BackgroundTasks, Depends, Header
 from sqlalchemy.orm import Session
 
@@ -56,6 +57,22 @@ def _exigir_segredo_cron(x_cron_secret: str | None = Header(None)) -> None:
         raise NaoAutorizado("Segredo de cron ausente ou inválido.")
 
 
+def _registrar_falha_tenant(tenant_id: str) -> None:
+    """Loga e reporta ao Sentry sem propagar — usada nos dispatchers que
+    iteram todos os tenants numa chamada só. Raio-X 2026-08-27: uma
+    credencial quebrada de UM tenant (ex.: `ConfiguracaoWhatsApp.
+    access_token` cifrado com uma chave de criptografia já rotacionada,
+    virando `cryptography.fernet.InvalidToken` toda vez que lido) sem
+    isolamento derrubava o dispatcher inteiro — todos os OUTROS tenants
+    deixavam de ter e-mail/WhatsApp processado, e como os passos do cron
+    externo (GitHub Actions) rodam em sequência, isso bloqueava também
+    todo cron agendado depois deste (webhooks de parceiro, fila de
+    enriquecimento, retenção de titulares etc.)."""
+    logger.exception("Falha ao processar cron para o tenant %s", tenant_id)
+    if settings.sentry_dsn:
+        sentry_sdk.capture_exception()
+
+
 @router.post("/processar-envios", dependencies=[Depends(_exigir_segredo_cron)])
 def processar_envios_todos_os_tenants(
     db: Session = Depends(get_db),
@@ -67,16 +84,23 @@ def processar_envios_todos_os_tenants(
     acionado por um cron externo (GitHub Actions) em vez de por um
     usuário autenticado."""
     resultado_por_tenant: dict[str, dict] = {}
+    tenants_com_falha: list[str] = []
     totais = {"enviadas": 0, "falhas": 0, "adiadas": 0, "tarefas_linkedin_criadas": 0, "descartadas_email_invalido": 0}
 
     for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
-        whatsapp = resolver_whatsapp_provider(tenant.id, db)
-        resultado = envio_service.processar_pendentes(db, tenant.id, whatsapp, email, email_validation)
+        try:
+            whatsapp = resolver_whatsapp_provider(tenant.id, db)
+            resultado = envio_service.processar_pendentes(db, tenant.id, whatsapp, email, email_validation)
+        except Exception:
+            db.rollback()
+            _registrar_falha_tenant(tenant.id)
+            tenants_com_falha.append(tenant.id)
+            continue
         resultado_por_tenant[tenant.id] = resultado
         for chave in totais:
             totais[chave] += resultado[chave]
 
-    return {"totais": totais, "por_tenant": resultado_por_tenant}
+    return {"totais": totais, "por_tenant": resultado_por_tenant, "tenants_com_falha": tenants_com_falha}
 
 
 @router.post("/processar-retorno", dependencies=[Depends(_exigir_segredo_cron)])
@@ -89,18 +113,25 @@ def processar_retorno_todos_os_tenants(
     padrão de `processar_envios_todos_os_tenants`. Sem isto, esses dois
     dispatchers só rodavam via chamada manual autenticada, nunca sozinhos."""
     resultado_por_tenant: dict[str, dict] = {}
+    tenants_com_falha: list[str] = []
     totais = {"lembretes_d1_enviados": 0, "lembretes_h2_enviados": 0, "pesquisas_disparadas": 0}
 
     for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
-        whatsapp = resolver_whatsapp_provider(tenant.id, db)
-        lembretes = reuniao_service.processar_lembretes(db, tenant.id, whatsapp, email)
-        nps = nps_service.disparar_pendentes(db, tenant.id, whatsapp, email)
+        try:
+            whatsapp = resolver_whatsapp_provider(tenant.id, db)
+            lembretes = reuniao_service.processar_lembretes(db, tenant.id, whatsapp, email)
+            nps = nps_service.disparar_pendentes(db, tenant.id, whatsapp, email)
+        except Exception:
+            db.rollback()
+            _registrar_falha_tenant(tenant.id)
+            tenants_com_falha.append(tenant.id)
+            continue
         resultado_por_tenant[tenant.id] = {**lembretes, **nps}
         totais["lembretes_d1_enviados"] += lembretes["lembretes_d1_enviados"]
         totais["lembretes_h2_enviados"] += lembretes["lembretes_h2_enviados"]
         totais["pesquisas_disparadas"] += nps["pesquisas_disparadas"]
 
-    return {"totais": totais, "por_tenant": resultado_por_tenant}
+    return {"totais": totais, "por_tenant": resultado_por_tenant, "tenants_com_falha": tenants_com_falha}
 
 
 @router.post("/processar-campanhas", dependencies=[Depends(_exigir_segredo_cron)])
@@ -114,16 +145,23 @@ def processar_campanhas_todos_os_tenants(
     campanha é uma chamada de provider simples por destinatário, então
     processa tudo pendente de uma vez, sem lote/limite artificial."""
     resultado_por_tenant: dict[str, dict] = {}
+    tenants_com_falha: list[str] = []
     totais = {"enviadas": 0, "falhas": 0}
 
     for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
-        whatsapp = resolver_whatsapp_provider(tenant.id, db)
-        resultado = campanha_service.processar_pendentes(db, tenant.id, email, whatsapp)
+        try:
+            whatsapp = resolver_whatsapp_provider(tenant.id, db)
+            resultado = campanha_service.processar_pendentes(db, tenant.id, email, whatsapp)
+        except Exception:
+            db.rollback()
+            _registrar_falha_tenant(tenant.id)
+            tenants_com_falha.append(tenant.id)
+            continue
         resultado_por_tenant[tenant.id] = resultado
         for chave in totais:
             totais[chave] += resultado[chave]
 
-    return {"totais": totais, "por_tenant": resultado_por_tenant}
+    return {"totais": totais, "por_tenant": resultado_por_tenant, "tenants_com_falha": tenants_com_falha}
 
 
 @router.post("/expirar-titulares", dependencies=[Depends(_exigir_segredo_cron)])
@@ -132,14 +170,25 @@ def expirar_titulares_todos_os_tenants(db: Session = Depends(get_db)) -> dict:
     padrão dos outros dispatchers agendados, mas 1x/dia basta (não é algo
     tempo-sensível como envio/lembrete)."""
     resultado_por_tenant: dict[str, dict] = {}
+    tenants_com_falha: list[str] = []
     total_expirados = 0
 
     for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
-        resultado = titular_service.expirar_inativos(db, tenant.id, settings.dias_retencao_titular_inativo)
+        try:
+            resultado = titular_service.expirar_inativos(db, tenant.id, settings.dias_retencao_titular_inativo)
+        except Exception:
+            db.rollback()
+            _registrar_falha_tenant(tenant.id)
+            tenants_com_falha.append(tenant.id)
+            continue
         resultado_por_tenant[tenant.id] = resultado
         total_expirados += resultado["decisores_expirados"]
 
-    return {"total_decisores_expirados": total_expirados, "por_tenant": resultado_por_tenant}
+    return {
+        "total_decisores_expirados": total_expirados,
+        "por_tenant": resultado_por_tenant,
+        "tenants_com_falha": tenants_com_falha,
+    }
 
 
 @router.post("/suspender-licencas-vencidas", dependencies=[Depends(_exigir_segredo_cron)])

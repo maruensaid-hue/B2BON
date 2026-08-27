@@ -31,7 +31,14 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      # `if: always()` em todos os passos daqui pra baixo (raio-X
+      # 2026-08-27): sem isso, uma falha num passo qualquer pulava TODOS
+      # os passos seguintes — uma credencial quebrada de UM tenant travando
+      # só o /cron/processar-envios bloqueava webhooks de parceiro, fila de
+      # enriquecimento em lote e todo o resto, mesmo sem nenhuma relação
+      # entre eles. Cada chamada agora é independente das outras.
       - name: Chamar POST /cron/processar-campanhas (e-mail/WhatsApp em massa)
+        if: always()
         run: |
           curl --fail --show-error --silent \
             -X POST "${API_BASE_URL}/cron/processar-campanhas" \
@@ -40,6 +47,7 @@ jobs:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
       - name: Chamar POST /cron/processar-retorno (lembretes de reunião + NPS)
+        if: always()
         run: |
           curl --fail --show-error --silent \
             -X POST "${API_BASE_URL}/cron/processar-retorno" \
@@ -48,6 +56,7 @@ jobs:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
       - name: Chamar POST /cron/disparar-webhooks-parceiros (Fase 2 hierarquia)
+        if: always()
         run: |
           curl --fail --show-error --silent \
             -X POST "${API_BASE_URL}/cron/disparar-webhooks-parceiros" \
@@ -56,6 +65,7 @@ jobs:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
       - name: Chamar POST /cron/processar-fila-enriquecimento (lote de importação de planilha)
+        if: always()
         run: |
           curl --fail --show-error --silent \
             -X POST "${API_BASE_URL}/cron/processar-fila-enriquecimento" \
@@ -64,7 +74,7 @@ jobs:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
       - name: Chamar POST /cron/expirar-titulares (retenção automática, 1x/dia)
-        if: github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch'
+        if: always() && (github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch')
         run: |
           curl --fail --show-error --silent \
             -X POST "${API_BASE_URL}/cron/expirar-titulares" \
@@ -73,7 +83,7 @@ jobs:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
       - name: Chamar POST /cron/suspender-licencas-vencidas (inadimplência, 1x/dia)
-        if: github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch'
+        if: always() && (github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch')
         run: |
           curl --fail --show-error --silent \
             -X POST "${API_BASE_URL}/cron/suspender-licencas-vencidas" \
@@ -82,7 +92,7 @@ jobs:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
       - name: Chamar POST /cron/disparar-relatorios-periodicos (Fase 3 hierarquia, 1x/dia)
-        if: github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch'
+        if: always() && (github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch')
         run: |
           curl --fail --show-error --silent \
             -X POST "${API_BASE_URL}/cron/disparar-relatorios-periodicos" \

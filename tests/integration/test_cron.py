@@ -1,9 +1,25 @@
 import pytest
 
+import app.api.v1.cron as cron_module
 from app.core.config import settings
+from app.models.licenca import Licenca
+from app.models.plano import Plano
+from app.models.tenant import Tenant
 from app.providers.web_search.base import ResultadoBusca
 
 SEGREDO = "segredo-de-teste-super-secreto"
+
+
+def _criar_tenant_ativo(db_session, tenant_id: str) -> None:
+    """Segundo tenant direto no banco, sem passar pela rota — os
+    dispatchers de cron iteram TODOS os tenants ativos independente de
+    qual tenant o `client` de teste está autenticado."""
+    plano = Plano(nome=f"Plano {tenant_id}", franquia_contas_mes=200, max_usuarios=10, preco_mensal=0.0)
+    db_session.add(plano)
+    db_session.flush()
+    db_session.add(Tenant(id=tenant_id, razao_social=f"Empresa {tenant_id}"))
+    db_session.add(Licenca(tenant_id=tenant_id, plano_id=plano.id, status="ativa"))
+    db_session.commit()
 
 
 @pytest.fixture()
@@ -41,6 +57,35 @@ def test_processar_envios_com_segredo_certo_processa_todos_os_tenants(client, co
         "descartadas_email_invalido",
     }
     assert isinstance(corpo["por_tenant"], dict)
+
+
+def test_processar_envios_isola_falha_de_um_tenant_sem_bloquear_os_outros(
+    client, db_session, com_segredo_cron, monkeypatch: pytest.MonkeyPatch
+):
+    """Raio-X 2026-08-27: `ConfiguracaoWhatsApp.access_token` cifrado com
+    uma chave de criptografia já rotacionada virava `cryptography.fernet.
+    InvalidToken` toda vez que lido — sem isolamento por tenant, isso
+    derrubava o dispatcher inteiro (nenhum outro tenant era processado).
+    Também prova que a sessão do banco se recupera (`db.rollback()`)
+    depois da falha — sem isso, a query do próximo tenant estouraria
+    `PendingRollbackError` em cascata."""
+    _criar_tenant_ativo(db_session, "tenant-com-whatsapp-quebrado")
+    resolver_original = cron_module.resolver_whatsapp_provider
+
+    def resolver_com_falha(tenant_id, db):
+        if tenant_id == "tenant-com-whatsapp-quebrado":
+            raise RuntimeError("simula InvalidToken na descriptografia do access_token")
+        return resolver_original(tenant_id, db)
+
+    monkeypatch.setattr(cron_module, "resolver_whatsapp_provider", resolver_com_falha)
+
+    resposta = client.post("/api/v1/cron/processar-envios", headers={"X-Cron-Secret": SEGREDO})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["tenants_com_falha"] == ["tenant-com-whatsapp-quebrado"]
+    assert "tenant-teste" in corpo["por_tenant"]
+    assert "tenant-com-whatsapp-quebrado" not in corpo["por_tenant"]
 
 
 def test_processar_retorno_sem_segredo_configurado_recusa(client):
