@@ -418,6 +418,36 @@ def listar_por_icp(db: Session, tenant_id: str, icp_id: int) -> list[Conta]:
     return db.query(Conta).filter_by(tenant_id=tenant_id, icp_id=icp_id).order_by(Conta.criado_em.desc()).all()
 
 
+def enfileirar_enriquecimento_em_lote(db: Session, tenant_id: str, conta_ids: list[int]) -> dict:
+    """Seleção manual pro botão "Enriquecer selecionadas" na tela de
+    Prospecção — mesma fila que `importar_participantes_evento` já
+    alimenta sozinho, só que disparada por escolha do usuário em vez de só
+    no momento da importação de planilha (pedido 2026-08-27: enriquecer
+    site/decisores de várias contas de uma vez, sem ser uma por uma).
+
+    Restringe aos ids que pertencem ao tenant, ignorando o resto (mesmo
+    padrão de `excluir_lote_por_lista`/`excluir_lote_leads`). Idempotente:
+    uma conta que já tem item pendente na fila não entra de novo — evita
+    processar a mesma conta duas vezes se o usuário clicar de novo antes
+    do cron rodar."""
+    ids_validos = {
+        conta_id
+        for (conta_id,) in db.query(Conta.id).filter(Conta.tenant_id == tenant_id, Conta.id.in_(conta_ids)).all()
+    }
+    ja_pendentes = {
+        conta_id
+        for (conta_id,) in db.query(FilaEnriquecimentoConta.conta_id)
+        .filter_by(tenant_id=tenant_id, status="pendente")
+        .filter(FilaEnriquecimentoConta.conta_id.in_(ids_validos))
+        .all()
+    }
+    novas = sorted(ids_validos - ja_pendentes)
+    for conta_id in novas:
+        db.add(FilaEnriquecimentoConta(tenant_id=tenant_id, conta_id=conta_id))
+    db.commit()
+    return {"contas_enfileiradas": len(novas)}
+
+
 def listar_por_lista(db: Session, tenant_id: str, lista_prospeccao_id: int) -> list[Conta]:
     """Contas de uma Lista de Prospecção específica — mesmo raciocínio de
     `listar_por_icp`, mas pro agrupamento por lote de importação."""

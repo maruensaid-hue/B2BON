@@ -76,6 +76,30 @@ def test_geracao_nao_consome_franquia(client, criar_icp, fake_account_data):
     assert franquia["usado"] == 0
 
 
+def test_enriquecer_em_lote_enfileira_as_contas_selecionadas(client, db_session, criar_icp, fake_account_data):
+    """Botão "Enriquecer selecionadas" na tela de Prospecção: enfileira as
+    contas escolhidas na mesma fila usada pela importação de planilha,
+    sem enriquecer na hora (evita timeout de proxy com várias contas)."""
+    from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
+
+    icp = criar_icp()
+    fake_account_data.candidatos = [
+        _candidato("11222333000191", "Alpha Tech"),
+        _candidato("22333444000192", "Beta Tech"),
+    ]
+    contas = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"]
+
+    resposta = client.post(
+        "/api/v1/contas/enriquecer-em-lote", json={"conta_ids": [conta["id"] for conta in contas]}
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"contas_enfileiradas": 2}
+    itens = db_session.query(FilaEnriquecimentoConta).all()
+    assert {item.conta_id for item in itens} == {conta["id"] for conta in contas}
+    assert all(item.status == "pendente" for item in itens)
+
+
 def test_enriquecer_conta_registra_fonte_e_data(client, db_session, criar_icp, fake_account_data, fake_llm):
     """E2-H2: ficha de conta com campos enriquecidos e fonte/data de cada dado."""
     icp = criar_icp()

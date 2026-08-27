@@ -79,6 +79,10 @@ interface ImportarParticipantesResponse {
   contas: Conta[];
 }
 
+interface EnriquecerEmLoteResponse {
+  contas_enfileiradas: number;
+}
+
 function paraLista(texto: string): string[] {
   return texto
     .split(",")
@@ -243,6 +247,9 @@ export function Prospeccao() {
   const [confirmandoExclusaoLoteLista, setConfirmandoExclusaoLoteLista] = useState(false);
   const [excluindoConta, setExcluindoConta] = useState(false);
 
+  const [selecaoEnriquecimento, setSelecaoEnriquecimento] = useState<Set<number>>(new Set());
+  const [enriquecendoEmLote, setEnriquecendoEmLote] = useState(false);
+
   const [modalExclusaoLeadsAberto, setModalExclusaoLeadsAberto] = useState(false);
   const [carregandoElegibilidadeLeads, setCarregandoElegibilidadeLeads] = useState(false);
   const [elegibilidadeLeads, setElegibilidadeLeads] = useState<ElegibilidadeConta[]>([]);
@@ -328,6 +335,10 @@ export function Prospeccao() {
   useEffect(() => {
     if (listaSelecionadaId !== null) carregarContasDaLista(listaSelecionadaId);
   }, [listaSelecionadaId]);
+
+  useEffect(() => {
+    setSelecaoEnriquecimento(new Set());
+  }, [origemContas, icpSelecionadoId, listaSelecionadaId]);
 
   useEffect(() => {
     if (origemContas === "leads" && leads.length === 0) carregarLeads();
@@ -461,6 +472,33 @@ export function Prospeccao() {
   }
 
   const contasVisiveis = origemContas === "icp" ? contas : origemContas === "lista" ? contasDaLista : leads;
+
+  function alternarSelecaoEnriquecimento(contaId: number) {
+    setSelecaoEnriquecimento((atual) => {
+      const proximo = new Set(atual);
+      if (proximo.has(contaId)) proximo.delete(contaId);
+      else proximo.add(contaId);
+      return proximo;
+    });
+  }
+
+  async function confirmarEnriquecimentoSelecionadas() {
+    if (enriquecendoEmLote || selecaoEnriquecimento.size === 0) return;
+    setEnriquecendoEmLote(true);
+    try {
+      const resultado = await api.post<EnriquecerEmLoteResponse>("/contas/enriquecer-em-lote", {
+        conta_ids: Array.from(selecaoEnriquecimento),
+      });
+      setSelecaoEnriquecimento(new Set());
+      setMensagem(
+        `${resultado.contas_enfileiradas} conta(s) entraram na fila de enriquecimento (site + contatos) — os dados aparecem aos poucos nos próximos minutos.`,
+      );
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível enfileirar as contas para enriquecimento.");
+    } finally {
+      setEnriquecendoEmLote(false);
+    }
+  }
 
   async function recarregarContasVisiveis() {
     if (origemContas === "icp" && icpSelecionadoId !== null) await carregarContas(icpSelecionadoId);
@@ -785,21 +823,41 @@ export function Prospeccao() {
       </Card>
 
       <Card>
-        <SectionLabel>
-          Contas{" "}
-          {origemContas === "icp"
-            ? icpSelecionado
-              ? `— ${icpSelecionado.nome}`
-              : ""
-            : origemContas === "lista"
-              ? listaSelecionada
-                ? `— ${listaSelecionada.nome}`
+        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+          <SectionLabel className="mb-0">
+            Contas{" "}
+            {origemContas === "icp"
+              ? icpSelecionado
+                ? `— ${icpSelecionado.nome}`
                 : ""
-              : "— Clientes Cadastrados"}
-        </SectionLabel>
+              : origemContas === "lista"
+                ? listaSelecionada
+                  ? `— ${listaSelecionada.nome}`
+                  : ""
+                : "— Clientes Cadastrados"}
+          </SectionLabel>
+          {selecaoEnriquecimento.size > 0 && (
+            <Button size="sm" disabled={enriquecendoEmLote} onClick={confirmarEnriquecimentoSelecionadas}>
+              {enriquecendoEmLote
+                ? "Enfileirando..."
+                : `Enriquecer ${selecaoEnriquecimento.size} conta(s) selecionada(s)`}
+            </Button>
+          )}
+        </div>
         <table className="w-full border-collapse text-[12px]">
           <thead>
             <tr className="border-b border-border text-[9.5px] tracking-wide text-muted uppercase">
+              <th className="p-2 text-left">
+                <input
+                  type="checkbox"
+                  checked={contasVisiveis.length > 0 && selecaoEnriquecimento.size === contasVisiveis.length}
+                  onChange={() =>
+                    setSelecaoEnriquecimento((atual) =>
+                      atual.size === contasVisiveis.length ? new Set() : new Set(contasVisiveis.map((c) => c.id)),
+                    )
+                  }
+                />
+              </th>
               <th className="p-2 text-left">Nome</th>
               <th className="p-2 text-left">CNPJ</th>
               <th className="p-2 text-left">Score</th>
@@ -810,6 +868,13 @@ export function Prospeccao() {
           <tbody>
             {contasVisiveis.map((conta) => (
               <tr key={conta.id} className="border-b border-border">
+                <td className="p-2">
+                  <input
+                    type="checkbox"
+                    checked={selecaoEnriquecimento.has(conta.id)}
+                    onChange={() => alternarSelecaoEnriquecimento(conta.id)}
+                  />
+                </td>
                 <td className="p-2 font-semibold">{conta.nome}</td>
                 <td className="p-2 text-muted">{conta.cnpj ?? "—"}</td>
                 <td className="p-2 text-cyan">{conta.score_aderencia ?? "—"}</td>
@@ -841,7 +906,7 @@ export function Prospeccao() {
             ))}
             {contasVisiveis.length === 0 && (
               <tr>
-                <td colSpan={5} className="p-4 text-center text-muted">
+                <td colSpan={6} className="p-4 text-center text-muted">
                   {origemContas === "icp"
                     ? "Nenhuma conta gerada para este ICP ainda."
                     : origemContas === "lista"

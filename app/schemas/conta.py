@@ -84,6 +84,14 @@ class GerarListaResponseSchema(BaseModel):
     contas: list[ContaSchema]
 
 
+class EnriquecerEmLoteRequestSchema(BaseModel):
+    conta_ids: list[int]
+
+
+class EnriquecerEmLoteResponseSchema(BaseModel):
+    contas_enfileiradas: int
+
+
 class ParticipanteEventoSchema(BaseModel):
     nome: str
     empresa: str

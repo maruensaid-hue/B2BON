@@ -30,6 +30,8 @@ from app.schemas.conta import (
     DefinirProximoPassoRequestSchema,
     DescartarContaRequestSchema,
     EnriquecerContaResponseSchema,
+    EnriquecerEmLoteRequestSchema,
+    EnriquecerEmLoteResponseSchema,
     FranquiaSchema,
     GerarListaRequestSchema,
     GerarListaResponseSchema,
@@ -112,6 +114,22 @@ def franquia_atual(
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> FranquiaSchema:
     return FranquiaSchema(**franquia_service.obter_franquia(db, tenant_id, plan_limits))
+
+
+@router.post("/contas/enriquecer-em-lote", response_model=EnriquecerEmLoteResponseSchema)
+def enriquecer_contas_em_lote(
+    dados: EnriquecerEmLoteRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> EnriquecerEmLoteResponseSchema:
+    """Enfileira as contas selecionadas pra enriquecimento em lote (site +
+    decisores) — processado aos poucos pelo cron a cada 15min, mesma fila
+    usada pela importação de planilha de evento. Não roda na hora (cada
+    conta passa por LLM + busca web + Lusha), pra não estourar o timeout
+    do proxy do Render."""
+    return EnriquecerEmLoteResponseSchema(
+        **conta_service.enfileirar_enriquecimento_em_lote(db, tenant_id, dados.conta_ids)
+    )
 
 
 @router.get("/contas/{conta_id}", response_model=ContaSchema)
