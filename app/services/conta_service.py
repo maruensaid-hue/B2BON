@@ -887,6 +887,16 @@ _DOMINIOS_IGNORADOS_BUSCA = {
     "agendarconsulta.com", "doctoralia.com.br", "boaconsulta.com",
     "reclameaqui.com.br", "mercadolivre.com.br", "empresascnpj.com",
     "dnb.com", "bloomberg.com", "crunchbase.com", "zoominfo.com", "manta.com",
+    # Plataformas de ATS/recrutamento que hospedam a página de vagas da
+    # empresa num subdomínio próprio (raio-X de produção 2026-08-27: pra
+    # "J&F S.A.", o subdomínio "j-f.gupy.io" bateu 100% de similaridade
+    # com o núcleo do nome — coincidência do slug "jf" — e virou o
+    # domínio "descoberto", trazendo dados da vaga em vez do site
+    # institucional real). O sufixo cobre qualquer subdomínio nessas
+    # plataformas, não só o caso observado.
+    "gupy.io", "kenoby.com", "vagas.com.br", "catho.com.br",
+    "infojobs.com.br", "solides.com.br", "greenhouse.io", "lever.co",
+    "myworkdayjobs.com", "bamboohr.com",
 }
 
 # Sufixos de natureza jurídica (com variações comuns de grafia) — a razão

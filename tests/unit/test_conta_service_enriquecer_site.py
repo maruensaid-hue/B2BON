@@ -104,6 +104,24 @@ def test_descobrir_dominio_ignora_portal_de_agendamento_terceiro(db_session):
     assert dominio == "santoriusmedicina.com.br"
 
 
+def test_descobrir_dominio_ignora_portal_de_vagas_mesmo_com_similaridade_perfeita(db_session):
+    """Raio-X de produção 2026-08-27: pra "J&F S.A.", o subdomínio
+    "j-f.gupy.io" (página de vagas hospedada na Gupy) batia 100% de
+    similaridade com o núcleo do nome ("jf") — a lista de bloqueio
+    precisa rejeitar isso mesmo com o score de similaridade perfeito, já
+    que o domínio real da empresa vem depois, com similaridade menor."""
+    web_search = FakeWebSearchProvider(
+        [
+            ResultadoBusca(titulo="Vagas J&F", url="https://j-f.gupy.io/", descricao=""),
+            ResultadoBusca(titulo="J&F S.A.", url="https://jfsa.com.br/", descricao=""),
+        ]
+    )
+
+    dominio = conta_service._descobrir_dominio("J&F S.A.", web_search)
+
+    assert dominio == "jfsa.com.br"
+
+
 def test_descobrir_dominio_rejeita_diretorio_desconhecido_por_similaridade(db_session):
     """Raio-X de produção: "dnb.com" (Dun & Bradstreet, diretório global de
     empresas) veio como resultado antes de entrar pra lista de bloqueio —
