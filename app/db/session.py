@@ -28,5 +28,19 @@ _eh_sqlite = _database_url.startswith("sqlite")
 # esperar a primeira liberar o lock (Onda H).
 _connect_args = {"check_same_thread": False, "timeout": 30} if _eh_sqlite else {}
 
-engine = create_engine(_database_url, connect_args=_connect_args, poolclass=NullPool if _eh_sqlite else None)
+engine = create_engine(
+    _database_url,
+    connect_args=_connect_args,
+    poolclass=NullPool if _eh_sqlite else None,
+    # Sem isto, uma conexão do pool que ficou parada durante um restart/
+    # deploy do Render (ou uma reciclagem do lado do Neon) só é descoberta
+    # como morta quando o request tenta usá-la de verdade — estourando
+    # "SSL connection has been closed unexpectedly" pro usuário em vez de
+    # reconectar sozinho (raio-X 2026-08-27: aconteceu duas vezes seguidas
+    # logo após reinícios do serviço). `pool_pre_ping` faz um `SELECT 1`
+    # barato antes de entregar a conexão, descartando e reconectando na
+    # hora se estiver morta — não tem efeito visível quando a conexão já
+    # está saudável.
+    pool_pre_ping=True,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
