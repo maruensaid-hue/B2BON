@@ -97,6 +97,39 @@ def test_salvar_configuracao_whatsapp_sem_reenviar_token_mantem_o_existente(clie
     assert config.access_token == "token-original"
 
 
+def test_salvar_configuracao_whatsapp_sobrescreve_token_indecifravel(client, db_session):
+    """Raio-X de produção 2026-08-27: um `access_token` cifrado com uma
+    chave de criptografia diferente da atual (ex.: chave rotacionada
+    depois do token já salvo) vira `cryptography.fernet.InvalidToken`
+    toda vez que a linha é lida pelo ORM — inclusive dentro do próprio
+    PUT, que precisava carregar a linha existente só pra checar se ela
+    já existia. Sem a correção (checagem via `select`/`update` de baixo
+    nível, sem tocar a coluna cifrada), a pessoa nunca conseguia
+    corrigir o token quebrado pela tela: o PUT também estourava 500."""
+    db_session.execute(
+        text(
+            "INSERT INTO configuracao_whatsapp "
+            "(tenant_id, access_token, phone_number_id, business_account_id, criado_em, atualizado_em) "
+            "VALUES (:t, :token, '111', '222', datetime('now'), datetime('now'))"
+        ),
+        {"t": TENANT_ID, "token": "isto-nao-e-um-token-fernet-valido"},
+    )
+    db_session.commit()
+
+    resposta = client.put(
+        "/api/v1/configuracao-whatsapp",
+        json={"phone_number_id": "333", "business_account_id": "444", "access_token": "token-novo-valido"},
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["phone_number_id"] == "333"
+    assert corpo["access_token_mascarado"].endswith("lido")
+
+    config = db_session.query(ConfiguracaoWhatsApp).filter_by(tenant_id=TENANT_ID).one()
+    assert config.access_token == "token-novo-valido"
+
+
 def test_configuracao_whatsapp_bloqueada_para_papel_user(client, criar_usuario_autenticado):
     headers_user = criar_usuario_autenticado(TENANT_ID, papel="user", email="user-comum@teste.com.br")
 

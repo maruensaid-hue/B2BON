@@ -234,6 +234,7 @@ export function Configuracao() {
   const [ofertas, setOfertas] = useState<Oferta[]>([]);
   const [comunicacao, setComunicacao] = useState<ConfiguracaoComunicacao | null>(null);
   const [whatsapp, setWhatsapp] = useState<ConfiguracaoWhatsApp | null>(null);
+  const [erroWhatsapp, setErroWhatsapp] = useState<string | null>(null);
   const [statusLinkedin, setStatusLinkedin] = useState<StatusConexoesLinkedin | null>(null);
   const [nomeArquivoLinkedin, setNomeArquivoLinkedin] = useState<string | null>(null);
   const [conteudoCsvLinkedin, setConteudoCsvLinkedin] = useState<string | null>(null);
@@ -283,7 +284,19 @@ export function Configuracao() {
       setComunicacao(comunicacaoResp);
       setStatusLinkedin(await api.get<StatusConexoesLinkedin>("/linkedin/conexoes/status"));
       if (isGestor) {
-        setWhatsapp(await api.get<ConfiguracaoWhatsApp | null>("/configuracao-whatsapp"));
+        // Isolado do resto (raio-X 2026-08-27): um access_token que não
+        // decifra mais (credencial cifrada com chave já rotacionada)
+        // não pode travar o carregamento das outras seções da tela —
+        // a pessoa precisa conseguir chegar até este formulário
+        // justamente pra corrigir o token quebrado.
+        try {
+          setWhatsapp(await api.get<ConfiguracaoWhatsApp | null>("/configuracao-whatsapp"));
+        } catch {
+          setErroWhatsapp(
+            "Não foi possível carregar a configuração atual do WhatsApp Business (credencial salva pode estar " +
+              "corrompida). Preencha os três campos abaixo de novo com os dados da Meta pra corrigir.",
+          );
+        }
       }
       await carregarTemplateProposta();
     } catch {
@@ -386,6 +399,7 @@ export function Configuracao() {
         access_token: accessToken || null,
       });
       setWhatsapp(salvo);
+      setErroWhatsapp(null);
       setMensagem("WhatsApp Business salvo.");
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível salvar o WhatsApp Business.");
@@ -646,6 +660,7 @@ export function Configuracao() {
               Token atual: <span className="font-mono">{whatsapp.access_token_mascarado}</span>
             </div>
           )}
+          {erroWhatsapp && <div className="mb-3 text-[12px] text-red">{erroWhatsapp}</div>}
           <form key={whatsapp?.id ?? "novo"} onSubmit={salvarWhatsapp} className="flex flex-col gap-3">
             <div>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Phone Number ID</div>
@@ -657,9 +672,9 @@ export function Configuracao() {
             </div>
             <div>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
-                Access Token {whatsapp ? "(deixe em branco para manter o atual)" : ""}
+                Access Token {whatsapp && !erroWhatsapp ? "(deixe em branco para manter o atual)" : ""}
               </div>
-              <Input name="access_token" type="password" required={!whatsapp} placeholder="EAAG..." />
+              <Input name="access_token" type="password" required={!whatsapp || !!erroWhatsapp} placeholder="EAAG..." />
             </div>
             <Button type="submit" disabled={salvandoWhatsapp} className="w-full justify-center">
               {salvandoWhatsapp ? "Salvando..." : "Salvar WhatsApp Business"}
