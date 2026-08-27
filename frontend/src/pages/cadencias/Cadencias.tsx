@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import type { Conta, ICP } from "@/pages/prospeccao/Prospeccao";
+import type { Conta, ICP, ListaProspeccao } from "@/pages/prospeccao/Prospeccao";
 import { api, ApiError } from "@/lib/api";
 
 interface Cadencia {
@@ -70,8 +70,10 @@ export function Cadencias() {
   const [cadenciaSelecionadaId, setCadenciaSelecionadaId] = useState<number | null>(null);
   const [toques, setToques] = useState<ToqueCadencia[]>([]);
   const [icps, setIcps] = useState<ICP[]>([]);
-  const [origemLote, setOrigemLote] = useState<"icp" | "leads">("icp");
+  const [listas, setListas] = useState<ListaProspeccao[]>([]);
+  const [origemLote, setOrigemLote] = useState<"icp" | "lista" | "leads">("icp");
   const [icpParaLoteId, setIcpParaLoteId] = useState<number | null>(null);
+  const [listaParaLoteId, setListaParaLoteId] = useState<number | null>(null);
   const [contasDoIcp, setContasDoIcp] = useState<Conta[]>([]);
   const [contasSelecionadas, setContasSelecionadas] = useState<Set<number>>(new Set());
   const [modalCriarAberto, setModalCriarAberto] = useState(false);
@@ -111,9 +113,18 @@ export function Cadencias() {
     }
   }
 
+  async function carregarListas() {
+    try {
+      setListas(await api.get<ListaProspeccao[]>("/listas-prospeccao"));
+    } catch {
+      setErro("Não foi possível carregar as listas de prospecção.");
+    }
+  }
+
   useEffect(() => {
     carregarCadencias();
     carregarIcps();
+    carregarListas();
   }, []);
 
   useEffect(() => {
@@ -134,6 +145,17 @@ export function Cadencias() {
         .catch(() => setErro("Não foi possível carregar os clientes cadastrados."));
       return;
     }
+    if (origemLote === "lista") {
+      if (listaParaLoteId === null) {
+        setContasDoIcp([]);
+        return;
+      }
+      api
+        .get<Conta[]>(`/listas-prospeccao/${listaParaLoteId}/contas`)
+        .then(setContasDoIcp)
+        .catch(() => setErro("Não foi possível carregar as contas da lista."));
+      return;
+    }
     if (icpParaLoteId === null) {
       setContasDoIcp([]);
       return;
@@ -142,7 +164,7 @@ export function Cadencias() {
       .get<Conta[]>(`/icp/${icpParaLoteId}/contas`)
       .then(setContasDoIcp)
       .catch(() => setErro("Não foi possível carregar as contas do ICP."));
-  }, [icpParaLoteId, origemLote]);
+  }, [icpParaLoteId, listaParaLoteId, origemLote]);
 
   function atualizarToque(indice: number, campo: keyof ToqueRascunho, valor: string | boolean) {
     setRascunhoToques((atual) =>
@@ -354,6 +376,15 @@ export function Cadencias() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setOrigemLote("lista")}
+                  className={`rounded-lg border px-3 py-1.5 text-[12px] ${
+                    origemLote === "lista" ? "border-cyan bg-cyan/15 text-cyan" : "border-border text-muted"
+                  }`}
+                >
+                  Listas de Prospecção
+                </button>
+                <button
+                  type="button"
                   onClick={() => setOrigemLote("leads")}
                   className={`rounded-lg border px-3 py-1.5 text-[12px] ${
                     origemLote === "leads" ? "border-cyan bg-cyan/15 text-cyan" : "border-border text-muted"
@@ -380,6 +411,28 @@ export function Cadencias() {
                 </div>
               )}
 
+              {origemLote === "lista" && (
+                <div className="mb-3">
+                  <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Lista de Prospecção</div>
+                  <Select
+                    value={listaParaLoteId ?? ""}
+                    onChange={(event) => setListaParaLoteId(event.target.value ? Number(event.target.value) : null)}
+                  >
+                    <option value="">Selecione uma lista</option>
+                    {listas.map((lista) => (
+                      <option key={lista.id} value={lista.id}>
+                        {lista.nome}
+                      </option>
+                    ))}
+                  </Select>
+                  {listas.length === 0 && (
+                    <div className="mt-1.5 text-[11px] text-muted">
+                      Nenhuma lista de prospecção criada ainda — crie uma na tela de Prospecção.
+                    </div>
+                  )}
+                </div>
+              )}
+
               {contasDoIcp.length > 0 && (
                 <div className="mb-3 flex max-h-64 flex-col gap-1 overflow-y-auto rounded-lg border border-border p-2">
                   {contasDoIcp.map((conta) => (
@@ -394,11 +447,18 @@ export function Cadencias() {
                   ))}
                 </div>
               )}
-              {contasDoIcp.length === 0 && (origemLote === "leads" || icpParaLoteId !== null) && (
-                <div className="mb-3 text-[12px] text-muted">
-                  {origemLote === "leads" ? "Nenhum cliente cadastrado ainda." : "Nenhuma conta gerada para esse ICP ainda."}
-                </div>
-              )}
+              {contasDoIcp.length === 0 &&
+                (origemLote === "leads" ||
+                  (origemLote === "icp" && icpParaLoteId !== null) ||
+                  (origemLote === "lista" && listaParaLoteId !== null)) && (
+                  <div className="mb-3 text-[12px] text-muted">
+                    {origemLote === "leads"
+                      ? "Nenhum cliente cadastrado ainda."
+                      : origemLote === "lista"
+                        ? "Nenhuma conta importada para essa lista ainda."
+                        : "Nenhuma conta gerada para esse ICP ainda."}
+                  </div>
+                )}
 
               <Button disabled={contasSelecionadas.size === 0 || progressoGeracao !== null} onClick={gerarParaLote}>
                 {progressoGeracao
