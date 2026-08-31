@@ -3,12 +3,14 @@ import pytest
 
 from app.integrations.site_fetcher import HostNaoPublico
 from app.models.conta import Conta
+from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.providers.web_search.base import ResultadoBusca
 from app.services import conta_service
 from app.services.errors import RegraNegocioViolada
 from tests.fakes import FakeLLMProvider, FakeWebSearchProvider
 
 TENANT_ID = "tenant-enriquecer-site"
+PLAN_LIMITS = StubPlanLimitsProvider()
 
 
 def _criar_conta(db_session, dominio: str | None = None) -> Conta:
@@ -27,7 +29,7 @@ def test_enriquecer_sem_dominio_descobre_e_persiste(db_session):
     web_search = FakeWebSearchProvider([ResultadoBusca(titulo="Alpha Tech", url="https://www.alphatech.com.br/", descricao="")])
     llm = FakeLLMProvider(["porte: media"])
 
-    conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, llm, _site_fetcher(), web_search)
+    conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, llm, _site_fetcher(), web_search, PLAN_LIMITS)
 
     db_session.refresh(conta)
     assert conta.dominio == "www.alphatech.com.br"
@@ -40,7 +42,7 @@ def test_enriquecer_sem_dominio_e_sem_resultado_aceitavel_falha(db_session):
     llm = FakeLLMProvider(["porte: media"])
 
     with pytest.raises(RegraNegocioViolada):
-        conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, llm, _site_fetcher(), web_search)
+        conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, llm, _site_fetcher(), web_search, PLAN_LIMITS)
 
 
 def test_enriquecer_com_dominio_ja_cadastrado_nao_busca_na_web(db_session):
@@ -48,7 +50,7 @@ def test_enriquecer_com_dominio_ja_cadastrado_nao_busca_na_web(db_session):
     web_search = FakeWebSearchProvider()
     llm = FakeLLMProvider(["porte: media"])
 
-    conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, llm, _site_fetcher(), web_search)
+    conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, llm, _site_fetcher(), web_search, PLAN_LIMITS)
 
     assert web_search.buscas == []
 
@@ -61,7 +63,7 @@ def test_enriquecer_popula_resumo_site_so_na_primeira_vez(db_session):
     web_search = FakeWebSearchProvider()
 
     conta_service.enriquecer(
-        db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["porte: media"]), _site_fetcher(), web_search
+        db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["porte: media"]), _site_fetcher(), web_search, PLAN_LIMITS
     )
     db_session.refresh(conta)
     assert conta.resumo_site == "porte: media"
@@ -70,7 +72,7 @@ def test_enriquecer_popula_resumo_site_so_na_primeira_vez(db_session):
     db_session.commit()
 
     conta_service.enriquecer(
-        db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["porte: grande"]), _site_fetcher(), web_search
+        db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["porte: grande"]), _site_fetcher(), web_search, PLAN_LIMITS
     )
     db_session.refresh(conta)
     assert conta.resumo_site == "Editado manualmente pelo vendedor."
@@ -202,6 +204,7 @@ def test_enriquecer_com_dominio_que_nao_resolve_da_mensagem_amigavel(db_session)
             db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["x"]),
             _site_fetcher_que_falha(HostNaoPublico("Não foi possível resolver o domínio: x")),
             FakeWebSearchProvider(),
+            PLAN_LIMITS,
         )
 
     mensagem = str(excinfo.value)
@@ -223,6 +226,7 @@ def test_enriquecer_com_site_bloqueando_acesso_da_mensagem_amigavel(db_session):
             db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["x"]),
             _site_fetcher_que_falha(erro),
             FakeWebSearchProvider(),
+            PLAN_LIMITS,
         )
 
     mensagem = str(excinfo.value)
@@ -238,6 +242,7 @@ def test_enriquecer_com_timeout_da_mensagem_amigavel(db_session):
             db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["x"]),
             _site_fetcher_que_falha(httpx.TimeoutException("timeout")),
             FakeWebSearchProvider(),
+            PLAN_LIMITS,
         )
 
     assert "fora do ar ou muito lento" in str(excinfo.value)

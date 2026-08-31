@@ -8,12 +8,14 @@ from app.db.base import Base
 
 
 class ConfiguracaoWhatsApp(Base):
-    """Número de WhatsApp Business próprio do tenant (raio-X de produção)
-    — sem isto, todo tenant compartilhava o mesmo número global
-    (`settings.whatsapp_access_token`), e um cliente prospectando mal
-    podia fazer a Meta restringir o número de todo mundo junto. Tenant
-    sem linha aqui cai no fallback legado (número compartilhado) em
-    `get_whatsapp_provider`, até migrar pro próprio.
+    """Número de WhatsApp Business próprio do tenant (raio-X de produção,
+    endurecido em 2026-08-27) — sem isto, todo tenant compartilhava o
+    mesmo número global (`settings.whatsapp_access_token`, hoje sem
+    fallback nenhum), e um cliente prospectando mal podia fazer a Meta
+    restringir o número de todo mundo junto. Tenant sem linha aqui não
+    consegue mais mandar WhatsApp (`resolver_whatsapp_provider` cai em
+    `WhatsAppDesativadoProvider` em produção) até configurar a própria
+    conta.
 
     Credenciais Meta (access_token/phone_number_id/business_account_id)
     ficam criptografadas em repouso (`TextoCriptografado`, achado de

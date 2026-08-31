@@ -13,6 +13,7 @@ from app.integrations.brasilapi_client import BrasilApiClient, consultar_cnpj_br
 from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.claude_provider import ClaudeProvider
 from app.models.chave_api_parceiro import ChaveApiParceiro
+from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.licenca import Licenca
 from app.models.tenant import Tenant
@@ -35,6 +36,7 @@ from app.providers.channels.email.sendgrid import SendGridEmailProvider
 from app.providers.channels.email.smtp import SmtpEmailProvider
 from app.providers.channels.email.stub import StubEmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.providers.channels.whatsapp.desativado import WhatsAppDesativadoProvider
 from app.providers.channels.whatsapp.meta import MetaWhatsAppProvider
 from app.providers.channels.whatsapp.stub import StubWhatsAppProvider
 from app.providers.crm.base import CrmProvider
@@ -195,13 +197,14 @@ def get_tenant_id(usuario: Usuario = Depends(get_usuario_atual)) -> str:
 
 
 def resolver_whatsapp_provider(tenant_id: str, db: Session) -> WhatsAppProvider:
-    """Raio-X de produção: número de WhatsApp por tenant, não mais um
-    único número compartilhado por toda a plataforma (um cliente
-    prospectando mal não pode mais fazer todo mundo perder WhatsApp
-    junto). Prioridade: 1) credencial própria do tenant
-    (`ConfiguracaoWhatsApp`); 2) fallback legado — o token global único,
-    só existe para não quebrar quem ainda não migrou; 3) stub de
-    dev/teste.
+    """Raio-X de produção, endurecido em 2026-08-27: número de WhatsApp é
+    por tenant (`ConfiguracaoWhatsApp`), sem fallback compartilhado —
+    antes um cliente prospectando mal podia fazer a Meta restringir o
+    número global de todo mundo junto; agora, sem conta própria
+    configurada, o tenant simplesmente não consegue mandar WhatsApp
+    (falha clara por mensagem, `WhatsAppDesativadoProvider`) até
+    configurar a própria conta. Dev/teste continua no stub, que sempre
+    "envia" sem exigir credencial nenhuma.
 
     Função simples (não `Depends`) de propósito — os dispatchers de cron
     (`cron.py`) iteram sobre todos os tenants numa única requisição sem
@@ -214,10 +217,8 @@ def resolver_whatsapp_provider(tenant_id: str, db: Session) -> WhatsAppProvider:
         return MetaWhatsAppProvider(
             config_tenant.access_token, config_tenant.phone_number_id, config_tenant.business_account_id
         )
-    if settings.whatsapp_access_token:
-        return MetaWhatsAppProvider(
-            settings.whatsapp_access_token, settings.whatsapp_phone_number_id, settings.whatsapp_business_account_id
-        )
+    if settings.e_ambiente_producao:
+        return WhatsAppDesativadoProvider()
     return StubWhatsAppProvider()
 
 
@@ -225,6 +226,43 @@ def get_whatsapp_provider(
     tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)
 ) -> WhatsAppProvider:
     return resolver_whatsapp_provider(tenant_id, db)
+
+
+def resolver_email_provider(tenant_id: str, db: Session) -> EmailProvider:
+    """Disparo de e-mail em nome do tenant (cadência/campanha/lembrete/
+    NPS) — raio-X 2026-08-27, mesmo raciocínio de `resolver_whatsapp_
+    provider`: conta SMTP própria do tenant (`ConfiguracaoEmailSmtp`),
+    sem fallback pro SendGrid compartilhado da CyberFort. Sem conta
+    própria configurada, o tenant não consegue disparar e-mail de
+    outreach até configurar a própria conta (falha clara por mensagem,
+    `EmailDesativadoProvider`).
+
+    **Não confundir com `get_email_provider`** — essa outra função
+    continua servindo e-mail de sistema/plataforma (onboarding, convite,
+    relatório periódico), que legitimamente sai pela conta da CyberFort
+    (o tenant nem existe ainda quando o e-mail de convite é mandado).
+
+    Função simples (não `Depends`), mesmo motivo de `resolver_whatsapp_
+    provider`: os dispatchers de cron resolvem por tenant dentro do
+    loop, sem JWT."""
+    config_tenant = db.query(ConfiguracaoEmailSmtp).filter_by(tenant_id=tenant_id).one_or_none()
+    if config_tenant is not None:
+        return SmtpEmailProvider(
+            host=config_tenant.host,
+            porta=config_tenant.porta,
+            usuario=config_tenant.usuario,
+            senha=config_tenant.senha,
+            usar_tls=config_tenant.usar_tls,
+        )
+    if settings.e_ambiente_producao:
+        return EmailDesativadoProvider()
+    return StubEmailProvider()
+
+
+def get_email_provider_do_tenant(
+    tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)
+) -> EmailProvider:
+    return resolver_email_provider(tenant_id, db)
 
 
 def get_ator_id(usuario: Usuario = Depends(get_usuario_atual)) -> str | None:

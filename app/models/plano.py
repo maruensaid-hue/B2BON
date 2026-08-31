@@ -23,3 +23,11 @@ class Plano(Base):
     # concedido por convite gratuito administrativo, nunca escolhido
     # livremente no cadastro self-service (POST /auth/registrar-vitrine).
     visivel_self_service: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # Nulo = sem limite (nenhum plano hoje). Todo plano tem valor
+    # configurado, proporcional à franquia mensal (raio-X 2026-08-28) —
+    # pesquisas de enriquecimento de site/contatos ficam bloqueadas até a
+    # semana seguinte quando o limite estoura (`enriquecimento_limite_
+    # service`); campo continua nullable pra suportar um plano futuro
+    # deliberadamente sem teto.
+    limite_enriquecimento_site_semanal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    limite_enriquecimento_contatos_semanal: Mapped[int | None] = mapped_column(Integer, nullable=True)

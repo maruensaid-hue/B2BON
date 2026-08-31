@@ -732,7 +732,14 @@ def criar_tenant_vitrine(
         raise RegraNegocioViolada("E-mail já cadastrado.")
 
     tenant_id = _gerar_tenant_id(db, razao_social)
-    tenant = Tenant(id=tenant_id, razao_social=razao_social, cnpj=cnpj)
+    # Convite gratuito (raio-X 2026-08-27): tenant cortesia nasce
+    # "distribuidor" (raiz da árvore, sem tenant pai), não "cliente" —
+    # sem isso, o admin cortesia nunca conseguia criar sub-tenants
+    # ("seus próprios clientes"), porque só distribuidor/revendedor
+    # passam em `permitir_gestao_hierarquica`. Convite pago continua
+    # "cliente" (comportamento inalterado).
+    tipo = "distribuidor" if convite.gratuito else "cliente"
+    tenant = Tenant(id=tenant_id, razao_social=razao_social, cnpj=cnpj, tipo=tipo)
     db.add(tenant)
     db.flush()
 

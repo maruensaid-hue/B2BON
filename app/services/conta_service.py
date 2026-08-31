@@ -37,10 +37,11 @@ from app.models.tarefa_linkedin import TarefaLinkedin
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, DecisorCandidato, FiltroBusca
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.schemas.conta import ParticipanteEventoSchema
 from app.schemas.decisor import DecisorCreateSchema
-from app.services import atividade_service, auditoria_service, descarte_service, llm_helpers
+from app.services import atividade_service, auditoria_service, descarte_service, enriquecimento_limite_service, llm_helpers
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 
@@ -1076,6 +1077,7 @@ def enriquecer(
     llm: LLMProvider,
     site_fetcher: SiteFetcher,
     web_search: WebSearchProvider,
+    plan_limits: PlanLimitsProvider,
 ) -> list[CampoEnriquecido]:
     """Pesquisa ampla dentro do site institucional da conta, com ficha de
     campos enriquecidos e fonte/data de cada dado (E2-H2).
@@ -1093,6 +1095,7 @@ def enriquecer(
     oficial sozinha via `web_search` e já salva o domínio encontrado na
     ficha da empresa — não busca de novo nas próximas pesquisas.
     """
+    enriquecimento_limite_service.verificar_e_registrar(db, tenant_id, "site", plan_limits)
     conta = obter(db, tenant_id, conta_id)
     dominio_descoberto: str | None = None
     if not conta.dominio:
@@ -1296,6 +1299,7 @@ def mapear_decisores(
     account_data: AccountDataProvider,
     contact_enrichment: ContactEnrichmentProvider,
     graph: Neo4jClient,
+    plan_limits: PlanLimitsProvider,
 ) -> list[Decisor]:
     """Decisores mapeados combinando o QSA da Receita Federal (sócios/
     administradores formais, quando a conta tem CNPJ) com uma base de
@@ -1309,6 +1313,7 @@ def mapear_decisores(
     restrita a esses cargos — filtra na requisição, não depois de já ter
     revelado o contato, economizando consulta de verdade. Sem lista (ou
     lista sem cargos definidos), cai no default genérico do provider."""
+    enriquecimento_limite_service.verificar_e_registrar(db, tenant_id, "contatos", plan_limits)
     conta = obter(db, tenant_id, conta_id)
 
     kwargs_filtro: dict = {"nome_empresa": conta.nome_fantasia or conta.nome, "dominio": conta.dominio, "cnpj": conta.cnpj}

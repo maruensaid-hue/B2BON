@@ -1,10 +1,12 @@
 from app.models.conta import Conta
 from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
+from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.providers.web_search.base import ResultadoBusca
 from app.services import enriquecimento_fila_service
 from tests.fakes import FakeAccountDataProvider, FakeContactEnrichmentProvider, FakeGraphClient, FakeLLMProvider, FakeWebSearchProvider
 
 TENANT_ID = "tenant-fila-enriquecimento"
+PLAN_LIMITS = StubPlanLimitsProvider()
 
 
 def _criar_conta(db_session, nome: str = "Alpha Tech", dominio: str | None = None) -> Conta:
@@ -37,7 +39,7 @@ def test_processar_pendentes_enriquece_site_e_marca_concluido(db_session):
 
     resultado = enriquecimento_fila_service.processar_pendentes(
         db_session, llm, _site_fetcher(), FakeWebSearchProvider(),
-        FakeAccountDataProvider(), FakeContactEnrichmentProvider(), FakeGraphClient(),
+        FakeAccountDataProvider(), FakeContactEnrichmentProvider(), FakeGraphClient(), PLAN_LIMITS,
     )
 
     assert resultado == {"processados": 1, "concluidos": 1, "falhas": 0}
@@ -57,7 +59,7 @@ def test_processar_pendentes_tolera_falha_sem_derrubar_outros_itens(db_session):
 
     resultado = enriquecimento_fila_service.processar_pendentes(
         db_session, llm, _site_fetcher(), web_search,
-        FakeAccountDataProvider(), FakeContactEnrichmentProvider(), FakeGraphClient(),
+        FakeAccountDataProvider(), FakeContactEnrichmentProvider(), FakeGraphClient(), PLAN_LIMITS,
     )
 
     assert resultado == {"processados": 2, "concluidos": 1, "falhas": 1}
@@ -77,7 +79,7 @@ def test_processar_pendentes_respeita_limite_por_execucao(db_session, monkeypatc
 
     resultado = enriquecimento_fila_service.processar_pendentes(
         db_session, llm, _site_fetcher(), FakeWebSearchProvider(),
-        FakeAccountDataProvider(), FakeContactEnrichmentProvider(), FakeGraphClient(),
+        FakeAccountDataProvider(), FakeContactEnrichmentProvider(), FakeGraphClient(), PLAN_LIMITS,
     )
 
     assert resultado["processados"] == 1

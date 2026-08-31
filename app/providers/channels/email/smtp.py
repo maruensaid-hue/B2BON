@@ -6,7 +6,29 @@ from app.providers.channels.email.base import EmailProvider, ResultadoEnvio, mon
 
 
 class SmtpEmailProvider(EmailProvider):
-    """Implementação real via SMTP (`smtplib`, biblioteca padrão)."""
+    """Implementação real via SMTP (`smtplib`, biblioteca padrão).
+
+    Sem argumento nenhum, usa a conta SMTP global (`settings.smtp_*`) —
+    só existe pros e-mails de sistema/plataforma (onboarding, convite,
+    relatório periódico), que continuam saindo pela conta da CyberFort.
+    Com credenciais explícitas (raio-X 2026-08-27, `resolver_email_
+    provider`), passa a mandar pela conta SMTP própria do tenant — sem
+    isso, disparo de cadência/campanha em nome do tenant continuava
+    saindo pela infraestrutura compartilhada da plataforma."""
+
+    def __init__(
+        self,
+        host: str | None = None,
+        porta: int | None = None,
+        usuario: str | None = None,
+        senha: str | None = None,
+        usar_tls: bool | None = None,
+    ) -> None:
+        self.host = host if host is not None else settings.smtp_host
+        self.porta = porta if porta is not None else settings.smtp_port
+        self.usuario = usuario if usuario is not None else settings.smtp_user
+        self.senha = senha if senha is not None else settings.smtp_password
+        self.usar_tls = usar_tls if usar_tls is not None else True
 
     def enviar(
         self,
@@ -31,10 +53,11 @@ class SmtpEmailProvider(EmailProvider):
             mensagem.add_alternative(montar_html_com_pixel(corpo, pixel_url), subtype="html")
 
         try:
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as servidor:
-                servidor.starttls()
-                if settings.smtp_user:
-                    servidor.login(settings.smtp_user, settings.smtp_password)
+            with smtplib.SMTP(self.host, self.porta, timeout=15) as servidor:
+                if self.usar_tls:
+                    servidor.starttls()
+                if self.usuario:
+                    servidor.login(self.usuario, self.senha)
                 servidor.send_message(mensagem)
             return ResultadoEnvio(sucesso=True)
         except (smtplib.SMTPException, OSError) as erro:

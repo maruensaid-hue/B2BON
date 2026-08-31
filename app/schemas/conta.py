@@ -80,6 +80,17 @@ class FranquiaSchema(BaseModel):
     restante: int
 
 
+class ContadorSemanalSchema(BaseModel):
+    limite: int | None
+    usado: int
+    restante: int | None
+
+
+class LimiteEnriquecimentoResponseSchema(BaseModel):
+    site: ContadorSemanalSchema
+    contatos: ContadorSemanalSchema
+
+
 class GerarListaResponseSchema(BaseModel):
     contas: list[ContaSchema]
 

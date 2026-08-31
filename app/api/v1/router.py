@@ -10,6 +10,7 @@ from app.api.v1.campanhas import router as campanhas_router
 from app.api.v1.canais import router as canais_router
 from app.api.v1.comunicacao import router as comunicacao_router
 from app.api.v1.configuracao_envio import router as configuracao_envio_router
+from app.api.v1.configuracao_email_smtp import router as configuracao_email_smtp_router
 from app.api.v1.configuracao_whatsapp import router as configuracao_whatsapp_router
 from app.api.v1.contas import router as contas_router
 from app.api.v1.listas_prospeccao import router as listas_prospeccao_router
@@ -73,6 +74,7 @@ router.include_router(optout_router)
 router.include_router(cron_router)
 router.include_router(configuracao_envio_router, dependencies=_exige_licenca)
 router.include_router(configuracao_whatsapp_router, dependencies=_exige_licenca)
+router.include_router(configuracao_email_smtp_router, dependencies=_exige_licenca)
 router.include_router(linkedin_router, dependencies=_exige_licenca)
 router.include_router(canais_router, dependencies=_exige_licenca)
 router.include_router(qualificacao_router, dependencies=_exige_licenca)

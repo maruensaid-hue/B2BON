@@ -9,6 +9,7 @@ from app.llm.base import LLMProvider
 from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.services import conta_service
 
@@ -36,6 +37,7 @@ def processar_pendentes(
     account_data: AccountDataProvider,
     contact_enrichment: ContactEnrichmentProvider,
     graph: Neo4jClient,
+    plan_limits: PlanLimitsProvider,
 ) -> dict:
     """Processa um lote pequeno da fila por vez (cron, `/cron/processar-
     fila-enriquecimento`) — site + decisores por conta, tolerante a falha
@@ -53,9 +55,11 @@ def processar_pendentes(
     falhas = 0
     for item in itens:
         try:
-            conta_service.enriquecer(db, item.tenant_id, None, item.conta_id, llm, site_fetcher, web_search)
+            conta_service.enriquecer(
+                db, item.tenant_id, None, item.conta_id, llm, site_fetcher, web_search, plan_limits
+            )
             conta_service.mapear_decisores(
-                db, item.tenant_id, None, item.conta_id, account_data, contact_enrichment, graph
+                db, item.tenant_id, None, item.conta_id, account_data, contact_enrichment, graph, plan_limits
             )
             item.status = "concluido"
             concluidos += 1

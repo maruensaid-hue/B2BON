@@ -142,6 +142,40 @@ def test_enriquecer_sem_dominio_descobre_e_persiste(client, fake_llm, fake_web_s
     assert conta_atualizada["dominio"] == "betaclinica.com.br"
 
 
+def test_enriquecer_sem_limite_semanal_configurado_nunca_bloqueia(client, fake_llm, fake_site_fetcher):
+    """`fake_plan_limits` padrão não tem limite semanal configurado
+    (`None`) — várias pesquisas seguidas nunca bloqueiam. Em produção
+    todo plano tem um valor real; `None` fica reservado pra um plano
+    futuro deliberadamente sem teto."""
+    conta_id = client.post("/api/v1/leads/contas", json={"nome": "Gama Tech", "dominio": "gamatech.com.br"}).json()["id"]
+    fake_llm.definir_respostas(["porte: media"] * 3)
+
+    for _ in range(3):
+        assert client.post(f"/api/v1/contas/{conta_id}/enriquecer").status_code == 200
+
+    limites = client.get("/api/v1/contas/limite-enriquecimento").json()
+    assert limites["site"] == {"limite": None, "usado": 0, "restante": None}
+
+
+def test_enriquecer_com_limite_semanal_atingido_bloqueia(client, fake_llm, fake_plan_limits):
+    """Raio-X 2026-08-28: plano "Teste" (cortesia) tem limite semanal de
+    pesquisas de site — estourado, o botão "Pesquisar empresa (site)"
+    fica bloqueado até a semana seguinte (ou upgrade)."""
+    fake_plan_limits._limite_site[TENANT_ID] = 1
+    conta_id = client.post("/api/v1/leads/contas", json={"nome": "Delta Tech", "dominio": "deltatech.com.br"}).json()["id"]
+    fake_llm.definir_respostas(["porte: media", "porte: media"])
+
+    primeira = client.post(f"/api/v1/contas/{conta_id}/enriquecer")
+    assert primeira.status_code == 200
+
+    segunda = client.post(f"/api/v1/contas/{conta_id}/enriquecer")
+    assert segunda.status_code == 409
+    assert "Limite semanal" in segunda.json()["detalhe"]
+
+    limites = client.get("/api/v1/contas/limite-enriquecimento").json()
+    assert limites["site"] == {"limite": 1, "usado": 1, "restante": 0}
+
+
 def test_enriquecer_sem_dominio_e_sem_busca_bem_sucedida_falha_com_mensagem_clara(client, fake_web_search):
     conta_id = client.post("/api/v1/leads/contas", json={"nome": "Empresa Sem Site Localizavel"}).json()["id"]
 

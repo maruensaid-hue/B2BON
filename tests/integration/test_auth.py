@@ -412,6 +412,58 @@ def test_aceitar_convite_gratuito_cria_licenca_ativa_sem_checkout_nem_expiracao(
     assert licenca.data_expiracao is None
 
 
+def test_aceitar_convite_gratuito_cria_tenant_tipo_distribuidor(client, db_session, criar_plano):
+    """Raio-X 2026-08-28: tenant cortesia (convite gratuito) precisa
+    conseguir criar sub-tenants ("seus próprios clientes") — sem isso,
+    nascia `tipo="cliente"` (folha, sem essa capacidade). Convite pago
+    continua `tipo="cliente"`, sem mudança."""
+    criar_plano(nome="Teste", preco_mensal=0.0, visivel_self_service=False)
+    convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24, "gratuito": True}).json()
+
+    resposta = client.post(
+        "/api/v1/auth/registrar-vitrine",
+        json={
+            "codigo_convite": convite["codigo"],
+            "razao_social": "Empresa Cortesia Ltda",
+            "nome_admin": "Admin Cortesia",
+            "email_admin": "admin@cortesia.com.br",
+            "senha_admin": "senha123",
+            "aceite_termos": True,
+        },
+    )
+
+    from app.models.tenant import Tenant
+
+    tenant_id = resposta.json()["usuario"]["tenant_id"]
+    tenant = db_session.query(Tenant).filter_by(id=tenant_id).one()
+    assert tenant.tipo == "distribuidor"
+    assert tenant.tenant_pai_id is None
+
+
+def test_aceitar_convite_pago_continua_criando_tenant_tipo_cliente(client, db_session, criar_plano):
+    plano_pago = criar_plano(nome="Starter Comum", preco_mensal=490.0)
+    convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
+
+    resposta = client.post(
+        "/api/v1/auth/registrar-vitrine",
+        json={
+            "codigo_convite": convite["codigo"],
+            "razao_social": "Empresa Paga Ltda",
+            "nome_admin": "Admin Paga",
+            "email_admin": "admin@paga.com.br",
+            "senha_admin": "senha123",
+            "aceite_termos": True,
+            "plano_id": plano_pago.id,
+        },
+    )
+
+    from app.models.tenant import Tenant
+
+    tenant_id = resposta.json()["usuario"]["tenant_id"]
+    tenant = db_session.query(Tenant).filter_by(id=tenant_id).one()
+    assert tenant.tipo == "cliente"
+
+
 def test_registrar_vitrine_com_plano_nao_self_service_e_negado(client, criar_plano):
     """Mesmo num convite normal (não gratuito), o plano "Teste" não pode
     ser escolhido livremente — só via convite gratuito."""

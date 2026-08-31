@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     get_db,
-    get_email_provider,
+    get_email_provider_do_tenant,
     get_email_validation_provider,
     get_tenant_id,
     get_whatsapp_provider,
@@ -21,7 +21,7 @@ def processar_envios(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
     whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
-    email: EmailProvider = Depends(get_email_provider),
+    email: EmailProvider = Depends(get_email_provider_do_tenant),
     email_validation: EmailVerificationProvider = Depends(get_email_validation_provider),
 ) -> dict:
     """Dispatcher de envio — chamado por cron externo (Onda 2)."""

@@ -10,6 +10,7 @@ from app.models.conexao_linkedin import ConexaoLinkedin
 from app.models.conta import Conta
 from app.models.conta_franquia_consumo import ContaFranquiaConsumo
 from app.models.configuracao_canal import ConfiguracaoCanal
+from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.custo_aquisicao import CustoAquisicao
 from app.models.configuracao_comunicacao import ConfiguracaoComunicacao
 from app.models.configuracao_envio import ConfiguracaoEnvio
@@ -23,6 +24,7 @@ from app.models.convite_vitrine import ConviteVitrine
 from app.models.conversa_qualificacao import ConversaQualificacao
 from app.models.decisor import Decisor
 from app.models.descarte_conta import DescarteConta
+from app.models.enriquecimento_semanal_consumo import EnriquecimentoSemanalConsumo
 from app.models.estagio_funil import EstagioFunil
 from app.models.faq_item import FaqItem
 from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
@@ -68,6 +70,7 @@ __all__ = [
     "ConfiguracaoComunicacao",
     "ConfiguracaoEnvio",
     "ConfiguracaoWhatsApp",
+    "ConfiguracaoEmailSmtp",
     "ConfiguracaoCanal",
     "ConfiguracaoQualificacao",
     "ConfiguracaoNotificacao",
@@ -76,6 +79,7 @@ __all__ = [
     "Conta",
     "CampoEnriquecido",
     "ContaFranquiaConsumo",
+    "EnriquecimentoSemanalConsumo",
     "DescarteConta",
     "Decisor",
     "Cadencia",

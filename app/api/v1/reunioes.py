@@ -6,7 +6,7 @@ from app.api.deps import (
     get_calendar_provider,
     get_crm_provider,
     get_db,
-    get_email_provider,
+    get_email_provider_do_tenant,
     get_graph_client,
     get_llm_provider,
     get_meeting_bot_provider,
@@ -54,7 +54,7 @@ def processar_lembretes(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
     whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
-    email: EmailProvider = Depends(get_email_provider),
+    email: EmailProvider = Depends(get_email_provider_do_tenant),
 ) -> ProcessarLembretesResponseSchema:
     """Dispatcher de lembretes D-1/H-2 — chamado por cron externo (E6-H1)."""
     return ProcessarLembretesResponseSchema(**reuniao_service.processar_lembretes(db, tenant_id, whatsapp, email))

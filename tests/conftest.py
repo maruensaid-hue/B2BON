@@ -15,6 +15,7 @@ from app.api.deps import (
     get_crm_provider,
     get_db,
     get_email_provider,
+    get_email_provider_do_tenant,
     get_email_validation_provider,
     get_graph_client,
     get_llm_provider,
@@ -216,6 +217,7 @@ def client(
     app.dependency_overrides[_whatsapp_provider_do_webhook_whatsapp] = lambda: fake_whatsapp
     app.dependency_overrides[_whatsapp_provider_do_webhook_email] = lambda: fake_whatsapp
     app.dependency_overrides[get_email_provider] = lambda: fake_email
+    app.dependency_overrides[get_email_provider_do_tenant] = lambda: fake_email
     app.dependency_overrides[get_calendar_provider] = lambda: fake_calendar
     app.dependency_overrides[get_crm_provider] = lambda: fake_crm
     app.dependency_overrides[get_rede_social_provider] = lambda: fake_rede_social

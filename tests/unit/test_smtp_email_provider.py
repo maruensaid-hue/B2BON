@@ -47,6 +47,28 @@ def test_com_pixel_envia_multipart_com_imagem_embutida(mock_smtp: MagicMock):
 
 
 @patch("app.providers.channels.email.smtp.smtplib.SMTP")
+def test_credenciais_explicitas_por_tenant_sao_usadas_no_lugar_da_conta_global(mock_smtp: MagicMock):
+    """Raio-X 2026-08-27: por-tenant precisa mandar pela conta SMTP do
+    próprio tenant, não pela conta global da plataforma — sem isso,
+    "configurar sua própria conta" não fazia diferença nenhuma no envio
+    de verdade."""
+    provider = SmtpEmailProvider(
+        host="smtp.tenant.com.br", porta=465, usuario="tenant@empresa.com.br", senha="senha-do-tenant",
+        usar_tls=False,
+    )
+
+    resultado = provider.enviar(
+        "dest@empresa.com", "Assunto", "Corpo do e-mail", "Vendas", "vendas@tenant.com.br", "tenant-x"
+    )
+
+    assert resultado.sucesso is True
+    mock_smtp.assert_called_once_with("smtp.tenant.com.br", 465, timeout=15)
+    servidor = mock_smtp.return_value.__enter__.return_value
+    servidor.starttls.assert_not_called()
+    servidor.login.assert_called_once_with("tenant@empresa.com.br", "senha-do-tenant")
+
+
+@patch("app.providers.channels.email.smtp.smtplib.SMTP")
 def test_pixel_url_com_caractere_html_e_escapado(mock_smtp: MagicMock):
     provider = SmtpEmailProvider()
 

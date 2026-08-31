@@ -5,7 +5,7 @@ from app.api.deps import (
     get_ator_id,
     get_calendar_provider,
     get_db,
-    get_email_provider,
+    get_email_provider_do_tenant,
     get_llm_provider,
     get_tenant_id,
     get_whatsapp_provider,
@@ -58,7 +58,7 @@ def marcar_entrega_concluida(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
     whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
-    email: EmailProvider = Depends(get_email_provider),
+    email: EmailProvider = Depends(get_email_provider_do_tenant),
 ) -> PesquisaNpsSchema:
     """Marco manual "entrega concluída" — dispara NPS imediatamente (E11-H1)."""
     return nps_service.marcar_entrega_concluida(db, tenant_id, ator_id, decisor_id, whatsapp, email)

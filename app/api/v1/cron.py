@@ -15,6 +15,7 @@ from app.api.deps import (
     get_plan_limits_provider,
     get_site_fetcher,
     get_web_search_provider,
+    resolver_email_provider,
     resolver_whatsapp_provider,
 )
 from app.core.config import settings
@@ -76,7 +77,6 @@ def _registrar_falha_tenant(tenant_id: str) -> None:
 @router.post("/processar-envios", dependencies=[Depends(_exigir_segredo_cron)])
 def processar_envios_todos_os_tenants(
     db: Session = Depends(get_db),
-    email: EmailProvider = Depends(get_email_provider),
     email_validation: EmailVerificationProvider = Depends(get_email_validation_provider),
 ) -> dict:
     """Dispatcher agendado (Onda I) — mesma lógica de `POST /envios/processar`,
@@ -90,6 +90,11 @@ def processar_envios_todos_os_tenants(
     for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
         try:
             whatsapp = resolver_whatsapp_provider(tenant.id, db)
+            # E-mail resolvido por tenant, dentro do loop (raio-X
+            # 2026-08-27) — igual ao WhatsApp: cada tenant manda pela
+            # própria conta SMTP, sem instância única compartilhada
+            # entre todos os tenants do disparo.
+            email = resolver_email_provider(tenant.id, db)
             resultado = envio_service.processar_pendentes(db, tenant.id, whatsapp, email, email_validation)
         except Exception:
             db.rollback()
@@ -106,7 +111,6 @@ def processar_envios_todos_os_tenants(
 @router.post("/processar-retorno", dependencies=[Depends(_exigir_segredo_cron)])
 def processar_retorno_todos_os_tenants(
     db: Session = Depends(get_db),
-    email: EmailProvider = Depends(get_email_provider),
 ) -> dict:
     """Dispatcher agendado das métricas de retorno (lembrete de reunião
     D-1/H-2 e disparo de pesquisa NPS pelo marco configurado) — mesmo
@@ -119,6 +123,7 @@ def processar_retorno_todos_os_tenants(
     for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
         try:
             whatsapp = resolver_whatsapp_provider(tenant.id, db)
+            email = resolver_email_provider(tenant.id, db)
             lembretes = reuniao_service.processar_lembretes(db, tenant.id, whatsapp, email)
             nps = nps_service.disparar_pendentes(db, tenant.id, whatsapp, email)
         except Exception:
@@ -137,7 +142,6 @@ def processar_retorno_todos_os_tenants(
 @router.post("/processar-campanhas", dependencies=[Depends(_exigir_segredo_cron)])
 def processar_campanhas_todos_os_tenants(
     db: Session = Depends(get_db),
-    email: EmailProvider = Depends(get_email_provider),
 ) -> dict:
     """Dispatcher agendado das campanhas de e-mail/WhatsApp em massa —
     mesmo padrão síncrono/idempotente dos outros dispatchers deste
@@ -151,6 +155,7 @@ def processar_campanhas_todos_os_tenants(
     for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
         try:
             whatsapp = resolver_whatsapp_provider(tenant.id, db)
+            email = resolver_email_provider(tenant.id, db)
             resultado = campanha_service.processar_pendentes(db, tenant.id, email, whatsapp)
         except Exception:
             db.rollback()
@@ -251,6 +256,7 @@ def processar_fila_enriquecimento(
     account_data: AccountDataProvider = Depends(get_account_data_provider),
     contact_enrichment: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider),
     graph: Neo4jClient = Depends(get_graph_client),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> dict:
     """Processa em lotes pequenos a fila de enriquecimento (site +
     decisores) de contas criadas em massa (ex.: importação de planilha de
@@ -259,7 +265,7 @@ def processar_fila_enriquecimento(
     empresa (raio-X: planilha grande estourando timeout do proxy do
     Render, mesmo raciocínio do recorte de CNPJ)."""
     return enriquecimento_fila_service.processar_pendentes(
-        db, llm, site_fetcher, web_search, account_data, contact_enrichment, graph
+        db, llm, site_fetcher, web_search, account_data, contact_enrichment, graph, plan_limits
     )
 
 

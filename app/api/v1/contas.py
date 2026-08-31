@@ -36,10 +36,18 @@ from app.schemas.conta import (
     GerarListaRequestSchema,
     GerarListaResponseSchema,
     GrafoContaResponseSchema,
+    LimiteEnriquecimentoResponseSchema,
 )
 from app.schemas.crm import AtividadeSchema
 from app.schemas.decisor import AtualizarDecisorRequestSchema, DecisorCreateSchema, DecisorSchema
-from app.services import atividade_service, conta_service, descarte_service, franquia_service, linkedin_conexao_service
+from app.services import (
+    atividade_service,
+    conta_service,
+    descarte_service,
+    enriquecimento_limite_service,
+    franquia_service,
+    linkedin_conexao_service,
+)
 
 router = APIRouter(tags=["contas"])
 
@@ -114,6 +122,19 @@ def franquia_atual(
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> FranquiaSchema:
     return FranquiaSchema(**franquia_service.obter_franquia(db, tenant_id, plan_limits))
+
+
+@router.get("/contas/limite-enriquecimento", response_model=LimiteEnriquecimentoResponseSchema)
+def limite_enriquecimento_atual(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+) -> LimiteEnriquecimentoResponseSchema:
+    """Limite semanal de pesquisas de enriquecimento — todo plano tem
+    limite configurado, proporcional à franquia mensal (raio-X
+    2026-08-28); `limite: null` fica reservado pra um plano futuro sem
+    teto."""
+    return LimiteEnriquecimentoResponseSchema(**enriquecimento_limite_service.obter_limites(db, tenant_id, plan_limits))
 
 
 @router.post("/contas/enriquecer-em-lote", response_model=EnriquecerEmLoteResponseSchema)
@@ -203,8 +224,9 @@ def enriquecer_conta(
     llm: LLMProvider = Depends(get_llm_provider),
     site_fetcher: SiteFetcher = Depends(get_site_fetcher),
     web_search: WebSearchProvider = Depends(get_web_search_provider),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> EnriquecerContaResponseSchema:
-    campos = conta_service.enriquecer(db, tenant_id, ator_id, conta_id, llm, site_fetcher, web_search)
+    campos = conta_service.enriquecer(db, tenant_id, ator_id, conta_id, llm, site_fetcher, web_search, plan_limits)
     return EnriquecerContaResponseSchema(campos=campos)
 
 
@@ -229,9 +251,10 @@ def mapear_decisores(
     account_data: AccountDataProvider = Depends(get_account_data_provider),
     contact_enrichment: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider),
     graph: Neo4jClient = Depends(get_graph_client),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> list[DecisorSchema]:
     decisores = conta_service.mapear_decisores(
-        db, tenant_id, ator_id, conta_id, account_data, contact_enrichment, graph
+        db, tenant_id, ator_id, conta_id, account_data, contact_enrichment, graph, plan_limits
     )
     return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, decisores)
 

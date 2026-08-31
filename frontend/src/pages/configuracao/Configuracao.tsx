@@ -30,6 +30,15 @@ interface ConfiguracaoWhatsApp {
   access_token_mascarado: string;
 }
 
+interface ConfiguracaoEmailSmtp {
+  id: number;
+  host: string;
+  porta: number;
+  usuario: string;
+  usar_tls: boolean;
+  senha_mascarada: string;
+}
+
 interface StatusConexoesLinkedin {
   total: number;
   atualizado_em: string | null;
@@ -235,6 +244,9 @@ export function Configuracao() {
   const [comunicacao, setComunicacao] = useState<ConfiguracaoComunicacao | null>(null);
   const [whatsapp, setWhatsapp] = useState<ConfiguracaoWhatsApp | null>(null);
   const [erroWhatsapp, setErroWhatsapp] = useState<string | null>(null);
+  const [emailSmtp, setEmailSmtp] = useState<ConfiguracaoEmailSmtp | null>(null);
+  const [erroEmailSmtp, setErroEmailSmtp] = useState<string | null>(null);
+  const [salvandoEmailSmtp, setSalvandoEmailSmtp] = useState(false);
   const [statusLinkedin, setStatusLinkedin] = useState<StatusConexoesLinkedin | null>(null);
   const [nomeArquivoLinkedin, setNomeArquivoLinkedin] = useState<string | null>(null);
   const [conteudoCsvLinkedin, setConteudoCsvLinkedin] = useState<string | null>(null);
@@ -295,6 +307,16 @@ export function Configuracao() {
           setErroWhatsapp(
             "Não foi possível carregar a configuração atual do WhatsApp Business (credencial salva pode estar " +
               "corrompida). Preencha os três campos abaixo de novo com os dados da Meta pra corrigir.",
+          );
+        }
+        // Mesmo isolamento — uma senha SMTP indecifrável não pode travar
+        // o resto da tela nem impedir a pessoa de chegar aqui pra corrigir.
+        try {
+          setEmailSmtp(await api.get<ConfiguracaoEmailSmtp | null>("/configuracao-email-smtp"));
+        } catch {
+          setErroEmailSmtp(
+            "Não foi possível carregar a configuração atual de e-mail (credencial salva pode estar " +
+              "corrompida). Preencha os campos abaixo de novo pra corrigir.",
           );
         }
       }
@@ -405,6 +427,31 @@ export function Configuracao() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível salvar o WhatsApp Business.");
     } finally {
       setSalvandoWhatsapp(false);
+    }
+  }
+
+  async function salvarEmailSmtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (salvandoEmailSmtp) return;
+    const form = new FormData(event.currentTarget);
+    const senha = String(form.get("senha") ?? "").trim();
+    setSalvandoEmailSmtp(true);
+    setErro(null);
+    try {
+      const salvo = await api.put<ConfiguracaoEmailSmtp>("/configuracao-email-smtp", {
+        host: String(form.get("host")),
+        porta: Number(form.get("porta")),
+        usuario: String(form.get("usuario")),
+        usar_tls: form.get("usar_tls") === "on",
+        senha: senha || null,
+      });
+      setEmailSmtp(salvo);
+      setErroEmailSmtp(null);
+      setMensagem("Conta de e-mail (SMTP) salva.");
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível salvar a conta de e-mail.");
+    } finally {
+      setSalvandoEmailSmtp(false);
     }
   }
 
@@ -650,10 +697,8 @@ export function Configuracao() {
         <Card className="mt-4">
           <SectionLabel>WhatsApp Business</SectionLabel>
           <div className="mb-3 text-[11px] text-muted">
-            Conta própria da Meta para este cliente. Sem isto, o envio usa o
-            número compartilhado da plataforma — se outro cliente prospectar
-            mal e a Meta restringir o número compartilhado, todos que ainda
-            não configuraram a própria conta são afetados junto.
+            Conta própria da Meta pra este cliente — obrigatória pra disparar WhatsApp de cadência/campanha.
+            Sem ela configurada aqui, o envio fica desativado (nenhuma mensagem sai).
           </div>
           {whatsapp && (
             <div className="mb-3 text-[12px] text-muted">
@@ -678,6 +723,52 @@ export function Configuracao() {
             </div>
             <Button type="submit" disabled={salvandoWhatsapp} className="w-full justify-center">
               {salvandoWhatsapp ? "Salvando..." : "Salvar WhatsApp Business"}
+            </Button>
+          </form>
+        </Card>
+      )}
+
+      {isGestor && (
+        <Card className="mt-4">
+          <SectionLabel>E-mail (SMTP)</SectionLabel>
+          <div className="mb-3 text-[11px] text-muted">
+            Conta de e-mail própria (host SMTP, porta, usuário e senha — Gmail Workspace, Outlook 365, sua
+            própria hospedagem, etc.) — obrigatória pra disparar e-mail de cadência/campanha. Sem ela
+            configurada aqui, o envio fica desativado (nenhum e-mail sai).
+          </div>
+          {emailSmtp && (
+            <div className="mb-3 text-[12px] text-muted">
+              Senha atual: <span className="font-mono">{emailSmtp.senha_mascarada}</span>
+            </div>
+          )}
+          {erroEmailSmtp && <div className="mb-3 text-[12px] text-red">{erroEmailSmtp}</div>}
+          <form key={emailSmtp?.id ?? "novo"} onSubmit={salvarEmailSmtp} className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Host</div>
+                <Input name="host" required defaultValue={emailSmtp?.host} placeholder="smtp.gmail.com" />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Porta</div>
+                <Input name="porta" type="number" required defaultValue={emailSmtp?.porta ?? 587} />
+              </div>
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Usuário</div>
+              <Input name="usuario" required defaultValue={emailSmtp?.usuario} placeholder="contato@suaempresa.com.br" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+                Senha {emailSmtp && !erroEmailSmtp ? "(deixe em branco para manter a atual)" : ""}
+              </div>
+              <Input name="senha" type="password" required={!emailSmtp || !!erroEmailSmtp} />
+            </div>
+            <label className="flex items-center gap-1.5 text-[12px] text-muted">
+              <input type="checkbox" name="usar_tls" defaultChecked={emailSmtp?.usar_tls ?? true} />
+              Usar TLS (recomendado)
+            </label>
+            <Button type="submit" disabled={salvandoEmailSmtp} className="w-full justify-center">
+              {salvandoEmailSmtp ? "Salvando..." : "Salvar conta de e-mail"}
             </Button>
           </form>
         </Card>

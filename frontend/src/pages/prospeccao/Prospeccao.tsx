@@ -62,6 +62,17 @@ interface Franquia {
   restante: number;
 }
 
+interface ContadorSemanal {
+  limite: number | null;
+  usado: number;
+  restante: number | null;
+}
+
+interface LimiteEnriquecimento {
+  site: ContadorSemanal;
+  contatos: ContadorSemanal;
+}
+
 interface ParticipanteEvento {
   nome: string;
   empresa: string;
@@ -232,6 +243,7 @@ export function Prospeccao() {
   const [listaSelecionadaId, setListaSelecionadaId] = useState<number | null>(null);
   const [contasDaLista, setContasDaLista] = useState<Conta[]>([]);
   const [franquia, setFranquia] = useState<Franquia | null>(null);
+  const [limiteEnriquecimento, setLimiteEnriquecimento] = useState<LimiteEnriquecimento | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const [modalIcpAberto, setModalIcpAberto] = useState(false);
@@ -322,10 +334,19 @@ export function Prospeccao() {
     }
   }
 
+  async function carregarLimiteEnriquecimento() {
+    try {
+      setLimiteEnriquecimento(await api.get<LimiteEnriquecimento>("/contas/limite-enriquecimento"));
+    } catch {
+      // idem franquia — informativo, não bloqueia o resto da tela
+    }
+  }
+
   useEffect(() => {
     carregarIcps();
     carregarListas();
     carregarFranquia();
+    carregarLimiteEnriquecimento();
   }, []);
 
   useEffect(() => {
@@ -646,6 +667,29 @@ export function Prospeccao() {
         <KpiCard label="Usado no mês" value={franquia?.usado ?? "—"} colorClassName="text-amber" />
         <KpiCard label="Restante" value={franquia?.restante ?? "—"} colorClassName="text-green" />
       </div>
+
+      {/* Todo plano tem limite semanal hoje (raio-X 2026-08-28) — a
+          condição de `limite !== null` continua aqui pra sustentar um
+          plano futuro deliberadamente sem teto. */}
+      {(limiteEnriquecimento?.site.limite !== null && limiteEnriquecimento?.site.limite !== undefined) ||
+      (limiteEnriquecimento?.contatos.limite !== null && limiteEnriquecimento?.contatos.limite !== undefined) ? (
+        <div className="mb-4 grid grid-cols-2 gap-2.5">
+          {limiteEnriquecimento?.site.limite != null && (
+            <KpiCard
+              label="Pesquisas de site — restante essa semana"
+              value={`${limiteEnriquecimento.site.restante} / ${limiteEnriquecimento.site.limite}`}
+              colorClassName="text-cyan"
+            />
+          )}
+          {limiteEnriquecimento?.contatos.limite != null && (
+            <KpiCard
+              label="Mapeamento de contatos — restante essa semana"
+              value={`${limiteEnriquecimento.contatos.restante} / ${limiteEnriquecimento.contatos.limite}`}
+              colorClassName="text-cyan"
+            />
+          )}
+        </div>
+      ) : null}
 
       <Card className="mb-4">
         <div className="mb-3 flex gap-2">
@@ -1192,6 +1236,7 @@ export function Prospeccao() {
           onAtualizado={() => {
             if (icpSelecionadoId !== null) carregarContas(icpSelecionadoId);
             if (listaSelecionadaId !== null) carregarContasDaLista(listaSelecionadaId);
+            carregarLimiteEnriquecimento();
           }}
         />
       )}

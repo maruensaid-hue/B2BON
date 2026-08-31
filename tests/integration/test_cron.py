@@ -88,6 +88,32 @@ def test_processar_envios_isola_falha_de_um_tenant_sem_bloquear_os_outros(
     assert "tenant-com-whatsapp-quebrado" not in corpo["por_tenant"]
 
 
+def test_processar_envios_isola_falha_de_email_de_um_tenant_sem_bloquear_os_outros(
+    client, db_session, com_segredo_cron, monkeypatch: pytest.MonkeyPatch
+):
+    """Mesma proteção do teste acima, mas pro lado do e-mail (raio-X
+    2026-08-28: `resolver_email_provider` agora é resolvido por tenant
+    dentro do loop, igual ao WhatsApp — uma `ConfiguracaoEmailSmtp`
+    quebrada de um tenant não pode derrubar os outros."""
+    _criar_tenant_ativo(db_session, "tenant-com-email-quebrado")
+    resolver_original = cron_module.resolver_email_provider
+
+    def resolver_com_falha(tenant_id, db):
+        if tenant_id == "tenant-com-email-quebrado":
+            raise RuntimeError("simula InvalidToken na descriptografia da senha SMTP")
+        return resolver_original(tenant_id, db)
+
+    monkeypatch.setattr(cron_module, "resolver_email_provider", resolver_com_falha)
+
+    resposta = client.post("/api/v1/cron/processar-envios", headers={"X-Cron-Secret": SEGREDO})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["tenants_com_falha"] == ["tenant-com-email-quebrado"]
+    assert "tenant-teste" in corpo["por_tenant"]
+    assert "tenant-com-email-quebrado" not in corpo["por_tenant"]
+
+
 def test_processar_retorno_sem_segredo_configurado_recusa(client):
     resposta = client.post("/api/v1/cron/processar-retorno")
     assert resposta.status_code == 403

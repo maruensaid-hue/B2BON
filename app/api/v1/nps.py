@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_email_provider, get_llm_provider, get_tenant_id, get_whatsapp_provider
+from app.api.deps import get_db, get_email_provider_do_tenant, get_llm_provider, get_tenant_id, get_whatsapp_provider
 from app.llm.base import LLMProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
@@ -41,7 +41,7 @@ def disparar_pendentes(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
     whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
-    email: EmailProvider = Depends(get_email_provider),
+    email: EmailProvider = Depends(get_email_provider_do_tenant),
 ) -> dict:
     """Dispatcher de NPS por dias-após-reunião — chamado por cron externo (E11-H1)."""
     return nps_service.disparar_pendentes(db, tenant_id, whatsapp, email)
