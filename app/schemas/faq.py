@@ -16,3 +16,11 @@ class FaqItemSchema(BaseModel):
 class FaqItemCreateSchema(BaseModel):
     pergunta: str
     resposta: str
+
+
+class FaqPerguntarRequestSchema(BaseModel):
+    pergunta: str
+
+
+class FaqPerguntarResponseSchema(BaseModel):
+    resposta: str

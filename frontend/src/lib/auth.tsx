@@ -18,6 +18,9 @@ interface TokenResponse {
   usuario: Usuario;
   tem_licenca_ativa: boolean;
   checkout_url: string | null;
+  /** True só no primeiro login/cadastro de verdade — dispara o tour
+   * guiado de onboarding uma única vez (raio-X 2026-09-01). */
+  primeiro_login: boolean;
 }
 
 interface DadosRegistroVitrine {
@@ -49,6 +52,11 @@ interface AuthContextValue {
   registrarVitrine: (dados: DadosRegistroVitrine) => Promise<string | null>;
   registrarComConvite: (dados: DadosRegistroConvite) => Promise<void>;
   sair: () => void;
+  /** True uma única vez, logo após o primeiro login/cadastro — consumido
+   * pelo AppShell (abre o tour) via `consumirPrimeiroLoginPendente`. Não
+   * reaparece num F5 no meio da sessão. */
+  primeiroLoginPendente: boolean;
+  consumirPrimeiroLoginPendente: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -66,12 +74,14 @@ function lerUsuarioSalvo(): Usuario | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(lerUsuarioSalvo);
   const [temLicencaAtiva, setTemLicencaAtiva] = useState<boolean>(getTemLicencaAtiva);
+  const [primeiroLoginPendente, setPrimeiroLoginPendente] = useState(false);
 
   const entrar = useCallback(async (email: string, senha: string) => {
     const resposta = await api.post<TokenResponse>("/auth/login", { email, senha });
     setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
     setUsuario(resposta.usuario);
     setTemLicencaAtiva(resposta.tem_licenca_ativa);
+    setPrimeiroLoginPendente(resposta.primeiro_login);
   }, []);
 
   const entrarComGoogle = useCallback(async (idToken: string) => {
@@ -79,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
     setUsuario(resposta.usuario);
     setTemLicencaAtiva(resposta.tem_licenca_ativa);
+    setPrimeiroLoginPendente(resposta.primeiro_login);
   }, []);
 
   const registrarVitrine = useCallback(async (dados: DadosRegistroVitrine) => {
@@ -86,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
     setUsuario(resposta.usuario);
     setTemLicencaAtiva(resposta.tem_licenca_ativa);
+    setPrimeiroLoginPendente(resposta.primeiro_login);
     return resposta.checkout_url;
   }, []);
 
@@ -94,12 +106,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
     setUsuario(resposta.usuario);
     setTemLicencaAtiva(resposta.tem_licenca_ativa);
+    setPrimeiroLoginPendente(resposta.primeiro_login);
   }, []);
 
   const sair = useCallback(() => {
     limparSessao();
     setUsuario(null);
     setTemLicencaAtiva(true);
+    setPrimeiroLoginPendente(false);
+  }, []);
+
+  const consumirPrimeiroLoginPendente = useCallback(() => {
+    setPrimeiroLoginPendente(false);
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -112,8 +130,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       registrarVitrine,
       registrarComConvite,
       sair,
+      primeiroLoginPendente,
+      consumirPrimeiroLoginPendente,
     }),
-    [usuario, temLicencaAtiva, entrar, entrarComGoogle, registrarVitrine, registrarComConvite, sair],
+    [
+      usuario,
+      temLicencaAtiva,
+      entrar,
+      entrarComGoogle,
+      registrarVitrine,
+      registrarComConvite,
+      sair,
+      primeiroLoginPendente,
+      consumirPrimeiroLoginPendente,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

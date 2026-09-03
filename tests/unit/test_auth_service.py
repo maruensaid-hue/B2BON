@@ -89,9 +89,22 @@ def test_autenticar_senha_incorreta_levanta_nao_autenticado(db_session):
 def test_autenticar_senha_correta_atualiza_ultimo_login(db_session):
     _criar_usuario(db_session, email="fulano2@teste.com.br")
 
-    usuario = auth_service.autenticar_senha(db_session, "fulano2@teste.com.br", "senha-forte-123")
+    usuario, _primeiro_login = auth_service.autenticar_senha(db_session, "fulano2@teste.com.br", "senha-forte-123")
 
     assert usuario.ultimo_login_em is not None
+
+
+def test_autenticar_senha_primeiro_login_true_so_na_primeira_vez(db_session):
+    """Raio-X 2026-09-01: sinal usado pra disparar o tour guiado de
+    onboarding uma única vez, sem campo novo no banco — reaproveita
+    `ultimo_login_em` (nulo até o primeiro login de verdade)."""
+    _criar_usuario(db_session, email="fulano3@teste.com.br")
+
+    _usuario1, primeiro_login1 = auth_service.autenticar_senha(db_session, "fulano3@teste.com.br", "senha-forte-123")
+    _usuario2, primeiro_login2 = auth_service.autenticar_senha(db_session, "fulano3@teste.com.br", "senha-forte-123")
+
+    assert primeiro_login1 is True
+    assert primeiro_login2 is False
 
 
 def test_fluxo_de_convite_gerar_usar_e_bloquear_reuso(db_session):

@@ -59,6 +59,9 @@ class TokenResponseSchema(BaseModel):
     usuario: UsuarioSchema
     tem_licenca_ativa: bool = True
     checkout_url: str | None = None
+    # True só no primeiro login de verdade (ou cadastro novo) — dispara o
+    # tour guiado de onboarding no frontend uma única vez.
+    primeiro_login: bool = False
 
 
 class LicencaStatusResponseSchema(BaseModel):

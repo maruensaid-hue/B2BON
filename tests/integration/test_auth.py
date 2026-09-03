@@ -33,6 +33,22 @@ def test_login_com_sucesso(client, db_session):
     assert corpo["usuario"]["email"] == "login@teste.com.br"
 
 
+def test_login_primeiro_login_true_so_na_primeira_vez(client, db_session):
+    """Raio-X 2026-09-01: sinal pra disparar o tour guiado de onboarding
+    no frontend uma única vez, sem campo novo no banco."""
+    _criar_usuario_senha(db_session, "primeiro-login@teste.com.br", "senha-forte")
+
+    primeira = client.post(
+        "/api/v1/auth/login", json={"email": "primeiro-login@teste.com.br", "senha": "senha-forte"}
+    )
+    segunda = client.post(
+        "/api/v1/auth/login", json={"email": "primeiro-login@teste.com.br", "senha": "senha-forte"}
+    )
+
+    assert primeira.json()["primeiro_login"] is True
+    assert segunda.json()["primeiro_login"] is False
+
+
 def test_login_com_senha_errada_retorna_401(client, db_session):
     _criar_usuario_senha(db_session, "login2@teste.com.br", "senha-forte")
 
@@ -252,6 +268,7 @@ def test_registrar_via_convite_normal_retorna_licenca_ativa(client, db_session):
 
     assert resposta.status_code == 201
     assert resposta.json()["tem_licenca_ativa"] is True
+    assert resposta.json()["primeiro_login"] is True
 
 
 def test_convite_vitrine_qualquer_usuario_pode_gerar_sem_papel_admin(client, criar_usuario_autenticado):
@@ -292,6 +309,7 @@ def test_aceitar_convite_vitrine_cria_licenca_pendente_de_pagamento_e_loga(clien
     assert corpo["checkout_url"] is not None
     assert corpo["usuario"]["papel"] == "admin"
     assert corpo["usuario"]["tenant_id"] != TENANT_ID
+    assert corpo["primeiro_login"] is True
 
 
 def test_tenant_vitrine_acessa_rede_social_mas_nao_modulo_pago(client, criar_plano):

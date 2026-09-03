@@ -37,7 +37,9 @@ from app.services import auth_service, pagamento_licenca_service, tenant_service
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _resposta_token(usuario: Usuario, db: Session, checkout_url: str | None = None) -> TokenResponseSchema:
+def _resposta_token(
+    usuario: Usuario, db: Session, checkout_url: str | None = None, primeiro_login: bool = False
+) -> TokenResponseSchema:
     licenca = db.query(Licenca).filter_by(tenant_id=usuario.tenant_id).one_or_none()
     tenant = db.query(Tenant).filter_by(id=usuario.tenant_id).one_or_none()
     usuario_schema = UsuarioSchema.model_validate(usuario).model_copy(
@@ -48,19 +50,20 @@ def _resposta_token(usuario: Usuario, db: Session, checkout_url: str | None = No
         usuario=usuario_schema,
         tem_licenca_ativa=licenca is not None and licenca.status == "ativa",
         checkout_url=checkout_url,
+        primeiro_login=primeiro_login,
     )
 
 
 @router.post("/login", response_model=TokenResponseSchema, dependencies=[Depends(limitar_por_ip())])
 def login(dados: LoginRequestSchema, db: Session = Depends(get_db)) -> TokenResponseSchema:
-    usuario = auth_service.autenticar_senha(db, dados.email, dados.senha)
-    return _resposta_token(usuario, db)
+    usuario, primeiro_login = auth_service.autenticar_senha(db, dados.email, dados.senha)
+    return _resposta_token(usuario, db, primeiro_login=primeiro_login)
 
 
 @router.post("/google", response_model=TokenResponseSchema, dependencies=[Depends(limitar_por_ip())])
 def login_google(dados: LoginGoogleRequestSchema, db: Session = Depends(get_db)) -> TokenResponseSchema:
-    usuario = auth_service.autenticar_google(db, dados.id_token)
-    return _resposta_token(usuario, db)
+    usuario, primeiro_login = auth_service.autenticar_google(db, dados.id_token)
+    return _resposta_token(usuario, db, primeiro_login=primeiro_login)
 
 
 @router.post(
@@ -70,7 +73,7 @@ def registrar(dados: RegistrarRequestSchema, db: Session = Depends(get_db)) -> T
     usuario = auth_service.registrar_com_convite(
         db, dados.codigo_convite, dados.nome, dados.email, dados.senha, dados.aceite_termos
     )
-    return _resposta_token(usuario, db)
+    return _resposta_token(usuario, db, primeiro_login=True)
 
 
 @router.post(
@@ -114,7 +117,7 @@ def registrar_vitrine(
         graph,
         dados.cnpj,
     )
-    return _resposta_token(usuario, db, checkout_url)
+    return _resposta_token(usuario, db, checkout_url, primeiro_login=True)
 
 
 @router.get("/eu", response_model=UsuarioSchema)

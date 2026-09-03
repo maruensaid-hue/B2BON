@@ -64,3 +64,21 @@ def test_sem_faq_cadastrada_prefixo_faq_tambem_transfere(client, criar_conta_com
     corpo = _responder_whatsapp(client, decisor, "Alguma pergunta").json()
 
     assert corpo["transferido"] is True
+
+
+def test_faq_perguntar_responde_com_ia(client, fake_llm):
+    """Raio-X 2026-09-01: FAQ interativa com IA, distinta da FAQ curada
+    por tenant testada acima — qualquer usuário autenticado pode
+    perguntar livremente sobre como usar a plataforma."""
+    fake_llm.definir_respostas(["Vai em Configuração e cadastra seu SMTP próprio."])
+
+    resposta = client.post("/api/v1/faq/perguntar", json={"pergunta": "Como configuro o e-mail?"})
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"resposta": "Vai em Configuração e cadastra seu SMTP próprio."}
+
+
+def test_faq_perguntar_sem_autenticacao_recusa(client):
+    resposta = client.post("/api/v1/faq/perguntar", json={"pergunta": "Oi"}, headers={"Authorization": ""})
+
+    assert resposta.status_code == 401

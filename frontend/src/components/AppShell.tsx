@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { InstallBanner } from "@/components/InstallBanner";
+import { FaqModal } from "@/components/onboarding/FaqModal";
+import { TourGuiado } from "@/components/onboarding/TourGuiado";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth";
 
@@ -146,9 +148,33 @@ function NavGroup({ label, icon, path, itens }: { label: string; icon: string; p
 }
 
 export function AppShell() {
-  const { usuario, temLicencaAtiva, sair } = useAuth();
+  const { usuario, temLicencaAtiva, sair, primeiroLoginPendente, consumirPrimeiroLoginPendente } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [tourAberto, setTourAberto] = useState(false);
+  const [faqAberto, setFaqAberto] = useState(false);
+  // `key` do TourGuiado — incrementado toda vez que o tour (re)abre, pra
+  // forçar o React a remontar o componente do zero (raio-X 2026-09-01:
+  // sem isto, reabrir via "Refazer o tour" quando `tourAberto` já
+  // estivesse `true` não disparava o efeito de reset — `useEffect([open])`
+  // só roda quando o valor muda —, deixando o passo travado no fim).
+  const [tourKey, setTourKey] = useState(0);
+
+  function abrirTour() {
+    setTourKey((atual) => atual + 1);
+    setTourAberto(true);
+  }
+
+  // Dispara o tour guiado automaticamente uma única vez, logo após o
+  // primeiro login/cadastro (raio-X 2026-09-01) — consome o sinal na
+  // hora pra não reabrir sozinho num F5 no meio da sessão.
+  useEffect(() => {
+    if (primeiroLoginPendente) {
+      abrirTour();
+      consumirPrimeiroLoginPendente();
+    }
+  }, [primeiroLoginPendente, consumirPrimeiroLoginPendente]);
+
   const isSuperAdmin = usuario?.papel === "super_admin";
   const ehGestorHierarquico = usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo);
   const ehAdminDistribuidor = usuario?.papel === "admin" && usuario.tenant_tipo === "distribuidor";
@@ -181,36 +207,63 @@ export function AppShell() {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-1.5">
-          {temLicencaAtiva && <NavButton {...NAV_ITEMS_PAGOS[0]} />}
-
-          {temLicencaAtiva && <NavGroup label={CRM_ITEM.label} icon={CRM_ITEM.icon} path={CRM_ITEM.path} itens={CRM_SUBITENS} />}
-
-          {temLicencaAtiva && <NavButton {...NAV_ITEMS_PAGOS[1]} />}
-
-          {temLicencaAtiva && <NavGroup label="Predator" icon="🐾" itens={PREDATOR_NAV_ITEMS} />}
-
-          <NavButton {...NAV_ITEM_REDE_SOCIAL} />
+          {temLicencaAtiva && (
+            <div data-tour-id="dashboard">
+              <NavButton {...NAV_ITEMS_PAGOS[0]} />
+            </div>
+          )}
 
           {temLicencaAtiva && (
-            <>
+            <div data-tour-id="crm">
+              <NavGroup label={CRM_ITEM.label} icon={CRM_ITEM.icon} path={CRM_ITEM.path} itens={CRM_SUBITENS} />
+            </div>
+          )}
+
+          {temLicencaAtiva && (
+            <div data-tour-id="map">
+              <NavButton {...NAV_ITEMS_PAGOS[1]} />
+            </div>
+          )}
+
+          {temLicencaAtiva && (
+            <div data-tour-id="predator">
+              <NavGroup label="Predator" icon="🐾" itens={PREDATOR_NAV_ITEMS} />
+            </div>
+          )}
+
+          <div data-tour-id="rede-social">
+            <NavButton {...NAV_ITEM_REDE_SOCIAL} />
+          </div>
+
+          {temLicencaAtiva && (
+            <div data-tour-id="leads">
               <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">Leads</div>
               {LEADS_NAV_ITEMS.map((item) => (
                 <NavButton key={item.path} {...item} />
               ))}
-            </>
+            </div>
           )}
 
           {(isSuperAdmin || ehGestorHierarquico) && (
-            <>
+            <div data-tour-id="admin">
               <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">Admin</div>
               {ADMIN_NAV_ITEMS_HIERARQUIA.map((item) => (
                 <NavButton key={item.path} {...item} />
               ))}
               {ehAdminDistribuidor && <NavButton {...ADMIN_NAV_ITEM_INTEGRACOES} />}
               {isSuperAdmin && ADMIN_NAV_ITEMS_SUPER_ADMIN.map((item) => <NavButton key={item.path} {...item} />)}
-            </>
+            </div>
           )}
         </nav>
+
+        <button
+          type="button"
+          onClick={() => setFaqAberto(true)}
+          className="mx-1.5 mb-1.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-muted transition-colors hover:bg-white/3 hover:text-text"
+        >
+          <span className="w-5 flex-shrink-0 text-center text-[15px]">❓</span>
+          <span>FAQ</span>
+        </button>
 
         <div className="flex items-center gap-2.5 border-t border-border p-2.5">
           <div className="flex h-7.5 w-7.5 flex-shrink-0 items-center justify-center rounded-full bg-violet/15 text-xs font-bold text-violet">
@@ -270,6 +323,16 @@ export function AppShell() {
           </NavLink>
         ))}
       </nav>
+
+      <TourGuiado key={tourKey} open={tourAberto} onClose={() => setTourAberto(false)} />
+      <FaqModal
+        open={faqAberto}
+        onClose={() => setFaqAberto(false)}
+        onRefazerTour={() => {
+          setFaqAberto(false);
+          abrirTour();
+        }}
+      />
     </div>
   );
 }

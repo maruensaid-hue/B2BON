@@ -50,20 +50,24 @@ def validar_token(db: Session, token: str) -> Usuario:
     return usuario
 
 
-def autenticar_senha(db: Session, email: str, senha: str) -> Usuario:
+def autenticar_senha(db: Session, email: str, senha: str) -> tuple[Usuario, bool]:
     usuario = db.query(Usuario).filter_by(email=email).one_or_none()
     if usuario is None or usuario.senha_hash is None or not verificar_senha(senha, usuario.senha_hash):
         raise NaoAutenticado("E-mail ou senha inválidos.")
     if not usuario.ativo:
         raise NaoAutenticado("Usuário inativo.")
 
+    # Calculado ANTES de sobrescrever — só é `True` quando este é
+    # genuinamente o primeiro login (raio-X: dispara o tour guiado de
+    # onboarding no frontend uma única vez).
+    primeiro_login = usuario.ultimo_login_em is None
     usuario.ultimo_login_em = datetime.now(UTC)
     db.commit()
     db.refresh(usuario)
-    return usuario
+    return usuario, primeiro_login
 
 
-def autenticar_google(db: Session, id_token_str: str) -> Usuario:
+def autenticar_google(db: Session, id_token_str: str) -> tuple[Usuario, bool]:
     """Login via Google — só para e-mail já cadastrado por convite (Onda A).
 
     Não há auto-cadastro livre via Google: mantém o modelo de acesso por
@@ -94,10 +98,11 @@ def autenticar_google(db: Session, id_token_str: str) -> Usuario:
     elif usuario.google_sub != google_sub:
         raise NaoAutenticado("Conta Google não corresponde ao cadastro.")
 
+    primeiro_login = usuario.ultimo_login_em is None
     usuario.ultimo_login_em = datetime.now(UTC)
     db.commit()
     db.refresh(usuario)
-    return usuario
+    return usuario, primeiro_login
 
 
 def _gerar_codigo_convite() -> str:
