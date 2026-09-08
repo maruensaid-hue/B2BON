@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { ROTULOS_PADRAO, rotuloTipo, type RotuloTipoTenant } from "@/lib/rotulosHierarquia";
 
 interface Tenant {
   id: string;
@@ -83,6 +84,9 @@ export function AdminTenants() {
   const [tenantParaExcluir, setTenantParaExcluir] = useState<Tenant | null>(null);
   const [textoConfirmacaoExclusao, setTextoConfirmacaoExclusao] = useState("");
   const [excluindoTenant, setExcluindoTenant] = useState(false);
+  const [rotulos, setRotulos] = useState<Record<string, string>>(ROTULOS_PADRAO);
+  const [erroRotulos, setErroRotulos] = useState<string | null>(null);
+  const [salvandoRotulos, setSalvandoRotulos] = useState(false);
 
   function alternarExpandido(tenantId: string) {
     setRecolhidos((atual) => {
@@ -128,7 +132,7 @@ export function AdminTenants() {
             </span>
           </td>
           <td className="p-2">{tenant.razao_social}</td>
-          <td className={`p-2 capitalize ${COR_TIPO[tenant.tipo] ?? "text-muted"}`}>{tenant.tipo}</td>
+          <td className={`p-2 ${COR_TIPO[tenant.tipo] ?? "text-muted"}`}>{rotuloTipo(rotulos, tenant.tipo)}</td>
           <td className="p-2 text-muted">{tenant.cnpj ?? "—"}</td>
           <td className="p-2 text-muted">{new Date(tenant.criado_em).toLocaleDateString("pt-BR")}</td>
           <td className="p-2">
@@ -188,16 +192,44 @@ export function AdminTenants() {
     });
   }
 
+  function aplicarRotulos(lista: RotuloTipoTenant[]) {
+    const mapa: Record<string, string> = {};
+    for (const item of lista) mapa[item.tipo] = item.rotulo;
+    setRotulos(mapa);
+  }
+
   async function carregar() {
     try {
-      const [tenantsResp, planosResp] = await Promise.all([
+      const [tenantsResp, planosResp, rotulosResp] = await Promise.all([
         api.get<Tenant[]>("/admin/tenants"),
         api.get<Plano[]>("/planos"),
+        api.get<RotuloTipoTenant[]>("/rotulos-hierarquia"),
       ]);
       setTenants(tenantsResp);
       setPlanos(planosResp);
+      aplicarRotulos(rotulosResp);
     } catch {
       setErro("Não foi possível carregar os tenants.");
+    }
+  }
+
+  async function salvarRotulos(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (salvandoRotulos) return;
+    const form = new FormData(event.currentTarget);
+    setSalvandoRotulos(true);
+    setErroRotulos(null);
+    try {
+      const atualizados = await api.put<RotuloTipoTenant[]>("/rotulos-hierarquia", {
+        rotulo_distribuidor: String(form.get("rotulo_distribuidor")),
+        rotulo_revendedor: String(form.get("rotulo_revendedor")),
+        rotulo_cliente: String(form.get("rotulo_cliente")),
+      });
+      aplicarRotulos(atualizados);
+    } catch (error) {
+      setErroRotulos(error instanceof ApiError ? error.message : "Não foi possível salvar os rótulos.");
+    } finally {
+      setSalvandoRotulos(false);
     }
   }
 
@@ -288,6 +320,41 @@ export function AdminTenants() {
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
+      {isSuperAdmin && (
+        <Card className="mb-4">
+          <SectionLabel>Perfis de hierarquia</SectionLabel>
+          <div className="mb-3 text-[11px] text-muted">
+            Nome exibido em toda a plataforma pra cada nível da hierarquia de tenants — hoje "Master" (quem
+            revende pra outros vendedores), "Vendedor" (quem revende pro cliente final) e "Cliente" (ponta da
+            cadeia). Só o texto muda aqui; a regra de quem pode ser pai de quem continua a mesma.
+          </div>
+          {erroRotulos && <div className="mb-3 text-[12px] text-red">{erroRotulos}</div>}
+          <form
+            key={`${rotulos.distribuidor}|${rotulos.revendedor}|${rotulos.cliente}`}
+            onSubmit={salvarRotulos}
+            className="flex flex-col gap-3"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nível 1 (distribuidor)</div>
+                <Input name="rotulo_distribuidor" required defaultValue={rotulos.distribuidor} />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nível 2 (revendedor)</div>
+                <Input name="rotulo_revendedor" required defaultValue={rotulos.revendedor} />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nível 3 (cliente final)</div>
+                <Input name="rotulo_cliente" required defaultValue={rotulos.cliente} />
+              </div>
+            </div>
+            <Button type="submit" disabled={salvandoRotulos} className="w-full justify-center">
+              {salvandoRotulos ? "Salvando..." : "Salvar rótulos"}
+            </Button>
+          </form>
+        </Card>
+      )}
+
       <Card>
         <SectionLabel>Tenants</SectionLabel>
         <table className="w-full border-collapse text-[12px]">
@@ -334,20 +401,21 @@ export function AdminTenants() {
               <div>
                 <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Tipo</div>
                 <Select name="tipo" defaultValue="cliente">
-                  <option value="distribuidor">Distribuidor</option>
-                  <option value="cliente">Cliente (direto, sem revenda)</option>
+                  <option value="distribuidor">{rotuloTipo(rotulos, "distribuidor")}</option>
+                  <option value="cliente">{rotuloTipo(rotulos, "cliente")} (direto, sem revenda)</option>
                 </Select>
               </div>
               <div>
                 <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
-                  Tenant pai (opcional — id do distribuidor/revendedor)
+                  Tenant pai (opcional — id do {rotuloTipo(rotulos, "distribuidor").toLowerCase()}/
+                  {rotuloTipo(rotulos, "revendedor").toLowerCase()})
                 </div>
                 <Input name="tenant_pai_id" placeholder="deixe em branco pra tenant top-level" />
               </div>
             </>
           ) : (
             <div className="text-[11px] text-muted">
-              Criado como <span className="capitalize">{tipoFilho}</span> sob o seu tenant ({usuario!.tenant_id}).
+              Criado como <span>{rotuloTipo(rotulos, tipoFilho)}</span> sob o seu tenant ({usuario!.tenant_id}).
             </div>
           )}
           <div>

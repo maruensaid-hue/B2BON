@@ -36,6 +36,7 @@ from app.api.v1.painel import router as painel_router
 from app.api.v1.parceiros import router as parceiros_router
 from app.api.v1.planos import router as planos_router
 from app.api.v1.relatorios import router as relatorios_router
+from app.api.v1.rotulos_hierarquia import router as rotulos_hierarquia_router
 from app.api.v1.qualificacao import router as qualificacao_router
 from app.api.v1.rede_social import router as rede_social_router
 from app.api.v1.reunioes import router as reunioes_router
@@ -91,6 +92,7 @@ router.include_router(leads_router, dependencies=_exige_licenca)
 router.include_router(auth_router)
 router.include_router(convites_router)
 router.include_router(planos_router)
+router.include_router(rotulos_hierarquia_router)
 router.include_router(admin_tenants_router)
 # Fase 2 da hierarquia (raio-X): /integracoes é JWT (Distribuidor logado
 # gerenciando chave/webhook próprios), /parceiros é chave de API (sistema

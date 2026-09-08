@@ -55,6 +55,7 @@ from app.models.registro_supressao_permanente import RegistroSupressaoPermanente
 from app.models.registro_tratamento import RegistroTratamento
 from app.models.regra_auto_aprovacao import RegraAutoAprovacao
 from app.models.reuniao import Reuniao
+from app.models.rotulo_tipo_tenant import RotuloTipoTenant
 from app.models.tarefa_linkedin import TarefaLinkedin
 from app.models.template_whatsapp import TemplateWhatsApp
 from app.models.tenant import Tenant
@@ -107,6 +108,7 @@ __all__ = [
     "AlertaDetrator",
     "Indicacao",
     "Tenant",
+    "RotuloTipoTenant",
     "Plano",
     "Licenca",
     "ListaProspeccao",

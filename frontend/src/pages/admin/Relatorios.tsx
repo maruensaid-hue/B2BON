@@ -7,6 +7,7 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useRotulosHierarquia } from "@/lib/rotulosHierarquia";
 
 interface Metricas {
   periodo_inicio: string;
@@ -46,6 +47,7 @@ export function Relatorios() {
   const [config, setConfig] = useState<ConfiguracaoRelatorio | null>(null);
   const [periodoDias, setPeriodoDias] = useState(7);
   const [erro, setErro] = useState<string | null>(null);
+  const rotulos = useRotulosHierarquia();
 
   const podeGerenciar =
     usuario?.papel === "super_admin" ||
@@ -107,7 +109,11 @@ export function Relatorios() {
         <KpiCard
           label="Tenants ativos"
           value={m ? tenantsAtivos : "—"}
-          sub={m ? `${m.tenants_ativos_distribuidor} distrib. · ${m.tenants_ativos_revendedor} revend. · ${m.tenants_ativos_cliente} cliente` : undefined}
+          sub={
+            m
+              ? `${m.tenants_ativos_distribuidor} ${rotulos.distribuidor.toLowerCase()} · ${m.tenants_ativos_revendedor} ${rotulos.revendedor.toLowerCase()} · ${m.tenants_ativos_cliente} ${rotulos.cliente.toLowerCase()}`
+              : undefined
+          }
           colorClassName="text-cyan"
         />
         <KpiCard
@@ -147,7 +153,8 @@ export function Relatorios() {
       <Card>
         <SectionLabel>Cadência do relatório periódico</SectionLabel>
         <div className="mb-3 text-[11px] text-muted">
-          Manda por e-mail (e, se você for Distribuidor, também dispara webhook) automaticamente nessa frequência.
+          Manda por e-mail (e, se você for {rotulos.distribuidor}, também dispara webhook) automaticamente nessa
+          frequência.
         </div>
         <form onSubmit={salvarCadencia} className="flex items-center gap-2">
           <Select name="cadencia" defaultValue={config?.cadencia ?? "desativada"} className="w-auto">
