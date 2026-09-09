@@ -74,7 +74,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  get: <T,>(path: string) => request<T>(path),
+  get: <T,>(path: string, options?: { signal?: AbortSignal }) => request<T>(path, options),
   post: <T,>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
   put: <T,>(path: string, body?: unknown) =>
@@ -98,10 +98,13 @@ export async function getBlob(path: string): Promise<Blob> {
 /** Upload de arquivo binário (ex.: PDF/DOCX de proposta) via multipart —
  * não passa por `request()` porque não pode forçar Content-Type: application/json
  * (o browser precisa definir o boundary do multipart sozinho). */
-export async function postFile<T>(path: string, file: File): Promise<T> {
+export async function postFile<T>(path: string, file: File, camposExtras?: Record<string, string>): Promise<T> {
   const token = getToken();
   const formData = new FormData();
   formData.append("arquivo", file);
+  for (const [chave, valor] of Object.entries(camposExtras ?? {})) {
+    formData.append(chave, valor);
+  }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",

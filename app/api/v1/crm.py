@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -168,6 +168,7 @@ def listar_atividades(
 async def anexar_proposta(
     negocio_id: int,
     arquivo: UploadFile = File(...),
+    nome: str | None = Form(None),
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
@@ -181,6 +182,7 @@ async def anexar_proposta(
         arquivo.filename or "proposta",
         arquivo.content_type or "",
         conteudo,
+        nome=nome,
     )
 
 
@@ -244,6 +246,7 @@ def gerar_proposta(
         "application/pdf",
         conteudo,
         gerada_automaticamente=True,
+        nome=dados.nome,
     )
 
 

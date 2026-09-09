@@ -18,6 +18,13 @@ class PropostaNegocio(Base):
     tenant_id: Mapped[str] = mapped_column(String, index=True)
     negocio_id: Mapped[int] = mapped_column(ForeignKey("negocio.id"), index=True)
     versao: Mapped[int] = mapped_column(Integer)
+    # Rótulo livre opcional e número sequencial por tenant (mesmo padrão de
+    # `versao`, mas por tenant em vez de por negócio) — usados pela busca
+    # global (raio-X 2026-09-09). Nullable: propostas criadas antes dessa
+    # feature ficam sem os dois, sem precisar de backfill; continuam
+    # acháveis pelo nome do negócio/cliente.
+    nome: Mapped[str | None] = mapped_column(String, nullable=True)
+    numero: Mapped[int | None] = mapped_column(Integer, nullable=True)
     nome_arquivo: Mapped[str] = mapped_column(String)
     tipo_mime: Mapped[str] = mapped_column(String)
     conteudo: Mapped[bytes] = mapped_column(LargeBinary)

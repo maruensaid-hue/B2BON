@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
 import { Button } from "@/components/ui/Button";
@@ -47,6 +47,8 @@ interface PropostaNegocio {
   id: number;
   negocio_id: number;
   versao: number;
+  numero: number | null;
+  nome: string | null;
   nome_arquivo: string;
   tipo_mime: string;
   tamanho_bytes: number;
@@ -69,6 +71,8 @@ interface Conta {
 }
 
 export function Kanban() {
+  const [searchParams] = useSearchParams();
+  const negocioIdPreSelecionadoId = Number(searchParams.get("negocio_id")) || null;
   const [estagios, setEstagios] = useState<EstagioFunil[]>([]);
   const [negocios, setNegocios] = useState<Negocio[]>([]);
   const [icps, setIcps] = useState<ICP[]>([]);
@@ -95,6 +99,7 @@ export function Kanban() {
   const [atividadesDoNegocio, setAtividadesDoNegocio] = useState<Atividade[]>([]);
   const [propostasDoNegocio, setPropostasDoNegocio] = useState<PropostaNegocio[]>([]);
   const [enviandoProposta, setEnviandoProposta] = useState(false);
+  const [nomeNovaProposta, setNomeNovaProposta] = useState("");
   const [erroProposta, setErroProposta] = useState<string | null>(null);
   const [contaEmEdicaoModalAberta, setContaEmEdicaoModalAberta] = useState(false);
 
@@ -138,6 +143,15 @@ export function Kanban() {
       .catch(() => setErro("Não foi possível carregar as contas existentes."));
   }, []);
 
+  // Abre o negócio direto quando se chega aqui via `?negocio_id=` (ex.: a
+  // busca global) — só depende da lista já ter carregado, não do clique
+  // no lápis do card.
+  useEffect(() => {
+    if (!negocioIdPreSelecionadoId || negocios.length === 0) return;
+    const negocio = negocios.find((n) => n.id === negocioIdPreSelecionadoId);
+    if (negocio) setNegocioEmEdicao(negocio);
+  }, [negocioIdPreSelecionadoId, negocios]);
+
   // Filtro opcional por ICP na hora de escolher "conta existente" — sem
   // ICP selecionado, mostra todas (inclusive leads sem ICP, que antes
   // ficavam impossíveis de escolher aqui).
@@ -180,6 +194,7 @@ export function Kanban() {
   }
 
   useEffect(() => {
+    setNomeNovaProposta("");
     if (!negocioEmEdicao) {
       setDecisoresDaContaEmEdicao([]);
       setAtividadesDoNegocio([]);
@@ -218,7 +233,9 @@ export function Kanban() {
     setEnviandoProposta(true);
     setErroProposta(null);
     try {
-      await postFile(`/crm/negocios/${negocioEmEdicao.id}/propostas`, arquivo);
+      const nome = nomeNovaProposta.trim();
+      await postFile(`/crm/negocios/${negocioEmEdicao.id}/propostas`, arquivo, nome ? { nome } : undefined);
+      setNomeNovaProposta("");
       await carregarPropostasDoNegocio(negocioEmEdicao.id);
     } catch (error) {
       setErroProposta(error instanceof ApiError ? error.message : "Não foi possível enviar a proposta.");
@@ -712,6 +729,12 @@ export function Kanban() {
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Propostas</div>
             <div className="mb-3 flex flex-col gap-2 rounded-lg border border-border p-2.5">
               {erroProposta && <div className="text-[11px] text-red">{erroProposta}</div>}
+              <Input
+                value={nomeNovaProposta}
+                onChange={(event) => setNomeNovaProposta(event.target.value)}
+                placeholder="Nome da proposta (opcional)"
+                className="text-[11px]"
+              />
               <SeletorArquivo
                 accept=".pdf,.docx"
                 disabled={enviandoProposta}
@@ -734,7 +757,8 @@ export function Kanban() {
                   <div key={proposta.id} className="flex items-center justify-between gap-2 border-b border-border py-1 text-[11px]">
                     <div>
                       <div className="text-text">
-                        v{proposta.versao} — {proposta.nome_arquivo}
+                        v{proposta.versao} — {proposta.nome ?? proposta.nome_arquivo}
+                        {proposta.numero && <span className="text-muted"> (#{proposta.numero})</span>}
                         {proposta.gerada_automaticamente && (
                           <span className="ml-1.5 rounded-full bg-cyan/15 px-1.5 py-px text-[10px] text-cyan">
                             gerada automaticamente

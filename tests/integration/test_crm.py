@@ -196,9 +196,12 @@ def test_anexar_listar_e_baixar_proposta_via_api(client, criar_conta_com_decisor
     anexada = client.post(
         f"/api/v1/crm/negocios/{negocio['id']}/propostas",
         files={"arquivo": ("proposta.pdf", b"%PDF-1.4 conteudo", "application/pdf")},
+        data={"nome": "Proposta Acme Q3"},
     )
     assert anexada.status_code == 201
     assert anexada.json()["versao"] == 1
+    assert anexada.json()["nome"] == "Proposta Acme Q3"
+    assert anexada.json()["numero"] == 1
 
     listagem = client.get(f"/api/v1/crm/negocios/{negocio['id']}/propostas").json()
     assert len(listagem) == 1
@@ -239,13 +242,15 @@ def test_gerar_proposta_automatica_via_api(client, criar_conta_com_decisor):
 
     gerada = client.post(
         f"/api/v1/crm/negocios/{negocio['id']}/propostas/gerar",
-        json={"itens_produtos": [{"descricao": "Licença", "valor": 500.0}], "itens_servicos": []},
+        json={"nome": "Proposta gerada", "itens_produtos": [{"descricao": "Licença", "valor": 500.0}], "itens_servicos": []},
     )
 
     assert gerada.status_code == 201
     corpo = gerada.json()
     assert corpo["gerada_automaticamente"] is True
     assert corpo["enviada_por_usuario_id"] is None
+    assert corpo["nome"] == "Proposta gerada"
+    assert corpo["numero"] == 1
 
     download = client.get(f"/api/v1/crm/negocios/{negocio['id']}/propostas/{corpo['id']}/download")
     assert download.status_code == 200

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
+import { BuscaGlobal } from "@/components/busca/BuscaGlobal";
 import { InstallBanner } from "@/components/InstallBanner";
 import { FaqModal } from "@/components/onboarding/FaqModal";
 import { TourGuiado } from "@/components/onboarding/TourGuiado";
@@ -153,6 +154,7 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [tourAberto, setTourAberto] = useState(false);
   const [faqAberto, setFaqAberto] = useState(false);
+  const [buscaAberta, setBuscaAberta] = useState(false);
   // `key` do TourGuiado — incrementado toda vez que o tour (re)abre, pra
   // forçar o React a remontar o componente do zero (raio-X 2026-09-01:
   // sem isto, reabrir via "Refazer o tour" quando `tourAberto` já
@@ -174,6 +176,19 @@ export function AppShell() {
       consumirPrimeiroLoginPendente();
     }
   }, [primeiroLoginPendente, consumirPrimeiroLoginPendente]);
+
+  // Busca global (Ctrl+K/Cmd+K) — único listener de teclado global do app
+  // hoje é o Escape do TourGuiado (condicionado a `open`), sem conflito.
+  useEffect(() => {
+    function aoTeclar(evento: KeyboardEvent) {
+      if ((evento.metaKey || evento.ctrlKey) && evento.key.toLowerCase() === "k") {
+        evento.preventDefault();
+        setBuscaAberta(true);
+      }
+    }
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, []);
 
   const isSuperAdmin = usuario?.papel === "super_admin";
   const ehGestorHierarquico = usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo);
@@ -207,6 +222,16 @@ export function AppShell() {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-1.5">
+          <button
+            type="button"
+            onClick={() => setBuscaAberta(true)}
+            className="mb-1.5 flex w-full items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-muted transition-colors hover:bg-white/3 hover:text-text"
+          >
+            <span className="w-5 flex-shrink-0 text-center text-[15px]">🔍</span>
+            <span className="flex-1 overflow-hidden text-left text-ellipsis">Buscar</span>
+            <span className="flex-shrink-0 rounded border border-border px-1 text-[9px] text-muted">Ctrl K</span>
+          </button>
+
           {temLicencaAtiva && (
             <div data-tour-id="dashboard">
               <NavButton {...NAV_ITEMS_PAGOS[0]} />
@@ -324,6 +349,7 @@ export function AppShell() {
         ))}
       </nav>
 
+      <BuscaGlobal open={buscaAberta} onClose={() => setBuscaAberta(false)} />
       <TourGuiado key={tourKey} open={tourAberto} onClose={() => setTourAberto(false)} />
       <FaqModal
         open={faqAberto}

@@ -104,3 +104,44 @@ def test_obter_proposta_inexistente_falha(db_session):
     negocio = _criar_negocio(db_session)
     with pytest.raises(NaoEncontrado):
         proposta_service.obter(db_session, TENANT_ID, negocio.id, 99999)
+
+
+def test_anexar_com_nome_salva_nome_e_numero(db_session):
+    negocio = _criar_negocio(db_session)
+
+    proposta = proposta_service.anexar(
+        db_session, TENANT_ID, "1", negocio.id, "proposta.pdf", "application/pdf", b"x", nome="Proposta Acme Q3"
+    )
+
+    assert proposta.nome == "Proposta Acme Q3"
+    assert proposta.numero == 1
+
+
+def test_anexar_sem_nome_fica_nulo_mas_numero_e_atribuido(db_session):
+    negocio = _criar_negocio(db_session)
+
+    proposta = proposta_service.anexar(db_session, TENANT_ID, "1", negocio.id, "proposta.pdf", "application/pdf", b"x")
+
+    assert proposta.nome is None
+    assert proposta.numero == 1
+
+
+def test_numero_incrementa_por_tenant_entre_negocios_diferentes(db_session):
+    negocio1 = _criar_negocio(db_session)
+    negocio2 = _criar_negocio(db_session)
+
+    primeira = proposta_service.anexar(db_session, TENANT_ID, "1", negocio1.id, "a.pdf", "application/pdf", b"a")
+    segunda = proposta_service.anexar(db_session, TENANT_ID, "1", negocio2.id, "b.pdf", "application/pdf", b"b")
+
+    assert primeira.numero == 1
+    assert segunda.numero == 2
+
+
+def test_anexar_com_nome_em_branco_fica_nulo(db_session):
+    negocio = _criar_negocio(db_session)
+
+    proposta = proposta_service.anexar(
+        db_session, TENANT_ID, "1", negocio.id, "proposta.pdf", "application/pdf", b"x", nome="   "
+    )
+
+    assert proposta.nome is None

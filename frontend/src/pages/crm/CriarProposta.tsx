@@ -34,6 +34,8 @@ interface ItemProposta {
 interface PropostaNegocio {
   id: number;
   versao: number;
+  numero: number | null;
+  nome: string | null;
   nome_arquivo: string;
 }
 
@@ -105,6 +107,7 @@ export function CriarProposta() {
   const [negocios, setNegocios] = useState<Negocio[]>([]);
   const [negocioId, setNegocioId] = useState<number | null>(null);
   const [carregandoTemplate, setCarregandoTemplate] = useState(false);
+  const [nomeProposta, setNomeProposta] = useState("");
   const [textoIntrodutorio, setTextoIntrodutorio] = useState("");
   const [termoAceite, setTermoAceite] = useState("");
   const [mostrarProdutos, setMostrarProdutos] = useState(true);
@@ -131,6 +134,7 @@ export function CriarProposta() {
 
   async function selecionarNegocio(id: number) {
     setNegocioId(id);
+    setNomeProposta("");
     setPropostaGerada(null);
     setErro(null);
     setCarregandoTemplate(true);
@@ -159,6 +163,7 @@ export function CriarProposta() {
     setErro(null);
     try {
       const proposta = await api.post<PropostaNegocio>(`/crm/negocios/${negocioId}/propostas/gerar`, {
+        nome: nomeProposta.trim() || null,
         texto_introdutorio: textoIntrodutorio,
         termo_aceite: termoAceite,
         mostrar_tabela_produtos: mostrarProdutos,
@@ -229,6 +234,16 @@ export function CriarProposta() {
           <Card className="mb-4">
             <SectionLabel>Texto e termo desta proposta</SectionLabel>
             <div className="flex flex-col gap-3">
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+                  Nome da proposta (opcional — ajuda a achar na busca depois)
+                </div>
+                <Input
+                  value={nomeProposta}
+                  onChange={(event) => setNomeProposta(event.target.value)}
+                  placeholder={`Ex.: Proposta ${negocioSelecionado.conta_nome}`}
+                />
+              </div>
               <div>
                 <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Texto introdutório</div>
                 <Textarea rows={4} value={textoIntrodutorio} onChange={(event) => setTextoIntrodutorio(event.target.value)} />

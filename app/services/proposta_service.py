@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.negocio import Negocio
@@ -31,6 +32,7 @@ def anexar(
     tipo_mime: str,
     conteudo: bytes,
     gerada_automaticamente: bool = False,
+    nome: str | None = None,
 ) -> PropostaNegocio:
     negocio = _obter_negocio(db, tenant_id, negocio_id)
 
@@ -48,10 +50,17 @@ def anexar(
     )
     versao = (maior_versao[0] + 1) if maior_versao else 1
 
+    # `func.max` ignora NULL nativamente (evita depender de como cada
+    # dialeto ordena NULL em `.desc()` — SQLite e Postgres discordam).
+    maior_numero = db.query(func.max(PropostaNegocio.numero)).filter_by(tenant_id=tenant_id).scalar()
+    numero = (maior_numero + 1) if maior_numero is not None else 1
+
     proposta = PropostaNegocio(
         tenant_id=tenant_id,
         negocio_id=negocio_id,
         versao=versao,
+        nome=nome.strip() if nome and nome.strip() else None,
+        numero=numero,
         nome_arquivo=nome_arquivo,
         tipo_mime=tipo_mime,
         conteudo=conteudo,

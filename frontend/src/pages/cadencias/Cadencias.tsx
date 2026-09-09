@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -66,6 +67,8 @@ function toneStatus(status: string): "cyan" | "amber" | "green" {
 }
 
 export function Cadencias() {
+  const [searchParams] = useSearchParams();
+  const cadenciaIdDaUrl = Number(searchParams.get("cadencia_id")) || null;
   const [cadencias, setCadencias] = useState<Cadencia[]>([]);
   const [cadenciaSelecionadaId, setCadenciaSelecionadaId] = useState<number | null>(null);
   const [toques, setToques] = useState<ToqueCadencia[]>([]);
@@ -96,8 +99,12 @@ export function Cadencias() {
     try {
       const resposta = await api.get<Cadencia[]>("/cadencias");
       setCadencias(resposta);
-      if (resposta.length > 0 && cadenciaSelecionadaId === null) {
-        setCadenciaSelecionadaId(resposta[0].id);
+      if (cadenciaSelecionadaId === null) {
+        // Prioriza `?cadencia_id=` (ex.: veio da busca global); sem ele,
+        // cai no comportamento de sempre (seleciona a primeira da lista).
+        const daUrl = cadenciaIdDaUrl && resposta.find((c) => c.id === cadenciaIdDaUrl);
+        if (daUrl) setCadenciaSelecionadaId(daUrl.id);
+        else if (resposta.length > 0) setCadenciaSelecionadaId(resposta[0].id);
       }
     } catch {
       setErro("Não foi possível carregar as cadências.");

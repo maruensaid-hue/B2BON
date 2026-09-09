@@ -49,6 +49,7 @@ class GerarPropostaRequestSchema(BaseModel):
     # Todos opcionais — quando omitidos, usa o que está salvo no modelo do
     # tenant. Preenchidos, valem só para esta proposta (nunca gravam de
     # volta no modelo).
+    nome: str | None = None
     texto_introdutorio: str | None = None
     termo_aceite: str | None = None
     mostrar_tabela_produtos: bool | None = None

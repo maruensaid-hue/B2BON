@@ -87,6 +87,8 @@ class PropostaNegocioSchema(BaseModel):
     id: int
     negocio_id: int
     versao: int
+    nome: str | None = None
+    numero: int | None = None
     nome_arquivo: str
     tipo_mime: str
     tamanho_bytes: int
