@@ -1,7 +1,7 @@
 import logging
 
 import sentry_sdk
-from fastapi import APIRouter, BackgroundTasks, Depends, Header
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -19,7 +19,6 @@ from app.api.deps import (
     resolver_whatsapp_provider,
 )
 from app.core.config import settings
-from app.db.session import SessionLocal
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
@@ -32,7 +31,6 @@ from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.services import (
     campanha_service,
-    cnpj_recorte_service,
     enriquecimento_fila_service,
     envio_service,
     nps_service,
@@ -212,39 +210,6 @@ def disparar_webhooks_parceiros(db: Session = Depends(get_db)) -> dict:
     configurado (Fase 2 da hierarquia, raio-X) — assinado (HMAC), com
     backoff e desistência depois de tentativas repetidas."""
     return webhook_parceiro_service.despachar_pendentes(db)
-
-
-def _rodar_atualizacao_recorte_em_segundo_plano() -> None:
-    """Roda fora do ciclo de vida do request (`BackgroundTasks`), com sua
-    própria sessão de banco — a sessão de `Depends(get_db)` já foi fechada
-    quando a tarefa em segundo plano executa, não dá pra reaproveitar."""
-    db = SessionLocal()
-    try:
-        resultado = cnpj_recorte_service.atualizar_recorte_automatico(db)
-        logger.info("Recorte de CNPJ atualizado em segundo plano: %s", resultado)
-    except Exception:
-        logger.exception("Falha ao atualizar recorte de CNPJ em segundo plano")
-    finally:
-        db.close()
-
-
-@router.post("/atualizar-recorte-cnpj", dependencies=[Depends(_exigir_segredo_cron)])
-def atualizar_recorte_cnpj(tarefas: BackgroundTasks) -> dict:
-    """Substitui o carregamento manual do recorte de CNPJ (raio-X: usuário
-    comum criando ICP não pode depender de alguém rodar um script à mão)
-    — baixa da própria Receita Federal, automaticamente, só o que os ICPs
-    ativos de todos os tenants ainda não têm carregado. Idempotente: rodar
-    de novo sem nenhum ICP novo não baixa nada (`cnpj_recorte_service`).
-
-    Dispara em segundo plano e responde na hora (raio-X 2026-08-26): o
-    download+processamento de vários GB de CSV nacional facilmente passa
-    do timeout do proxy do Render — a conexão cortava com 502 e o processo
-    morria junto (não continuava em segundo plano por conta própria).
-    `BackgroundTasks` roda depois da resposta ser enviada, então o timeout
-    do proxy não afeta mais o processamento; o cron externo só confirma
-    que foi disparado — conclusão real se vê em `RecorteCnpjEstado`."""
-    tarefas.add_task(_rodar_atualizacao_recorte_em_segundo_plano)
-    return {"disparado": True}
 
 
 @router.post("/processar-fila-enriquecimento", dependencies=[Depends(_exigir_segredo_cron)])

@@ -39,16 +39,22 @@ def _obter_ou_criar_estado(db: Session) -> RecorteCnpjEstado:
 
 def atualizar_recorte_automatico(db: Session) -> dict:
     """Substitui o script manual (`scripts/carregar_recorte_receita_federal.py`)
-    por um passo 100% automático, pensado pra rodar via cron (mesmo padrão
-    de `app/api/v1/cron.py`): calcula os CNAE/UF exigidos por todos os
+    por um passo 100% automático: calcula os CNAE/UF exigidos por todos os
     ICPs ativos de todos os tenants, baixa da própria Receita Federal só o
     que ainda não foi coberto, e recarrega o staging local
     (`cnpj_estabelecimento`). Nenhuma intervenção humana — nem escolha de
     caminho de arquivo, nem execução manual de script.
 
+    Chamada por `scripts/carregar_recorte_ci.py`, sempre num runner do
+    GitHub Actions (workflow_dispatch manual ou agendado a cada 30 min em
+    `cron-envios.yml`) — nunca por um endpoint do Render (raio-X
+    2026-09-09: já existiu um `POST /cron/atualizar-recorte-cnpj`, removido
+    depois de estourar a cota fixa de 2GB do `/tmp` do Render durante o
+    download de um ICP novo).
+
     Idempotente por natureza (`carregar_recorte` faz upsert por CNPJ), mas
-    evita reduzir trabalho: só baixa de novo quando há CNAE/UF novo desde
-    a última carga ou quando a Receita Federal publicou um mês de
+    evita trabalho redundante: só baixa de novo quando há CNAE/UF novo
+    desde a última carga ou quando a Receita Federal publicou um mês de
     competência mais recente."""
     cnae_codigos, ufs = uniao_cnae_uf_ativos_todos_tenants(db)
     if not cnae_codigos or not ufs:

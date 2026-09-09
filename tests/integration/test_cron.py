@@ -183,23 +183,6 @@ def test_disparar_relatorios_periodicos_com_segredo_certo_retorna_resumo(client,
     assert set(resposta.json()) == {"tenants_processados", "emails_enviados"}
 
 
-def test_atualizar_recorte_cnpj_sem_segredo_configurado_recusa(client):
-    resposta = client.post("/api/v1/cron/atualizar-recorte-cnpj")
-    assert resposta.status_code == 403
-
-
-def test_atualizar_recorte_cnpj_dispara_em_segundo_plano(client, com_segredo_cron):
-    """Responde na hora (raio-X 2026-08-26: download+processamento de
-    vários GB facilmente passa do timeout do proxy do Render — a conexão
-    cortava com 502 e o processo morria junto) — a lógica de
-    executar/pular fica em `test_cnpj_recorte_service.py` (mockada), aqui
-    só confirma que a rota aceita e despacha a tarefa."""
-    resposta = client.post("/api/v1/cron/atualizar-recorte-cnpj", headers={"X-Cron-Secret": SEGREDO})
-
-    assert resposta.status_code == 200
-    assert resposta.json() == {"disparado": True}
-
-
 def test_processar_fila_enriquecimento_sem_segredo_configurado_recusa(client):
     resposta = client.post("/api/v1/cron/processar-fila-enriquecimento")
     assert resposta.status_code == 403

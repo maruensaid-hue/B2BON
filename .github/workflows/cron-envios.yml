@@ -109,21 +109,28 @@ jobs:
     # disparo dos 30 min anterior colidiria com o próximo, os dois
     # tentando escrever no mesmo staging ao mesmo tempo. `group` fixo +
     # cancel-in-progress:false enfileira em vez de rodar em paralelo.
+    #
+    # Roda direto neste runner (~14GB de disco livre), NUNCA mais via
+    # POST /cron/atualizar-recorte-cnpj no Render (raio-X 2026-09-09): o
+    # risco que o comentário antigo aqui chamava de "não validado em
+    # produção" se confirmou — um ICP novo baixou shards grandes o
+    # suficiente pra estourar a cota fixa de 2GB do /tmp do Render
+    # DURANTE o download, matando a instância no meio do processo. Mesmo
+    # script do workflow manual (`carregar-recorte-manual.yml`), só que
+    # agendado — `atualizar_recorte_automatico` já é idempotente (sem
+    # CNAE/UF novo, só confere e não baixa nada), por isso é seguro/barato
+    # rodar a cada 30 min.
     concurrency:
       group: cron-recorte-cnpj
       cancel-in-progress: false
     steps:
-      - name: Chamar POST /cron/atualizar-recorte-cnpj (recorte automático de CNPJ)
-        # Pode baixar alguns GB da Receita Federal quando há ICP novo — sem
-        # CNAE/UF novo, o serviço só confere e não baixa nada (idempotente,
-        # por isso é seguro rodar a cada 30 min). Se o proxy do Render
-        # matar a conexão num download longo (raio-X: risco não validado
-        # em produção ainda), o próximo disparo de 30 min tenta de novo
-        # sozinho, sem intervenção humana.
-        run: |
-          curl --fail --show-error --silent --max-time 3000 \
-            -X POST "${API_BASE_URL}/cron/atualizar-recorte-cnpj" \
-            -H "X-Cron-Secret: ${CRON_SECRET}"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependências
+        run: pip install -e .
+      - name: Rodar atualização automática do recorte de CNPJ
+        run: python scripts/carregar_recorte_ci.py
         env:
-          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

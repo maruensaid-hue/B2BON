@@ -156,7 +156,11 @@ dados públicos de CNPJ da Receita Federal — **nunca a base nacional
 completa**, só o recorte (CNAE+UF) exigido pelos ICPs ativos. Esse
 carregamento agora é automático: o mesmo workflow do passo 7
 (`cron-envios.yml`, job `atualizar-recorte-cnpj`, disparo a cada 30 min)
-chama `POST /cron/atualizar-recorte-cnpj`, que:
+roda `scripts/carregar_recorte_ci.py` **direto no runner do GitHub
+Actions** (conectando no Postgres de produção via **Actions secret**
+`DATABASE_URL`, a mesma connection string do Neon do passo 1 — precisa
+estar cadastrada em Settings → Secrets and variables → Actions do repo,
+mesmo secret já usado por `carregar-recorte-manual.yml`), que:
 
 1. Calcula a união de CNAE+UF de todos os ICPs ativos de todos os tenants.
 2. Se já cobre tudo desde a última execução (mesmo mês de competência da
@@ -166,6 +170,14 @@ chama `POST /cron/atualizar-recorte-cnpj`, que:
    os arquivos necessários e recarrega o staging — sem passo manual, sem
    `scripts/carregar_recorte_receita_federal.py` (que continua existindo
    só como fallback pra debug local).
+
+**Importante (raio-X 2026-09-09)**: essa carga roda só no GitHub
+Actions, nunca chamando um endpoint do Render — já existiu um
+`POST /cron/atualizar-recorte-cnpj` que fazia esse download dentro da
+própria instância do Render, removido depois de estourar a cota fixa de
+2GB do `/tmp` (Estabelecimentos sozinho passa de 4GB) e derrubar a
+instância no meio do processo. O runner do GitHub Actions tem ~14GB de
+disco livre, suficiente pra qualquer volume desse recorte.
 
 Efeito prático: um ICP criado hoje tem candidatos em até 30 minutos (não
 instantâneo, mas não mais 1 dia inteiro), sem nenhuma intervenção humana.
