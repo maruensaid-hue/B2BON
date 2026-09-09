@@ -32,6 +32,13 @@ export function getTemLicencaAtiva(): boolean {
   }
 }
 
+/** Atualiza só a flag de licença ativa no localStorage, sem tocar token
+ * nem usuário — usada quando o back reativa a licença no meio da sessão
+ * (autoatendimento "já paguei", raio-X 2026-09-09), sem exigir logout/login. */
+export function setTemLicencaAtiva(temLicencaAtiva: boolean): void {
+  localStorage.setItem(TEM_LICENCA_KEY, JSON.stringify(temLicencaAtiva));
+}
+
 export function limparSessao(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USUARIO_KEY);

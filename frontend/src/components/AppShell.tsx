@@ -5,6 +5,7 @@ import { BuscaGlobal } from "@/components/busca/BuscaGlobal";
 import { InstallBanner } from "@/components/InstallBanner";
 import { FaqModal } from "@/components/onboarding/FaqModal";
 import { TourGuiado } from "@/components/onboarding/TourGuiado";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth";
 
@@ -144,6 +145,57 @@ function NavGroup({ label, icon, path, itens }: { label: string; icon: string; p
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function BannerLicencaSuspensa() {
+  const { declararPagamento } = useAuth();
+  const [statusLicenca, setStatusLicenca] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [confirmado, setConfirmado] = useState(false);
+
+  useEffect(() => {
+    // `temLicencaAtiva=false` também cobre quem nunca teve licença paga
+    // (convite-vitrine gratuito) — só faz sentido oferecer "já paguei"
+    // pra quem de fato está "suspensa" por inadimplência.
+    api
+      .get<{ status: string }>("/auth/licenca-status")
+      .then((resposta) => setStatusLicenca(resposta.status))
+      .catch(() => setStatusLicenca(null));
+  }, []);
+
+  async function aoClicar() {
+    setEnviando(true);
+    setErro(null);
+    try {
+      await declararPagamento();
+      setConfirmado(true);
+    } catch {
+      setErro("Não foi possível registrar agora. Tente de novo em alguns instantes.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  if (statusLicenca !== "suspensa" || confirmado) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-b border-amber/30 bg-amber/10 px-4 py-2.5 text-[12.5px] text-text">
+      <span className="flex-1">
+        Sua licença está suspensa por falta de pagamento. Se você já pagou e o pagamento ainda está em
+        compensação (boleto ou cartão), avise a gente para liberar seu acesso enquanto confirmamos.
+      </span>
+      {erro && <span className="text-red">{erro}</span>}
+      <button
+        type="button"
+        onClick={aoClicar}
+        disabled={enviando}
+        className="flex-shrink-0 rounded-lg bg-amber px-3 py-1.5 font-semibold text-white disabled:opacity-60"
+      >
+        {enviando ? "Enviando..." : "Já fiz o pagamento"}
+      </button>
     </div>
   );
 }
@@ -324,6 +376,8 @@ export function AppShell() {
           </button>
           <div className="font-head text-sm font-bold">B2B ON</div>
         </header>
+
+        {!temLicencaAtiva && <BannerLicencaSuspensa />}
 
         <main className="flex-1 overflow-auto pb-20 sm:pb-0">
           <Outlet />

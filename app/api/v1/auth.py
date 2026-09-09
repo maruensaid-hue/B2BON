@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -5,6 +7,7 @@ from app.api.deps import (
     get_account_data_provider,
     get_contact_enrichment_provider,
     get_db,
+    get_email_provider,
     get_graph_client,
     get_llm_provider,
     get_payment_provider,
@@ -12,6 +15,7 @@ from app.api.deps import (
     get_usuario_atual,
     get_web_search_provider,
 )
+from app.core.config import settings
 from app.core.rate_limit import limitar_por_ip
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
@@ -20,6 +24,7 @@ from app.models.licenca import Licenca
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider
+from app.providers.channels.email.base import EmailProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.payment.base import PaymentProvider
 from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
@@ -36,11 +41,36 @@ from app.schemas.auth import (
 )
 from app.services import auth_service, pagamento_licenca_service, tenant_service
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _enviar_email_boas_vindas_primeiro_login(usuario: Usuario, email_provider: EmailProvider) -> None:
+    try:
+        corpo = (
+            f"Olá, {usuario.nome}!\n\n"
+            f"Que bom ter você usando a B2B ON! Você já tem acesso ao CRM, prospecção automatizada, "
+            f"MAP (Motor de Alta Performance) e à rede social entre empresas.\n\n"
+            f"Alguma dúvida? Assista o tutorial da plataforma, consulte a FAQ. Em breve também vamos "
+            f"lançar uma plataforma de treinamento com conteúdo passo a passo sobre cada funcionalidade "
+            f"e certificação para profissionais técnicos e usuários.\n\n"
+            f"Não encontrou o que precisava? Fale com a nossa equipe de suporte em suporte@cyberfort.com.br."
+        )
+        email_provider.enviar(
+            usuario.email, "Bem-vindo à B2B ON!", corpo, "B2B ON", settings.sendgrid_remetente_email,
+            usuario.tenant_id,
+        )
+    except Exception:
+        logger.warning("Falha ao enviar e-mail de boas-vindas pro usuário %s", usuario.id, exc_info=True)
+
+
 def _resposta_token(
-    usuario: Usuario, db: Session, checkout_url: str | None = None, primeiro_login: bool = False
+    usuario: Usuario,
+    db: Session,
+    checkout_url: str | None = None,
+    primeiro_login: bool = False,
+    email_provider: EmailProvider | None = None,
 ) -> TokenResponseSchema:
     licenca = db.query(Licenca).filter_by(tenant_id=usuario.tenant_id).one_or_none()
     tenant = db.query(Tenant).filter_by(id=usuario.tenant_id).one_or_none()
@@ -59,6 +89,8 @@ def _resposta_token(
             "recursos_plano": recursos_plano,
         }
     )
+    if primeiro_login and email_provider is not None:
+        _enviar_email_boas_vindas_primeiro_login(usuario, email_provider)
     return TokenResponseSchema(
         access_token=auth_service.gerar_token(usuario),
         usuario=usuario_schema,
@@ -69,25 +101,33 @@ def _resposta_token(
 
 
 @router.post("/login", response_model=TokenResponseSchema, dependencies=[Depends(limitar_por_ip())])
-def login(dados: LoginRequestSchema, db: Session = Depends(get_db)) -> TokenResponseSchema:
+def login(
+    dados: LoginRequestSchema, db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)
+) -> TokenResponseSchema:
     usuario, primeiro_login = auth_service.autenticar_senha(db, dados.email, dados.senha)
-    return _resposta_token(usuario, db, primeiro_login=primeiro_login)
+    return _resposta_token(usuario, db, primeiro_login=primeiro_login, email_provider=email)
 
 
 @router.post("/google", response_model=TokenResponseSchema, dependencies=[Depends(limitar_por_ip())])
-def login_google(dados: LoginGoogleRequestSchema, db: Session = Depends(get_db)) -> TokenResponseSchema:
+def login_google(
+    dados: LoginGoogleRequestSchema,
+    db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
+) -> TokenResponseSchema:
     usuario, primeiro_login = auth_service.autenticar_google(db, dados.id_token)
-    return _resposta_token(usuario, db, primeiro_login=primeiro_login)
+    return _resposta_token(usuario, db, primeiro_login=primeiro_login, email_provider=email)
 
 
 @router.post(
     "/registrar", response_model=TokenResponseSchema, status_code=201, dependencies=[Depends(limitar_por_ip())]
 )
-def registrar(dados: RegistrarRequestSchema, db: Session = Depends(get_db)) -> TokenResponseSchema:
+def registrar(
+    dados: RegistrarRequestSchema, db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)
+) -> TokenResponseSchema:
     usuario = auth_service.registrar_com_convite(
         db, dados.codigo_convite, dados.nome, dados.email, dados.senha, dados.aceite_termos
     )
-    return _resposta_token(usuario, db, primeiro_login=True)
+    return _resposta_token(usuario, db, primeiro_login=True, email_provider=email)
 
 
 @router.post(
@@ -106,6 +146,7 @@ def registrar_vitrine(
     account_data: AccountDataProvider = Depends(get_account_data_provider),
     contact_enrichment: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider),
     graph: Neo4jClient = Depends(get_graph_client),
+    email: EmailProvider = Depends(get_email_provider),
 ) -> TokenResponseSchema:
     """Aceite público de convite-vitrine — cria o tenant novo, já loga, e
     abre a cobrança do plano escolhido (Onda H + raio-X de produção). Sem
@@ -131,7 +172,7 @@ def registrar_vitrine(
         graph,
         dados.cnpj,
     )
-    return _resposta_token(usuario, db, checkout_url, primeiro_login=True)
+    return _resposta_token(usuario, db, checkout_url, primeiro_login=True, email_provider=email)
 
 
 @router.get("/eu", response_model=UsuarioSchema)
@@ -144,3 +185,16 @@ def licenca_status(usuario: Usuario = Depends(get_usuario_atual), db: Session = 
     """Usado pela tela de retorno do checkout (Mercado Pago) pra saber
     quando parar de esperar o webhook confirmar o pagamento."""
     return LicencaStatusResponseSchema(status=pagamento_licenca_service.status_licenca(db, usuario.tenant_id))
+
+
+@router.post("/declarar-pagamento", response_model=LicencaStatusResponseSchema)
+def declarar_pagamento(
+    usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)
+) -> LicencaStatusResponseSchema:
+    """Autoatendimento "já paguei" (raio-X 2026-09-09) — deliberadamente sem
+    `exigir_licenca_ativa`, já que é exatamente pra quem está suspenso
+    reativar o próprio acesso enquanto o pagamento (boleto/cartão tardio)
+    ainda está compensando. Ver `pagamento_licenca_service.declarar_pagamento`
+    pra carência própria de 3 dias que se abre a partir daqui."""
+    licenca = pagamento_licenca_service.declarar_pagamento(db, usuario.tenant_id)
+    return LicencaStatusResponseSchema(status=licenca.status)

@@ -3,11 +3,12 @@ import json
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_llm_provider, get_payment_provider, resolver_whatsapp_provider
+from app.api.deps import get_db, get_email_provider, get_llm_provider, get_payment_provider, resolver_whatsapp_provider
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.decisor import Decisor
+from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.payment.base import PaymentProvider
 from app.schemas.reputacao import RegistrarEventoReputacaoRequestSchema, SaudeCanalSchema
@@ -223,6 +224,7 @@ def webhook_mercadopago(
     request: Request,
     db: Session = Depends(get_db),
     payment_provider: PaymentProvider = Depends(get_payment_provider),
+    email: EmailProvider = Depends(get_email_provider),
     x_signature: str | None = Header(None, alias="x-signature"),
     x_request_id: str | None = Header(None, alias="x-request-id"),
 ) -> dict:
@@ -239,5 +241,5 @@ def webhook_mercadopago(
         raise NaoAutorizado("Assinatura do webhook inválida.")
 
     if payment_id:
-        pagamento_licenca_service.confirmar_via_webhook(db, payment_provider, payment_id)
+        pagamento_licenca_service.confirmar_via_webhook(db, payment_provider, payment_id, email)
     return {"recebido": True}

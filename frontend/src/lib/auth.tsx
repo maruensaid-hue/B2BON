@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-import { api, getTemLicencaAtiva, getToken, limparSessao, setSessao } from "@/lib/api";
+import { api, getTemLicencaAtiva, getToken, limparSessao, setSessao, setTemLicencaAtiva as persistirTemLicencaAtiva } from "@/lib/api";
 
 /** Gancho de upgrade além de volume (raio-X 2026-09-09) — usada pra
  * mostrar o cadeado direto na UI, sem esperar um 403. A checagem de
@@ -70,6 +70,10 @@ interface AuthContextValue {
    * reaparece num F5 no meio da sessão. */
   primeiroLoginPendente: boolean;
   consumirPrimeiroLoginPendente: () => void;
+  /** Autoatendimento "já paguei" (raio-X 2026-09-09) — reativa
+   * `temLicencaAtiva` na hora, sem exigir logout/login, pra desbloquear a
+   * navegação assim que o back confirma a autodeclaração. */
+  declararPagamento: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -133,6 +137,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPrimeiroLoginPendente(false);
   }, []);
 
+  const declararPagamento = useCallback(async () => {
+    await api.post<{ status: string }>("/auth/declarar-pagamento");
+    persistirTemLicencaAtiva(true);
+    setTemLicencaAtiva(true);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       usuario,
@@ -145,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sair,
       primeiroLoginPendente,
       consumirPrimeiroLoginPendente,
+      declararPagamento,
     }),
     [
       usuario,
@@ -156,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sair,
       primeiroLoginPendente,
       consumirPrimeiroLoginPendente,
+      declararPagamento,
     ],
   );
 

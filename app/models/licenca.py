@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -18,3 +18,10 @@ class Licenca(Base):
     status: Mapped[str] = mapped_column(String)  # ativa | suspensa | expirada
     data_inicio: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     data_expiracao: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Momento em que o usuário se autodeclarou pagador ainda suspenso (raio-X
+    # 2026-09-09) — reinicia uma carência própria de 3 dias a partir daqui,
+    # independente da carência original de `data_expiracao`.
+    declaracao_pagamento_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Idempotência do cron diário de lembrete de cobrança — evita reenviar
+    # no mesmo dia se o cron rodar de novo.
+    ultimo_lembrete_cobranca_em: Mapped[date | None] = mapped_column(Date, nullable=True)

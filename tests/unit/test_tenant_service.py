@@ -465,11 +465,16 @@ def test_suspender_licencas_vencidas_suspende_so_direta_e_vencida(db_session):
     db_session.add_all([tenant_vencido, tenant_consolidado_vencido, tenant_em_dia])
     db_session.flush()
 
-    ontem = datetime.now(UTC) - timedelta(days=1)
+    # Além da carência de 3 dias (raio-X 2026-09-09) — sem isso a licença
+    # nem deveria ser suspensa ainda.
+    vencido_ha_4_dias = datetime.now(UTC) - timedelta(days=4)
     amanha = datetime.now(UTC) + timedelta(days=1)
     db_session.add_all([
-        Licenca(tenant_id="tenant-vencido", plano_id=plano.id, status="ativa", data_expiracao=ontem),
-        Licenca(tenant_id="tenant-consolidado-vencido", plano_id=plano.id, status="ativa", data_expiracao=ontem),
+        Licenca(tenant_id="tenant-vencido", plano_id=plano.id, status="ativa", data_expiracao=vencido_ha_4_dias),
+        Licenca(
+            tenant_id="tenant-consolidado-vencido", plano_id=plano.id, status="ativa",
+            data_expiracao=vencido_ha_4_dias,
+        ),
         Licenca(tenant_id="tenant-em-dia", plano_id=plano.id, status="ativa", data_expiracao=amanha),
     ])
     db_session.commit()
@@ -480,3 +485,70 @@ def test_suspender_licencas_vencidas_suspende_so_direta_e_vencida(db_session):
     assert db_session.query(Licenca).filter_by(tenant_id="tenant-vencido").one().status == "suspensa"
     assert db_session.query(Licenca).filter_by(tenant_id="tenant-consolidado-vencido").one().status == "ativa"
     assert db_session.query(Licenca).filter_by(tenant_id="tenant-em-dia").one().status == "ativa"
+
+
+def test_suspender_licencas_vencidas_respeita_carencia_de_3_dias(db_session):
+    """Boleto/cartão tardio (raio-X 2026-09-09) — vencido há só 1 dia
+    ainda está dentro da carência, não pode ser suspenso."""
+    plano = _plano(db_session)
+    tenant = Tenant(id="tenant-dentro-carencia", razao_social="Dentro da carência", modo_cobranca="direta")
+    db_session.add(tenant)
+    db_session.flush()
+    vencido_ha_1_dia = datetime.now(UTC) - timedelta(days=1)
+    db_session.add(Licenca(tenant_id="tenant-dentro-carencia", plano_id=plano.id, status="ativa", data_expiracao=vencido_ha_1_dia))
+    db_session.commit()
+
+    suspensos = tenant_service.suspender_licencas_vencidas(db_session)
+
+    assert suspensos == []
+    assert db_session.query(Licenca).filter_by(tenant_id="tenant-dentro-carencia").one().status == "ativa"
+
+
+def test_suspender_licencas_vencidas_respeita_carencia_da_autodeclaracao(db_session):
+    """Quem se autodeclarou pagador (`declararPagamento`) ganha 3 dias
+    próprios a partir da declaração, mesmo já tendo passado da carência
+    original do vencimento."""
+    plano = _plano(db_session)
+    tenant = Tenant(id="tenant-autodeclarado", razao_social="Autodeclarado", modo_cobranca="direta")
+    db_session.add(tenant)
+    db_session.flush()
+    vencido_ha_10_dias = datetime.now(UTC) - timedelta(days=10)
+    declarado_ha_1_dia = datetime.now(UTC) - timedelta(days=1)
+    db_session.add(
+        Licenca(
+            tenant_id="tenant-autodeclarado", plano_id=plano.id, status="ativa", data_expiracao=vencido_ha_10_dias,
+            declaracao_pagamento_em=declarado_ha_1_dia,
+        )
+    )
+    db_session.commit()
+
+    suspensos = tenant_service.suspender_licencas_vencidas(db_session)
+
+    assert suspensos == []
+    assert db_session.query(Licenca).filter_by(tenant_id="tenant-autodeclarado").one().status == "ativa"
+
+
+def test_suspender_licencas_vencidas_suspende_de_novo_apos_carencia_da_autodeclaracao_esgotada(db_session):
+    """Se a autodeclaração também passou de 3 dias sem confirmação real do
+    pagamento, a licença volta a ser suspensa — e a declaração é zerada
+    pra não interferir no próximo ciclo."""
+    plano = _plano(db_session)
+    tenant = Tenant(id="tenant-autodeclarado-vencido", razao_social="Autodeclarado vencido", modo_cobranca="direta")
+    db_session.add(tenant)
+    db_session.flush()
+    vencido_ha_10_dias = datetime.now(UTC) - timedelta(days=10)
+    declarado_ha_4_dias = datetime.now(UTC) - timedelta(days=4)
+    db_session.add(
+        Licenca(
+            tenant_id="tenant-autodeclarado-vencido", plano_id=plano.id, status="ativa",
+            data_expiracao=vencido_ha_10_dias, declaracao_pagamento_em=declarado_ha_4_dias,
+        )
+    )
+    db_session.commit()
+
+    suspensos = tenant_service.suspender_licencas_vencidas(db_session)
+
+    assert suspensos == ["tenant-autodeclarado-vencido"]
+    licenca = db_session.query(Licenca).filter_by(tenant_id="tenant-autodeclarado-vencido").one()
+    assert licenca.status == "suspensa"
+    assert licenca.declaracao_pagamento_em is None

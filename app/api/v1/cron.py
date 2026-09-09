@@ -34,6 +34,7 @@ from app.services import (
     enriquecimento_fila_service,
     envio_service,
     nps_service,
+    pagamento_licenca_service,
     relatorio_service,
     reuniao_service,
     tenant_service,
@@ -245,3 +246,13 @@ def disparar_relatorios_periodicos(
     recebe (`ConfiguracaoRelatorio`), rodado 1x/dia (suficiente até pra
     cadência diária, já que checar 1x/dia é o próprio significado disso)."""
     return relatorio_service.disparar_periodicos(db, email, plan_limits)
+
+
+@router.post("/enviar-lembretes-cobranca", dependencies=[Depends(_exigir_segredo_cron)])
+def enviar_lembretes_cobranca(
+    db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)
+) -> dict:
+    """Lembrete de cobrança (raio-X 2026-09-09) — aviso único 3 dias antes
+    do vencimento e lembrete diário durante a carência de 3 dias após,
+    mesma janela usada por `suspender-licencas-vencidas`. Roda 1x/dia."""
+    return pagamento_licenca_service.enviar_lembretes_cobranca(db, email)

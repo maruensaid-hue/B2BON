@@ -4,7 +4,7 @@ import secrets
 import unicodedata
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -279,6 +279,9 @@ def listar_tenants_visiveis(db: Session, usuario: Usuario) -> list[Tenant]:
     return listar_subarvore(db, usuario.tenant_id)
 
 
+_DIAS_CARENCIA_PAGAMENTO = 3
+
+
 def suspender_licencas_vencidas(db: Session) -> list[str]:
     """Suspensão automática por inadimplência (raio-X) — antes disso,
     `data_expiracao` nunca era comparado com a data atual em lugar nenhum
@@ -286,8 +289,21 @@ def suspender_licencas_vencidas(db: Session) -> list[str]:
     humano mudar o status manualmente. Só afeta tenants `modo_cobranca ==
     "direta"` — um tenant "consolidada" não tem `data_expiracao` própria
     relevante, o status de pagamento vem do tenant pai (ver
-    `exigir_licenca_ativa`)."""
+    `exigir_licenca_ativa`).
+
+    Carência de 3 dias (raio-X 2026-09-09) antes de suspender — o Mercado
+    Pago permite boleto bancário, cuja compensação pode levar dias, e
+    cartão pago perto da virada do dia não pode ser penalizado por atraso
+    puramente bancário. Uma licença só é suspensa quando as duas carências
+    possíveis já se esgotaram:
+    - nunca se autodeclarou pagador (`declaracao_pagamento_em is None`) e
+      já passou de `_DIAS_CARENCIA_PAGAMENTO` dias do vencimento original; ou
+    - se autodeclarou pagador (`pagamento_licenca_service.declarar_pagamento`),
+      mas essa carência própria também já se esgotou e o pagamento ainda
+      não foi confirmado de fato (se tivesse sido, `data_expiracao` já
+      teria sido empurrado pra frente e não bateria mais no filtro)."""
     agora = datetime.now(UTC)
+    limite_carencia = agora - timedelta(days=_DIAS_CARENCIA_PAGAMENTO)
     licencas_vencidas = (
         db.query(Licenca)
         .join(Tenant, Tenant.id == Licenca.tenant_id)
@@ -296,6 +312,10 @@ def suspender_licencas_vencidas(db: Session) -> list[str]:
             Licenca.data_expiracao.isnot(None),
             Licenca.data_expiracao < agora,
             Tenant.modo_cobranca == "direta",
+            or_(
+                and_(Licenca.declaracao_pagamento_em.is_(None), Licenca.data_expiracao < limite_carencia),
+                and_(Licenca.declaracao_pagamento_em.isnot(None), Licenca.declaracao_pagamento_em < limite_carencia),
+            ),
         )
         .all()
     )
@@ -303,6 +323,7 @@ def suspender_licencas_vencidas(db: Session) -> list[str]:
     tenants_suspensos = []
     for licenca in licencas_vencidas:
         licenca.status = "suspensa"
+        licenca.declaracao_pagamento_em = None
         auditoria_service.registrar(
             db, licenca.tenant_id, "licenca_suspensa_automaticamente", "licenca", licenca.id, None,
             {"data_expiracao": licenca.data_expiracao.isoformat()},
