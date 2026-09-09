@@ -2,6 +2,18 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 
 import { api, getTemLicencaAtiva, getToken, limparSessao, setSessao } from "@/lib/api";
 
+/** Gancho de upgrade além de volume (raio-X 2026-09-09) — usada pra
+ * mostrar o cadeado direto na UI, sem esperar um 403. A checagem de
+ * verdade sempre acontece de novo no backend em cada rota. */
+export interface RecursosPlano {
+  ab_teste_cadencia: boolean;
+  auto_aprovacao: boolean;
+  webhook_relatorio: boolean;
+  api_parceiros: boolean;
+  subtenants: boolean;
+  retencao_dias_relatorio: number | null;
+}
+
 export interface Usuario {
   id: number;
   tenant_id: string;
@@ -11,6 +23,7 @@ export interface Usuario {
   ativo: boolean;
   /** distribuidor | revendedor | cliente — raio-X: hierarquia de distribuidores. */
   tenant_tipo: string;
+  recursos_plano: RecursosPlano;
 }
 
 interface TokenResponse {

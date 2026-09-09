@@ -22,27 +22,48 @@ from app.services.errors import ErroServico
 # vale pra todo plano, não só o "Teste" (cortesia). Proporcional à
 # franquia mensal de cada plano, na mesma razão validada no Teste
 # (50/semana pra 200 de franquia/mês = 25%).
+#
+# Recursos de escala (raio-X 2026-09-09) — gancho de upgrade além de
+# volume: teste A/B, auto-aprovação, webhook de relatório, API de
+# parceiros e hierarquia de sub-tenants só fazem sentido pra quem já
+# opera em escala, nunca pro "core" do produto (CRM, cadência básica,
+# WhatsApp/e-mail continuam iguais em todo plano). "Teste" espelha
+# Starter de propósito, igual já faz pra franquia/usuários.
+POC_STARTER_TESTE = {
+    "permite_ab_teste_cadencia": False, "permite_auto_aprovacao": False,
+    "permite_webhook_relatorio": False, "permite_api_parceiros": False, "permite_subtenants": False,
+    "retencao_dias_relatorio": 30, "retencao_dias_auditoria": 90,
+}
 PLANOS_PADRAO = [
     {
         "nome": "POC", "franquia_contas_mes": 50, "max_usuarios": 3, "preco_mensal": 0.0,
         "limite_enriquecimento_site_semanal": 15, "limite_enriquecimento_contatos_semanal": 15,
+        **POC_STARTER_TESTE,
     },
     {
         "nome": "Teste", "franquia_contas_mes": 200, "max_usuarios": 10, "preco_mensal": 0.0,
         "visivel_self_service": False,
         "limite_enriquecimento_site_semanal": 50, "limite_enriquecimento_contatos_semanal": 50,
+        **POC_STARTER_TESTE,
     },
     {
         "nome": "Starter", "franquia_contas_mes": 200, "max_usuarios": 10, "preco_mensal": 490.0,
         "limite_enriquecimento_site_semanal": 50, "limite_enriquecimento_contatos_semanal": 50,
+        **POC_STARTER_TESTE,
     },
     {
         "nome": "Professional", "franquia_contas_mes": 800, "max_usuarios": 25, "preco_mensal": 990.0,
         "limite_enriquecimento_site_semanal": 200, "limite_enriquecimento_contatos_semanal": 200,
+        "permite_ab_teste_cadencia": True, "permite_auto_aprovacao": False,
+        "permite_webhook_relatorio": True, "permite_api_parceiros": True, "permite_subtenants": True,
+        "retencao_dias_relatorio": 90, "retencao_dias_auditoria": 365,
     },
     {
         "nome": "Enterprise", "franquia_contas_mes": 5000, "max_usuarios": 999, "preco_mensal": 2490.0,
         "limite_enriquecimento_site_semanal": 1250, "limite_enriquecimento_contatos_semanal": 1250,
+        "permite_ab_teste_cadencia": True, "permite_auto_aprovacao": True,
+        "permite_webhook_relatorio": True, "permite_api_parceiros": True, "permite_subtenants": True,
+        "retencao_dias_relatorio": None, "retencao_dias_auditoria": None,
     },
 ]
 

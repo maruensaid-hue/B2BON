@@ -58,6 +58,51 @@ def listar_planos(db: Session, apenas_self_service: bool = False) -> list[Plano]
     return query.order_by(Plano.preco_mensal).all()
 
 
+_CAMPOS_NUMERICOS_NAO_NEGATIVOS = (
+    "franquia_contas_mes",
+    "max_usuarios",
+    "preco_mensal",
+    "limite_enriquecimento_site_semanal",
+    "limite_enriquecimento_contatos_semanal",
+    "retencao_dias_relatorio",
+    "retencao_dias_auditoria",
+)
+
+
+def _validar_dados_plano(db: Session, dados: dict, plano_id: int | None = None) -> None:
+    existente = db.query(Plano).filter_by(nome=dados["nome"]).one_or_none()
+    if existente is not None and existente.id != plano_id:
+        raise RegraNegocioViolada(f'Já existe um plano chamado "{dados["nome"]}".')
+    for campo in _CAMPOS_NUMERICOS_NAO_NEGATIVOS:
+        valor = dados.get(campo)
+        if valor is not None and valor < 0:
+            raise ValidacaoFalhou(f'"{campo}" não pode ser negativo.')
+
+
+def criar_plano(db: Session, dados: dict) -> Plano:
+    """CRUD de planos pela tela (raio-X 2026-09-09) — antes disso, planos só
+    nasciam via `scripts/bootstrap_tenant.py`; agora quem decide os
+    recursos exclusivos de cada plano ajusta direto em Admin → Planos."""
+    _validar_dados_plano(db, dados)
+    plano = Plano(**dados)
+    db.add(plano)
+    db.commit()
+    db.refresh(plano)
+    return plano
+
+
+def atualizar_plano(db: Session, plano_id: int, dados: dict) -> Plano:
+    plano = db.query(Plano).filter_by(id=plano_id).one_or_none()
+    if plano is None:
+        raise NaoEncontrado(f"Plano {plano_id} não encontrado")
+    _validar_dados_plano(db, dados, plano_id)
+    for campo, valor in dados.items():
+        setattr(plano, campo, valor)
+    db.commit()
+    db.refresh(plano)
+    return plano
+
+
 def _obter_plano_teste(db: Session) -> Plano:
     plano = db.query(Plano).filter_by(nome="Teste").one_or_none()
     if plano is None:

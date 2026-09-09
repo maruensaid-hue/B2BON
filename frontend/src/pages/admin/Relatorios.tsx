@@ -56,8 +56,8 @@ export function Relatorios() {
   async function carregar() {
     try {
       setDashboard(await api.get<DashboardRelatorio>(`/relatorios/dashboard?periodo_dias=${periodoDias}`));
-    } catch {
-      setErro("Não foi possível carregar o relatório.");
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível carregar o relatório.");
     }
     try {
       setConfig(await api.get<ConfiguracaoRelatorio>("/relatorios/configuracao"));
@@ -97,9 +97,15 @@ export function Relatorios() {
           <div className="mt-0.5 text-[11px] text-muted">Volumetria, franquia, inadimplência e receita da sua árvore</div>
         </div>
         <Select value={periodoDias} onChange={(e) => setPeriodoDias(Number(e.target.value))} className="w-auto">
-          <option value={7}>Últimos 7 dias</option>
-          <option value={30}>Últimos 30 dias</option>
-          <option value={90}>Últimos 90 dias</option>
+          {[7, 30, 90].map((dias) => {
+            const retencao = usuario?.recursos_plano.retencao_dias_relatorio ?? null;
+            const bloqueado = retencao !== null && dias > retencao;
+            return (
+              <option key={dias} value={dias} disabled={bloqueado}>
+                Últimos {dias} dias{bloqueado ? " 🔒 Professional+" : ""}
+              </option>
+            );
+          })}
         </Select>
       </div>
 

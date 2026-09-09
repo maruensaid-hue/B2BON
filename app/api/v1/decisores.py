@@ -7,6 +7,7 @@ from app.api.deps import (
     get_db,
     get_email_provider_do_tenant,
     get_llm_provider,
+    get_plan_limits_provider,
     get_tenant_id,
     get_whatsapp_provider,
 )
@@ -14,6 +15,7 @@ from app.llm.base import LLMProvider
 from app.providers.calendar.base import CalendarProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.conversa import DevolverLeadRequestSchema
 from app.schemas.nps import PesquisaNpsSchema
 from app.schemas.reuniao import ProporHorariosRequestSchema, ReuniaoSchema
@@ -44,10 +46,11 @@ def devolver_lead(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> dict:
     """Devolução do lead à cadência de nutrição adequada ao motivo (E7-H2)."""
     return qualificacao_service.devolver(
-        db, tenant_id, ator_id, decisor_id, dados.motivo, dados.cadencia_nutricao_id, llm
+        db, tenant_id, ator_id, decisor_id, dados.motivo, dados.cadencia_nutricao_id, llm, plan_limits
     )
 
 

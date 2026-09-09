@@ -13,6 +13,7 @@ from app.models.faq_item import FaqItem
 from app.models.mensagem import Mensagem
 from app.models.turno_conversa import TurnoConversa
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.services import (
     auditoria_service,
     cadencia_service,
@@ -281,6 +282,7 @@ def devolver(
     motivo: str,
     cadencia_nutricao_id: int,
     llm: LLMProvider,
+    plan_limits: PlanLimitsProvider,
 ) -> dict:
     """Devolve o lead à cadência de nutrição adequada ao motivo (E7-H2).
 
@@ -319,7 +321,7 @@ def devolver(
     db.flush()
 
     resultado_geracao = cadencia_service.gerar_para_lote(
-        db, tenant_id, ator_id, cadencia_nutricao.id, [decisor.conta_id], llm
+        db, tenant_id, ator_id, cadencia_nutricao.id, [decisor.conta_id], llm, plan_limits
     )
 
     auditoria_service.registrar(

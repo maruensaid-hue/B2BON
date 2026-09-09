@@ -7,6 +7,7 @@ from app.models.aprovacao import Aprovacao
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
 from app.models.regra_auto_aprovacao import RegraAutoAprovacao
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
@@ -22,6 +23,7 @@ def criar_proposta(
     canal: str,
     template_id: str | None,
     conteudo: str,
+    plan_limits: PlanLimitsProvider,
     toque_cadencia_id: int | None = None,
     variante_ab: str | None = None,
     agendado_para: datetime | None = None,
@@ -56,21 +58,31 @@ def criar_proposta(
 
     auditoria_service.registrar(db, tenant_id, "mensagem_proposta", "mensagem", mensagem.id, None, {}, canal=canal)
 
-    _aplicar_regra_auto_aprovacao(db, tenant_id, aprovacao, mensagem)
+    _aplicar_regra_auto_aprovacao(db, tenant_id, aprovacao, mensagem, plan_limits)
 
     db.commit()
     db.refresh(mensagem)
     return mensagem
 
 
-def _aplicar_regra_auto_aprovacao(db: Session, tenant_id: str, aprovacao: Aprovacao, mensagem: Mensagem) -> None:
+def _aplicar_regra_auto_aprovacao(
+    db: Session, tenant_id: str, aprovacao: Aprovacao, mensagem: Mensagem, plan_limits: PlanLimitsProvider
+) -> None:
     """Auto-aprovação por template — opcional, desligada por padrão (E4-H4).
 
     O log distingue aprovação manual (`aprovacao_aprovada`/`_lote`) da
     automática (`aprovacao_automatica_por_regra`) pela própria chave do
     evento de auditoria, sem exigir campo novo.
+
+    Recurso exclusivo do plano Enterprise (raio-X 2026-09-09) — checado de
+    novo aqui (além de `definir_regra`) pra cobrir downgrade depois que a
+    regra já foi criada: nesse caso a regra fica só ignorada (mensagem
+    segue pro fluxo normal de aprovação humana), sem levantar erro no meio
+    da criação da mensagem.
     """
     if mensagem.template_id is None:
+        return
+    if not plan_limits.permite_auto_aprovacao(tenant_id):
         return
     regra = (
         db.query(RegraAutoAprovacao)
@@ -98,8 +110,16 @@ def _aplicar_regra_auto_aprovacao(db: Session, tenant_id: str, aprovacao: Aprova
 
 
 def definir_regra(
-    db: Session, tenant_id: str, ator_id: str | None, template_id: str, habilitada: bool
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    template_id: str,
+    habilitada: bool,
+    plan_limits: PlanLimitsProvider,
 ) -> RegraAutoAprovacao:
+    if habilitada and not plan_limits.permite_auto_aprovacao(tenant_id):
+        raise RegraNegocioViolada("Auto-aprovação é exclusiva do plano Enterprise. Fale com o time comercial pra upgrade.")
+
     regra = db.query(RegraAutoAprovacao).filter_by(tenant_id=tenant_id, template_id=template_id).one_or_none()
     if regra is None:
         regra = RegraAutoAprovacao(tenant_id=tenant_id, template_id=template_id, habilitada=habilitada)

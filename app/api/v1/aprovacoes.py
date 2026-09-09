@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_plan_limits_provider, get_tenant_id
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.aprovacao import (
     AprovacaoFilaItemSchema,
     AprovacaoSchema,
@@ -88,5 +89,6 @@ def definir_regra_auto_aprovacao(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> RegraAutoAprovacaoSchema:
-    return aprovacao_service.definir_regra(db, tenant_id, ator_id, template_id, dados.habilitada)
+    return aprovacao_service.definir_regra(db, tenant_id, ator_id, template_id, dados.habilitada, plan_limits)

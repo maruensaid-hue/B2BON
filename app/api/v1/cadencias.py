@@ -24,8 +24,9 @@ def criar_cadencia(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> CadenciaSchema:
-    return cadencia_service.criar(db, tenant_id, ator_id, dados)
+    return cadencia_service.criar(db, tenant_id, ator_id, dados, plan_limits)
 
 
 @router.get("", response_model=list[CadenciaSchema])
@@ -73,8 +74,9 @@ def gerar_cadencia_para_lote(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> GerarCadenciaResponseSchema:
-    resultado = cadencia_service.gerar_para_lote(db, tenant_id, ator_id, cadencia_id, dados.conta_ids, llm)
+    resultado = cadencia_service.gerar_para_lote(db, tenant_id, ator_id, cadencia_id, dados.conta_ids, llm, plan_limits)
     return GerarCadenciaResponseSchema(**resultado)
 
 

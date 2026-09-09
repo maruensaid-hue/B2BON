@@ -383,6 +383,12 @@ export function AdminTenants() {
       </Card>
 
       <Modal title="Criar tenant" open={modalAberto} onClose={() => setModalAberto(false)}>
+        {!isSuperAdmin && !usuario?.recursos_plano.subtenants ? (
+          <div className="py-6 text-center text-[12px] text-muted">
+            🔒 Criar {rotuloTipo(rotulos, tipoFilho).toLowerCase()} é exclusivo do plano Professional ou superior.
+            Fale com o time comercial pra upgrade.
+          </div>
+        ) : (
         <form onSubmit={criarTenant} className="flex flex-col gap-3">
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Identificador (slug)</div>
@@ -447,6 +453,7 @@ export function AdminTenants() {
             Criar
           </Button>
         </form>
+        )}
       </Modal>
 
       <Modal

@@ -31,3 +31,16 @@ class Plano(Base):
     # deliberadamente sem teto.
     limite_enriquecimento_site_semanal: Mapped[int | None] = mapped_column(Integer, nullable=True)
     limite_enriquecimento_contatos_semanal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Gancho de upgrade além de volume (raio-X 2026-09-09): recursos que só
+    # fazem sentido pra quem já opera em escala (teste A/B, auto-aprovação,
+    # webhook, API de parceiros, revenda), não recursos do dia a dia — por
+    # isso ficam de fora do "core" (CRM, cadência básica, WhatsApp/e-mail).
+    permite_ab_teste_cadencia: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    permite_auto_aprovacao: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    permite_webhook_relatorio: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    permite_api_parceiros: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    permite_subtenants: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Nulo = sem limite — mesmo padrão dos limites de enriquecimento acima.
+    retencao_dias_relatorio: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retencao_dias_auditoria: Mapped[int | None] = mapped_column(Integer, nullable=True)

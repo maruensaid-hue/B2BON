@@ -6,12 +6,14 @@ from app.api.deps import (
     get_ator_id,
     get_db,
     get_email_provider,
+    get_plan_limits_provider,
     get_usuario_atual,
     permitir_gestao_hierarquica,
 )
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.tenant import (
     CriarTenantRequestSchema,
     DefinirLicencaRequestSchema,
@@ -20,7 +22,7 @@ from app.schemas.tenant import (
     TenantSchema,
 )
 from app.services import tenant_service
-from app.services.errors import NaoAutorizado, ValidacaoFalhou
+from app.services.errors import NaoAutorizado, RegraNegocioViolada, ValidacaoFalhou
 
 router = APIRouter(prefix="/admin/tenants", tags=["admin"], dependencies=[Depends(permitir_gestao_hierarquica)])
 
@@ -38,6 +40,7 @@ def criar_tenant(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
     email: EmailProvider = Depends(get_email_provider),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> TenantSchema:
     """Onboarding de um novo tenant por um gestor já autenticado — distinto
     do bootstrap do primeiro tenant (script, sem essa exigência circular de
@@ -48,10 +51,17 @@ def criar_tenant(
     exatamente o admin desse tenant pai (Distribuidor criando Revendedor,
     Revendedor criando Cliente) ou super_admin. O primeiro usuário do
     tenant novo sempre nasce `papel="admin"`, nunca `super_admin` — ver
-    `tenant_service.criar_tenant_inicial`."""
+    `tenant_service.criar_tenant_inicial`.
+
+    Criar sub-tenant é gancho de upgrade além de volume (raio-X
+    2026-09-09) — exige o PRÓPRIO plano do gestor permitir, além da
+    hierarquia de tipo já checada acima. Super_admin (operador da
+    plataforma) nunca passa por essa checagem."""
     if usuario.papel != "super_admin":
         if dados.tenant_pai_id is None or dados.tenant_pai_id != usuario.tenant_id:
             raise NaoAutorizado("Você só pode criar tenants diretamente sob o seu próprio tenant.")
+        if not plan_limits.permite_subtenants(usuario.tenant_id):
+            raise RegraNegocioViolada("Criar sub-tenants é exclusivo do plano Professional ou superior.")
 
     usuario_admin = tenant_service.criar_tenant_inicial(
         db,

@@ -13,6 +13,7 @@ from app.models.decisor import Decisor
 from app.models.indicacao import Indicacao
 from app.models.mensagem import Mensagem
 from app.models.pesquisa_nps import PesquisaNps
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.rede_social.base import RedeSocialProvider
 from app.services import aprovacao_service, auditoria_service, llm_helpers
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
@@ -34,7 +35,9 @@ def _canal_preferido(decisor: Decisor) -> str:
     return "email"
 
 
-def solicitar(db: Session, tenant_id: str, pesquisa: PesquisaNps, llm: LLMProvider) -> Mensagem:
+def solicitar(
+    db: Session, tenant_id: str, pesquisa: PesquisaNps, llm: LLMProvider, plan_limits: PlanLimitsProvider
+) -> Mensagem:
     """Pedido de indicação — só chamado para promotores (nota >= 9, E11-H2).
 
     A mensagem é submetida à mesma fila de aprovações do E4
@@ -70,7 +73,7 @@ def solicitar(db: Session, tenant_id: str, pesquisa: PesquisaNps, llm: LLMProvid
     )
 
     mensagem = aprovacao_service.criar_proposta(
-        db, tenant_id, None, decisor.id, canal, None, resposta.content, agendado_para=datetime.now(UTC)
+        db, tenant_id, None, decisor.id, canal, None, resposta.content, plan_limits, agendado_para=datetime.now(UTC)
     )
 
     auditoria_service.registrar(

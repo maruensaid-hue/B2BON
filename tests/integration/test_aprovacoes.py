@@ -4,6 +4,7 @@ from app.models.cadencia import Cadencia
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.icp import ICP
+from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.services import aprovacao_service
 
 TENANT_ID = "tenant-teste"
@@ -31,7 +32,9 @@ def cadencia_e_decisor(db_session):
 
 
 def _propor_mensagem(db_session, cadencia, decisor, canal="email", template_id="tpl-1", conteudo="Olá {{nome}}"):
-    return aprovacao_service.criar_proposta(db_session, TENANT_ID, cadencia.id, decisor.id, canal, template_id, conteudo)
+    return aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, cadencia.id, decisor.id, canal, template_id, conteudo, StubPlanLimitsProvider()
+    )
 
 
 def test_fila_filtra_por_canal_conta_e_cadencia(client, db_session, cadencia_e_decisor):
@@ -162,7 +165,7 @@ def test_log_distingue_aprovacao_automatica_de_manual(client, db_session, cadenc
     ][0]
     client.post(f"/api/v1/aprovacoes/{manual_id}/aprovar")
 
-    logs = auditoria_service.consultar(db_session, TENANT_ID, conta_id=conta.id)
+    logs = auditoria_service.consultar(db_session, TENANT_ID, StubPlanLimitsProvider(), conta_id=conta.id)
     eventos = {log.evento_tipo for log in logs}
 
     assert "aprovacao_automatica_por_regra" in eventos

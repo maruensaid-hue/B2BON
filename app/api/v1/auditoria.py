@@ -3,7 +3,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_tenant_id
+from app.api.deps import get_db, get_plan_limits_provider, get_tenant_id
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.auditoria import AuditLogSchema
 from app.services import auditoria_service
 
@@ -18,8 +19,9 @@ def consultar_auditoria(
     data_fim: datetime | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> list[AuditLogSchema]:
-    return auditoria_service.consultar(db, tenant_id, conta_id, canal, data_inicio, data_fim)
+    return auditoria_service.consultar(db, tenant_id, plan_limits, conta_id, canal, data_inicio, data_fim)
 
 
 @router.get("/exportar.csv")
@@ -30,8 +32,9 @@ def exportar_auditoria_csv(
     data_fim: datetime | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> Response:
-    logs = auditoria_service.consultar(db, tenant_id, conta_id, canal, data_inicio, data_fim)
+    logs = auditoria_service.consultar(db, tenant_id, plan_limits, conta_id, canal, data_inicio, data_fim)
     csv_conteudo = auditoria_service.exportar_csv(logs)
     return Response(
         content=csv_conteudo,

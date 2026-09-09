@@ -1,10 +1,18 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_email_provider_do_tenant, get_llm_provider, get_tenant_id, get_whatsapp_provider
+from app.api.deps import (
+    get_db,
+    get_email_provider_do_tenant,
+    get_llm_provider,
+    get_plan_limits_provider,
+    get_tenant_id,
+    get_whatsapp_provider,
+)
 from app.llm.base import LLMProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.nps import (
     ConfiguracaoNpsSchema,
     ConfiguracaoNpsUpsertSchema,
@@ -60,6 +68,7 @@ def responder(
     db: Session = Depends(get_db),
     whatsapp: WhatsAppProvider = Depends(get_whatsapp_provider),
     llm: LLMProvider = Depends(get_llm_provider),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> PesquisaNpsSchema:
     """Resposta pública, sem X-Tenant-Id — mesmo padrão de reagendamento/opt-out (E11-H1)."""
-    return nps_service.responder(db, token, dados.nota, whatsapp, llm)
+    return nps_service.responder(db, token, dados.nota, whatsapp, llm, plan_limits)

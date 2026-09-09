@@ -1,9 +1,12 @@
 from datetime import UTC, datetime
 
+from app.api.deps import get_plan_limits_provider
+from app.main import app
 from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
+from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.services import auth_service
 
 TENANT_ID = "tenant-teste"
@@ -519,3 +522,58 @@ def test_cron_suspende_licencas_vencidas(client, db_session, monkeypatch):
     assert resposta.status_code == 200
     assert "tenant-vencido-cron" in resposta.json()["tenants_suspensos"]
     assert db_session.query(Licenca).filter_by(tenant_id="tenant-vencido-cron").one().status == "suspensa"
+
+
+def test_admin_distribuidor_sem_plano_nao_cria_subtenant(client, db_session, monkeypatch):
+    """Gancho de upgrade além de volume (raio-X 2026-09-09) — mesma
+    hierarquia de tipo de sempre, mas o plano do PRÓPRIO gestor também
+    precisa permitir."""
+    headers_distribuidor = _criar_admin_hierarquico(db_session, "distribuidora-sem-plano", tipo="distribuidor")
+    plano_id = _criar_plano(db_session, nome="Revenda Sem Plano", franquia=200)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_plan_limits_provider,
+        lambda: StubPlanLimitsProvider(recursos_desabilitados={"distribuidora-sem-plano": {"subtenants"}}),
+    )
+
+    resposta = client.post(
+        "/api/v1/admin/tenants",
+        json={
+            "tenant_id": "revenda-sem-plano-1",
+            "razao_social": "Revenda Sem Plano",
+            "plano_id": plano_id,
+            "nome_admin": "Admin Revenda",
+            "email_admin": "admin@revendasemplano.com.br",
+            "senha_admin": "senha123",
+            "tenant_pai_id": "distribuidora-sem-plano",
+            "tipo": "revendedor",
+        },
+        headers=headers_distribuidor,
+    )
+
+    assert resposta.status_code == 409
+
+
+def test_super_admin_cria_subtenant_mesmo_sem_plano_liberado(client, db_session, monkeypatch):
+    """Super_admin nunca passa pela checagem de plano — é o operador da
+    plataforma, não um assinante."""
+    plano_id = _criar_plano(db_session, nome="Direto Super Admin", franquia=200)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_plan_limits_provider,
+        lambda: StubPlanLimitsProvider(recursos_desabilitados={"tenant-teste": {"subtenants"}}),
+    )
+
+    resposta = client.post(
+        "/api/v1/admin/tenants",
+        json={
+            "tenant_id": "criado-por-super-admin",
+            "razao_social": "Criado Por Super Admin",
+            "plano_id": plano_id,
+            "nome_admin": "Admin",
+            "email_admin": "admin@criadoporsuperadmin.com.br",
+            "senha_admin": "senha123",
+        },
+    )
+
+    assert resposta.status_code == 201

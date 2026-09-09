@@ -68,10 +68,17 @@ def toques_da_cadencia(db: Session, cadencia_id: int) -> list[ToqueCadencia]:
     return db.query(ToqueCadencia).filter_by(cadencia_id=cadencia_id).order_by(ToqueCadencia.ordem).all()
 
 
-def criar(db: Session, tenant_id: str, ator_id: str | None, dados: CadenciaCreateSchema) -> Cadencia:
+def criar(
+    db: Session, tenant_id: str, ator_id: str | None, dados: CadenciaCreateSchema, plan_limits: PlanLimitsProvider
+) -> Cadencia:
     """Cadência com no mínimo 5 toques distribuídos entre canais disponíveis (E3-H1)."""
     if len(dados.toques) < MINIMO_TOQUES:
         raise RegraNegocioViolada(f"Uma cadência precisa de no mínimo {MINIMO_TOQUES} toques.")
+
+    if any(toque.ab_teste_habilitado for toque in dados.toques) and not plan_limits.permite_ab_teste_cadencia(
+        tenant_id
+    ):
+        raise RegraNegocioViolada("Teste A/B é exclusivo do plano Professional ou superior. Faça upgrade pra usar.")
 
     canais = {toque.canal for toque in dados.toques}
     if len(canais) < MINIMO_CANAIS_DISTINTOS:
@@ -185,6 +192,7 @@ def gerar_para_lote(
     cadencia_id: int,
     conta_ids: list[int],
     llm: LLMProvider,
+    plan_limits: PlanLimitsProvider,
 ) -> dict:
     """Gera os toques personalizados para um lote de contas e os submete à
     fila de aprovações — cadência inteira antes de ativar (E3-H1)."""
@@ -227,6 +235,7 @@ def gerar_para_lote(
                 toque.canal,
                 toque.template_whatsapp_id,
                 conteudo,
+                plan_limits,
                 toque_cadencia_id=toque.id,
                 variante_ab=variante,
             )

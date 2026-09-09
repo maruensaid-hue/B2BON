@@ -24,3 +24,35 @@ class PlanLimitsProvider(ABC):
     @abstractmethod
     def obter_limite_enriquecimento_contatos_semanal(self, tenant_id: str) -> int | None:
         raise NotImplementedError
+
+    # Recursos de escala (raio-X 2026-09-09) — gancho de upgrade além de
+    # volume: só quem já opera em escala precisa deles (teste A/B,
+    # auto-aprovação, webhook, API de parceiros, revenda), nunca o "core".
+    @abstractmethod
+    def permite_ab_teste_cadencia(self, tenant_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def permite_auto_aprovacao(self, tenant_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def permite_webhook_relatorio(self, tenant_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def permite_api_parceiros(self, tenant_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def permite_subtenants(self, tenant_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def obter_retencao_dias_relatorio(self, tenant_id: str) -> int | None:
+        """`None` = sem limite."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def obter_retencao_dias_auditoria(self, tenant_id: str) -> int | None:
+        raise NotImplementedError

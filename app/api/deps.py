@@ -356,6 +356,20 @@ def exigir_admin_distribuidor(usuario: Usuario = Depends(get_usuario_atual), db:
     raise NaoAutorizado("Recurso exclusivo de administradores de tenant Distribuidor.")
 
 
+def exigir_plano_permite_api_parceiros(
+    usuario: Usuario = Depends(get_usuario_atual),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+) -> Usuario:
+    """Gancho de upgrade além de volume (raio-X 2026-09-09) — API de
+    parceiros/webhooks exige tipo de tenant distribuidor (`exigir_admin_
+    distribuidor`, dependency separada) **e** plano Professional ou
+    superior. As duas dependencies são combinadas no router de
+    `app/api/v1/integracoes.py`, nunca uma substitui a outra."""
+    if not plan_limits.permite_api_parceiros(usuario.tenant_id):
+        raise NaoAutorizado("API de parceiros é exclusiva do plano Professional ou superior. Faça upgrade pra usar.")
+    return usuario
+
+
 def get_chave_api_atual(
     authorization: str | None = Header(None, alias="Authorization"),
     db: Session = Depends(get_db),

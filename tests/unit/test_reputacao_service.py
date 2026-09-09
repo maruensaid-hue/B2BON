@@ -21,9 +21,10 @@ def test_evento_acima_do_limiar_pausa_e_audita(db_session):
     assert saude["pausado"] is True
     assert reputacao_service.canal_pausado(db_session, TENANT_ID, "email") is True
 
+    from app.providers.plan_limits.stub import StubPlanLimitsProvider
     from app.services import auditoria_service
 
-    eventos = {log.evento_tipo for log in auditoria_service.consultar(db_session, TENANT_ID)}
+    eventos = {log.evento_tipo for log in auditoria_service.consultar(db_session, TENANT_ID, StubPlanLimitsProvider())}
     assert "canal_pausado_automaticamente" in eventos
 
 

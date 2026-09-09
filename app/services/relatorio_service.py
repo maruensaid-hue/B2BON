@@ -12,7 +12,7 @@ from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.services import franquia_service, webhook_parceiro_service
-from app.services.errors import ValidacaoFalhou
+from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 
 CADENCIAS_VALIDAS = {"diaria", "semanal", "mensal", "desativada"}
 _DIAS_POR_CADENCIA = {"diaria": 1, "semanal": 7, "mensal": 30}
@@ -129,6 +129,15 @@ def _tenant_ids_visiveis(db: Session, usuario_ou_tenant_id, papel: str | None = 
 
 
 def dashboard(db: Session, usuario: Usuario, periodo_dias: int, plan_limits: PlanLimitsProvider) -> dict:
+    # Retenção de histórico é gancho de upgrade além de volume (raio-X
+    # 2026-09-09) — `None` = sem limite, mesmo padrão dos demais campos
+    # nullable-é-ilimitado do Plano.
+    retencao = plan_limits.obter_retencao_dias_relatorio(usuario.tenant_id)
+    if retencao is not None and periodo_dias > retencao:
+        raise RegraNegocioViolada(
+            f"Seu plano permite consultar até {retencao} dias. Faça upgrade pra períodos maiores."
+        )
+
     tenant_ids = _tenant_ids_visiveis(db, usuario.tenant_id, usuario.papel)
 
     agora = datetime.now(UTC).replace(tzinfo=None)
@@ -179,7 +188,8 @@ def disparar_periodicos(db: Session, email_provider: EmailProvider, plan_limits:
     """Cron entrypoint (`POST /cron/disparar-relatorios-periodicos`) — pra
     cada `ConfiguracaoRelatorio` ativa e devida, manda e-mail pros
     destinatários (admin/super_admin do tenant que configurou) e, só se o
-    tenant for `tipo="distribuidor"`, enfileira o evento de webhook
+    tenant for `tipo="distribuidor"` **e** o plano permitir (raio-X
+    2026-09-09 — gancho de upgrade), enfileira o evento de webhook
     `relatorio_periodico` (Fase 2 — Revendedor/CyberFort não têm
     `AssinaturaWebhookParceiro`, mesma restrição já decidida lá)."""
     agora = datetime.now(UTC).replace(tzinfo=None)
@@ -218,7 +228,7 @@ def disparar_periodicos(db: Session, email_provider: EmailProvider, plan_limits:
             )
             emails_enviados += 1
 
-        if tenant.tipo == "distribuidor":
+        if tenant.tipo == "distribuidor" and plan_limits.permite_webhook_relatorio(tenant.id):
             metricas_tenant = calcular_metricas(
                 db, _tenant_ids_visiveis(db, tenant.id), agora - timedelta(days=intervalo_dias), agora, plan_limits
             )

@@ -8,6 +8,7 @@ import { Input, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import type { Conta, ICP, ListaProspeccao } from "@/pages/prospeccao/Prospeccao";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface Cadencia {
   id: number;
@@ -67,6 +68,8 @@ function toneStatus(status: string): "cyan" | "amber" | "green" {
 }
 
 export function Cadencias() {
+  const { usuario } = useAuth();
+  const permiteAbTeste = usuario?.recursos_plano.ab_teste_cadencia ?? false;
   const [searchParams] = useSearchParams();
   const cadenciaIdDaUrl = Number(searchParams.get("cadencia_id")) || null;
   const [cadencias, setCadencias] = useState<Cadencia[]>([]);
@@ -534,6 +537,20 @@ export function Cadencias() {
                   title="Dias após o toque anterior"
                   className="w-20 flex-shrink-0"
                 />
+                <label
+                  className={`flex flex-shrink-0 items-center gap-1 text-[10px] whitespace-nowrap ${
+                    permiteAbTeste ? "text-muted" : "text-muted/50"
+                  }`}
+                  title={permiteAbTeste ? "Testar 2 variantes de mensagem para este toque" : "Requer plano Professional ou superior"}
+                >
+                  <input
+                    type="checkbox"
+                    checked={toque.ab_teste_habilitado}
+                    disabled={!permiteAbTeste}
+                    onChange={(event) => atualizarToque(indice, "ab_teste_habilitado", event.target.checked)}
+                  />
+                  Teste A/B{!permiteAbTeste && " 🔒"}
+                </label>
                 <Button type="button" size="sm" variant="danger" onClick={() => removerToque(indice)}>
                   ✕
                 </Button>

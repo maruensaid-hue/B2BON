@@ -1,10 +1,12 @@
 import csv
 import io
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.models.auditoria import AuditLog
+from app.providers.plan_limits.base import PlanLimitsProvider
+from app.services.errors import RegraNegocioViolada
 
 # Convenção para eventos que documentam o módulo como um todo, não um
 # assinante específico (ex.: ROPA — E9-H1).
@@ -40,11 +42,28 @@ def registrar(
 def consultar(
     db: Session,
     tenant_id: str,
+    plan_limits: PlanLimitsProvider,
     conta_id: int | None = None,
     canal: str | None = None,
     data_inicio: datetime | None = None,
     data_fim: datetime | None = None,
 ) -> list[AuditLog]:
+    """Retenção de histórico é gancho de upgrade além de volume (raio-X
+    2026-09-09) — `None` = sem limite. Consulta sem `data_inicio` explícito
+    é automaticamente limitada à janela do plano (sem erro, só devolve
+    menos); pedir um `data_inicio` explícito mais antigo que o permitido
+    falha alto, com sugestão de upgrade."""
+    retencao = plan_limits.obter_retencao_dias_auditoria(tenant_id)
+    if retencao is not None:
+        limite_data = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=retencao)
+        if data_inicio is None:
+            data_inicio = limite_data
+        elif data_inicio < limite_data:
+            raise RegraNegocioViolada(
+                f"Seu plano permite consultar auditoria até {retencao} dias atrás. Faça upgrade pra um "
+                "histórico maior."
+            )
+
     query = db.query(AuditLog).filter(AuditLog.tenant_id == tenant_id)
     if conta_id is not None:
         query = query.filter(AuditLog.conta_id == conta_id)

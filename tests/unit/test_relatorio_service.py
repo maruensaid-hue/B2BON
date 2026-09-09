@@ -11,7 +11,7 @@ from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.services import relatorio_service
-from app.services.errors import ValidacaoFalhou
+from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 from tests.fakes import FakeEmailProvider
 
 PLAN_LIMITS = StubPlanLimitsProvider(franquia_padrao=100)
@@ -172,6 +172,52 @@ def test_dashboard_distribuidor_ve_so_subarvore(db_session) -> None:
 
     assert resultado["atual"]["tenants_ativos_distribuidor"] == 1
     assert resultado["atual"]["tenants_ativos_revendedor"] == 1
+
+
+def test_dashboard_recusa_periodo_maior_que_retencao_do_plano(db_session) -> None:
+    _tenant(db_session, "dashboard-retencao")
+    db_session.commit()
+    admin = Usuario(tenant_id="dashboard-retencao", nome="Admin", email="admin@dashboardretencao.com.br", papel="admin")
+    db_session.add(admin)
+    db_session.commit()
+    plan_limits_retido = StubPlanLimitsProvider(retencao_dias_relatorio={"dashboard-retencao": 30})
+
+    with pytest.raises(RegraNegocioViolada):
+        relatorio_service.dashboard(db_session, admin, periodo_dias=90, plan_limits=plan_limits_retido)
+
+
+def test_dashboard_aceita_periodo_dentro_da_retencao_do_plano(db_session) -> None:
+    _tenant(db_session, "dashboard-retencao-ok")
+    db_session.commit()
+    admin = Usuario(
+        tenant_id="dashboard-retencao-ok", nome="Admin", email="admin@dashboardretencaook.com.br", papel="admin"
+    )
+    db_session.add(admin)
+    db_session.commit()
+    plan_limits_retido = StubPlanLimitsProvider(retencao_dias_relatorio={"dashboard-retencao-ok": 30})
+
+    resultado = relatorio_service.dashboard(db_session, admin, periodo_dias=7, plan_limits=plan_limits_retido)
+
+    assert "atual" in resultado
+
+
+def test_disparar_periodicos_nao_enfileira_webhook_se_plano_nao_permite(db_session) -> None:
+    from app.models.assinatura_webhook_parceiro import AssinaturaWebhookParceiro
+    from app.models.evento_webhook_parceiro import EventoWebhookParceiro
+
+    _tenant(db_session, "disparo-sem-plano", tipo="distribuidor")
+    db_session.add(
+        AssinaturaWebhookParceiro(tenant_id="disparo-sem-plano", url_callback="https://x.com.br/wh", segredo="s")
+    )
+    db_session.add(Usuario(tenant_id="disparo-sem-plano", nome="Admin", email="admin@disparosemplano.com.br", papel="admin"))
+    db_session.add(ConfiguracaoRelatorio(tenant_id="disparo-sem-plano", cadencia="diaria"))
+    db_session.commit()
+    plan_limits_sem_webhook = StubPlanLimitsProvider(recursos_desabilitados={"disparo-sem-plano": {"webhook_relatorio"}})
+
+    relatorio_service.disparar_periodicos(db_session, FakeEmailProvider(), plan_limits_sem_webhook)
+
+    eventos = db_session.query(EventoWebhookParceiro).all()
+    assert len(eventos) == 0
 
 
 def test_definir_configuracao_cria_e_atualiza(db_session) -> None:

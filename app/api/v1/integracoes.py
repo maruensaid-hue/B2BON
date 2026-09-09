@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_admin_distribuidor, get_db
+from app.api.deps import exigir_admin_distribuidor, exigir_plano_permite_api_parceiros, get_db
 from app.models.assinatura_webhook_parceiro import AssinaturaWebhookParceiro
 from app.models.chave_api_parceiro import ChaveApiParceiro
 from app.models.usuario import Usuario
@@ -19,7 +19,11 @@ from app.schemas.parceiro import (
 )
 from app.services.errors import NaoEncontrado
 
-router = APIRouter(prefix="/integracoes", tags=["integracoes"], dependencies=[Depends(exigir_admin_distribuidor)])
+router = APIRouter(
+    prefix="/integracoes",
+    tags=["integracoes"],
+    dependencies=[Depends(exigir_admin_distribuidor), Depends(exigir_plano_permite_api_parceiros)],
+)
 
 
 @router.post("/chaves-api", response_model=ChaveApiCriadaSchema, status_code=201)

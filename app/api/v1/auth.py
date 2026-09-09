@@ -22,11 +22,13 @@ from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.payment.base import PaymentProvider
+from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.schemas.auth import (
     LicencaStatusResponseSchema,
     LoginGoogleRequestSchema,
     LoginRequestSchema,
+    RecursosPlanoSchema,
     RegistrarRequestSchema,
     RegistrarVitrineRequestSchema,
     TokenResponseSchema,
@@ -42,8 +44,20 @@ def _resposta_token(
 ) -> TokenResponseSchema:
     licenca = db.query(Licenca).filter_by(tenant_id=usuario.tenant_id).one_or_none()
     tenant = db.query(Tenant).filter_by(id=usuario.tenant_id).one_or_none()
+    plan_limits = NucleoPlanLimitsProvider(db)
+    recursos_plano = RecursosPlanoSchema(
+        ab_teste_cadencia=plan_limits.permite_ab_teste_cadencia(usuario.tenant_id),
+        auto_aprovacao=plan_limits.permite_auto_aprovacao(usuario.tenant_id),
+        webhook_relatorio=plan_limits.permite_webhook_relatorio(usuario.tenant_id),
+        api_parceiros=plan_limits.permite_api_parceiros(usuario.tenant_id),
+        subtenants=plan_limits.permite_subtenants(usuario.tenant_id),
+        retencao_dias_relatorio=plan_limits.obter_retencao_dias_relatorio(usuario.tenant_id),
+    )
     usuario_schema = UsuarioSchema.model_validate(usuario).model_copy(
-        update={"tenant_tipo": tenant.tipo if tenant is not None else "cliente"}
+        update={
+            "tenant_tipo": tenant.tipo if tenant is not None else "cliente",
+            "recursos_plano": recursos_plano,
+        }
     )
     return TokenResponseSchema(
         access_token=auth_service.gerar_token(usuario),

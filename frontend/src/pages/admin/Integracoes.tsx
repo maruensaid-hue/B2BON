@@ -100,6 +100,9 @@ export function Integracoes() {
   }
 
   if (!podeGerenciar) return <AcessoRestrito />;
+  if (!usuario?.recursos_plano.api_parceiros) {
+    return <AcessoRestrito mensagem="API de parceiros e webhooks são exclusivos do plano Professional ou superior. Fale com o time comercial pra upgrade." />;
+  }
 
   return (
     <div className="p-5.5">

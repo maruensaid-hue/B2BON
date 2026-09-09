@@ -3,6 +3,19 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
+class RecursosPlanoSchema(BaseModel):
+    """Gancho de upgrade além de volume (raio-X 2026-09-09) — a UI usa isso
+    pra mostrar o cadeado direto, sem esperar um 403; a checagem de
+    verdade sempre acontece de novo no backend em cada rota."""
+
+    ab_teste_cadencia: bool = False
+    auto_aprovacao: bool = False
+    webhook_relatorio: bool = False
+    api_parceiros: bool = False
+    subtenants: bool = False
+    retencao_dias_relatorio: int | None = None
+
+
 class UsuarioSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -20,6 +33,9 @@ class UsuarioSchema(BaseModel):
     # default aqui só permite `model_validate` passar sem o atributo; o
     # valor real é preenchido em `_resposta_token` via query em `Tenant`.
     tenant_tipo: str = "cliente"
+    # Mesmo padrão de `tenant_tipo` acima — preenchido em `_resposta_token`
+    # a partir do `PlanLimitsProvider`, não vem de `Usuario`.
+    recursos_plano: RecursosPlanoSchema = RecursosPlanoSchema()
 
 
 class LoginRequestSchema(BaseModel):
@@ -51,6 +67,19 @@ class RegistrarVitrineRequestSchema(BaseModel):
     # sozinho, ignorando qualquer plano_id enviado — ver
     # tenant_service.criar_tenant_vitrine).
     plano_id: int | None = None
+
+
+class RecursosPlanoSchema(BaseModel):
+    """Gancho de upgrade além de volume (raio-X 2026-09-09) — a UI usa isso
+    pra mostrar o cadeado direto, sem esperar um 403; a checagem de
+    verdade sempre acontece de novo no backend em cada rota."""
+
+    ab_teste_cadencia: bool = False
+    auto_aprovacao: bool = False
+    webhook_relatorio: bool = False
+    api_parceiros: bool = False
+    subtenants: bool = False
+    retencao_dias_relatorio: int | None = None
 
 
 class TokenResponseSchema(BaseModel):

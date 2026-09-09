@@ -35,3 +35,31 @@ class NucleoPlanLimitsProvider(PlanLimitsProvider):
     def obter_limite_enriquecimento_contatos_semanal(self, tenant_id: str) -> int | None:
         plano = self._plano_ativo(tenant_id)
         return plano.limite_enriquecimento_contatos_semanal if plano is not None else 0
+
+    def permite_ab_teste_cadencia(self, tenant_id: str) -> bool:
+        plano = self._plano_ativo(tenant_id)
+        return plano.permite_ab_teste_cadencia if plano is not None else False
+
+    def permite_auto_aprovacao(self, tenant_id: str) -> bool:
+        plano = self._plano_ativo(tenant_id)
+        return plano.permite_auto_aprovacao if plano is not None else False
+
+    def permite_webhook_relatorio(self, tenant_id: str) -> bool:
+        plano = self._plano_ativo(tenant_id)
+        return plano.permite_webhook_relatorio if plano is not None else False
+
+    def permite_api_parceiros(self, tenant_id: str) -> bool:
+        plano = self._plano_ativo(tenant_id)
+        return plano.permite_api_parceiros if plano is not None else False
+
+    def permite_subtenants(self, tenant_id: str) -> bool:
+        plano = self._plano_ativo(tenant_id)
+        return plano.permite_subtenants if plano is not None else False
+
+    def obter_retencao_dias_relatorio(self, tenant_id: str) -> int | None:
+        plano = self._plano_ativo(tenant_id)
+        return plano.retencao_dias_relatorio if plano is not None else 0
+
+    def obter_retencao_dias_auditoria(self, tenant_id: str) -> int | None:
+        plano = self._plano_ativo(tenant_id)
+        return plano.retencao_dias_auditoria if plano is not None else 0

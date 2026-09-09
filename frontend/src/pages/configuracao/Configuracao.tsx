@@ -44,6 +44,18 @@ interface StatusConexoesLinkedin {
   atualizado_em: string | null;
 }
 
+interface RegraAutoAprovacao {
+  id: number;
+  template_id: string;
+  habilitada: boolean;
+}
+
+interface TemplateWhatsApp {
+  id: number;
+  nome: string;
+  status: string;
+}
+
 interface TemplateProposta {
   id: number;
   texto_introdutorio: string | null;
@@ -262,6 +274,12 @@ export function Configuracao() {
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [salvandoTemplateProposta, setSalvandoTemplateProposta] = useState(false);
   const [enviandoLogo, setEnviandoLogo] = useState(false);
+  const [regrasAutoAprovacao, setRegrasAutoAprovacao] = useState<RegraAutoAprovacao[]>([]);
+  const [templatesWhatsapp, setTemplatesWhatsapp] = useState<TemplateWhatsApp[]>([]);
+  const [templateParaNovaRegraId, setTemplateParaNovaRegraId] = useState<string>("");
+  const [salvandoRegra, setSalvandoRegra] = useState(false);
+  const [erroRegra, setErroRegra] = useState<string | null>(null);
+  const permiteAutoAprovacao = usuario?.recursos_plano.auto_aprovacao ?? false;
 
   const ofertaEmEdicao = ofertas.find((oferta) => oferta.id === ofertaEmEdicaoId) ?? null;
 
@@ -318,6 +336,17 @@ export function Configuracao() {
             "Não foi possível carregar a configuração atual de e-mail (credencial salva pode estar " +
               "corrompida). Preencha os campos abaixo de novo pra corrigir.",
           );
+        }
+        try {
+          const [regras, templates] = await Promise.all([
+            api.get<RegraAutoAprovacao[]>("/aprovacoes/regras"),
+            api.get<TemplateWhatsApp[]>("/whatsapp/templates"),
+          ]);
+          setRegrasAutoAprovacao(regras);
+          setTemplatesWhatsapp(templates);
+        } catch {
+          // Regras de auto-aprovação são opcionais — silencioso se ainda
+          // não houver templates de WhatsApp sincronizados.
         }
       }
       await carregarTemplateProposta();
@@ -452,6 +481,36 @@ export function Configuracao() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível salvar a conta de e-mail.");
     } finally {
       setSalvandoEmailSmtp(false);
+    }
+  }
+
+  async function adicionarRegraAutoAprovacao(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (salvandoRegra || !templateParaNovaRegraId) return;
+    setSalvandoRegra(true);
+    setErroRegra(null);
+    try {
+      const regra = await api.put<RegraAutoAprovacao>(`/aprovacoes/regras/${templateParaNovaRegraId}`, {
+        habilitada: true,
+      });
+      setRegrasAutoAprovacao((atual) => [...atual.filter((r) => r.template_id !== regra.template_id), regra]);
+      setTemplateParaNovaRegraId("");
+    } catch (error) {
+      setErroRegra(error instanceof ApiError ? error.message : "Não foi possível salvar a regra.");
+    } finally {
+      setSalvandoRegra(false);
+    }
+  }
+
+  async function alternarRegraAutoAprovacao(regra: RegraAutoAprovacao) {
+    setErroRegra(null);
+    try {
+      const atualizada = await api.put<RegraAutoAprovacao>(`/aprovacoes/regras/${regra.template_id}`, {
+        habilitada: !regra.habilitada,
+      });
+      setRegrasAutoAprovacao((atual) => atual.map((r) => (r.template_id === regra.template_id ? atualizada : r)));
+    } catch (error) {
+      setErroRegra(error instanceof ApiError ? error.message : "Não foi possível atualizar a regra.");
     }
   }
 
@@ -769,6 +828,62 @@ export function Configuracao() {
             </label>
             <Button type="submit" disabled={salvandoEmailSmtp} className="w-full justify-center">
               {salvandoEmailSmtp ? "Salvando..." : "Salvar conta de e-mail"}
+            </Button>
+          </form>
+        </Card>
+      )}
+
+      {isGestor && (
+        <Card className="mt-4">
+          <SectionLabel>
+            Regras de auto-aprovação {!permiteAutoAprovacao && "🔒 Exclusivo do plano Enterprise"}
+          </SectionLabel>
+          <div className="mb-3 text-[11px] text-muted">
+            Pra um template específico, pula a fila de aprovação humana — a mensagem sai aprovada
+            automaticamente sempre que casar com esse template. Desligada por padrão; ative só pra
+            mensagens já testadas e de baixo risco.
+          </div>
+          {erroRegra && <div className="mb-3 text-[12px] text-red">{erroRegra}</div>}
+          <div className="mb-3 flex flex-col gap-1.5">
+            {regrasAutoAprovacao.map((regra) => {
+              const template = templatesWhatsapp.find((t) => String(t.id) === regra.template_id);
+              return (
+                <div key={regra.id} className="flex items-center justify-between text-[12px]">
+                  <span>{template?.nome ?? `Template #${regra.template_id}`}</span>
+                  <label className="flex items-center gap-1.5 text-muted">
+                    <input
+                      type="checkbox"
+                      checked={regra.habilitada}
+                      disabled={!permiteAutoAprovacao && !regra.habilitada}
+                      onChange={() => alternarRegraAutoAprovacao(regra)}
+                    />
+                    {regra.habilitada ? "Ativa" : "Inativa"}
+                  </label>
+                </div>
+              );
+            })}
+            {regrasAutoAprovacao.length === 0 && (
+              <div className="text-[12px] text-muted">Nenhuma regra cadastrada ainda.</div>
+            )}
+          </div>
+          <form onSubmit={adicionarRegraAutoAprovacao} className="flex gap-2">
+            <select
+              className="flex-1 rounded-lg border border-border bg-surf2 px-3 py-2 text-[12.5px] text-text outline-none focus:border-cyan"
+              value={templateParaNovaRegraId}
+              onChange={(event) => setTemplateParaNovaRegraId(event.target.value)}
+              disabled={!permiteAutoAprovacao}
+            >
+              <option value="">Selecione um template de WhatsApp</option>
+              {templatesWhatsapp
+                .filter((template) => !regrasAutoAprovacao.some((r) => r.template_id === String(template.id)))
+                .map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.nome}
+                  </option>
+                ))}
+            </select>
+            <Button type="submit" size="sm" disabled={!permiteAutoAprovacao || !templateParaNovaRegraId || salvandoRegra}>
+              {salvandoRegra ? "Salvando..." : "+ Ativar"}
             </Button>
           </form>
         </Card>

@@ -4,6 +4,7 @@ from app.models.cadencia import Cadencia
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.icp import ICP
+from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.services import aprovacao_service
 
 TENANT_ID = "tenant-teste"
@@ -28,7 +29,9 @@ def aprovacao_registrada(client, db_session):
     db_session.add(decisor)
     db_session.commit()
 
-    aprovacao_service.criar_proposta(db_session, TENANT_ID, cadencia.id, decisor.id, "email", "tpl-1", "Olá {{nome}}")
+    aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, cadencia.id, decisor.id, "email", "tpl-1", "Olá {{nome}}", StubPlanLimitsProvider()
+    )
     aprovacao_id = client.get("/api/v1/aprovacoes").json()[0]["aprovacao_id"]
     client.post(f"/api/v1/aprovacoes/{aprovacao_id}/aprovar")
 

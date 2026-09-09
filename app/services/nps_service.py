@@ -15,6 +15,7 @@ from app.models.pesquisa_nps import PesquisaNps
 from app.models.reuniao import Reuniao
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.services import auditoria_service, indicacao_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
@@ -182,7 +183,9 @@ def obter_por_token(db: Session, token: str) -> PesquisaNps:
     return pesquisa
 
 
-def responder(db: Session, token: str, nota: int, whatsapp: WhatsAppProvider, llm: LLMProvider) -> PesquisaNps:
+def responder(
+    db: Session, token: str, nota: int, whatsapp: WhatsAppProvider, llm: LLMProvider, plan_limits: PlanLimitsProvider
+) -> PesquisaNps:
     """Resposta pública à pesquisa (link/token, endpoint sem X-Tenant-Id).
 
     Classificação promotor/neutro/detrator é registrada na pesquisa e na
@@ -213,7 +216,7 @@ def responder(db: Session, token: str, nota: int, whatsapp: WhatsAppProvider, ll
     if pesquisa.classificacao == "detrator":
         _gerar_alerta_detrator(db, tenant_id, pesquisa, whatsapp)
     elif pesquisa.classificacao == "promotor":
-        indicacao_service.solicitar(db, tenant_id, pesquisa, llm)
+        indicacao_service.solicitar(db, tenant_id, pesquisa, llm, plan_limits)
 
     db.commit()
     db.refresh(pesquisa)
