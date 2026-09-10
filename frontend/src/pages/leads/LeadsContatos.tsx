@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -31,6 +31,7 @@ export function LeadsContatos() {
 
   const [contatos, setContatos] = useState<LeadDecisor[]>([]);
   const [empresas, setEmpresas] = useState<LeadConta[]>([]);
+  const [busca, setBusca] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
   const [empresaOrigem, setEmpresaOrigem] = useState<"existente" | "nova">("existente");
   const [salvando, setSalvando] = useState(false);
@@ -59,6 +60,18 @@ export function LeadsContatos() {
     const empresa = empresas.find((item) => item.id === contaId);
     return empresa ? empresa.nome_fantasia || empresa.nome : `Conta #${contaId}`;
   }
+
+  const contatosFiltrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return contatos;
+    return contatos.filter(
+      (contato) =>
+        contato.nome.toLowerCase().includes(termo) ||
+        (contato.cargo ?? "").toLowerCase().includes(termo) ||
+        (contato.email ?? "").toLowerCase().includes(termo) ||
+        nomeEmpresa(contato.conta_id).toLowerCase().includes(termo),
+    );
+  }, [contatos, empresas, busca]);
 
   async function criarContato(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -134,9 +147,17 @@ export function LeadsContatos() {
             {isGestor ? "Contatos de todos os leads do time" : "Contatos dos leads da sua carteira"}
           </div>
         </div>
-        <Button size="sm" onClick={() => setModalAberto(true)}>
-          + Novo contato
-        </Button>
+        <div className="flex items-center gap-2">
+          <Input
+            value={busca}
+            onChange={(event) => setBusca(event.target.value)}
+            placeholder="Buscar por contato, cargo ou empresa..."
+            className="w-64"
+          />
+          <Button size="sm" onClick={() => setModalAberto(true)}>
+            + Novo contato
+          </Button>
+        </div>
       </div>
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
@@ -154,7 +175,7 @@ export function LeadsContatos() {
             </tr>
           </thead>
           <tbody>
-            {contatos.map((contato) => (
+            {contatosFiltrados.map((contato) => (
               <tr
                 key={contato.id}
                 onClick={() => navigate(`/leads/contas/${contato.conta_id}`)}
@@ -181,10 +202,10 @@ export function LeadsContatos() {
                 </td>
               </tr>
             ))}
-            {contatos.length === 0 && (
+            {contatosFiltrados.length === 0 && (
               <tr>
                 <td colSpan={5} className="p-4 text-center text-muted">
-                  Nenhum contato cadastrado ainda.
+                  {contatos.length === 0 ? "Nenhum contato cadastrado ainda." : "Nenhum contato encontrado para essa busca."}
                 </td>
               </tr>
             )}
