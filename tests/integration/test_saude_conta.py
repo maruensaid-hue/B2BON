@@ -1,21 +1,24 @@
 from app.models.conta import Conta
 from app.models.icp import ICP
+from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 
 TENANT_ID = "tenant-teste"
 
 
-def _criar_conta(db_session, vendedor_usuario_id: int | None = None, nome: str = "Conta Teste") -> Conta:
-    icp = db_session.query(ICP).filter_by(tenant_id=TENANT_ID).first()
+def _criar_conta(
+    db_session, vendedor_usuario_id: int | None = None, nome: str = "Conta Teste", tenant_id: str = TENANT_ID
+) -> Conta:
+    icp = db_session.query(ICP).filter_by(tenant_id=tenant_id).first()
     if icp is None:
         icp = ICP(
-            tenant_id=TENANT_ID, grupo_id="grupo-saude-conta", nome="ICP", segmento="Tecnologia",
+            tenant_id=tenant_id, grupo_id="grupo-saude-conta", nome="ICP", segmento="Tecnologia",
             porte="PEQUENO", regiao="SP", ativo=True,
         )
         db_session.add(icp)
         db_session.flush()
     conta = Conta(
-        tenant_id=TENANT_ID, icp_id=icp.id, nome=nome, status="prospectada",
+        tenant_id=tenant_id, icp_id=icp.id, nome=nome, status="prospectada",
         vendedor_usuario_id=vendedor_usuario_id,
     )
     db_session.add(conta)
@@ -25,6 +28,14 @@ def _criar_conta(db_session, vendedor_usuario_id: int | None = None, nome: str =
 
 def _id_do_usuario(db_session, email: str) -> int:
     return db_session.query(Usuario).filter_by(email=email).one().id
+
+
+def _criar_tenant(db_session, tenant_id: str, tipo: str = "cliente", tenant_pai_id: str | None = None) -> None:
+    if db_session.query(Tenant).filter_by(id=tenant_id).one_or_none() is None:
+        db_session.add(
+            Tenant(id=tenant_id, razao_social=f"Empresa {tenant_id}", tipo=tipo, tenant_pai_id=tenant_pai_id)
+        )
+        db_session.commit()
 
 
 def test_registrar_interacao_e_calcular_score(client, db_session):
@@ -146,3 +157,108 @@ def test_script_resgate_via_llm(client, db_session, fake_llm):
 
     assert resposta.status_code == 200
     assert "Olá" in resposta.json()["script"]
+
+
+DISTRIBUIDOR_ID = "distribuidor-teste"
+CLIENTE_FILHO_ID = "cliente-filho-teste"
+OUTRA_ARVORE_ID = "outra-arvore-teste"
+
+
+def _montar_hierarquia(db_session):
+    """distribuidor-teste (raiz) -> cliente-filho-teste; e uma árvore
+    irmã (outra-arvore-teste) sem nenhuma relação, pra garantir que o
+    escopo não vaza pra fora da subárvore do distribuidor."""
+    _criar_tenant(db_session, DISTRIBUIDOR_ID, tipo="distribuidor")
+    _criar_tenant(db_session, CLIENTE_FILHO_ID, tipo="cliente", tenant_pai_id=DISTRIBUIDOR_ID)
+    _criar_tenant(db_session, OUTRA_ARVORE_ID, tipo="cliente")
+
+
+def test_admin_de_distribuidor_ve_contas_da_subarvore_sem_filtro(client, db_session, criar_usuario_autenticado):
+    _montar_hierarquia(db_session)
+    headers_admin = criar_usuario_autenticado(DISTRIBUIDOR_ID, papel="admin", email="admin-dist@teste.com.br")
+    conta_pai = _criar_conta(db_session, nome="Conta do distribuidor", tenant_id=DISTRIBUIDOR_ID)
+    conta_filha = _criar_conta(db_session, nome="Conta do cliente filho", tenant_id=CLIENTE_FILHO_ID)
+    _criar_conta(db_session, nome="Conta de outra árvore", tenant_id=OUTRA_ARVORE_ID)
+
+    ranking = client.get("/api/v1/saude-contas/ranking", headers=headers_admin).json()
+
+    ids = {item["conta_id"] for item in ranking}
+    assert ids == {conta_pai.id, conta_filha.id}
+    tenant_ids_no_ranking = {item["tenant_id"] for item in ranking}
+    assert tenant_ids_no_ranking == {DISTRIBUIDOR_ID, CLIENTE_FILHO_ID}
+
+
+def test_admin_de_distribuidor_pode_dar_zoom_num_tenant_da_subarvore(client, db_session, criar_usuario_autenticado):
+    _montar_hierarquia(db_session)
+    headers_admin = criar_usuario_autenticado(DISTRIBUIDOR_ID, papel="admin", email="admin-dist-2@teste.com.br")
+    _criar_conta(db_session, nome="Conta do distribuidor", tenant_id=DISTRIBUIDOR_ID)
+    conta_filha = _criar_conta(db_session, nome="Conta do cliente filho", tenant_id=CLIENTE_FILHO_ID)
+
+    ranking = client.get(
+        f"/api/v1/saude-contas/ranking?tenant_id_selecionado={CLIENTE_FILHO_ID}", headers=headers_admin
+    ).json()
+
+    assert [item["conta_id"] for item in ranking] == [conta_filha.id]
+
+
+def test_tenant_id_selecionado_fora_do_escopo_e_rejeitado(client, db_session, criar_usuario_autenticado):
+    _montar_hierarquia(db_session)
+    headers_admin = criar_usuario_autenticado(DISTRIBUIDOR_ID, papel="admin", email="admin-dist-3@teste.com.br")
+
+    resposta = client.get(
+        f"/api/v1/saude-contas/ranking?tenant_id_selecionado={OUTRA_ARVORE_ID}", headers=headers_admin
+    )
+
+    assert resposta.status_code == 403
+
+
+def test_admin_de_tenant_cliente_sem_subarvore_nao_muda_de_comportamento(client, db_session, criar_usuario_autenticado):
+    """Regressão: a maioria dos admins não gerencia hierarquia nenhuma —
+    continuam vendo só o próprio tenant, exatamente como antes."""
+    headers_admin = criar_usuario_autenticado(TENANT_ID, papel="admin", email="admin-cliente@teste.com.br")
+    conta = _criar_conta(db_session, nome="Conta própria")
+
+    ranking = client.get("/api/v1/saude-contas/ranking", headers=headers_admin).json()
+
+    assert [item["conta_id"] for item in ranking] == [conta.id]
+
+
+def test_admin_de_distribuidor_abre_detalhe_de_conta_do_subtenant(client, db_session, criar_usuario_autenticado):
+    _montar_hierarquia(db_session)
+    headers_admin = criar_usuario_autenticado(DISTRIBUIDOR_ID, papel="admin", email="admin-dist-4@teste.com.br")
+    conta_filha = _criar_conta(db_session, nome="Conta do cliente filho", tenant_id=CLIENTE_FILHO_ID)
+
+    resposta_score = client.get(f"/api/v1/saude-contas/contas/{conta_filha.id}/score-risco", headers=headers_admin)
+    assert resposta_score.status_code == 200
+
+    resposta_interacao = client.post(
+        "/api/v1/saude-contas/interacoes",
+        json={"conta_id": conta_filha.id, "tipo": "contato"},
+        headers=headers_admin,
+    )
+    assert resposta_interacao.status_code == 201
+
+    resposta_interacoes = client.get(
+        f"/api/v1/saude-contas/contas/{conta_filha.id}/interacoes", headers=headers_admin
+    )
+    assert resposta_interacoes.status_code == 200
+    assert len(resposta_interacoes.json()) == 1
+
+
+def test_atribuir_vendedor_busca_vendedor_no_tenant_da_conta(client, db_session, criar_usuario_autenticado):
+    """O vendedor mora no tenant da conta (o filho), não no do admin que
+    está chamando (o distribuidor, pai) — raio-X 2026-09-10."""
+    _montar_hierarquia(db_session)
+    headers_admin = criar_usuario_autenticado(DISTRIBUIDOR_ID, papel="admin", email="admin-dist-5@teste.com.br")
+    criar_usuario_autenticado(CLIENTE_FILHO_ID, papel="user", email="vendedor-filho@teste.com.br")
+    vendedor_id = _id_do_usuario(db_session, "vendedor-filho@teste.com.br")
+    conta_filha = _criar_conta(db_session, nome="Conta do cliente filho", tenant_id=CLIENTE_FILHO_ID)
+
+    resposta = client.put(
+        f"/api/v1/saude-contas/contas/{conta_filha.id}/vendedor",
+        json={"vendedor_usuario_id": vendedor_id},
+        headers=headers_admin,
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["vendedor_usuario_id"] == vendedor_id

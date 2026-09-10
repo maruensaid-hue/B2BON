@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -36,9 +36,18 @@ export function LeadsEmpresas() {
   const [empresas, setEmpresas] = useState<LeadConta[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
   const [filtroVendedorId, setFiltroVendedorId] = useState<number | null>(null);
+  const [busca, setBusca] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  const empresasFiltradas = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return empresas;
+    return empresas.filter(
+      (empresa) => empresa.nome.toLowerCase().includes(termo) || (empresa.nome_fantasia ?? "").toLowerCase().includes(termo),
+    );
+  }, [empresas, busca]);
 
   async function carregar() {
     const filtro = filtroVendedorId ? `?vendedor_usuario_id=${filtroVendedorId}` : "";
@@ -96,6 +105,12 @@ export function LeadsEmpresas() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Input
+            value={busca}
+            onChange={(event) => setBusca(event.target.value)}
+            placeholder="Buscar por empresa..."
+            className="w-52"
+          />
           {isGestor && (
             <Select
               value={filtroVendedorId ?? ""}
@@ -130,7 +145,7 @@ export function LeadsEmpresas() {
             </tr>
           </thead>
           <tbody>
-            {empresas.map((empresa) => (
+            {empresasFiltradas.map((empresa) => (
               <tr
                 key={empresa.id}
                 onClick={() => navigate(`/leads/contas/${empresa.id}`)}
@@ -142,10 +157,10 @@ export function LeadsEmpresas() {
                 <td className="p-2 text-muted">{empresa.regiao ?? "—"}</td>
               </tr>
             ))}
-            {empresas.length === 0 && (
+            {empresasFiltradas.length === 0 && (
               <tr>
                 <td colSpan={4} className="p-4 text-center text-muted">
-                  Nenhuma empresa cadastrada ainda.
+                  {empresas.length === 0 ? "Nenhuma empresa cadastrada ainda." : "Nenhuma empresa encontrada para essa busca."}
                 </td>
               </tr>
             )}

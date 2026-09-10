@@ -33,6 +33,8 @@ class SaudeContaSchema(BaseModel):
     conta_id: int
     nome: str
     nome_fantasia: str | None
+    tenant_id: str
+    tenant_nome: str
     vendedor_usuario_id: int | None
     vendedor_nome: str | None
     score: float

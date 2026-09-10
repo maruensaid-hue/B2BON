@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +25,8 @@ interface SaudeConta {
   conta_id: number;
   nome: string;
   nome_fantasia: string | null;
+  tenant_id: string;
+  tenant_nome: string;
   vendedor_usuario_id: number | null;
   vendedor_nome: string | null;
   score: number;
@@ -57,6 +59,11 @@ interface UsuarioResumo {
   nome: string;
 }
 
+interface TenantResumo {
+  id: string;
+  razao_social: string;
+}
+
 const TIPOS_INTERACAO = [
   { valor: "contato", rotulo: "Contato" },
   { valor: "ticket_suporte", rotulo: "Ticket de Suporte" },
@@ -80,11 +87,20 @@ function toneClassificacao(classificacao: string): "red" | "amber" | "green" | "
 export function MapContas() {
   const { usuario } = useAuth();
   const isGestor = usuario?.papel === "admin" || usuario?.papel === "super_admin";
+  const isSuperAdmin = usuario?.papel === "super_admin";
+  // Mesma condição de AppShell.tsx/AdminTenants.tsx — quem gerencia mais
+  // de um tenant (hierarquia de distribuidores, raio-X 2026-09-10).
+  const ehGestorHierarquico =
+    usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo);
+  const podeVerHierarquia = isSuperAdmin || ehGestorHierarquico;
 
   const [dashboard, setDashboard] = useState<DashboardSaudeContas | null>(null);
   const [ranking, setRanking] = useState<SaudeConta[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
+  const [tenantsVisiveis, setTenantsVisiveis] = useState<TenantResumo[]>([]);
   const [filtroVendedorId, setFiltroVendedorId] = useState<number | null>(null);
+  const [tenantSelecionadoId, setTenantSelecionadoId] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
   const [contaSelecionadaId, setContaSelecionadaId] = useState<number | null>(null);
   const [scoreRisco, setScoreRisco] = useState<ScoreRiscoConta | null>(null);
   const [interacoes, setInteracoes] = useState<InteracaoConta[]>([]);
@@ -94,7 +110,10 @@ export function MapContas() {
   const [gerandoScript, setGerandoScript] = useState(false);
 
   async function carregarVisaoGeral() {
-    const filtro = filtroVendedorId ? `?vendedor_usuario_id=${filtroVendedorId}` : "";
+    const params = new URLSearchParams();
+    if (filtroVendedorId) params.set("vendedor_usuario_id", String(filtroVendedorId));
+    if (tenantSelecionadoId) params.set("tenant_id_selecionado", tenantSelecionadoId);
+    const filtro = params.toString() ? `?${params.toString()}` : "";
     try {
       const [dashboardResp, rankingResp] = await Promise.all([
         api.get<DashboardSaudeContas>(`/saude-contas/dashboard${filtro}`),
@@ -123,7 +142,7 @@ export function MapContas() {
 
   useEffect(() => {
     carregarVisaoGeral();
-  }, [filtroVendedorId]);
+  }, [filtroVendedorId, tenantSelecionadoId]);
 
   useEffect(() => {
     if (isGestor) {
@@ -133,6 +152,24 @@ export function MapContas() {
         .catch(() => undefined);
     }
   }, [isGestor]);
+
+  useEffect(() => {
+    if (podeVerHierarquia) {
+      api
+        .get<TenantResumo[]>("/admin/tenants")
+        .then(setTenantsVisiveis)
+        .catch(() => undefined);
+    }
+  }, [podeVerHierarquia]);
+
+  useEffect(() => {
+    // `GET /usuarios` só devolve os usuários do PRÓPRIO tenant do
+    // chamador — ao trocar pra outro tenant da hierarquia, o filtro de
+    // vendedor não teria como ser aplicado corretamente, então reseta
+    // (raio-X 2026-09-10, escopo desta rodada não cobre filtrar vendedor
+    // dentro de um tenant alheio ainda).
+    setFiltroVendedorId(null);
+  }, [tenantSelecionadoId]);
 
   useEffect(() => {
     if (contaSelecionadaId) carregarDetalheConta(contaSelecionadaId);
@@ -169,6 +206,18 @@ export function MapContas() {
 
   const contaNome = ranking.find((item) => item.conta_id === contaSelecionadaId);
   const contaTitulo = contaNome ? contaNome.nome_fantasia || contaNome.nome : null;
+  // Mostra a coluna "Empresa" só pra quem realmente gerencia mais de um
+  // tenant — a maioria dos admins de tenant "cliente" não vê mudança
+  // nenhuma nesta tela (raio-X 2026-09-10).
+  const mostraColunaTenant = podeVerHierarquia && tenantsVisiveis.length > 1;
+
+  const rankingFiltrado = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return ranking;
+    return ranking.filter(
+      (item) => item.nome.toLowerCase().includes(termo) || (item.nome_fantasia ?? "").toLowerCase().includes(termo),
+    );
+  }, [ranking, busca]);
 
   return (
     <div className="p-5.5">
@@ -181,20 +230,42 @@ export function MapContas() {
               : "Saúde das contas da sua carteira"}
           </div>
         </div>
-        {isGestor && (
-          <Select
-            value={filtroVendedorId ?? ""}
-            onChange={(event) => setFiltroVendedorId(event.target.value ? Number(event.target.value) : null)}
-            className="w-56"
-          >
-            <option value="">Todos os vendedores</option>
-            {vendedores.map((vendedor) => (
-              <option key={vendedor.id} value={vendedor.id}>
-                {vendedor.nome}
-              </option>
-            ))}
-          </Select>
-        )}
+        <div className="flex items-center gap-2">
+          <Input
+            value={busca}
+            onChange={(event) => setBusca(event.target.value)}
+            placeholder="Buscar por empresa..."
+            className="w-52"
+          />
+          {podeVerHierarquia && (
+            <Select
+              value={tenantSelecionadoId ?? ""}
+              onChange={(event) => setTenantSelecionadoId(event.target.value || null)}
+              className="w-56"
+            >
+              <option value="">Toda a hierarquia</option>
+              {tenantsVisiveis.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.razao_social}
+                </option>
+              ))}
+            </Select>
+          )}
+          {isGestor && !tenantSelecionadoId && (
+            <Select
+              value={filtroVendedorId ?? ""}
+              onChange={(event) => setFiltroVendedorId(event.target.value ? Number(event.target.value) : null)}
+              className="w-56"
+            >
+              <option value="">Todos os vendedores</option>
+              {vendedores.map((vendedor) => (
+                <option key={vendedor.id} value={vendedor.id}>
+                  {vendedor.nome}
+                </option>
+              ))}
+            </Select>
+          )}
+        </div>
       </div>
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
@@ -228,13 +299,14 @@ export function MapContas() {
             <thead>
               <tr className="border-b border-border text-[9.5px] tracking-wide text-muted uppercase">
                 <th className="p-2 text-left">Conta</th>
+                {mostraColunaTenant && <th className="p-2 text-left">Empresa</th>}
                 {isGestor && <th className="p-2 text-left">Vendedor</th>}
                 <th className="p-2 text-left">Score</th>
                 <th className="p-2 text-left">Pipeline aberto</th>
               </tr>
             </thead>
             <tbody>
-              {ranking.map((item) => (
+              {rankingFiltrado.map((item) => (
                 <tr
                   key={item.conta_id}
                   onClick={() => setContaSelecionadaId(item.conta_id)}
@@ -243,6 +315,7 @@ export function MapContas() {
                   }`}
                 >
                   <td className="p-2 font-semibold">{item.nome_fantasia || item.nome}</td>
+                  {mostraColunaTenant && <td className="p-2 text-muted">{item.tenant_nome}</td>}
                   {isGestor && <td className="p-2 text-muted">{item.vendedor_nome ?? "—"}</td>}
                   <td className="p-2">
                     <Badge tone={toneClassificacao(item.classificacao)}>{item.score.toFixed(0)}</Badge>
@@ -250,12 +323,14 @@ export function MapContas() {
                   <td className="p-2 text-muted">R${Math.round(item.valor_pipeline_aberto / 1000)}k</td>
                 </tr>
               ))}
-              {ranking.length === 0 && (
+              {rankingFiltrado.length === 0 && (
                 <tr>
-                  <td colSpan={isGestor ? 4 : 3} className="p-4 text-center text-muted">
-                    {isGestor
-                      ? "Nenhuma conta encontrada."
-                      : "Nenhuma conta atribuída a você ainda — peça ao seu gestor para vincular contas ao seu nome."}
+                  <td colSpan={isGestor ? (mostraColunaTenant ? 5 : 4) : 3} className="p-4 text-center text-muted">
+                    {ranking.length > 0
+                      ? "Nenhuma conta encontrada para essa busca."
+                      : isGestor
+                        ? "Nenhuma conta encontrada."
+                        : "Nenhuma conta atribuída a você ainda — peça ao seu gestor para vincular contas ao seu nome."}
                   </td>
                 </tr>
               )}

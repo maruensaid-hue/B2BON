@@ -118,6 +118,18 @@ export function Kanban() {
       .sort((a, b) => a.ordem - b.ordem);
   }, [estagios]);
 
+  const [buscaNegocio, setBuscaNegocio] = useState("");
+  const negociosFiltrados = useMemo(() => {
+    const termo = buscaNegocio.trim().toLowerCase();
+    if (!termo) return negocios;
+    return negocios.filter(
+      (negocio) =>
+        negocio.conta_nome.toLowerCase().includes(termo) ||
+        negocio.nome.toLowerCase().includes(termo) ||
+        (negocio.decisor_nome ?? "").toLowerCase().includes(termo),
+    );
+  }, [negocios, buscaNegocio]);
+
   async function carregar() {
     try {
       const [estagiosResp, negociosResp] = await Promise.all([
@@ -434,16 +446,24 @@ export function Kanban() {
             {negocios.length} negócio(s) · R${Math.round(valorTotal / 1000)}k em pipeline
           </div>
         </div>
-        <Button size="sm" onClick={() => setModalAberto(true)}>
-          + Novo negócio
-        </Button>
+        <div className="flex items-center gap-2">
+          <Input
+            value={buscaNegocio}
+            onChange={(event) => setBuscaNegocio(event.target.value)}
+            placeholder="Buscar por empresa, negócio ou contato..."
+            className="w-64"
+          />
+          <Button size="sm" onClick={() => setModalAberto(true)}>
+            + Novo negócio
+          </Button>
+        </div>
       </div>
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
       <div className="grid grid-cols-1 gap-2.5 overflow-x-auto sm:grid-cols-2 lg:grid-cols-4">
         {estagiosUnicos.map((estagio) => {
-          const negociosDoEstagio = negocios.filter((negocio) => negocio.estagio_id === estagio.id);
+          const negociosDoEstagio = negociosFiltrados.filter((negocio) => negocio.estagio_id === estagio.id);
           return (
             <div
               key={estagio.id}

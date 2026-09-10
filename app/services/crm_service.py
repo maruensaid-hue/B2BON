@@ -458,7 +458,7 @@ def dashboard_economia(db: Session, tenant_id: str, periodo: str) -> dict:
     taxa_churn = (len(cancelados_periodo) / len(ativos_inicio)) if ativos_inicio else None
 
     roi = metricas_service.calcular_roi(ltv_medio, cac)
-    scores_risco = [saude_conta_service.calcular_score_risco(db, tenant_id, conta.id)["score"] for conta in contas]
+    scores_risco = [saude_conta_service.calcular_score_risco_da_conta(db, conta)["score"] for conta in contas]
     cs = metricas_service.calcular_cs_score(
         db, tenant_id, conta_ids=[conta.id for conta in contas], scores_risco=scores_risco
     )
