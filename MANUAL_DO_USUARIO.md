@@ -13,8 +13,9 @@ já em funcionamento.
 3. [Rede Social](#3-rede-social)
 4. [MAP — Motor de Alta Performance](#4-map--motor-de-alta-performance)
 5. [PREDATOR](#5-predator)
-6. [Administração](#6-administração)
-7. [Modelos de licença](#7-modelos-de-licença)
+6. [Leads (clientes avulsos, sem ICP)](#6-leads-clientes-avulsos-sem-icp)
+7. [Administração](#7-administração)
+8. [Modelos de licença](#8-modelos-de-licença)
 
 ---
 
@@ -39,11 +40,26 @@ Cada usuário tem um papel (`papel`), que define o que ele pode fazer:
   cadastro para novos usuários do próprio tenant. No MAP, é o gestor:
   vê a carteira de todos os vendedores do tenant, com filtro por
   vendedor, e é quem atribui qual vendedor é responsável por cada conta.
+  Se o tenant é `distribuidor`/`revendedor` (seção
+  [7](#7-administração)), também enxerga — em **MAP** e em **Leads →
+  Empresas** — a subárvore de sub-tenants abaixo dele, não só o próprio
+  tenant.
 - **`super_admin`** — reservado à equipe da própria B2B ON (CyberFort):
   além de tudo acima, enxerga a área de **Administração** (Tenants,
   Licenças, Planos). O MAP dele é outro: monitora a saúde de *todos os
   tenants assinantes* da B2B ON, não as contas de um tenant específico
   — ver seção 4 para a diferença entre os dois MAPs.
+
+### Busca Global (Ctrl+K)
+
+Em qualquer tela, `Ctrl+K` (ou o botão **Buscar** no topo do menu
+lateral) abre uma busca única por empresa, oportunidade, proposta,
+contato, cadência ou tenant (este último só pra quem administra
+hierarquia — `admin` de distribuidor/revendedor ou `super_admin`).
+Resultados agrupados por tipo, navegação por teclado (`↑`/`↓`/`Enter`).
+Busca em qualquer conta do tenant, inclusive as que vieram de
+prospecção via ICP — diferente das telas de **Leads**, que só cobrem
+cadastros avulsos (ver seção [6](#6-leads-clientes-avulsos-sem-icp)).
 
 ### Entrando na plataforma
 
@@ -55,7 +71,7 @@ Existem dois jeitos de uma conta de usuário nascer:
 - **Convite-vitrine** (qualquer usuário gera na tela **Rede Social**):
   cria um **tenant novo e independente**, sem licença nenhuma — a
   empresa convidada entra só para participar da Rede Social, sem virar
-  cliente. Veja a seção [7](#7-modelos-de-licença) para o que isso
+  cliente. Veja a seção [8](#8-modelos-de-licença) para o que isso
   restringe na prática.
 
 ### O que cada tela mostra depende da licença
@@ -127,7 +143,7 @@ cada um enxerga, não se tem acesso:
 | Papel | O que o MAP mostra |
 |---|---|
 | `user` (vendedor) | Só as contas em que ele é o vendedor responsável — a própria carteira. |
-| `admin` (gestor) | Todas as contas do tenant, de todos os vendedores, com filtro por vendedor. |
+| `admin` (gestor) | Todas as contas do próprio tenant, de todos os vendedores, com filtro por vendedor. Se o tenant é `distribuidor`/`revendedor`, também a subárvore de sub-tenants abaixo dele (seletor "Toda a hierarquia"). |
 | `super_admin` (B2B ON) | Os tenants **assinantes da B2B ON** (visão cross-tenant, inalterada — é o negócio da própria CyberFort, não as contas de um tenant). |
 
 Nas duas primeiras linhas o MAP mede a saúde das **contas** (clientes e
@@ -143,6 +159,15 @@ no MAP, só a saúde do tenant como cliente da B2B ON.
   crítica/atenção/saudável e valor de pipeline aberto em risco.
 - **Filtro por vendedor** (só para `admin`): reduz o ranking e os KPIs
   a um vendedor específico — útil para o 1:1 de gestão.
+- **Seletor "Toda a hierarquia"** (só para `admin` de tenant
+  `distribuidor`/`revendedor`, ou `super_admin`): por padrão, o ranking
+  já mostra as contas do próprio tenant **mais** todos os sub-tenants
+  abaixo dele, com uma coluna extra indicando de qual empresa é cada
+  conta. Selecionar um tenant específico no seletor restringe a visão
+  só àquela empresa (e à subárvore dela) — útil pra revisar a carteira
+  de um Revendedor/Cliente específico sem misturar com o resto. O
+  filtro por vendedor some quando um tenant específico é selecionado
+  (o cadastro de vendedores é sempre do próprio tenant logado).
 - **Ranking de saúde**: contas ordenadas por score; o gestor vê também
   a coluna de qual vendedor é o responsável.
 - **Detalhe da conta**: score de risco (0–100) com os sinais que o
@@ -206,7 +231,7 @@ Antes de gerar cadências, cadastre em **Configuração**:
   do mesmo ICP; "Clonar" cria um ICP independente a partir dele.
 - **Gerar lista**: a partir de um ICP ativo, gera N contas reais a
   partir da base da Receita Federal que batem com os critérios — cada
-  execução **consome franquia mensal** (ver seção 7).
+  execução **consome franquia mensal** (ver seção 8).
 - **Importar de evento**: cole a lista de participantes de um evento
   (direto do Excel/Planilhas ou CSV) — reconhece cabeçalho em qualquer
   ordem (Nome, Empresa, Cargo, E-mail, Telefone). Empresas repetidas
@@ -237,7 +262,9 @@ IA para abordar as contas.
 1. **Criar cadência**: nome, tipo (prospecção ou nutrição) e a
    sequência de toques (mínimo 5, em pelo menos 2 canais), cada um com
    canal e intervalo de dias em relação ao toque anterior. Nasce como
-   `rascunho`.
+   `rascunho`. Num toque, é possível marcar **teste A/B** (exclusivo do
+   plano Professional ou superior — nos demais planos a opção aparece
+   bloqueada) pra comparar duas variações de texto no mesmo passo.
 2. **Gerar mensagens para um lote**: com a cadência em rascunho,
    escolha um ICP e marque as contas — a IA gera o texto de cada
    mensagem de cada toque, respeitando oferta/tom/restrições. Contas
@@ -247,18 +274,27 @@ IA para abordar as contas.
 3. **Ativar cadência**: depois que a fila de aprovação está revisada,
    ativar a cadência (`ativa`) faz os envios entrarem na fila de envio
    real, respeitando o agendamento de cada toque. É neste momento que a
-   franquia é consumida para as contas novas do lote (ver seção 7).
+   franquia é consumida para as contas novas do lote (ver seção 8).
 
 ### 5.4 Fila de Aprovação
 
 Toda mensagem que a IA gera passa por aqui antes de sair — é o "mediante
 aprovação" do PREDATOR.
 
-- Lista mensagens pendentes, com filtro por canal.
+- Lista mensagens pendentes, com filtro por canal — inclui também as já
+  **rejeitadas** (filtro de status), com a opção **"Aprovar mesmo
+  assim"** pra destravar uma cadência que ficaria parada pra sempre se
+  a única mensagem daquele toque tivesse sido rejeitada por engano.
 - **Editar**: o texto é editável antes de aprovar.
 - **Aprovar** / **Rejeitar**: individual, ou "Aprovar todas" para o
   lote inteiro visível no filtro atual.
 - Só mensagens aprovadas entram na fila de envio.
+- **Auto-aprovação** (exclusivo do plano Enterprise): em
+  **Configuração**, é possível marcar um template de WhatsApp como
+  auto-aprovado — mensagens geradas com aquele template pulam a fila e
+  vão direto pro envio, sem revisão manual. Pensado pra fluxos já
+  validados e de alto volume; nos demais planos essa opção fica
+  bloqueada.
 
 ### 5.5 Disparo e rampa de aquecimento
 
@@ -303,26 +339,90 @@ alguém abrir a plataforma para acontecer.
 
 ---
 
-## 6. Administração
+## 6. Leads (clientes avulsos, sem ICP)
 
-Restrito a `super_admin` — gestão dos tenants assinantes da B2B ON.
+Cadastro manual de empresas conquistadas fora do PREDATOR — indicação,
+evento, contato pessoal — que não passam pelo recorte de segmento/
+porte/dor de nenhum ICP. Duas telas no menu **Leads**:
 
-- **Tenants**: lista todos os tenants; "Criar tenant" cadastra um
-  cliente novo de uma vez (identificador, razão social, CNPJ, plano e
-  o primeiro usuário admin).
-- **Licenças**: para cada tenant, o plano atual, status
-  (`ativa`/`suspensa`/`expirada`) e data de expiração — editável aqui.
-  Suspender ou expirar uma licença bloqueia imediatamente o acesso do
-  tenant a tudo além da Rede Social.
-- **Planos**: catálogo dos planos comerciais (somente leitura na tela;
-  alterar valores é uma operação de banco de dados, não de produto).
-- **Convites**: convites de cadastro (usuário novo dentro de um tenant
-  já cliente) e convites-vitrine (tenant novo, sem licença) gerados
-  pelo próprio tenant.
+- **Empresas**: lista as contas cadastradas manualmente (**+ Nova
+  empresa**: nome, CNPJ opcional, domínio opcional, segmento, porte,
+  UF), com busca por nome e filtro por vendedor. Pra `admin` de tenant
+  `distribuidor`/`revendedor` (ou `super_admin`), ganha o mesmo seletor
+  "Toda a hierarquia" do MAP — por padrão mostra os leads do próprio
+  tenant **mais** os de toda a subárvore de sub-tenants, com uma coluna
+  indicando de qual tenant é cada empresa; selecionar um tenant
+  específico restringe a visão só a ele.
+- **Contatos**: lista os decisores cadastrados nessas empresas
+  avulsas (nome, cargo, e-mail, telefone, empresa vinculada), com
+  **+ Novo contato** (vinculado a uma empresa existente ou a uma nova,
+  criada na hora) e busca por nome/cargo/empresa. Diferente da tela de
+  Empresas, esta não tem seletor de hierarquia.
+
+**Importante**: estas duas telas só mostram contas **sem ICP e sem
+Lista de Prospecção** — uma conta gerada por um ICP ativo (seção 5.2)
+ou importada numa Lista de Prospecção aparece no **CRM**/**Prospecção**,
+não aqui, mesmo que já tenha decisores mapeados. Isso evita duplicar a
+mesma empresa em dois lugares. Pra ver **todas** as contas do tenant
+(com ou sem ICP) num só lugar, use o **MAP** (seção 4) ou a **Busca
+Global** (seção [1](#1-conceitos-gerais)).
 
 ---
 
-## 7. Modelos de licença
+## 7. Administração
+
+Gestão dos tenants assinantes da B2B ON. **Tenants**/**Licenças**/
+**Relatórios** são visíveis pra `super_admin` **e** pra `admin` de um
+tenant `distribuidor`/`revendedor` (escopados à própria subárvore);
+**Convites** e **Planos** são exclusivos de `super_admin`.
+
+### Hierarquia de tenants (Distribuidor → Revendedor → Cliente)
+
+Todo tenant tem um `tipo`: `distribuidor`, `revendedor` ou `cliente`
+(o padrão), e opcionalmente um tenant pai (`tenant_pai_id`), formando
+uma árvore rasa (3 níveis sob a CyberFort). Quem cria um tenant sob si
+mesmo (na tela **Tenants** ou pela API de parceiros — ver
+`docs/api-parceiros.md`) só pode fazer isso um nível abaixo do próprio
+tipo (distribuidor cria revendedor, revendedor cria cliente);
+`super_admin` cria de qualquer tipo, em qualquer ponto da árvore. Os
+rótulos exibidos pra cada nível (por padrão "Distribuidor"/
+"Revendedor"/"Cliente") são configuráveis por tenant, útil pra quem
+usa nomenclatura própria (ex.: "Master"/"Vendedor"/"Cliente").
+
+- **Tenants**: lista os tenants visíveis (todos, pra `super_admin`; a
+  própria subárvore, pra admin de distribuidor/revendedor). "Criar
+  tenant" cadastra um cliente novo de uma vez (identificador, razão
+  social, CNPJ, plano e o primeiro usuário admin).
+- **Licenças**: para cada tenant visível, o plano atual, status
+  (`ativa`/`suspensa`/`expirada`) e data de expiração — editável aqui.
+  Suspender ou expirar uma licença bloqueia imediatamente o acesso do
+  tenant a tudo além da Rede Social (sujeito à carência descrita na
+  seção [8](#8-modelos-de-licença)).
+- **Relatórios** (visão do distribuidor/revendedor sobre a própria
+  subárvore): dashboard com tenants ativos por nível, novas ativações,
+  licenças suspensas, franquia consumida, receita e churn no período,
+  com envio periódico por e-mail configurável (diário/semanal/mensal).
+  O disparo automático por **webhook** desse relatório pro sistema do
+  próprio distribuidor é exclusivo do plano Professional ou superior
+  (seção [8](#8-modelos-de-licença); ver também `docs/api-parceiros.md`).
+- **Integrações** (exclusivo de `admin` de tenant `tipo="distribuidor"`):
+  gera a chave de API usada pra provisionar/gerenciar a própria árvore
+  por fora do painel (sistema de billing/ERP do distribuidor), e
+  configura a URL de webhook que recebe os eventos da árvore —
+  detalhes completos em `docs/api-parceiros.md`.
+- **Planos** (exclusivo de `super_admin`): CRUD completo — criar,
+  editar e (dentro do possível) remover planos comerciais direto na
+  tela, incluindo franquia, limite de usuários, preço, os dois limites
+  de enriquecimento semanal, os recursos exclusivos por plano e as
+  retenções (ver seção [8](#8-modelos-de-licença)) — não depende mais
+  de alteração direta no banco de dados.
+- **Convites** (exclusivo de `super_admin`): convites de cadastro
+  (usuário novo dentro de um tenant já cliente) e convites-vitrine
+  (tenant novo, sem licença) gerados pelo próprio tenant.
+
+---
+
+## 8. Modelos de licença
 
 ### O que é uma licença
 
@@ -333,6 +433,33 @@ PREDATOR). **Um tenant sem nenhuma linha de licença** — caso do
 convite-vitrine — fica automaticamente restrito à Rede Social; não
 existe uma "flag" separada para isso, é a ausência da licença que gera
 a restrição.
+
+### Carência de 3 dias e cobrança automática
+
+A suspensão por falta de pagamento **não é imediata** no vencimento —
+existe uma carência de 3 dias, pensada pro tempo de compensação de
+boleto bancário (Mercado Pago) e pra não penalizar quem paga por cartão
+perto da virada do dia:
+
+- **3 dias antes do vencimento**: e-mail único avisando que a
+  mensalidade está próxima de vencer.
+- **A partir do vencimento** (enquanto durar a carência): um e-mail
+  diário de lembrança, até o pagamento ser confirmado ou a carência se
+  esgotar.
+- **"Já fiz o pagamento"**: se o usuário for suspenso mas já tiver
+  pago (ainda em compensação), qualquer `admin`/`super_admin` do tenant
+  vê um aviso na tela com um botão pra se autodeclarar pagador — o
+  acesso volta **na hora**, sem esperar confirmação do Mercado Pago.
+  Essa autodeclaração abre uma carência própria de mais 3 dias: se o
+  pagamento realmente não for confirmado até lá, a licença é suspensa
+  de novo.
+- **Confirmação do pagamento**: assim que o Mercado Pago confirma
+  (webhook), a licença é reativada automaticamente por 30 dias e um
+  e-mail de agradecimento é enviado — independente de ter havido
+  autodeclaração no meio do caminho.
+- **Primeiro login**: todo usuário recebe um e-mail de boas-vindas
+  no primeiro acesso, com FAQ e contato do suporte
+  (`suporte@cyberfort.com.br`).
 
 ### O que é a "franquia"
 
@@ -359,18 +486,46 @@ O consumo/restante em tempo real aparece na tela de **Prospecção**.
 | Plano | Franquia (contas/mês) | Máx. usuários | Preço mensal |
 |---|---|---|---|
 | POC | 50 | 3 | R$ 0 (gratuito) |
+| Teste | 200 | 10 | R$ 0 (cortesia, só por convite) |
 | Starter | 200 | 10 | R$ 490 |
 | Professional | 800 | 25 | R$ 990 |
 | Enterprise | 5.000 | 999 (na prática, ilimitado) | R$ 2.490 |
 
 Esses valores são registros no banco (tabela `plano`), não constantes
 fixas no código — podem ser ajustados comercialmente sem alteração de
-software, e novos planos podem ser criados do mesmo jeito.
+software (tela **Admin → Planos**, exclusiva de `super_admin`), e
+novos planos podem ser criados do mesmo jeito.
 
 **"Máx. usuários"** é o número de contas de usuário (`Usuario`) que o
 plano comporta dentro do tenant — é o limite pensado para dimensionar o
 plano correto para o tamanho do time do cliente (ex.: POC serve para um
 piloto de até 3 pessoas; Enterprise cobre praticamente qualquer time).
+
+**Plano "Teste"** espelha o Starter em franquia/usuários, mas é
+gratuito e nasce **sem** cobrança nem data de expiração — só é
+atribuído por convite de um `admin`/`super_admin` (não aparece como
+opção de autoatendimento no cadastro), pensado pra pilotos internos ou
+avaliação comercial sem risco de suspensão automática.
+
+### Recursos exclusivos por plano
+
+Além do volume (franquia/usuários), alguns recursos são um gancho de
+upgrade — bloqueados nos planos mais baixos independente de quanto a
+franquia ainda tenha sobrado. O plano **Teste** espelha o Starter aqui
+também (nenhum dos recursos abaixo):
+
+| Recurso | POC / Starter / Teste | Professional | Enterprise |
+|---|---|---|---|
+| Teste A/B em cadências | ✗ | ✓ | ✓ |
+| Auto-aprovação de mensagens | ✗ | ✗ | ✓ |
+| Webhook automático no relatório periódico | ✗ | ✓ | ✓ |
+| API de parceiros (provisionamento/billing) | ✗ | ✓ | ✓ |
+| Criar sub-tenants (hierarquia) | ✗ | ✓ | ✓ |
+| Retenção de relatórios / auditoria | 30 / 90 dias | 90 / 365 dias | sem limite |
+
+A UI mostra um cadeado nas opções bloqueadas em vez de simplesmente
+escondê-las — o bloqueio de verdade é sempre revalidado no backend, não
+depende só do que a tela mostra.
 
 ### O tier "vitrine" (sem licença)
 

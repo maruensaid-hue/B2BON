@@ -103,6 +103,14 @@ se suspeitar que perdeu algum evento).
 | `tipo_evento` | Quando dispara | Payload |
 |---|---|---|
 | `tenant_provisionado` | Um Revendedor/Cliente novo nasceu na sua árvore (painel ou API) | `{tenant_id, razao_social, tipo, tenant_pai_id, plano_id}` |
-| `licenca_suspensa` | Licença suspensa automaticamente por inadimplência | `{tenant_id, data_expiracao}` |
-| `licenca_atualizada` | Plano ou status de licença mudou | `{tenant_id, plano_id, status}` |
+| `licenca_suspensa` | Licença suspensa automaticamente por inadimplência — **com carência de 3 dias após o vencimento** (mais 3 dias extra se o usuário final tiver se autodeclarado pagador pela tela "já paguei" antes do pagamento ser de fato confirmado) | `{tenant_id, data_expiracao}` |
+| `licenca_atualizada` | Plano ou status de licença mudou por edição manual (painel ou `PUT .../licenca` desta API) | `{tenant_id, plano_id, status}` |
 | `pagamento_confirmado` | Pagamento (Mercado Pago) aprovado | `{tenant_id, plano_id, valor}` |
+| `relatorio_periodico` | Disparo do relatório periódico da sua árvore (exclusivo do plano Professional ou superior) — mesmos dados do dashboard em **Administração → Relatórios** | métricas agregadas do período (tenants ativos por nível, novas ativações, licenças suspensas, franquia, receita, churn) |
+
+**Não gera webhook:** a reativação via autoatendimento ("já fiz o
+pagamento", que já libera o acesso na hora) é só interna — não dispara
+`licenca_atualizada` nem nenhum outro evento pra você. Se precisar
+saber em tempo real quando um sub-tenant se autodeclara pagador,
+consulte `GET .../billing` periodicamente enquanto uma licença estiver
+`suspensa`.

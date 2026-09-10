@@ -129,8 +129,24 @@ aprovadas ficam pra sempre "agendadas" e nunca saem, lembretes de
 reunião (D-1/H-2) nunca disparam e pesquisas de NPS nunca são
 disparadas, porque nada chama esses dispatchers sozinho. Quem chama é
 um **GitHub Actions agendado** (`.github/workflows/cron-envios.yml`, já
-no repo, roda a cada 15 minutos de graça, chamando os dois endpoints
-abaixo em sequência):
+no repo), com dois grupos de disparo em sequência:
+
+- **A cada 15 minutos**: `processar-envios`, `processar-campanhas`
+  (e-mail/WhatsApp em massa), `processar-retorno` (lembretes de
+  reunião D-1/H-2 + NPS), `disparar-webhooks-parceiros` (Fase 2 da
+  hierarquia) e `processar-fila-enriquecimento` (lote de importação de
+  planilha).
+- **1x/dia (06:00 UTC)**: `expirar-titulares` (retenção LGPD),
+  `suspender-licencas-vencidas` (inadimplência, com a carência de 3
+  dias — ver `MANUAL_DO_USUARIO.md` seção 8), `enviar-lembretes-cobranca`
+  (e-mail pré/pós-vencimento) e `disparar-relatorios-periodicos`
+  (Fase 3 da hierarquia — dashboard + webhook opcional pro
+  distribuidor).
+
+Cada rota é `POST /cron/<nome>`, protegida pelo mesmo `X-Cron-Secret`
+(seção abaixo) — nenhuma delas aceita chamada sem esse segredo. O
+recorte de CNPJ (`atualizar-recorte-cnpj`, a cada 30 min) é um job
+**separado**, direto no runner do GitHub Actions — ver seção 7.1.
 
 1. Gere o segredo: `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 2. Cole o mesmo valor em dois lugares:
