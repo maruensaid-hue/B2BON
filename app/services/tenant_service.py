@@ -279,6 +279,23 @@ def listar_tenants_visiveis(db: Session, usuario: Usuario) -> list[Tenant]:
     return listar_subarvore(db, usuario.tenant_id)
 
 
+def tenant_ids_no_escopo(db: Session, usuario: Usuario, tenant_id_selecionado: str | None) -> list[str]:
+    """IDs de tenant que `usuario` pode enxergar numa listagem cross-tenant
+    (raio-X 2026-09-10 — extraído de `saude_conta_service` pra ser
+    reaproveitado também por `conta_service`/Leads): `user` só o próprio
+    tenant; admin/super_admin a própria subárvore inteira (ou tudo, se
+    super_admin) por padrão, podendo "dar zoom" num tenant específico
+    dessa subárvore via `tenant_id_selecionado`."""
+    if usuario.papel == "user":
+        return [usuario.tenant_id]
+    visiveis = {t.id for t in listar_tenants_visiveis(db, usuario)}
+    if tenant_id_selecionado is not None:
+        if tenant_id_selecionado not in visiveis:
+            raise NaoAutorizado("Você não tem permissão para ver esse tenant.")
+        return [t.id for t in listar_subarvore(db, tenant_id_selecionado)]
+    return list(visiveis)
+
+
 _DIAS_CARENCIA_PAGAMENTO = 3
 
 

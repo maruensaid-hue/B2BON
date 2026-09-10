@@ -268,6 +268,37 @@ def listar_leads(
     return _leads_visiveis(db, tenant_id, usuario, vendedor_usuario_id).order_by(Conta.id.desc()).all()
 
 
+def listar_leads_hierarquia(
+    db: Session,
+    usuario: Usuario,
+    vendedor_usuario_id: int | None = None,
+    tenant_id_selecionado: str | None = None,
+) -> list[Conta]:
+    """Mesmo escopo/regra de `_leads_visiveis` (leads avulsos, sem ICP nem
+    Lista de Prospecção), mas pela subárvore de tenants visível a
+    admin/super_admin (raio-X 2026-09-10 — pedido explícito do usuário
+    pra "Leads — Empresas" enxergar hierarquia, igual já existe em MAP →
+    Contas). Usada só pela tela de listagem — **não** pelas rotas de
+    exclusão em lote (`listar_leads` continua single-tenant pra elas):
+    apagar leads de um sub-tenant a partir do tenant pai é uma decisão
+    arriscada demais pra vir de brinde numa mudança só de visualização."""
+    # Import local (não no topo do arquivo) pra evitar dependência
+    # circular: `tenant_service` já importa `conta_service` no topo dele
+    # (pra criação/exclusão de tenant), então o inverso só pode acontecer
+    # dentro da função, nunca no carregamento do módulo em si.
+    from app.services import tenant_service
+
+    tenant_ids = tenant_service.tenant_ids_no_escopo(db, usuario, tenant_id_selecionado)
+    query = db.query(Conta).filter(
+        Conta.tenant_id.in_(tenant_ids), Conta.icp_id.is_(None), Conta.lista_prospeccao_id.is_(None)
+    )
+    if usuario.papel == "user":
+        query = query.filter_by(vendedor_usuario_id=usuario.id)
+    elif vendedor_usuario_id is not None:
+        query = query.filter_by(vendedor_usuario_id=vendedor_usuario_id)
+    return query.order_by(Conta.id.desc()).all()
+
+
 def listar_decisores_leads(
     db: Session, tenant_id: str, usuario: Usuario, vendedor_usuario_id: int | None = None
 ) -> list[Decisor]:

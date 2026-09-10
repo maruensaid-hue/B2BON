@@ -639,6 +639,73 @@ def test_listar_leads_nao_traz_contas_de_lista_prospeccao(client):
     assert [lead["nome"] for lead in leads] == ["Lead Avulso"]
 
 
+DISTRIBUIDOR_ID_LEADS = "distribuidor-leads-teste"
+CLIENTE_FILHO_ID_LEADS = "cliente-filho-leads-teste"
+
+
+def _montar_hierarquia_leads(db_session):
+    from app.models.tenant import Tenant
+
+    db_session.add(Tenant(id=DISTRIBUIDOR_ID_LEADS, razao_social="Distribuidor Leads Teste", tipo="distribuidor"))
+    db_session.add(
+        Tenant(
+            id=CLIENTE_FILHO_ID_LEADS, razao_social="Cliente Filho Leads Teste", tipo="cliente",
+            tenant_pai_id=DISTRIBUIDOR_ID_LEADS,
+        )
+    )
+    db_session.commit()
+
+
+def test_listar_leads_sem_hierarquia_continua_so_o_proprio_tenant(client):
+    """Regressão: sem os novos parâmetros opt-in, `/leads/contas` continua
+    idêntico a antes — inclusive pro seletor de empresa da tela de
+    Contatos, que reusa esta rota sem passar esses parâmetros."""
+    client.post("/api/v1/leads/contas", json={"nome": "Lead Só Do Próprio Tenant"})
+
+    leads = client.get("/api/v1/leads/contas").json()
+
+    assert [lead["nome"] for lead in leads] == ["Lead Só Do Próprio Tenant"]
+
+
+def test_listar_leads_com_todos_da_hierarquia_inclui_subtenant(client, db_session, criar_usuario_autenticado):
+    _montar_hierarquia_leads(db_session)
+    headers_admin = criar_usuario_autenticado(DISTRIBUIDOR_ID_LEADS, papel="admin", email="admin-leads@teste.com.br")
+    client.post(
+        "/api/v1/leads/contas", json={"nome": "Lead Do Distribuidor"}, headers=headers_admin
+    )
+    from app.models.conta import Conta as ContaModel
+
+    conta_filho = ContaModel(
+        tenant_id=CLIENTE_FILHO_ID_LEADS, nome="Lead Do Cliente Filho", status="prospectada", origem="lead",
+    )
+    db_session.add(conta_filho)
+    db_session.commit()
+
+    resposta = client.get("/api/v1/leads/contas?todos_da_hierarquia=true", headers=headers_admin)
+
+    nomes = {lead["nome"] for lead in resposta.json()}
+    assert nomes == {"Lead Do Distribuidor", "Lead Do Cliente Filho"}
+
+
+def test_listar_leads_com_tenant_selecionado_restringe_a_ele(client, db_session, criar_usuario_autenticado):
+    _montar_hierarquia_leads(db_session)
+    headers_admin = criar_usuario_autenticado(DISTRIBUIDOR_ID_LEADS, papel="admin", email="admin-leads-2@teste.com.br")
+    client.post("/api/v1/leads/contas", json={"nome": "Lead Do Distribuidor"}, headers=headers_admin)
+    from app.models.conta import Conta as ContaModel
+
+    conta_filho = ContaModel(
+        tenant_id=CLIENTE_FILHO_ID_LEADS, nome="Lead Do Cliente Filho", status="prospectada", origem="lead",
+    )
+    db_session.add(conta_filho)
+    db_session.commit()
+
+    resposta = client.get(
+        f"/api/v1/leads/contas?tenant_id_selecionado={CLIENTE_FILHO_ID_LEADS}", headers=headers_admin
+    )
+
+    assert [lead["nome"] for lead in resposta.json()] == ["Lead Do Cliente Filho"]
+
+
 def test_excluir_todos_os_leads_via_api_super_admin(client):
     """Client de teste já é super_admin por padrão."""
     client.post("/api/v1/leads/contas", json={"nome": "Lead A"})

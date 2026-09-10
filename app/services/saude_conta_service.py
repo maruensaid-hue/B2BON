@@ -12,8 +12,8 @@ from app.models.interacao_conta import InteracaoConta
 from app.models.negocio import Negocio
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
-from app.services import auditoria_service, llm_helpers, metricas_service
-from app.services.errors import NaoAutorizado, NaoEncontrado, ValidacaoFalhou
+from app.services import auditoria_service, llm_helpers, metricas_service, tenant_service
+from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 _TIPOS_VALIDOS = {
     "contato",
@@ -27,27 +27,9 @@ _TIPOS_CONTATO = {"contato", "feedback_positivo"}
 _JANELA_SINAIS_DIAS = 30
 
 
-def _tenant_ids_no_escopo(db: Session, usuario: Usuario, tenant_id_selecionado: str | None) -> list[str]:
-    """Mesmo espírito de `relatorio_service._tenant_ids_visiveis`: `user`
-    só vê o próprio tenant; admin/super_admin veem a própria subárvore
-    (ou tudo, se super_admin) e podem "dar zoom" num tenant específico
-    dessa subárvore via `tenant_id_selecionado` (raio-X 2026-09-10 — MAP
-    hoje não enxergava sub-tenants, só o tenant do próprio usuário)."""
-    from app.services import tenant_service
-
-    if usuario.papel == "user":
-        return [usuario.tenant_id]
-    visiveis = {t.id for t in tenant_service.listar_tenants_visiveis(db, usuario)}
-    if tenant_id_selecionado is not None:
-        if tenant_id_selecionado not in visiveis:
-            raise NaoAutorizado("Você não tem permissão para ver esse tenant.")
-        return [t.id for t in tenant_service.listar_subarvore(db, tenant_id_selecionado)]
-    return list(visiveis)
-
-
 def _obter_conta(db: Session, usuario: Usuario, conta_id: int) -> Conta:
     conta = db.query(Conta).filter_by(id=conta_id).one_or_none()
-    if conta is None or conta.tenant_id not in _tenant_ids_no_escopo(db, usuario, None):
+    if conta is None or conta.tenant_id not in tenant_service.tenant_ids_no_escopo(db, usuario, None):
         raise NaoEncontrado(f"Conta {conta_id} não encontrada")
     return conta
 
@@ -178,7 +160,7 @@ def _contas_visiveis(
     outra pessoa é ignorado — a query já trava nele mesmo, não é um 403
     (a intenção não é maliciosa, é só a tela não ter essa opção pra esse
     papel)."""
-    tenant_ids = _tenant_ids_no_escopo(db, usuario, tenant_id_selecionado)
+    tenant_ids = tenant_service.tenant_ids_no_escopo(db, usuario, tenant_id_selecionado)
     query = db.query(Conta).filter(Conta.tenant_id.in_(tenant_ids))
     if usuario.papel == "user":
         query = query.filter_by(vendedor_usuario_id=usuario.id)

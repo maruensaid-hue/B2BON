@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 
 interface LeadConta {
   id: number;
+  tenant_id: string;
   nome: string;
   nome_fantasia: string | null;
   segmento: string | null;
@@ -24,6 +25,11 @@ interface UsuarioResumo {
   nome: string;
 }
 
+interface TenantResumo {
+  id: string;
+  razao_social: string;
+}
+
 /** "Leads" (E-Leads) — clientes conquistados um a um (indicação, evento,
  * contato pessoal), fora do recorte estático de qualquer ICP. Distinta da
  * Prospecção (ICP + Receita Federal): aqui não há segmento/porte/dor único
@@ -32,14 +38,31 @@ export function LeadsEmpresas() {
   const navigate = useNavigate();
   const { usuario } = useAuth();
   const isGestor = usuario?.papel === "admin" || usuario?.papel === "super_admin";
+  const isSuperAdmin = usuario?.papel === "super_admin";
+  // Mesma condição de AppShell.tsx/MapContas.tsx — quem gerencia mais de
+  // um tenant (hierarquia de distribuidores, raio-X 2026-09-10).
+  const ehGestorHierarquico =
+    usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo);
+  const podeVerHierarquia = isSuperAdmin || ehGestorHierarquico;
 
   const [empresas, setEmpresas] = useState<LeadConta[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
+  const [tenantsVisiveis, setTenantsVisiveis] = useState<TenantResumo[]>([]);
   const [filtroVendedorId, setFiltroVendedorId] = useState<number | null>(null);
+  const [tenantSelecionadoId, setTenantSelecionadoId] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  const nomesTenants = useMemo(() => {
+    const mapa = new Map(tenantsVisiveis.map((tenant) => [tenant.id, tenant.razao_social]));
+    return (tenantId: string) => mapa.get(tenantId) ?? tenantId;
+  }, [tenantsVisiveis]);
+  // Mostra a coluna "Empresa" (tenant) só pra quem realmente gerencia
+  // mais de um tenant — a maioria dos admins de tenant "cliente" não vê
+  // mudança nenhuma nesta tela (raio-X 2026-09-10).
+  const mostraColunaTenant = podeVerHierarquia && tenantsVisiveis.length > 1;
 
   const empresasFiltradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -50,7 +73,11 @@ export function LeadsEmpresas() {
   }, [empresas, busca]);
 
   async function carregar() {
-    const filtro = filtroVendedorId ? `?vendedor_usuario_id=${filtroVendedorId}` : "";
+    const params = new URLSearchParams();
+    if (filtroVendedorId) params.set("vendedor_usuario_id", String(filtroVendedorId));
+    if (tenantSelecionadoId) params.set("tenant_id_selecionado", tenantSelecionadoId);
+    else if (podeVerHierarquia) params.set("todos_da_hierarquia", "true");
+    const filtro = params.toString() ? `?${params.toString()}` : "";
     try {
       setEmpresas(await api.get<LeadConta[]>(`/leads/contas${filtro}`));
     } catch (error) {
@@ -60,7 +87,7 @@ export function LeadsEmpresas() {
 
   useEffect(() => {
     carregar();
-  }, [filtroVendedorId]);
+  }, [filtroVendedorId, tenantSelecionadoId, podeVerHierarquia]);
 
   useEffect(() => {
     if (isGestor) {
@@ -70,6 +97,23 @@ export function LeadsEmpresas() {
         .catch(() => undefined);
     }
   }, [isGestor]);
+
+  useEffect(() => {
+    if (podeVerHierarquia) {
+      api
+        .get<TenantResumo[]>("/admin/tenants")
+        .then(setTenantsVisiveis)
+        .catch(() => undefined);
+    }
+  }, [podeVerHierarquia]);
+
+  useEffect(() => {
+    // `GET /usuarios` só devolve os usuários do PRÓPRIO tenant do
+    // chamador — ao trocar pra outro tenant da hierarquia, o filtro de
+    // vendedor não teria como ser aplicado corretamente, então reseta
+    // (mesma decisão de MapContas.tsx, raio-X 2026-09-10).
+    setFiltroVendedorId(null);
+  }, [tenantSelecionadoId]);
 
   async function criarEmpresa(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -111,7 +155,21 @@ export function LeadsEmpresas() {
             placeholder="Buscar por empresa..."
             className="w-52"
           />
-          {isGestor && (
+          {podeVerHierarquia && (
+            <Select
+              value={tenantSelecionadoId ?? ""}
+              onChange={(event) => setTenantSelecionadoId(event.target.value || null)}
+              className="w-56"
+            >
+              <option value="">Toda a hierarquia</option>
+              {tenantsVisiveis.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.razao_social}
+                </option>
+              ))}
+            </Select>
+          )}
+          {isGestor && !tenantSelecionadoId && (
             <Select
               value={filtroVendedorId ?? ""}
               onChange={(event) => setFiltroVendedorId(event.target.value ? Number(event.target.value) : null)}
@@ -139,6 +197,7 @@ export function LeadsEmpresas() {
           <thead>
             <tr className="border-b border-border text-[9.5px] tracking-wide text-muted uppercase">
               <th className="p-2 text-left">Empresa</th>
+              {mostraColunaTenant && <th className="p-2 text-left">Tenant</th>}
               <th className="p-2 text-left">Segmento</th>
               <th className="p-2 text-left">Porte</th>
               <th className="p-2 text-left">UF</th>
@@ -152,6 +211,7 @@ export function LeadsEmpresas() {
                 className="cursor-pointer border-b border-border hover:bg-surf2"
               >
                 <td className="p-2 font-semibold">{empresa.nome_fantasia || empresa.nome}</td>
+                {mostraColunaTenant && <td className="p-2 text-muted">{nomesTenants(empresa.tenant_id)}</td>}
                 <td className="p-2 text-muted">{empresa.segmento ?? "—"}</td>
                 <td className="p-2 text-muted">{empresa.porte ?? "—"}</td>
                 <td className="p-2 text-muted">{empresa.regiao ?? "—"}</td>
@@ -159,7 +219,7 @@ export function LeadsEmpresas() {
             ))}
             {empresasFiltradas.length === 0 && (
               <tr>
-                <td colSpan={4} className="p-4 text-center text-muted">
+                <td colSpan={mostraColunaTenant ? 5 : 4} className="p-4 text-center text-muted">
                   {empresas.length === 0 ? "Nenhuma empresa cadastrada ainda." : "Nenhuma empresa encontrada para essa busca."}
                 </td>
               </tr>

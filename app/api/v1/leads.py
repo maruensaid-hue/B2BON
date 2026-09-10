@@ -34,10 +34,18 @@ def criar_lead(
 @router.get("/contas", response_model=list[ContaSchema])
 def listar_leads(
     vendedor_usuario_id: int | None = None,
+    tenant_id_selecionado: str | None = None,
+    todos_da_hierarquia: bool = False,
     tenant_id: str = Depends(get_tenant_id),
     usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[ContaSchema]:
+    """`todos_da_hierarquia`/`tenant_id_selecionado` (raio-X 2026-09-10) são
+    opt-in — sem eles, comportamento idêntico a sempre (só o próprio
+    tenant), o que preserva o seletor de empresa da tela de Contatos
+    (que reusa esta mesma rota sem passar esses parâmetros)."""
+    if todos_da_hierarquia or tenant_id_selecionado is not None:
+        return conta_service.listar_leads_hierarquia(db, usuario, vendedor_usuario_id, tenant_id_selecionado)
     return conta_service.listar_leads(db, tenant_id, usuario, vendedor_usuario_id)
 
 
