@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/Input";
 import { api, ApiError } from "@/lib/api";
 
 interface ResultadoBusca {
-  tipo: "conta" | "negocio" | "proposta" | "cadencia" | "tenant";
+  tipo: "conta" | "negocio" | "proposta" | "decisor" | "cadencia" | "tenant";
   id: number | string;
   titulo: string;
   subtitulo: string | null;
@@ -16,11 +16,12 @@ const ROTULO_GRUPO: Record<ResultadoBusca["tipo"], string> = {
   conta: "Empresas",
   negocio: "Oportunidades",
   proposta: "Propostas",
+  decisor: "Contatos",
   cadencia: "Cadências",
   tenant: "Tenants",
 };
 
-const ORDEM_GRUPOS: ResultadoBusca["tipo"][] = ["conta", "negocio", "proposta", "cadencia", "tenant"];
+const ORDEM_GRUPOS: ResultadoBusca["tipo"][] = ["conta", "negocio", "proposta", "decisor", "cadencia", "tenant"];
 
 interface BuscaGlobalProps {
   open: boolean;
@@ -120,7 +121,7 @@ export function BuscaGlobal({ open, onClose }: BuscaGlobalProps) {
             value={termo}
             onChange={(event) => setTermo(event.target.value)}
             onKeyDown={aoTeclar}
-            placeholder="Buscar empresa, oportunidade, proposta, cadência ou tenant..."
+            placeholder="Buscar empresa, oportunidade, proposta, contato, cadência ou tenant..."
             autoFocus
           />
         </div>
@@ -132,7 +133,7 @@ export function BuscaGlobal({ open, onClose }: BuscaGlobalProps) {
           )}
           {!termo.trim() && (
             <div className="p-3 text-[12px] text-muted">
-              Digite pra buscar em empresas, oportunidades, propostas, cadências
+              Digite pra buscar em empresas, oportunidades, propostas, contatos, cadências
               {resultados.length === 0 ? " e tenants." : "."}
             </div>
           )}

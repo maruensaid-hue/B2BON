@@ -103,6 +103,57 @@ def test_acha_proposta_por_nome(db_session):
     assert any(r.tipo == "proposta" and r.titulo == "Proposta Especial Verão" for r in resultados)
 
 
+def test_acha_decisor_por_nome(db_session):
+    usuario = _criar_tenant_e_usuario(db_session, TENANT_ID)
+    conta = _criar_conta(db_session, TENANT_ID, nome="Empresa Do Contato")
+    db_session.add(Decisor(tenant_id=TENANT_ID, conta_id=conta.id, nome="Fulano de Souza Busca", cargo="Diretor"))
+    db_session.commit()
+
+    resultados = busca_service.buscar(db_session, usuario, "Fulano de Souza")
+
+    decisores = [r for r in resultados if r.tipo == "decisor"]
+    assert len(decisores) == 1
+    assert decisores[0].subtitulo == "Diretor · Empresa Do Contato"
+    assert decisores[0].rota == f"/leads/contas/{conta.id}"
+
+
+def test_acha_decisor_por_email(db_session):
+    usuario = _criar_tenant_e_usuario(db_session, TENANT_ID)
+    conta = _criar_conta(db_session, TENANT_ID)
+    db_session.add(Decisor(tenant_id=TENANT_ID, conta_id=conta.id, nome="Outro Contato", email="contato.unico@empresa.com.br"))
+    db_session.commit()
+
+    resultados = busca_service.buscar(db_session, usuario, "contato.unico@empresa.com.br")
+
+    assert any(r.tipo == "decisor" and r.titulo == "Outro Contato" for r in resultados)
+
+
+def test_acha_decisor_de_conta_com_icp(db_session):
+    """Diferente das telas de Leads (avulsos, sem ICP), a busca global
+    precisa achar contatos de QUALQUER conta — inclusive as que vieram de
+    prospecção via ICP, que é o caso mais comum na prática."""
+    usuario = _criar_tenant_e_usuario(db_session, TENANT_ID)
+    conta = _criar_conta(db_session, TENANT_ID, nome="Conta Prospectada Via ICP")
+    db_session.add(Decisor(tenant_id=TENANT_ID, conta_id=conta.id, nome="Contato Prospectado Via ICP"))
+    db_session.commit()
+
+    resultados = busca_service.buscar(db_session, usuario, "Contato Prospectado Via ICP")
+
+    assert any(r.tipo == "decisor" for r in resultados)
+
+
+def test_isolamento_por_tenant_nao_acha_decisor_de_outro_tenant(db_session):
+    usuario = _criar_tenant_e_usuario(db_session, TENANT_ID)
+    _criar_tenant_e_usuario(db_session, OUTRO_TENANT_ID)
+    conta_outro_tenant = _criar_conta(db_session, OUTRO_TENANT_ID)
+    db_session.add(Decisor(tenant_id=OUTRO_TENANT_ID, conta_id=conta_outro_tenant.id, nome="Contato Do Outro Tenant Unico"))
+    db_session.commit()
+
+    resultados = busca_service.buscar(db_session, usuario, "Contato Do Outro Tenant Unico")
+
+    assert resultados == []
+
+
 def test_acha_cadencia_por_nome(db_session):
     usuario = _criar_tenant_e_usuario(db_session, TENANT_ID)
     db_session.add(Cadencia(tenant_id=TENANT_ID, nome="Cadência de Reativação", canais=["email"], status="rascunho"))

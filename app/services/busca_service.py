@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.models.cadencia import Cadencia
 from app.models.conta import Conta
+from app.models.decisor import Decisor
 from app.models.negocio import Negocio
 from app.models.proposta_negocio import PropostaNegocio
 from app.models.tenant import Tenant
@@ -113,6 +114,30 @@ def buscar(db: Session, usuario: Usuario, termo: str) -> list[ResultadoBuscaSche
                 titulo=titulo,
                 subtitulo=negocio.nome if negocio else None,
                 rota=f"/crm?negocio_id={proposta.negocio_id}",
+            )
+        )
+
+    decisores = (
+        db.query(Decisor)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .filter(
+            Decisor.tenant_id == tenant_id,
+            or_(Decisor.nome.ilike(padrao), Decisor.email.ilike(padrao), Decisor.cargo.ilike(padrao)),
+        )
+        .order_by(Decisor.nome)
+        .limit(_LIMITE_POR_TIPO)
+        .all()
+    )
+    for decisor in decisores:
+        conta = db.query(Conta).filter_by(id=decisor.conta_id).one_or_none()
+        subtitulo_partes = [parte for parte in [decisor.cargo, conta.nome if conta else None] if parte]
+        resultados.append(
+            ResultadoBuscaSchema(
+                tipo="decisor",
+                id=decisor.id,
+                titulo=decisor.nome,
+                subtitulo=" · ".join(subtitulo_partes) if subtitulo_partes else None,
+                rota=f"/leads/contas/{decisor.conta_id}",
             )
         )
 
