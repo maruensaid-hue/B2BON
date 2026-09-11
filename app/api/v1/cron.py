@@ -31,6 +31,7 @@ from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.services import (
     campanha_service,
+    cnpj_recorte_service,
     enriquecimento_fila_service,
     envio_service,
     nps_service,
@@ -203,6 +204,17 @@ def suspender_licencas_vencidas(db: Session = Depends(get_db)) -> dict:
     vencida continuava dando acesso total até um humano mudar o status
     manualmente pela tela de Admin."""
     return {"tenants_suspensos": tenant_service.suspender_licencas_vencidas(db)}
+
+
+@router.post("/podar-recorte-cnpj", dependencies=[Depends(_exigir_segredo_cron)])
+def podar_recorte_cnpj(db: Session = Depends(get_db)) -> dict:
+    """Libera espaço no staging de CNPJ removendo CNAE/UF que não são mais
+    exigidos por nenhum ICP ativo (raio-X 2026-09-11: o staging só
+    crescia, sem nunca encolher quando um ICP era desativado — chegou a
+    estourar a cota de armazenamento do Postgres). Só banco, sem download
+    de arquivo — por isso roda aqui no Render, não no GitHub Actions
+    (diferente de `atualizar-recorte-cnpj`)."""
+    return cnpj_recorte_service.podar_recorte_nao_utilizado(db)
 
 
 @router.post("/disparar-webhooks-parceiros", dependencies=[Depends(_exigir_segredo_cron)])

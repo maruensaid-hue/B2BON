@@ -62,6 +62,47 @@ def test_buscar_decisores_le_qsa_do_recorte(db_session):
     assert nomes == {"JOAO DA SILVA", "MARIA SOUZA"}
 
 
+def test_carregar_recorte_ignora_combinacao_ja_coberta(db_session):
+    """Raio-X 2026-09-11: dentro do mesmo mês de competência, uma
+    combinação CNAE+UF já carregada antes não precisa ser regravada — só
+    a diferença (deixa a atualização bem mais rápida quando um ICP novo
+    de outro tenant amplia a união de CNAE/UF, sem precisar reescrever
+    tudo que já estava certo)."""
+    carregados = carregar_recorte(
+        db_session,
+        cnae_codigos=["6201500", "4711301"],
+        ufs=["SP", "RJ"],
+        caminho_empresas=str(FIXTURES / "empresas.csv"),
+        caminho_estabelecimentos=str(FIXTURES / "estabelecimentos.csv"),
+        caminho_socios=str(FIXTURES / "socios.csv"),
+        cnae_ja_cobertos={"6201500"},
+        ufs_ja_cobertos={"SP"},
+    )
+
+    # Alpha e Gama (cnae=6201500, uf=SP) já estavam cobertos — só Beta
+    # (cnae=4711301, uf=RJ), genuinamente novo, é carregado.
+    assert carregados == 1
+    cnpjs = {e.cnpj for e in db_session.query(CnpjEstabelecimento).all()}
+    assert cnpjs == {"44555666000150"}
+
+
+def test_carregar_recorte_sem_cobertura_anterior_carrega_tudo(db_session):
+    """Sem `cnae_ja_cobertos`/`ufs_ja_cobertos` (mês de competência novo,
+    ou primeira carga), o comportamento é o de sempre: grava tudo que bate
+    com o recorte pedido, mesmo que já existisse — os dados da Receita
+    Federal podem ter mudado no mês novo."""
+    carregados = carregar_recorte(
+        db_session,
+        cnae_codigos=["6201500", "4711301"],
+        ufs=["SP", "RJ"],
+        caminho_empresas=str(FIXTURES / "empresas.csv"),
+        caminho_estabelecimentos=str(FIXTURES / "estabelecimentos.csv"),
+        caminho_socios=str(FIXTURES / "socios.csv"),
+    )
+
+    assert carregados == 3  # Alpha, Beta e Gama
+
+
 def test_carregar_recorte_aceita_lista_de_shards_por_tipo(db_session, tmp_path):
     """Layout público atual da Receita Federal particiona cada tipo em até
     10 arquivos (`receita_federal_downloader.baixar_shards`) — o loader

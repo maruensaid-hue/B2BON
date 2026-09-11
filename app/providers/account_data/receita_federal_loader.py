@@ -75,9 +75,22 @@ def carregar_recorte(
     caminho_empresas: str | list[str],
     caminho_estabelecimentos: str | list[str],
     caminho_socios: str | list[str],
+    cnae_ja_cobertos: set[str] | None = None,
+    ufs_ja_cobertos: set[str] | None = None,
 ) -> int:
     """Carrega no staging local só o recorte de CNAE+UF exigido pelos ICPs
     ativos — nunca a base pública completa (Seção 11 da especificação).
+
+    `cnae_ja_cobertos`/`ufs_ja_cobertos` (raio-X 2026-09-11, opcionais):
+    quando informados, ignora estabelecimentos cuja combinação CNAE+UF já
+    estava coberta ANTES desta carga — só grava no banco o que é
+    genuinamente novo. Precisa ser a combinação exata (CNAE **e** UF
+    dentro dos respectivos conjuntos antigos), não cada um isoladamente —
+    senão um CNAE novo com uma UF antiga (ou vice-versa) seria ignorado
+    por engano. Passar `None` (padrão) mantém o comportamento antigo:
+    grava tudo que bate com `cnae_codigos`/`ufs`, mesmo já carregado
+    antes (usado quando a Receita Federal publica um mês de competência
+    novo — dados de empresas já cobertas também podem ter mudado).
 
     Espera o layout público de dados abertos da Receita Federal: arquivos
     `;`-delimitados, codificação latin-1, sem cabeçalho. Cada `caminho_*`
@@ -90,12 +103,19 @@ def carregar_recorte(
     """
     cnae_set = set(cnae_codigos)
     uf_set = {uf.upper() for uf in ufs}
+    cnae_cobertos_set = set(cnae_ja_cobertos) if cnae_ja_cobertos is not None else None
+    uf_cobertos_set = {uf.upper() for uf in ufs_ja_cobertos} if ufs_ja_cobertos is not None else None
 
     print("Filtrando estabelecimentos por CNAE/UF (arquivo maior, mais demorado)...", flush=True)
     estabelecimentos_no_recorte = []
+    ja_cobertos_ignorados = 0
     for indice, linha in enumerate(_linhas(caminho_estabelecimentos), start=1):
-        if linha[11] in cnae_set and linha[19].upper() in uf_set:
-            estabelecimentos_no_recorte.append(linha)
+        cnae, uf = linha[11], linha[19].upper()
+        if cnae in cnae_set and uf in uf_set:
+            if cnae_cobertos_set is not None and cnae in cnae_cobertos_set and uf in uf_cobertos_set:
+                ja_cobertos_ignorados += 1
+            else:
+                estabelecimentos_no_recorte.append(linha)
         if indice % 1_000_000 == 0:
             print(f"  {indice:,} linha(s) varrida(s), {len(estabelecimentos_no_recorte)} no recorte...", flush=True)
             # A varredura é só em Python (sem tocar o banco) e passa de 70
@@ -112,7 +132,8 @@ def carregar_recorte(
             db.execute(text("SELECT 1"))
             db.commit()
     cnpjs_basicos_no_recorte = {linha[0] for linha in estabelecimentos_no_recorte}
-    print(f"{len(estabelecimentos_no_recorte)} estabelecimento(s) no recorte.", flush=True)
+    sufixo_incremento = f" ({ja_cobertos_ignorados} já cobertos antes, ignorados)" if cnae_cobertos_set is not None else ""
+    print(f"{len(estabelecimentos_no_recorte)} estabelecimento(s) no recorte{sufixo_incremento}.", flush=True)
 
     print("Buscando dados de empresas do recorte...", flush=True)
     empresas_por_cnpj_basico = {

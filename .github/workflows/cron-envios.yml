@@ -109,6 +109,15 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Chamar POST /cron/podar-recorte-cnpj (libera espaço de ICP desativado, 1x/dia)
+        if: always() && (github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch')
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${API_BASE_URL}/cron/podar-recorte-cnpj" \
+            -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
   atualizar-recorte-cnpj:
     runs-on: ubuntu-latest

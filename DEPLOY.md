@@ -139,9 +139,10 @@ no repo), com dois grupos de disparo em sequência:
 - **1x/dia (06:00 UTC)**: `expirar-titulares` (retenção LGPD),
   `suspender-licencas-vencidas` (inadimplência, com a carência de 3
   dias — ver `MANUAL_DO_USUARIO.md` seção 8), `enviar-lembretes-cobranca`
-  (e-mail pré/pós-vencimento) e `disparar-relatorios-periodicos`
+  (e-mail pré/pós-vencimento), `disparar-relatorios-periodicos`
   (Fase 3 da hierarquia — dashboard + webhook opcional pro
-  distribuidor).
+  distribuidor) e `podar-recorte-cnpj` (libera espaço de CNAE/UF que
+  nenhum ICP ativo usa mais — ver seção 7.1).
 
 Cada rota é `POST /cron/<nome>`, protegida pelo mesmo `X-Cron-Secret`
 (seção abaixo) — nenhuma delas aceita chamada sem esse segredo. O
@@ -185,7 +186,32 @@ mesmo secret já usado por `carregar-recorte-manual.yml`), que:
 3. Senão, baixa da própria Receita Federal (`dadosabertos.rfb.gov.br`) só
    os arquivos necessários e recarrega o staging — sem passo manual, sem
    `scripts/carregar_recorte_receita_federal.py` (que continua existindo
-   só como fallback pra debug local).
+   só como fallback pra debug local). Dentro do mesmo mês de competência,
+   grava só o que ainda não estava coberto (raio-X 2026-09-11 abaixo) —
+   um ICP novo não obriga reescrever o recorte todo dos ICPs já
+   existentes, só a diferença.
+
+**Raio-X 2026-09-11 — projeto do Neon ficou sem espaço (`DiskFull`)**:
+um ICP novo com CNAE amplo (ex.: TI/software, que aparece em milhões de
+estabelecimentos no Brasil todo) fez o staging crescer o suficiente pra
+estourar o limite de armazenamento do plano do Neon — e como é o
+**mesmo banco** de toda a aplicação, isso bloqueava **qualquer escrita**
+em produção, não só a geração de lista por ICP. Correção em duas
+frentes:
+- **Carga incremental** (`carregar_recorte`, `cnae_ja_cobertos`/
+  `ufs_ja_cobertos`): dentro do mesmo mês de competência, só grava no
+  banco a combinação CNAE+UF que ainda não estava coberta — evita
+  reescrever milhões de linhas que já estavam corretas só porque um ICP
+  novo (de outro tenant, até) foi criado.
+- **Poda automática** (`POST /cron/podar-recorte-cnpj`, 1x/dia, passo 7
+  acima): remove do staging qualquer CNAE/UF que nenhum ICP ativo de
+  nenhum tenant mais usa (ICP desativado ou substituído por versão
+  nova) — sem isso, o staging só crescia, nunca encolhia.
+
+Nenhuma das duas frentes limita o **tamanho** de um recorte genuinamente
+necessário — se a soma dos ICPs ativos precisar de mais espaço do que o
+plano do Neon comporta, o upgrade de plano continua sendo a solução (foi
+o que desbloqueou o incidente de 2026-09-11).
 
 **Importante (raio-X 2026-09-09)**: essa carga roda só no GitHub
 Actions, nunca chamando um endpoint do Render — já existiu um
