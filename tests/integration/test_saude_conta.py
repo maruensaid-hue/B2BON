@@ -262,3 +262,103 @@ def test_atribuir_vendedor_busca_vendedor_no_tenant_da_conta(client, db_session,
 
     assert resposta.status_code == 200
     assert resposta.json()["vendedor_usuario_id"] == vendedor_id
+
+
+def test_vendedores_disponiveis_lista_vendedor_do_subtenant(client, db_session, criar_usuario_autenticado):
+    """Raio-X 2026-09-11: o campo "Vendedor responsável" usava
+    `GET /usuarios` (só o próprio tenant de quem chama) — um admin de
+    distribuidor via a conta de um sub-tenant pela hierarquia, mas o
+    vendedor de lá nunca aparecia pra ser atribuído."""
+    _montar_hierarquia(db_session)
+    headers_admin = criar_usuario_autenticado(DISTRIBUIDOR_ID, papel="admin", email="admin-dist-6@teste.com.br")
+    criar_usuario_autenticado(CLIENTE_FILHO_ID, papel="user", email="vendedor-filho-2@teste.com.br")
+    conta_filha = _criar_conta(db_session, nome="Conta do cliente filho", tenant_id=CLIENTE_FILHO_ID)
+
+    resposta = client.get(
+        f"/api/v1/saude-contas/contas/{conta_filha.id}/vendedores-disponiveis", headers=headers_admin
+    )
+
+    assert resposta.status_code == 200
+    emails = {u["email"] for u in resposta.json()}
+    assert "vendedor-filho-2@teste.com.br" in emails
+
+
+def test_vendedores_disponiveis_inclui_toda_a_subarvore_mas_nao_extravasa(
+    client, db_session, criar_usuario_autenticado
+):
+    """Raio-X 2026-09-11 (3a rodada): pra este uso da hierarquia, os
+    sub-tenants são estrutura interna do próprio time do Admin
+    (matriz/filial), não clientes pagantes separados — então o vendedor
+    do tenant PAI (distribuidor) TAMBÉM deve poder ser atribuído numa
+    conta do tenant FILHO (e vice-versa). O limite continua sendo a
+    subárvore: um vendedor de uma árvore de tenants sem nenhuma relação
+    (`outra-arvore-teste`) não pode aparecer."""
+    _montar_hierarquia(db_session)
+    headers_admin = criar_usuario_autenticado(DISTRIBUIDOR_ID, papel="admin", email="admin-dist-7@teste.com.br")
+    criar_usuario_autenticado(DISTRIBUIDOR_ID, papel="user", email="vendedor-do-pai@teste.com.br")
+    criar_usuario_autenticado(CLIENTE_FILHO_ID, papel="user", email="vendedor-do-filho@teste.com.br")
+    criar_usuario_autenticado(OUTRA_ARVORE_ID, papel="user", email="vendedor-de-outra-arvore@teste.com.br")
+    conta_filha = _criar_conta(db_session, nome="Conta do cliente filho", tenant_id=CLIENTE_FILHO_ID)
+
+    resposta = client.get(
+        f"/api/v1/saude-contas/contas/{conta_filha.id}/vendedores-disponiveis", headers=headers_admin
+    )
+
+    emails = {u["email"] for u in resposta.json()}
+    assert "vendedor-do-filho@teste.com.br" in emails
+    assert "vendedor-do-pai@teste.com.br" in emails
+    assert "vendedor-de-outra-arvore@teste.com.br" not in emails
+
+
+def test_atribuir_vendedor_do_subtenant_a_conta_do_tenant_pai(client, db_session, criar_usuario_autenticado):
+    """Cenário real relatado pelo cliente: a empresa (conta) foi
+    cadastrada no tenant do próprio Admin (o distribuidor/pai), e o
+    vendedor que deveria assumi-la mora num sub-tenant (o cliente/filho)
+    — antes disso falhava tanto na listagem quanto na atribuição."""
+    _montar_hierarquia(db_session)
+    headers_admin = criar_usuario_autenticado(DISTRIBUIDOR_ID, papel="admin", email="admin-dist-8@teste.com.br")
+    criar_usuario_autenticado(CLIENTE_FILHO_ID, papel="user", email="vendedor-filho-3@teste.com.br")
+    vendedor_id = _id_do_usuario(db_session, "vendedor-filho-3@teste.com.br")
+    conta_pai = _criar_conta(db_session, nome="Empresa cadastrada pelo Admin", tenant_id=DISTRIBUIDOR_ID)
+
+    resposta_lista = client.get(
+        f"/api/v1/saude-contas/contas/{conta_pai.id}/vendedores-disponiveis", headers=headers_admin
+    )
+    assert resposta_lista.status_code == 200
+    emails = {u["email"] for u in resposta_lista.json()}
+    assert "vendedor-filho-3@teste.com.br" in emails
+
+    resposta_put = client.put(
+        f"/api/v1/saude-contas/contas/{conta_pai.id}/vendedor",
+        json={"vendedor_usuario_id": vendedor_id},
+        headers=headers_admin,
+    )
+    assert resposta_put.status_code == 200
+    assert resposta_put.json()["vendedor_usuario_id"] == vendedor_id
+
+
+def test_vendedores_disponiveis_bloqueado_para_user(client, db_session, criar_usuario_autenticado):
+    conta = _criar_conta(db_session, nome="Conta Qualquer")
+    headers_vendedor = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-comum@teste.com.br")
+
+    resposta = client.get(
+        f"/api/v1/saude-contas/contas/{conta.id}/vendedores-disponiveis", headers=headers_vendedor
+    )
+
+    assert resposta.status_code == 403
+
+
+def test_vendedores_disponiveis_admin_comum_ve_o_proprio_tenant(client, db_session, criar_usuario_autenticado):
+    """Regressão: sem nenhuma hierarquia envolvida, continua idêntico a
+    `GET /usuarios` — mesmo tenant do admin, só ativos."""
+    conta = _criar_conta(db_session, nome="Conta Qualquer")
+    headers_admin = criar_usuario_autenticado(TENANT_ID, papel="admin", email="admin-comum@teste.com.br")
+    criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-comum-2@teste.com.br")
+
+    resposta = client.get(
+        f"/api/v1/saude-contas/contas/{conta.id}/vendedores-disponiveis", headers=headers_admin
+    )
+
+    assert resposta.status_code == 200
+    emails = {u["email"] for u in resposta.json()}
+    assert "vendedor-comum-2@teste.com.br" in emails

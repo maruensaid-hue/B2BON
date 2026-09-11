@@ -294,16 +294,41 @@ def gerar_script_resgate(db: Session, usuario: Usuario, conta_id: int, llm: LLMP
     }
 
 
+def listar_vendedores_disponiveis(db: Session, usuario: Usuario, conta_id: int) -> list[Usuario]:
+    """Vendedores atribuíveis a esta conta: qualquer usuário ativo da
+    subárvore de tenants visível a quem chama, não só do tenant exato da
+    conta (raio-X 2026-09-11: pra este uso da hierarquia, os sub-tenants
+    são estrutura interna do próprio time do Admin — matriz/filial —, não
+    clientes pagantes separados, então um vendedor de qualquer tenant
+    dessa subárvore deve poder ser atribuído a uma conta de outro tenant
+    da mesma subárvore; antes o campo "Vendedor responsável" usava
+    `GET /usuarios`, escopado só ao tenant do chamador, e nem achava
+    vendedores de outros tenants da própria subárvore). `_obter_conta` já
+    garante que a conta está dentro desse escopo."""
+    _obter_conta(db, usuario, conta_id)
+    tenant_ids = tenant_service.tenant_ids_no_escopo(db, usuario, None)
+    return (
+        db.query(Usuario)
+        .filter(Usuario.tenant_id.in_(tenant_ids), Usuario.ativo.is_(True))
+        .order_by(Usuario.nome)
+        .all()
+    )
+
+
 def atribuir_vendedor(
     db: Session, usuario: Usuario, ator_id: str | None, conta_id: int, vendedor_usuario_id: int | None
 ) -> Conta:
     conta = _obter_conta(db, usuario, conta_id)
     if vendedor_usuario_id is not None:
-        # Sempre o tenant DA CONTA, não o do chamador (raio-X 2026-09-10)
-        # — um admin de distribuidor pode estar atribuindo vendedor numa
-        # conta de um tenant "cliente" abaixo dele, e o vendedor mora lá,
-        # não no tenant do distribuidor.
-        vendedor = db.query(Usuario).filter_by(id=vendedor_usuario_id, tenant_id=conta.tenant_id).one_or_none()
+        # Qualquer tenant da subárvore visível a quem chama, não só o
+        # tenant exato da conta (raio-X 2026-09-11, mesmo motivo de
+        # `listar_vendedores_disponiveis` acima).
+        tenant_ids = tenant_service.tenant_ids_no_escopo(db, usuario, None)
+        vendedor = (
+            db.query(Usuario)
+            .filter(Usuario.id == vendedor_usuario_id, Usuario.tenant_id.in_(tenant_ids))
+            .one_or_none()
+        )
         if vendedor is None:
             raise NaoEncontrado(f"Usuário {vendedor_usuario_id} não encontrado neste tenant")
 

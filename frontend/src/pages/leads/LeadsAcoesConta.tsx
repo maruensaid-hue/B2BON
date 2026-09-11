@@ -151,12 +151,17 @@ export function LeadsAcoesConta() {
 
   useEffect(() => {
     if (isGestor) {
+      // Vendedores do tenant DA CONTA, não do tenant de quem está
+      // logado (raio-X 2026-09-11) — um admin de distribuidor vendo uma
+      // conta de um sub-tenant via a hierarquia precisa ver o vendedor
+      // de lá, que `GET /usuarios` (escopado ao próprio tenant do
+      // chamador) nunca traria.
       api
-        .get<UsuarioResumo[]>("/usuarios")
+        .get<UsuarioResumo[]>(`/saude-contas/contas/${contaId}/vendedores-disponiveis`)
         .then(setVendedores)
         .catch(() => undefined);
     }
-  }, [isGestor]);
+  }, [isGestor, contaId]);
 
   async function executar(nomeAcao: string, acao: () => Promise<void>) {
     setErro(null);
