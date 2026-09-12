@@ -136,6 +136,9 @@ def variante_ab_para_decisor(decisor_id: int) -> str:
     return "A" if decisor_id % 2 == 0 else "B"
 
 
+_TENTATIVAS_POR_TOQUE = 3
+
+
 def _gerar_conteudo_toque(
     llm: LLMProvider,
     icp: ICP,
@@ -148,31 +151,34 @@ def _gerar_conteudo_toque(
 ) -> str | None:
     """Mensagem personalizada por conta/decisor — não mala direta (E3-H1).
 
-    Retorna None se o texto gerado violar as restrições do E1-H3 (melhor
-    esforço: o toque é pulado, não bloqueia o restante do lote).
-    """
+    Tenta até `_TENTATIVAS_POR_TOQUE` vezes (mesmo padrão de
+    `comunicacao_service.gerar_amostra`) antes de desistir — raio-X: sem
+    retentativa, uma única resposta da IA que mencionasse por acaso uma
+    restrição configurada (ex.: o nome da própria empresa/oferta) já
+    descartava o toque silenciosamente, podendo zerar o lote inteiro sem
+    nenhum aviso. Retorna None só se todas as tentativas violarem as
+    restrições do E1-H3 (melhor esforço: o toque é pulado, não bloqueia o
+    restante do lote — `gerar_para_lote` conta quantos foram pulados
+    assim pra avisar quem gerou)."""
     enquadramento_variante = f" {_ENQUADRAMENTO_VARIANTE[variante]}" if variante else ""
     dores_e_gatilhos = (
         f" Dores prováveis desse perfil de cliente: {', '.join(icp.dores)}." if icp.dores else ""
     ) + (f" Gatilhos de abordagem: {', '.join(icp.gatilhos)}." if icp.gatilhos else "")
     diferenciais = f" Diferenciais: {', '.join(oferta.diferenciais)}." if oferta.diferenciais else ""
     provas_sociais = f" Provas sociais: {', '.join(oferta.provas_sociais)}." if oferta.provas_sociais else ""
-    resposta = llm_helpers.gerar(
-        llm,
-        LLMRequest(
-            prompt=(
-                f"Escreva o toque {toque.ordem} (canal {toque.canal}) de uma cadência de prospecção "
-                f"para {decisor.nome} ({decisor.cargo or 'decisor'}) na empresa {conta.nome}, "
-                f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento}).{dores_e_gatilhos} "
-                f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais} "
-                f"Tom: {config.tom}.{enquadramento_variante} Nunca mencione: "
-                f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
-            )
-        )
+    prompt = (
+        f"Escreva o toque {toque.ordem} (canal {toque.canal}) de uma cadência de prospecção "
+        f"para {decisor.nome} ({decisor.cargo or 'decisor'}) na empresa {conta.nome}, "
+        f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento}).{dores_e_gatilhos} "
+        f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais} "
+        f"Tom: {config.tom}.{enquadramento_variante} Nunca mencione: "
+        f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
     )
-    if comunicacao_service.validar_texto(resposta.content, config.restricoes):
-        return None
-    return resposta.content
+    for _ in range(_TENTATIVAS_POR_TOQUE):
+        resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt))
+        if not comunicacao_service.validar_texto(resposta.content, config.restricoes):
+            return resposta.content
+    return None
 
 
 def _rodape_por_canal(db: Session, tenant_id: str, decisor: Decisor, canal: str, conteudo: str) -> str:
@@ -209,6 +215,7 @@ def gerar_para_lote(
     contas_processadas: list[int] = []
     contas_sem_decisor: list[int] = []
     mensagens_geradas = 0
+    toques_bloqueados_restricao = 0
 
     for conta_id in conta_ids:
         conta = db.query(Conta).filter_by(id=conta_id, tenant_id=tenant_id).one_or_none()
@@ -225,6 +232,7 @@ def gerar_para_lote(
             variante = variante_ab_para_decisor(decisor.id) if toque.ab_teste_habilitado else None
             conteudo = _gerar_conteudo_toque(llm, icp, oferta, config, conta, decisor, toque, variante)
             if conteudo is None:
+                toques_bloqueados_restricao += 1
                 continue
             conteudo = _rodape_por_canal(db, tenant_id, decisor, toque.canal, conteudo)
             aprovacao_service.criar_proposta(
@@ -259,6 +267,7 @@ def gerar_para_lote(
         "contas_processadas": contas_processadas,
         "contas_sem_decisor": contas_sem_decisor,
         "mensagens_geradas": mensagens_geradas,
+        "toques_bloqueados_restricao": toques_bloqueados_restricao,
     }
 
 

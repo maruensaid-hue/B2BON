@@ -40,6 +40,10 @@ class AprovarLoteRequestSchema(BaseModel):
     ids: list[int]
 
 
+class ExcluirLoteResponseSchema(BaseModel):
+    excluidas: int
+
+
 class RegraAutoAprovacaoSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

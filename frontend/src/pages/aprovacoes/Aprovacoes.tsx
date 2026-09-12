@@ -110,6 +110,36 @@ export function Aprovacoes() {
     }
   }
 
+  async function excluir(aprovacaoId: number) {
+    if (!window.confirm("Excluir esta mensagem definitivamente? Essa ação não pode ser desfeita.")) return;
+    try {
+      await api.delete(`/aprovacoes/${aprovacaoId}`);
+      setMensagem("Mensagem excluída.");
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir.");
+    }
+  }
+
+  async function excluirTudoVisivel() {
+    if (itens.length === 0) return;
+    if (
+      !window.confirm(
+        `Excluir definitivamente ${itens.length} mensagem(ns) visíveis com este filtro? Essa ação não pode ser desfeita.`,
+      )
+    )
+      return;
+    try {
+      const resultado = await api.post<{ excluidas: number }>("/aprovacoes/excluir-lote", {
+        ids: itens.map((item) => item.aprovacao_id),
+      });
+      setMensagem(`${resultado.excluidas} mensagem(ns) excluída(s).`);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir em lote.");
+    }
+  }
+
   return (
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
@@ -136,6 +166,11 @@ export function Aprovacoes() {
           {filtroStatus === "pendente" && (
             <Button size="sm" variant="violet" disabled={itens.length === 0} onClick={aprovarTudoVisivel}>
               Aprovar todas ({itens.length})
+            </Button>
+          )}
+          {filtroStatus !== "" && (
+            <Button size="sm" variant="danger" disabled={itens.length === 0} onClick={excluirTudoVisivel}>
+              Excluir todas ({itens.length})
             </Button>
           )}
         </div>
@@ -187,6 +222,9 @@ export function Aprovacoes() {
                     {item.status === "rejeitado" ? "Aprovar mesmo assim" : "Aprovar"}
                   </Button>
                 )}
+                <Button size="sm" variant="danger" onClick={() => excluir(item.aprovacao_id)}>
+                  Excluir
+                </Button>
               </div>
             </Card>
           );

@@ -9,6 +9,7 @@ from app.schemas.aprovacao import (
     AprovarLoteRequestSchema,
     DefinirRegraAutoAprovacaoRequestSchema,
     EditarMensagemRequestSchema,
+    ExcluirLoteResponseSchema,
     RegraAutoAprovacaoSchema,
     RejeitarRequestSchema,
 )
@@ -60,6 +61,26 @@ def rejeitar(
     db: Session = Depends(get_db),
 ) -> AprovacaoSchema:
     return aprovacao_service.rejeitar(db, tenant_id, ator_id, aprovacao_id, dados.motivo)
+
+
+@router.delete("/{aprovacao_id}", status_code=204)
+def excluir(
+    aprovacao_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    aprovacao_service.excluir(db, tenant_id, ator_id, aprovacao_id)
+
+
+@router.post("/excluir-lote", response_model=ExcluirLoteResponseSchema)
+def excluir_lote(
+    dados: AprovarLoteRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ExcluirLoteResponseSchema:
+    return ExcluirLoteResponseSchema(excluidas=aprovacao_service.excluir_lote(db, tenant_id, ator_id, dados.ids))
 
 
 @router.put("/{aprovacao_id}/mensagem", response_model=MensagemSchema)

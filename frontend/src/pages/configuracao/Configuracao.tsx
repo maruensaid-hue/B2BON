@@ -80,6 +80,28 @@ function paraLista(texto: string): string[] {
     .filter(Boolean);
 }
 
+// Termos comuns o bastante no vocabulário de qualquer mensagem de
+// prospecção que, como restrição, praticamente garantem que NENHUMA
+// mensagem gerada passe pela validação (raio-X: usuário relatou "gerar
+// mensagens" não gerando nada — a causa era "oferta" na lista de
+// restrições, mas o prompt sempre escreve sobre a oferta cadastrada).
+// Restrição de verdade é pra bloquear algo específico e evitável (nome
+// de concorrente, promessa exagerada) — não uma palavra do dia a dia.
+const TERMOS_RESTRICAO_GENERICOS_DEMAIS = [
+  "oferta",
+  "produto",
+  "serviço",
+  "solução",
+  "empresa",
+  "cliente",
+  "negócio",
+  "proposta",
+];
+
+function restricoesGenericasDemais(restricoes: string[]): string[] {
+  return restricoes.filter((restricao) => TERMOS_RESTRICAO_GENERICOS_DEMAIS.includes(restricao.trim().toLowerCase()));
+}
+
 function paraListaPorLinha(texto: string): string[] {
   return texto
     .split("\n")
@@ -254,6 +276,7 @@ export function Configuracao() {
 
   const [ofertas, setOfertas] = useState<Oferta[]>([]);
   const [comunicacao, setComunicacao] = useState<ConfiguracaoComunicacao | null>(null);
+  const [avisoRestricoesGenericas, setAvisoRestricoesGenericas] = useState<string[]>([]);
   const [whatsapp, setWhatsapp] = useState<ConfiguracaoWhatsApp | null>(null);
   const [erroWhatsapp, setErroWhatsapp] = useState<string | null>(null);
   const [emailSmtp, setEmailSmtp] = useState<ConfiguracaoEmailSmtp | null>(null);
@@ -312,6 +335,7 @@ export function Configuracao() {
       ]);
       setOfertas(ofertasResp);
       setComunicacao(comunicacaoResp);
+      setAvisoRestricoesGenericas(restricoesGenericasDemais(comunicacaoResp?.restricoes ?? []));
       setStatusLinkedin(await api.get<StatusConexoesLinkedin>("/linkedin/conexoes/status"));
       if (isGestor) {
         // Isolado do resto (raio-X 2026-08-27): um access_token que não
@@ -709,7 +733,16 @@ export function Configuracao() {
               name="restricoes"
               defaultValue={comunicacao?.restricoes.join(", ")}
               placeholder="preço, concorrentes, desconto"
+              onChange={(event) => setAvisoRestricoesGenericas(restricoesGenericasDemais(paraLista(event.target.value)))}
             />
+            {avisoRestricoesGenericas.length > 0 && (
+              <div className="mt-1.5 text-[11px] text-amber">
+                "{avisoRestricoesGenericas.join(", ")}"{" "}
+                {avisoRestricoesGenericas.length === 1 ? "é um termo comum demais" : "são termos comuns demais"} numa
+                mensagem de prospecção — restrição assim tende a bloquear TODA mensagem gerada (nenhuma passa na
+                validação), não só casos específicos. Considere remover.
+              </div>
+            )}
           </div>
           <Button type="submit" className="w-full justify-center">
             Salvar

@@ -40,6 +40,7 @@ interface GerarLoteResultado {
   contas_processadas: number[];
   contas_sem_decisor: number[];
   mensagens_geradas: number;
+  toques_bloqueados_restricao: number;
 }
 
 // Mesmo limite de app/services/cadencia_service.py::MAXIMO_CONTAS_POR_LOTE —
@@ -236,7 +237,12 @@ export function Cadencias() {
     setResultadoGeracao(null);
 
     const lotes = paraLotes(Array.from(contasSelecionadas), MAXIMO_CONTAS_POR_LOTE);
-    const acumulado: GerarLoteResultado = { contas_processadas: [], contas_sem_decisor: [], mensagens_geradas: 0 };
+    const acumulado: GerarLoteResultado = {
+      contas_processadas: [],
+      contas_sem_decisor: [],
+      mensagens_geradas: 0,
+      toques_bloqueados_restricao: 0,
+    };
 
     try {
       for (let i = 0; i < lotes.length; i++) {
@@ -247,6 +253,7 @@ export function Cadencias() {
         acumulado.contas_processadas.push(...resultado.contas_processadas);
         acumulado.contas_sem_decisor.push(...resultado.contas_sem_decisor);
         acumulado.mensagens_geradas += resultado.mensagens_geradas;
+        acumulado.toques_bloqueados_restricao += resultado.toques_bloqueados_restricao;
       }
       setResultadoGeracao(acumulado);
       setContasSelecionadas(new Set());
@@ -490,6 +497,13 @@ export function Cadencias() {
                     <div className="mt-1 text-amber">
                       {resultadoGeracao.contas_sem_decisor.length} conta(s) sem decisor mapeado, ficaram de fora —
                       mapeie um decisor na conta antes de tentar de novo.
+                    </div>
+                  )}
+                  {resultadoGeracao.toques_bloqueados_restricao > 0 && (
+                    <div className="mt-1 text-amber">
+                      {resultadoGeracao.toques_bloqueados_restricao} toque(s) não puderam ser gerados sem violar
+                      as restrições configuradas em Configuração → Comunicação — revise a lista de termos
+                      proibidos (pode estar bloqueando um termo comum, como o nome da própria empresa/oferta).
                     </div>
                   )}
                 </div>

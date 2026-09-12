@@ -7,6 +7,7 @@ from app.models.aprovacao import Aprovacao
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
 from app.models.regra_auto_aprovacao import RegraAutoAprovacao
+from app.models.tarefa_linkedin import TarefaLinkedin
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
@@ -279,6 +280,61 @@ def rejeitar(db: Session, tenant_id: str, ator_id: str | None, aprovacao_id: int
     db.commit()
     db.refresh(aprovacao)
     return aprovacao
+
+
+def _excluir_mensagem_e_aprovacao(
+    db: Session, tenant_id: str, ator_id: str | None, aprovacao: Aprovacao, mensagem: Mensagem
+) -> None:
+    """Núcleo compartilhado por `excluir`/`excluir_lote` — some também
+    o(s) `TarefaLinkedin` que apontam pra essa mensagem, senão ficariam
+    com uma referência órfã depois do delete. Quem chama já garantiu que
+    `mensagem.status != "enviado"`."""
+    auditoria_service.registrar(
+        db,
+        tenant_id,
+        "aprovacao_excluida",
+        "aprovacao",
+        aprovacao.id,
+        ator_id,
+        {"mensagem_id": mensagem.id, "status_mensagem": mensagem.status},
+        conta_id=_conta_id_da_mensagem(db, mensagem),
+        canal=mensagem.canal,
+    )
+    db.query(TarefaLinkedin).filter_by(tenant_id=tenant_id, mensagem_id=mensagem.id).delete()
+    db.delete(aprovacao)
+    db.delete(mensagem)
+
+
+def excluir(db: Session, tenant_id: str, ator_id: str | None, aprovacao_id: int) -> None:
+    """Exclusão definitiva (raio-X: mensagens de teste acumuladas
+    entopem a visualização de "Todas" na fila) — nunca de uma mensagem já
+    `"enviado"`, que é histórico real de comunicação com o cliente (mesmo
+    raciocínio de retenção de `RegistroTratamento`/ROPA)."""
+    aprovacao = _obter_aprovacao(db, tenant_id, aprovacao_id)
+    mensagem = db.query(Mensagem).filter_by(id=aprovacao.mensagem_id).one()
+    if mensagem.status == "enviado":
+        raise RegraNegocioViolada(
+            "Mensagens já enviadas não podem ser excluídas — fazem parte do histórico de comunicação com o cliente."
+        )
+    _excluir_mensagem_e_aprovacao(db, tenant_id, ator_id, aprovacao, mensagem)
+    db.commit()
+
+
+def excluir_lote(db: Session, tenant_id: str, ator_id: str | None, aprovacao_ids: list[int]) -> int:
+    """Melhor esforço, mesmo espírito de `cadencia_service.gerar_para_lote`:
+    pula silenciosamente mensagens já `"enviado"` em vez de falhar o lote
+    inteiro por causa de uma delas — devolve quantas foram de fato
+    excluídas."""
+    excluidas = 0
+    for aprovacao_id in aprovacao_ids:
+        aprovacao = _obter_aprovacao(db, tenant_id, aprovacao_id)
+        mensagem = db.query(Mensagem).filter_by(id=aprovacao.mensagem_id).one()
+        if mensagem.status == "enviado":
+            continue
+        _excluir_mensagem_e_aprovacao(db, tenant_id, ator_id, aprovacao, mensagem)
+        excluidas += 1
+    db.commit()
+    return excluidas
 
 
 def editar_mensagem(

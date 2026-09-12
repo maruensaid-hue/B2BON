@@ -100,6 +100,54 @@ def test_lote_aprova_mesmo_template(client, db_session, cadencia_e_decisor):
     assert all(item["status"] == "aprovado" for item in resposta.json())
 
 
+def test_excluir_mensagem_remove_da_fila(client, db_session, cadencia_e_decisor):
+    """Raio-X: mensagens de teste acumuladas entopem a visualização de
+    "Todas" na fila de Aprovações — precisa dar pra excluir de vez."""
+    from app.models.mensagem import Mensagem
+
+    cadencia, decisor, _ = cadencia_e_decisor
+    mensagem = _propor_mensagem(db_session, cadencia, decisor)
+    aprovacao_id = client.get("/api/v1/aprovacoes").json()[0]["aprovacao_id"]
+
+    resposta = client.delete(f"/api/v1/aprovacoes/{aprovacao_id}")
+
+    assert resposta.status_code == 204
+    assert client.get("/api/v1/aprovacoes").json() == []
+    assert db_session.query(Mensagem).filter_by(id=mensagem.id).one_or_none() is None
+
+
+def test_excluir_mensagem_ja_enviada_e_bloqueado(client, db_session, cadencia_e_decisor):
+    """Mensagem já enviada é histórico real de comunicação com o cliente
+    — nunca pode ser apagada, mesmo que a UI de teste seja usada pra isso."""
+    cadencia, decisor, _ = cadencia_e_decisor
+    mensagem = _propor_mensagem(db_session, cadencia, decisor)
+    mensagem.status = "enviado"
+    db_session.commit()
+    aprovacao_id = client.get("/api/v1/aprovacoes").json()[0]["aprovacao_id"]
+
+    resposta = client.delete(f"/api/v1/aprovacoes/{aprovacao_id}")
+
+    assert resposta.status_code == 409
+
+
+def test_excluir_lote_pula_mensagens_enviadas(client, db_session, cadencia_e_decisor):
+    from app.models.mensagem import Mensagem
+
+    cadencia, decisor, _ = cadencia_e_decisor
+    mensagem_enviada = _propor_mensagem(db_session, cadencia, decisor, template_id="tpl-A")
+    mensagem_enviada.status = "enviado"
+    mensagem_pendente = _propor_mensagem(db_session, cadencia, decisor, template_id="tpl-B")
+    db_session.commit()
+    ids = [item["aprovacao_id"] for item in client.get("/api/v1/aprovacoes").json()]
+
+    resposta = client.post("/api/v1/aprovacoes/excluir-lote", json={"ids": ids})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["excluidas"] == 1
+    assert db_session.query(Mensagem).filter_by(id=mensagem_enviada.id).one_or_none() is not None
+    assert db_session.query(Mensagem).filter_by(id=mensagem_pendente.id).one_or_none() is None
+
+
 def test_editar_mensagem_preserva_variaveis_validas(client, db_session, cadencia_e_decisor):
     """E4-H2: edição inline preservando variáveis de personalização válidas."""
     cadencia, decisor, _ = cadencia_e_decisor

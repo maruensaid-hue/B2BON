@@ -130,6 +130,53 @@ def test_gerar_para_conta_sem_decisor_nao_falha_o_lote(
     assert corpo["mensagens_geradas"] == 0
 
 
+def test_gerar_retenta_quando_texto_viola_restricao_e_recupera(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, configurar_comunicacao, fake_llm
+):
+    """Raio-X: sem retentativa, uma única resposta da IA que mencionasse
+    por acaso uma restrição configurada já descartava o toque
+    silenciosamente — podia zerar o lote inteiro sem nenhum aviso, e é
+    exatamente o "gerar mensagens não gera nada" relatado. Uma resposta
+    ruim seguida de uma boa tem que recuperar, não desistir na primeira."""
+    configurar_comunicacao(restricoes=["concorrente x"])
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    # 5 toques x (1 resposta violadora + 1 válida) = 10 respostas.
+    fake_llm.definir_respostas(["Fale com a concorrente x." if i % 2 == 0 else "Mensagem válida." for i in range(10)])
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["mensagens_geradas"] == 5
+    assert corpo["toques_bloqueados_restricao"] == 0
+    assert len(fake_llm.chamadas) == 10
+
+
+def test_gerar_avisa_quando_toque_so_viola_restricao_apos_todas_as_tentativas(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, configurar_comunicacao, fake_llm
+):
+    """Quando a restrição realmente não deixa nenhuma tentativa passar
+    (ex.: um termo genérico demais na lista), o toque é pulado — mas
+    isso agora aparece em `toques_bloqueados_restricao`, não fica
+    silencioso, e por isso a fila de aprovações "Pendentes" fica vazia
+    corretamente (não há mensagem nova nenhuma pra aprovar)."""
+    configurar_comunicacao(restricoes=["empresa"])
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    fake_llm.definir_respostas(["Fale com a empresa deles."] * 15)  # 5 toques x 3 tentativas
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["mensagens_geradas"] == 0
+    assert corpo["toques_bloqueados_restricao"] == 5
+
+    pendentes = client.get("/api/v1/aprovacoes", params={"status": "pendente"}).json()
+    assert pendentes == []
+
+
 def test_ativar_falha_com_toques_pendentes_de_aprovacao(
     client, onboarding_completo, criar_conta_com_decisor, criar_cadencia
 ):
