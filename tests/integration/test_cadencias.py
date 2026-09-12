@@ -177,6 +177,78 @@ def test_gerar_avisa_quando_toque_so_viola_restricao_apos_todas_as_tentativas(
     assert pendentes == []
 
 
+def test_gerar_recupera_de_falha_intermitente_da_ia(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm
+):
+    """Raio-X: `llm_helpers.gerar` traduz falha da IA (resposta vazia,
+    limite de taxa) em `RegraNegocioViolada` — sem capturar isso DENTRO
+    da retentativa por toque, a exceção escapava na hora e derrubava a
+    requisição INTEIRA (409), mesmo com só 1 conta selecionada e mesmo
+    a IA tendo se recuperado logo na tentativa seguinte. Um hiccup
+    pontual (2 falhas, depois sucesso) precisa se recuperar sozinho."""
+    from app.api.deps import get_llm_provider
+    from app.llm.base import LLMIndisponivel
+    from app.llm.schemas import LLMResponse
+    from app.main import app
+
+    class LLMFalhaIntermitente:
+        def __init__(self, falhas: int) -> None:
+            self._falhas_restantes = falhas
+
+        def generate(self, request):
+            if self._falhas_restantes > 0:
+                self._falhas_restantes -= 1
+                raise LLMIndisponivel("instabilidade simulada")
+            return LLMResponse(content="Mensagem válida.", model="fake", input_tokens=0, output_tokens=0)
+
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+
+    app.dependency_overrides[get_llm_provider] = lambda: LLMFalhaIntermitente(falhas=2)
+    try:
+        resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    finally:
+        app.dependency_overrides[get_llm_provider] = lambda: fake_llm
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["mensagens_geradas"] == 5
+    assert corpo["toques_falha_ia"] == 0
+
+
+def test_gerar_nao_derruba_lote_inteiro_quando_ia_falha_persistentemente(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm
+):
+    """Quando a IA falha em TODAS as tentativas de um toque (não só uma
+    vez), o toque é pulado e contado em `toques_falha_ia` — a requisição
+    continua respondendo 200, nunca 409, mesmo sem gerar nenhuma
+    mensagem. Essa é a diferença que importa pra quem usa a tela: 200
+    com aviso claro ("instabilidade da IA, tente de novo") é bem
+    diferente de um erro que parece ter quebrado tudo."""
+    from app.api.deps import get_llm_provider
+    from app.llm.base import LLMIndisponivel
+    from app.main import app
+
+    class LLMSempreIndisponivel:
+        def generate(self, request):
+            raise LLMIndisponivel("instabilidade simulada")
+
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+
+    app.dependency_overrides[get_llm_provider] = lambda: LLMSempreIndisponivel()
+    try:
+        resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    finally:
+        app.dependency_overrides[get_llm_provider] = lambda: fake_llm
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["mensagens_geradas"] == 0
+    assert corpo["toques_falha_ia"] == 5
+    assert corpo["toques_bloqueados_restricao"] == 0
+
+
 def test_ativar_falha_com_toques_pendentes_de_aprovacao(
     client, onboarding_completo, criar_conta_com_decisor, criar_cadencia
 ):

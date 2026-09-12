@@ -148,7 +148,7 @@ def _gerar_conteudo_toque(
     decisor: Decisor,
     toque: ToqueCadencia,
     variante: str | None = None,
-) -> str | None:
+) -> tuple[str | None, bool]:
     """Mensagem personalizada por conta/decisor — não mala direta (E3-H1).
 
     Tenta até `_TENTATIVAS_POR_TOQUE` vezes (mesmo padrão de
@@ -156,10 +156,21 @@ def _gerar_conteudo_toque(
     retentativa, uma única resposta da IA que mencionasse por acaso uma
     restrição configurada (ex.: o nome da própria empresa/oferta) já
     descartava o toque silenciosamente, podendo zerar o lote inteiro sem
-    nenhum aviso. Retorna None só se todas as tentativas violarem as
-    restrições do E1-H3 (melhor esforço: o toque é pulado, não bloqueia o
-    restante do lote — `gerar_para_lote` conta quantos foram pulados
-    assim pra avisar quem gerou)."""
+    nenhum aviso.
+
+    Retorna `(conteudo, falhou_por_erro_ia)`. `conteudo` vem `None` por
+    dois motivos bem diferentes, por isso o segundo valor: (a) toda
+    tentativa violou as restrições configuradas — problema de
+    configuração, quem chama deveria revisá-las; ou (b)
+    `llm_helpers.gerar` levantou `RegraNegocioViolada` em toda tentativa
+    (raio-X mais grave: a IA não respondeu com texto, limite de taxa,
+    etc. — instabilidade, não tem nada a ver com o prompt). **Precisa
+    capturar essa exceção aqui dentro** — sem o `try/except`, ela
+    escapava direto pra fora de `gerar_para_lote` na primeira falha,
+    sem nem chegar a tentar de novo, e derrubava a requisição INTEIRA
+    (todo o lote, todas as contas) com 409, mesmo com só 1 conta
+    selecionada — o "melhor esforço" de pular só o toque problemático
+    nunca chegava a valer pra esse caso."""
     enquadramento_variante = f" {_ENQUADRAMENTO_VARIANTE[variante]}" if variante else ""
     dores_e_gatilhos = (
         f" Dores prováveis desse perfil de cliente: {', '.join(icp.dores)}." if icp.dores else ""
@@ -174,11 +185,17 @@ def _gerar_conteudo_toque(
         f"Tom: {config.tom}.{enquadramento_variante} Nunca mencione: "
         f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
     )
+    falhou_por_erro_ia = False
     for _ in range(_TENTATIVAS_POR_TOQUE):
-        resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt))
+        try:
+            resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt))
+        except RegraNegocioViolada:
+            falhou_por_erro_ia = True
+            continue
+        falhou_por_erro_ia = False
         if not comunicacao_service.validar_texto(resposta.content, config.restricoes):
-            return resposta.content
-    return None
+            return resposta.content, False
+    return None, falhou_por_erro_ia
 
 
 def _rodape_por_canal(db: Session, tenant_id: str, decisor: Decisor, canal: str, conteudo: str) -> str:
@@ -216,6 +233,7 @@ def gerar_para_lote(
     contas_sem_decisor: list[int] = []
     mensagens_geradas = 0
     toques_bloqueados_restricao = 0
+    toques_falha_ia = 0
 
     for conta_id in conta_ids:
         conta = db.query(Conta).filter_by(id=conta_id, tenant_id=tenant_id).one_or_none()
@@ -230,9 +248,14 @@ def gerar_para_lote(
         contas_processadas.append(conta_id)
         for toque in toques:
             variante = variante_ab_para_decisor(decisor.id) if toque.ab_teste_habilitado else None
-            conteudo = _gerar_conteudo_toque(llm, icp, oferta, config, conta, decisor, toque, variante)
+            conteudo, falhou_por_erro_ia = _gerar_conteudo_toque(
+                llm, icp, oferta, config, conta, decisor, toque, variante
+            )
             if conteudo is None:
-                toques_bloqueados_restricao += 1
+                if falhou_por_erro_ia:
+                    toques_falha_ia += 1
+                else:
+                    toques_bloqueados_restricao += 1
                 continue
             conteudo = _rodape_por_canal(db, tenant_id, decisor, toque.canal, conteudo)
             aprovacao_service.criar_proposta(
@@ -268,6 +291,7 @@ def gerar_para_lote(
         "contas_sem_decisor": contas_sem_decisor,
         "mensagens_geradas": mensagens_geradas,
         "toques_bloqueados_restricao": toques_bloqueados_restricao,
+        "toques_falha_ia": toques_falha_ia,
     }
 
 

@@ -52,6 +52,7 @@ class GerarCadenciaResponseSchema(BaseModel):
     contas_sem_decisor: list[int]
     mensagens_geradas: int
     toques_bloqueados_restricao: int = 0
+    toques_falha_ia: int = 0
 
 
 class AtivarCadenciaResponseSchema(BaseModel):

@@ -41,6 +41,7 @@ interface GerarLoteResultado {
   contas_sem_decisor: number[];
   mensagens_geradas: number;
   toques_bloqueados_restricao: number;
+  toques_falha_ia: number;
 }
 
 // Mesmo limite de app/services/cadencia_service.py::MAXIMO_CONTAS_POR_LOTE —
@@ -248,6 +249,7 @@ export function Cadencias() {
       contas_sem_decisor: [],
       mensagens_geradas: 0,
       toques_bloqueados_restricao: 0,
+      toques_falha_ia: 0,
     };
 
     try {
@@ -258,8 +260,14 @@ export function Cadencias() {
         });
         acumulado.contas_processadas.push(...resultado.contas_processadas);
         acumulado.contas_sem_decisor.push(...resultado.contas_sem_decisor);
-        acumulado.mensagens_geradas += resultado.mensagens_geradas;
-        acumulado.toques_bloqueados_restricao += resultado.toques_bloqueados_restricao;
+        acumulado.mensagens_geradas += resultado.mensagens_geradas ?? 0;
+        // `?? 0` — API antiga (antes deste campo existir) responde sem essa
+        // chave; sem a defesa, `acumulado + undefined = NaN` propaga pro
+        // resto da soma e o aviso de "N toque(s) bloqueados" nunca aparece
+        // (raio-X: `NaN > 0` é `false`), mascarando o problema real por
+        // trás de uma tela que parece só "gerou 0 mensagens" sem explicar.
+        acumulado.toques_bloqueados_restricao += resultado.toques_bloqueados_restricao ?? 0;
+        acumulado.toques_falha_ia += resultado.toques_falha_ia ?? 0;
       }
       setResultadoGeracao(acumulado);
       setContasSelecionadas(new Set());
@@ -520,6 +528,12 @@ export function Cadencias() {
                       {resultadoGeracao.toques_bloqueados_restricao} toque(s) não puderam ser gerados sem violar
                       as restrições configuradas em Configuração → Comunicação — revise a lista de termos
                       proibidos (pode estar bloqueando um termo comum, como o nome da própria empresa/oferta).
+                    </div>
+                  )}
+                  {resultadoGeracao.toques_falha_ia > 0 && (
+                    <div className="mt-1 text-amber">
+                      {resultadoGeracao.toques_falha_ia} toque(s) não puderam ser gerados por instabilidade da IA
+                      (não é problema de configuração) — tente gerar novamente em alguns instantes.
                     </div>
                   )}
                 </div>
