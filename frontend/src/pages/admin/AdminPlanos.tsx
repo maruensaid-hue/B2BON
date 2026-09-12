@@ -23,6 +23,7 @@ interface Plano {
   permite_webhook_relatorio: boolean;
   permite_api_parceiros: boolean;
   permite_subtenants: boolean;
+  permite_registro_oportunidade: boolean;
   retencao_dias_relatorio: number | null;
   retencao_dias_auditoria: number | null;
 }
@@ -33,6 +34,7 @@ const RECURSOS_PLANO: { campo: keyof Plano; rotulo: string }[] = [
   { campo: "permite_webhook_relatorio", rotulo: "Webhook de relatório" },
   { campo: "permite_api_parceiros", rotulo: "API de parceiros" },
   { campo: "permite_subtenants", rotulo: "Criar sub-tenants (revenda)" },
+  { campo: "permite_registro_oportunidade", rotulo: "Registro de Oportunidade (RO)" },
 ];
 
 function campoNumeroOuVazio(valor: FormDataEntryValue | null): number | null {
@@ -178,6 +180,7 @@ export function AdminPlanos() {
       permite_webhook_relatorio: form.get("permite_webhook_relatorio") === "on",
       permite_api_parceiros: form.get("permite_api_parceiros") === "on",
       permite_subtenants: form.get("permite_subtenants") === "on",
+      permite_registro_oportunidade: form.get("permite_registro_oportunidade") === "on",
       retencao_dias_relatorio: campoNumeroOuVazio(form.get("retencao_dias_relatorio")),
       retencao_dias_auditoria: campoNumeroOuVazio(form.get("retencao_dias_auditoria")),
     };

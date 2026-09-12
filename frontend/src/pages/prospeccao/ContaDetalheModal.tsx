@@ -62,6 +62,13 @@ interface ContaResumo {
   nome_fantasia: string | null;
 }
 
+interface RegistroOportunidadeResumo {
+  id: number;
+  tenant_id: string;
+  conta_id: number | null;
+  status: string;
+}
+
 interface Props {
   contaId: number;
   onClose: () => void;
@@ -77,6 +84,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
   const [todasAsContas, setTodasAsContas] = useState<ContaResumo[]>([]);
+  const [registroPrime, setRegistroPrime] = useState<RegistroOportunidadeResumo | null>(null);
   const [mostrarDescarte, setMostrarDescarte] = useState(false);
   const [editandoConta, setEditandoConta] = useState(false);
   const [decisorEmEdicaoId, setDecisorEmEdicaoId] = useState<number | null>(null);
@@ -122,6 +130,18 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
         .catch(() => undefined);
     }
   }, [isGestor, contaId]);
+
+  useEffect(() => {
+    // Badge PRIME (raio-X: Registro de Oportunidade) — só busca pra quem
+    // tem o recurso no plano; a listagem já vem escopada à rede/tenant
+    // de quem está logado, então basta achar a linha com esta conta.
+    if (usuario?.recursos_plano.registro_oportunidade) {
+      api
+        .get<RegistroOportunidadeResumo[]>("/registro-oportunidade")
+        .then((registros) => setRegistroPrime(registros.find((r) => r.conta_id === contaId) ?? null))
+        .catch(() => undefined);
+    }
+  }, [usuario, contaId]);
 
   async function atribuirVendedor(vendedorUsuarioId: number | null) {
     await executar("atribuir-vendedor", async () => {
@@ -237,6 +257,13 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
 
       {conta && (
         <>
+          {registroPrime?.status === "ativo" && (
+            <div className="mb-3">
+              <Badge tone={registroPrime.tenant_id === usuario?.tenant_id ? "cyan" : "muted"}>
+                {registroPrime.tenant_id === usuario?.tenant_id ? "PRIME" : "RO de outro tenant"}
+              </Badge>
+            </div>
+          )}
           {editandoConta ? (
             <form onSubmit={salvarConta} className="mb-4 flex flex-col gap-3">
               <div>

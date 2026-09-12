@@ -32,6 +32,7 @@ from app.services.errors import ErroServico
 POC_STARTER_TESTE = {
     "permite_ab_teste_cadencia": False, "permite_auto_aprovacao": False,
     "permite_webhook_relatorio": False, "permite_api_parceiros": False, "permite_subtenants": False,
+    "permite_registro_oportunidade": False,
     "retencao_dias_relatorio": 30, "retencao_dias_auditoria": 90,
 }
 PLANOS_PADRAO = [
@@ -56,6 +57,7 @@ PLANOS_PADRAO = [
         "limite_enriquecimento_site_semanal": 200, "limite_enriquecimento_contatos_semanal": 200,
         "permite_ab_teste_cadencia": True, "permite_auto_aprovacao": False,
         "permite_webhook_relatorio": True, "permite_api_parceiros": True, "permite_subtenants": True,
+        "permite_registro_oportunidade": True,
         "retencao_dias_relatorio": 90, "retencao_dias_auditoria": 365,
     },
     {
@@ -63,6 +65,7 @@ PLANOS_PADRAO = [
         "limite_enriquecimento_site_semanal": 1250, "limite_enriquecimento_contatos_semanal": 1250,
         "permite_ab_teste_cadencia": True, "permite_auto_aprovacao": True,
         "permite_webhook_relatorio": True, "permite_api_parceiros": True, "permite_subtenants": True,
+        "permite_registro_oportunidade": True,
         "retencao_dias_relatorio": None, "retencao_dias_auditoria": None,
     },
 ]

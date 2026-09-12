@@ -48,6 +48,14 @@ const LEADS_NAV_ITEMS: NavItem[] = [
 // (entrou via convite-vitrine, Onda H) tem acesso.
 const NAV_ITEM_REDE_SOCIAL: NavItem = { path: "/rede-social", label: "Rede Social", icon: "◎", end: false };
 
+// RO (Registro de Oportunidade) — deal registration: qualquer papel
+// registra/vê as próprias oportunidades; "Aprovar Descontos" é só de
+// quem decide desconto pra toda a rede (admin do tenant raiz/distribuidor,
+// mesma condição de `ehAdminDistribuidor` — distribuidor nunca tem pai,
+// então é sempre a raiz da própria rede — ou super_admin).
+const RO_NAV_ITEM: NavItem = { path: "/ro", label: "Minhas Oportunidades", icon: "📌" };
+const RO_NAV_ITEM_APROVACOES: NavItem = { path: "/ro/aprovacoes", label: "Aprovar Descontos", icon: "💰" };
+
 // Tenants/Licenças: super_admin OU admin de um tenant distribuidor/
 // revendedor gerenciando a própria subárvore (raio-X: hierarquia). Convites/
 // Planos continuam exclusivos de super_admin — fora do escopo desta fase.
@@ -318,6 +326,14 @@ export function AppShell() {
               {LEADS_NAV_ITEMS.map((item) => (
                 <NavButton key={item.path} {...item} />
               ))}
+            </div>
+          )}
+
+          {temLicencaAtiva && usuario?.recursos_plano.registro_oportunidade && (
+            <div data-tour-id="ro">
+              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">RO</div>
+              <NavButton {...RO_NAV_ITEM} />
+              {(ehAdminDistribuidor || isSuperAdmin) && <NavButton {...RO_NAV_ITEM_APROVACOES} />}
             </div>
           )}
 

@@ -188,6 +188,45 @@ def test_disparar_webhooks_parceiros_sem_segredo_configurado_recusa(client):
     assert resposta.status_code == 403
 
 
+def test_expirar_registros_oportunidade_sem_segredo_configurado_recusa(client):
+    resposta = client.post("/api/v1/cron/expirar-registros-oportunidade")
+    assert resposta.status_code == 403
+
+
+def test_expirar_registros_oportunidade_expira_vencidos_sem_afetar_validos(
+    client, db_session, com_segredo_cron, criar_usuario_autenticado
+):
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.registro_oportunidade import RegistroOportunidade
+    from app.models.usuario import Usuario
+
+    criar_usuario_autenticado("tenant-teste", papel="user", email="vendedor-expira-ro@teste.com.br")
+    vendedor_id = db_session.query(Usuario).filter_by(email="vendedor-expira-ro@teste.com.br").one().id
+
+    vencido = RegistroOportunidade(
+        tenant_id="tenant-teste", rede_raiz_tenant_id="tenant-teste", vendedor_usuario_id=vendedor_id,
+        cnpj="99888777000199", nome_empresa="Empresa Vencida", status="ativo",
+        expira_em=datetime.now(UTC) - timedelta(days=1),
+    )
+    valido = RegistroOportunidade(
+        tenant_id="tenant-teste", rede_raiz_tenant_id="tenant-teste", vendedor_usuario_id=vendedor_id,
+        cnpj="99888777000280", nome_empresa="Empresa Válida", status="ativo",
+        expira_em=datetime.now(UTC) + timedelta(days=30),
+    )
+    db_session.add_all([vencido, valido])
+    db_session.commit()
+
+    resposta = client.post("/api/v1/cron/expirar-registros-oportunidade", headers={"X-Cron-Secret": SEGREDO})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["expirados"] == 1
+    db_session.refresh(vencido)
+    db_session.refresh(valido)
+    assert vencido.status == "expirado"
+    assert valido.status == "ativo"
+
+
 def test_disparar_webhooks_parceiros_com_segredo_certo_retorna_resumo(client, com_segredo_cron):
     resposta = client.post("/api/v1/cron/disparar-webhooks-parceiros", headers={"X-Cron-Secret": SEGREDO})
 

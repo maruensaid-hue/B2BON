@@ -69,6 +69,9 @@ class StubPlanLimitsProvider(PlanLimitsProvider):
     def permite_subtenants(self, tenant_id: str) -> bool:
         return self._permite(tenant_id, "subtenants")
 
+    def permite_registro_oportunidade(self, tenant_id: str) -> bool:
+        return self._permite(tenant_id, "registro_oportunidade")
+
     def obter_retencao_dias_relatorio(self, tenant_id: str) -> int | None:
         return self._retencao_relatorio.get(tenant_id)
 

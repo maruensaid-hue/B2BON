@@ -49,6 +49,10 @@ class PlanLimitsProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def permite_registro_oportunidade(self, tenant_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
     def obter_retencao_dias_relatorio(self, tenant_id: str) -> int | None:
         """`None` = sem limite."""
         raise NotImplementedError

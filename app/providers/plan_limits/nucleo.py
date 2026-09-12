@@ -56,6 +56,10 @@ class NucleoPlanLimitsProvider(PlanLimitsProvider):
         plano = self._plano_ativo(tenant_id)
         return plano.permite_subtenants if plano is not None else False
 
+    def permite_registro_oportunidade(self, tenant_id: str) -> bool:
+        plano = self._plano_ativo(tenant_id)
+        return plano.permite_registro_oportunidade if plano is not None else False
+
     def obter_retencao_dias_relatorio(self, tenant_id: str) -> int | None:
         plano = self._plano_ativo(tenant_id)
         return plano.retencao_dias_relatorio if plano is not None else 0

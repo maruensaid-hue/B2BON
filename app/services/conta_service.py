@@ -130,8 +130,12 @@ def gerar_lista(
         db, tenant_id, "lista_gerada", "icp", icp.id, ator_id, {"quantidade": len(criadas)}
     )
     db.commit()
+
+    from app.services import registro_oportunidade_service
+
     for conta in criadas:
         db.refresh(conta)
+        registro_oportunidade_service.vincular_conta_criada(db, conta)
     return criadas
 
 
@@ -163,6 +167,10 @@ def criar_manual(
     auditoria_service.registrar(db, tenant_id, "conta_criada_manual", "conta", conta.id, ator_id, {"nome": nome})
     db.commit()
     db.refresh(conta)
+
+    from app.services import registro_oportunidade_service
+
+    registro_oportunidade_service.vincular_conta_criada(db, conta)
     return conta
 
 
@@ -199,6 +207,10 @@ def criar_lead(
     auditoria_service.registrar(db, tenant_id, "lead_criado", "conta", conta.id, ator_id, {"nome": nome})
     db.commit()
     db.refresh(conta)
+
+    from app.services import registro_oportunidade_service
+
+    registro_oportunidade_service.vincular_conta_criada(db, conta)
     return conta
 
 

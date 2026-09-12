@@ -296,6 +296,33 @@ def tenant_ids_no_escopo(db: Session, usuario: Usuario, tenant_id_selecionado: s
     return list(visiveis)
 
 
+def obter_raiz_da_rede(db: Session, tenant_id: str) -> str:
+    """Sobe a cadeia de `tenant_pai_id` a partir de `tenant_id` até o
+    tenant sem pai (a raiz da rede) — diferente de `tenant_ids_no_escopo`,
+    que é sobre VISIBILIDADE de quem chama (um `user` só vê o próprio
+    tenant); aqui o escopo é sempre a rede toda, independente do papel de
+    quem chama (raio-X do Registro de Oportunidade: o conflito de PRIME
+    entre revendedores precisa alcançar a rede inteira, mesmo quando quem
+    registra é um vendedor comum sem visão de hierarquia nenhuma)."""
+    atual = db.query(Tenant).filter_by(id=tenant_id).one_or_none()
+    raiz_id = tenant_id
+    for _ in range(_PROFUNDIDADE_MAXIMA_HIERARQUIA):
+        if atual is None or atual.tenant_pai_id is None:
+            break
+        atual = db.query(Tenant).filter_by(id=atual.tenant_pai_id).one_or_none()
+        if atual is not None:
+            raiz_id = atual.id
+    return raiz_id
+
+
+def tenant_ids_da_rede(db: Session, tenant_id: str) -> list[str]:
+    """Toda a rede a que `tenant_id` pertence: sobe até a raiz da
+    hierarquia (`obter_raiz_da_rede`) e desce a subárvore inteira a
+    partir dali (`listar_subarvore`)."""
+    raiz_id = obter_raiz_da_rede(db, tenant_id)
+    return [t.id for t in listar_subarvore(db, raiz_id)]
+
+
 _DIAS_CARENCIA_PAGAMENTO = 3
 
 

@@ -11,6 +11,7 @@ export interface RecursosPlano {
   webhook_relatorio: boolean;
   api_parceiros: boolean;
   subtenants: boolean;
+  registro_oportunidade: boolean;
   retencao_dias_relatorio: number | null;
 }
 

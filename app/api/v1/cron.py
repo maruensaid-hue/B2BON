@@ -36,6 +36,7 @@ from app.services import (
     envio_service,
     nps_service,
     pagamento_licenca_service,
+    registro_oportunidade_service,
     relatorio_service,
     reuniao_service,
     tenant_service,
@@ -268,3 +269,11 @@ def enviar_lembretes_cobranca(
     do vencimento e lembrete diário durante a carência de 3 dias após,
     mesma janela usada por `suspender-licencas-vencidas`. Roda 1x/dia."""
     return pagamento_licenca_service.enviar_lembretes_cobranca(db, email)
+
+
+@router.post("/expirar-registros-oportunidade", dependencies=[Depends(_exigir_segredo_cron)])
+def expirar_registros_oportunidade(db: Session = Depends(get_db)) -> dict:
+    """Libera o CNPJ pra um novo Registro de Oportunidade quando o
+    anterior passa da validade sem decisão (raio-X: deal registration).
+    Roda 1x/dia."""
+    return {"expirados": registro_oportunidade_service.expirar_registros_vencidos(db)}

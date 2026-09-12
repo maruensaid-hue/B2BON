@@ -17,6 +17,7 @@ class PlanoSchema(BaseModel):
     permite_webhook_relatorio: bool
     permite_api_parceiros: bool
     permite_subtenants: bool
+    permite_registro_oportunidade: bool
     retencao_dias_relatorio: int | None
     retencao_dias_auditoria: int | None
 
@@ -34,6 +35,7 @@ class CriarPlanoRequestSchema(BaseModel):
     permite_webhook_relatorio: bool = False
     permite_api_parceiros: bool = False
     permite_subtenants: bool = False
+    permite_registro_oportunidade: bool = False
     retencao_dias_relatorio: int | None = None
     retencao_dias_auditoria: int | None = None
 

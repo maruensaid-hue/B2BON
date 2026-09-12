@@ -40,6 +40,7 @@ from app.api.v1.relatorios import router as relatorios_router
 from app.api.v1.rotulos_hierarquia import router as rotulos_hierarquia_router
 from app.api.v1.qualificacao import router as qualificacao_router
 from app.api.v1.rede_social import router as rede_social_router
+from app.api.v1.registro_oportunidade import router as registro_oportunidade_router
 from app.api.v1.reunioes import router as reunioes_router
 from app.api.v1.ropa import router as ropa_router
 from app.api.v1.saude_conta import router as saude_conta_router
@@ -111,5 +112,6 @@ router.include_router(motor_router, dependencies=_exige_licenca)
 # tenant (escopo aplicado no serviço), distinto do /motor acima (só
 # super_admin, cross-tenant).
 router.include_router(saude_conta_router, dependencies=_exige_licenca)
+router.include_router(registro_oportunidade_router, dependencies=_exige_licenca)
 router.include_router(usuarios_router, dependencies=_exige_licenca)
 router.include_router(template_proposta_router, dependencies=_exige_licenca)

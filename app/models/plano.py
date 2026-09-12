@@ -41,6 +41,7 @@ class Plano(Base):
     permite_webhook_relatorio: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     permite_api_parceiros: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     permite_subtenants: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    permite_registro_oportunidade: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Nulo = sem limite — mesmo padrão dos limites de enriquecimento acima.
     retencao_dias_relatorio: Mapped[int | None] = mapped_column(Integer, nullable=True)
     retencao_dias_auditoria: Mapped[int | None] = mapped_column(Integer, nullable=True)

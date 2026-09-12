@@ -81,6 +81,7 @@ def _resposta_token(
         webhook_relatorio=plan_limits.permite_webhook_relatorio(usuario.tenant_id),
         api_parceiros=plan_limits.permite_api_parceiros(usuario.tenant_id),
         subtenants=plan_limits.permite_subtenants(usuario.tenant_id),
+        registro_oportunidade=plan_limits.permite_registro_oportunidade(usuario.tenant_id),
         retencao_dias_relatorio=plan_limits.obter_retencao_dias_relatorio(usuario.tenant_id),
     )
     usuario_schema = UsuarioSchema.model_validate(usuario).model_copy(

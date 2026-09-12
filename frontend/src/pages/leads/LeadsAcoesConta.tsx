@@ -75,6 +75,13 @@ interface UsuarioResumo {
   nome: string;
 }
 
+interface RegistroOportunidadeResumo {
+  id: number;
+  tenant_id: string;
+  conta_id: number | null;
+  status: string;
+}
+
 function toneStatusReuniao(status: string): "cyan" | "green" | "amber" | "red" | "muted" {
   if (status === "agendada") return "cyan";
   if (status === "realizada") return "green";
@@ -102,6 +109,7 @@ export function LeadsAcoesConta() {
   const [cadencias, setCadencias] = useState<Cadencia[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
   const [todasAsContas, setTodasAsContas] = useState<ContaResumo[]>([]);
+  const [registroPrime, setRegistroPrime] = useState<RegistroOportunidadeResumo | null>(null);
 
   const [editandoEmpresa, setEditandoEmpresa] = useState(false);
   const [editandoProximoPasso, setEditandoProximoPasso] = useState(false);
@@ -162,6 +170,18 @@ export function LeadsAcoesConta() {
         .catch(() => undefined);
     }
   }, [isGestor, contaId]);
+
+  useEffect(() => {
+    // Badge PRIME (raio-X: Registro de Oportunidade) — só busca pra quem
+    // tem o recurso no plano; a listagem já vem escopada à rede/tenant
+    // de quem está logado, então basta achar a linha com esta conta.
+    if (usuario?.recursos_plano.registro_oportunidade) {
+      api
+        .get<RegistroOportunidadeResumo[]>("/registro-oportunidade")
+        .then((registros) => setRegistroPrime(registros.find((r) => r.conta_id === contaId) ?? null))
+        .catch(() => undefined);
+    }
+  }, [usuario, contaId]);
 
   async function executar(nomeAcao: string, acao: () => Promise<void>) {
     setErro(null);
@@ -339,7 +359,14 @@ export function LeadsAcoesConta() {
 
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <div className="font-head text-xl font-bold">{conta.nome_fantasia || conta.nome}</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">{conta.nome_fantasia || conta.nome}</div>
+            {registroPrime?.status === "ativo" && (
+              <Badge tone={registroPrime.tenant_id === usuario?.tenant_id ? "cyan" : "muted"}>
+                {registroPrime.tenant_id === usuario?.tenant_id ? "PRIME" : "RO de outro tenant"}
+              </Badge>
+            )}
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">Lead avulso — fora do recorte de ICP</div>
         </div>
         <Button size="sm" variant="ghost" onClick={() => setModalEnriquecimento(true)}>

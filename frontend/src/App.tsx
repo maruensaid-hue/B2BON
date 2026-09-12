@@ -37,6 +37,10 @@ const Map = lazy(() => import("@/pages/map/Map").then((m) => ({ default: m.Map }
 const Prospeccao = lazy(() => import("@/pages/prospeccao/Prospeccao").then((m) => ({ default: m.Prospeccao })));
 const RedeSocial = lazy(() => import("@/pages/rede-social/RedeSocial").then((m) => ({ default: m.RedeSocial })));
 const Reunioes = lazy(() => import("@/pages/reunioes/Reunioes").then((m) => ({ default: m.Reunioes })));
+const RegistroOportunidade = lazy(() =>
+  import("@/pages/ro/RegistroOportunidade").then((m) => ({ default: m.RegistroOportunidade })),
+);
+const AprovarDescontos = lazy(() => import("@/pages/ro/AprovarDescontos").then((m) => ({ default: m.AprovarDescontos })));
 
 function CarregandoPagina() {
   return <div className="p-5.5 text-[12px] text-muted">Carregando...</div>;
@@ -99,6 +103,22 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <LeadsAcoesConta />
+              </Suspense>
+            }
+          />
+          <Route
+            path="ro"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <RegistroOportunidade />
+              </Suspense>
+            }
+          />
+          <Route
+            path="ro/aprovacoes"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <AprovarDescontos />
               </Suspense>
             }
           />
