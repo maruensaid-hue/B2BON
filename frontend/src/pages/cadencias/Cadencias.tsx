@@ -231,6 +231,12 @@ export function Cadencias() {
     });
   }
 
+  function alternarTodasAsContas() {
+    setContasSelecionadas((atual) =>
+      atual.size === contasDoIcp.length ? new Set() : new Set(contasDoIcp.map((conta) => conta.id)),
+    );
+  }
+
   async function gerarParaLote() {
     if (cadenciaSelecionadaId === null || contasSelecionadas.size === 0) return;
     setErro(null);
@@ -451,17 +457,27 @@ export function Cadencias() {
               )}
 
               {contasDoIcp.length > 0 && (
-                <div className="mb-3 flex max-h-64 flex-col gap-1 overflow-y-auto rounded-lg border border-border p-2">
-                  {contasDoIcp.map((conta) => (
-                    <label key={conta.id} className="flex items-center gap-2 text-[12px]">
-                      <input
-                        type="checkbox"
-                        checked={contasSelecionadas.has(conta.id)}
-                        onChange={() => alternarConta(conta.id)}
-                      />
-                      {conta.nome}
-                    </label>
-                  ))}
+                <div className="mb-3 rounded-lg border border-border">
+                  <label className="flex items-center gap-2 border-b border-border p-2 text-[12px] font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={contasSelecionadas.size === contasDoIcp.length}
+                      onChange={alternarTodasAsContas}
+                    />
+                    Selecionar todos ({contasDoIcp.length})
+                  </label>
+                  <div className="flex max-h-64 flex-col gap-1 overflow-y-auto p-2">
+                    {contasDoIcp.map((conta) => (
+                      <label key={conta.id} className="flex items-center gap-2 text-[12px]">
+                        <input
+                          type="checkbox"
+                          checked={contasSelecionadas.has(conta.id)}
+                          onChange={() => alternarConta(conta.id)}
+                        />
+                        {conta.nome}
+                      </label>
+                    ))}
+                  </div>
                 </div>
               )}
               {contasDoIcp.length === 0 &&
