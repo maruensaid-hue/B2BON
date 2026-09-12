@@ -329,7 +329,7 @@ export function AppShell() {
             </div>
           )}
 
-          {temLicencaAtiva && usuario?.recursos_plano.registro_oportunidade && (
+          {temLicencaAtiva && (usuario?.recursos_plano.registro_oportunidade || isSuperAdmin) && (
             <div data-tour-id="ro">
               <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">RO</div>
               <NavButton {...RO_NAV_ITEM} />
