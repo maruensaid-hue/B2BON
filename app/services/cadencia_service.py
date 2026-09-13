@@ -84,8 +84,26 @@ def criar(
     if len(canais) < MINIMO_CANAIS_DISTINTOS:
         raise RegraNegocioViolada("Os toques precisam estar distribuídos entre pelo menos 2 canais.")
 
+    # Capturado AGORA, na criação — não re-avaliado a cada geração (raio-X:
+    # bug real de produção, ver docstring de `Cadencia.icp_id`/`oferta_id`
+    # e de `_contexto_de_geracao`). `dados.icp_id` explícito serve pra quem
+    # tem mais de um ICP ativo simultâneo (comparação de campanhas); a
+    # Oferta nunca tem essa ambiguidade — só uma fica ativa por vez
+    # (`oferta_service.ativar`).
+    if dados.icp_id is not None:
+        icp = db.query(ICP).filter_by(id=dados.icp_id, tenant_id=tenant_id).one_or_none()
+        if icp is None:
+            raise NaoEncontrado(f"ICP {dados.icp_id} não encontrado")
+        icp_id = icp.id
+    else:
+        icp_ativo = db.query(ICP).filter_by(tenant_id=tenant_id, ativo=True).first()
+        icp_id = icp_ativo.id if icp_ativo else None
+    oferta_ativa = db.query(Oferta).filter_by(tenant_id=tenant_id, ativo=True).first()
+    oferta_id = oferta_ativa.id if oferta_ativa else None
+
     cadencia = Cadencia(
-        tenant_id=tenant_id, nome=dados.nome, canais=sorted(canais), status="rascunho", tipo=dados.tipo
+        tenant_id=tenant_id, nome=dados.nome, canais=sorted(canais), status="rascunho", tipo=dados.tipo,
+        icp_id=icp_id, oferta_id=oferta_id,
     )
     db.add(cadencia)
     db.flush()
@@ -111,11 +129,25 @@ def criar(
     return cadencia
 
 
-def _contexto_de_geracao(db: Session, tenant_id: str) -> tuple[ICP, Oferta, ConfiguracaoComunicacao]:
-    icp = db.query(ICP).filter_by(tenant_id=tenant_id, ativo=True).first()
+def _contexto_de_geracao(
+    db: Session, tenant_id: str, icp_id: int | None = None, oferta_id: int | None = None
+) -> tuple[ICP, Oferta, ConfiguracaoComunicacao]:
+    """`icp_id`/`oferta_id` vêm de `Cadencia.icp_id`/`Cadencia.oferta_id`
+    (capturados na criação) — busca por id, não mais "o que estiver ativo
+    agora" (raio-X: bug real de produção, ver docstring de
+    `Cadencia.icp_id`). `None` só acontece pra cadência criada antes desta
+    coluna existir; cai no fallback antigo, único caso em que "ativo
+    agora" ainda é usado."""
+    if icp_id is not None:
+        icp = db.query(ICP).filter_by(id=icp_id, tenant_id=tenant_id).one_or_none()
+    else:
+        icp = db.query(ICP).filter_by(tenant_id=tenant_id, ativo=True).first()
     if icp is None:
         raise RegraNegocioViolada("Sem ICP ativo, o motor não inicia prospecção.")
-    oferta = db.query(Oferta).filter_by(tenant_id=tenant_id, ativo=True).first()
+    if oferta_id is not None:
+        oferta = db.query(Oferta).filter_by(id=oferta_id, tenant_id=tenant_id).one_or_none()
+    else:
+        oferta = db.query(Oferta).filter_by(tenant_id=tenant_id, ativo=True).first()
     if oferta is None:
         raise RegraNegocioViolada("Cadastre ao menos uma oferta antes de gerar uma cadência.")
     config = db.query(ConfiguracaoComunicacao).filter_by(tenant_id=tenant_id).one_or_none()
@@ -188,7 +220,10 @@ def _gerar_conteudo_toque(
     falhou_por_erro_ia = False
     for _ in range(_TENTATIVAS_POR_TOQUE):
         try:
-            resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt))
+            # max_tokens acima do default (1024) — mensagens de prospecção
+            # em português, com contexto de ICP/oferta, às vezes batiam no
+            # teto padrão e voltavam cortadas ao meio (ver claude_provider.py).
+            resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt, max_tokens=2048))
         except RegraNegocioViolada:
             falhou_por_erro_ia = True
             continue
@@ -227,7 +262,7 @@ def gerar_para_lote(
         )
     cadencia = obter(db, tenant_id, cadencia_id)
     toques = toques_da_cadencia(db, cadencia.id)
-    icp, oferta, config = _contexto_de_geracao(db, tenant_id)
+    icp, oferta, config = _contexto_de_geracao(db, tenant_id, cadencia.icp_id, cadencia.oferta_id)
 
     contas_processadas: list[int] = []
     contas_sem_decisor: list[int] = []

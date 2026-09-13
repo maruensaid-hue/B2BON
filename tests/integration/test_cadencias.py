@@ -249,6 +249,52 @@ def test_gerar_nao_derruba_lote_inteiro_quando_ia_falha_persistentemente(
     assert corpo["toques_bloqueados_restricao"] == 0
 
 
+def test_gerar_usa_oferta_travada_na_criacao_mesmo_apos_trocar_a_ativa(
+    client, criar_icp, criar_oferta, configurar_comunicacao, criar_conta_com_decisor, criar_cadencia, fake_llm
+):
+    """Raio-X de produção real: usuário tinha uma cadência desenhada pra
+    prospectar "B2B ON" e, depois de criá-la, trocou a oferta ativa pra
+    outra campanha ("Acronis", que a CyberFort também revende) —
+    `oferta_service.ativar` desativa a anterior ao ativar uma nova.
+    Antes desta correção isso corrompia silenciosamente a geração da
+    cadência JÁ CRIADA (ela usava "a oferta ativa agora", não a que
+    existia quando foi desenhada). A partir de agora a cadência fica
+    travada na oferta que estava ativa no momento em que foi criada."""
+    criar_icp(nome="ICP B2B ON")
+    criar_oferta(nome="Oferta B2B ON", descricao="Plataforma de CRM B2B ON")
+    configurar_comunicacao()
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+
+    # Troca a oferta ativa DEPOIS de criar a cadência.
+    criar_oferta(nome="Oferta Acronis", descricao="Backup e cibersegurança Acronis")
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["mensagens_geradas"] == 5
+    prompts = [chamada.prompt for chamada in fake_llm.chamadas]
+    assert all("Oferta B2B ON" in prompt for prompt in prompts)
+    assert all("Acronis" not in prompt for prompt in prompts)
+
+
+def test_criar_cadencia_com_icp_explicito_quando_ha_mais_de_um_ativo(
+    client, criar_icp, criar_oferta, configurar_comunicacao, criar_cadencia
+):
+    """Múltiplos ICPs ativos ao mesmo tempo são suportados de propósito
+    (comparação de campanhas, `icp_service.performance`) — quem cria a
+    cadência precisa poder escolher qual dos dois é o certo, em vez de
+    a API adivinhar "o primeiro que aparecer"."""
+    criar_icp(nome="ICP A")
+    icp_b = criar_icp(nome="ICP B")
+    criar_oferta()
+    configurar_comunicacao()
+
+    cadencia = criar_cadencia(icp_id=icp_b["id"])
+
+    assert cadencia["icp_id"] == icp_b["id"]
+
+
 def test_ativar_falha_com_toques_pendentes_de_aprovacao(
     client, onboarding_completo, criar_conta_com_decisor, criar_cadencia
 ):

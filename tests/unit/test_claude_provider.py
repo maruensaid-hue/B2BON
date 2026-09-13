@@ -52,6 +52,37 @@ def test_generate_sem_nenhum_bloco_de_texto_levanta_llm_indisponivel(monkeypatch
         provider.generate(LLMRequest(prompt="qualquer coisa"))
 
 
+def test_generate_bloco_de_texto_vazio_levanta_llm_indisponivel(monkeypatch: pytest.MonkeyPatch):
+    """Raio-X de produção real: um bloco de texto VAZIO ("") passava como
+    sucesso — só `texto is None` era tratado como falha, então a
+    mensagem "gerada" seguia adiante sem corpo nenhum, e quem usa a tela
+    via só o rodapé de opt-out (`_rodape_por_canal`), sem nenhum texto
+    de verdade."""
+    monkeypatch.setattr(settings, "anthropic_api_key", "chave-teste")
+    mensagem_falsa = MagicMock()
+    mensagem_falsa.content = [_bloco("text", "")]
+    mensagem_falsa.stop_reason = "end_turn"
+    provider = _provider_com_resposta(mensagem_falsa)
+
+    with pytest.raises(LLMIndisponivel):
+        provider.generate(LLMRequest(prompt="qualquer coisa"))
+
+
+def test_generate_resposta_cortada_por_limite_de_tokens_levanta_llm_indisponivel(monkeypatch: pytest.MonkeyPatch):
+    """Raio-X de produção real: mensagens de cadência chegavam cortadas no
+    meio da frase, sem conclusão — a IA atingiu o teto de tokens antes de
+    terminar (`stop_reason == "max_tokens"`), mas isso nunca era checado;
+    o texto parcial era aceito como se fosse a mensagem completa."""
+    monkeypatch.setattr(settings, "anthropic_api_key", "chave-teste")
+    mensagem_falsa = MagicMock()
+    mensagem_falsa.content = [_bloco("text", "Prezado cliente, gostaria de apresentar nossa")]
+    mensagem_falsa.stop_reason = "max_tokens"
+    provider = _provider_com_resposta(mensagem_falsa)
+
+    with pytest.raises(LLMIndisponivel):
+        provider.generate(LLMRequest(prompt="qualquer coisa"))
+
+
 def test_generate_com_typeerror_da_sdk_levanta_llm_indisponivel(monkeypatch: pytest.MonkeyPatch):
     """Raio-X de produção real (2026-08-27): sem lock file, a versão da SDK
     da Anthropic instalada em produção pode divergir da testada localmente

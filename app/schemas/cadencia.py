@@ -9,6 +9,8 @@ class CadenciaSchema(BaseModel):
     id: int
     tenant_id: str
     conta_id: int | None
+    icp_id: int | None
+    oferta_id: int | None
     nome: str
     canais: list
     status: str
@@ -41,6 +43,11 @@ class CadenciaCreateSchema(BaseModel):
     nome: str
     toques: list[ToqueCadenciaCreateSchema]
     tipo: str = "prospeccao"
+    # Opcional — só relevante pra quem tem mais de um ICP ativo ao mesmo
+    # tempo (comparação de campanhas, `icp_service.performance`). Sem
+    # informar, cai no ICP ativo (o primeiro encontrado, mesmo
+    # comportamento de antes desta correção).
+    icp_id: int | None = None
 
 
 class GerarCadenciaRequestSchema(BaseModel):

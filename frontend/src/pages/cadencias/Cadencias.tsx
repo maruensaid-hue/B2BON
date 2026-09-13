@@ -17,6 +17,13 @@ interface Cadencia {
   status: "rascunho" | "aguardando_aprovacao" | "ativa";
   tipo: string;
   data_inicio: string | null;
+  icp_id: number | null;
+  oferta_id: number | null;
+}
+
+interface OfertaResumo {
+  id: number;
+  nome: string;
 }
 
 interface ToqueCadencia {
@@ -78,6 +85,8 @@ export function Cadencias() {
   const [cadenciaSelecionadaId, setCadenciaSelecionadaId] = useState<number | null>(null);
   const [toques, setToques] = useState<ToqueCadencia[]>([]);
   const [icps, setIcps] = useState<ICP[]>([]);
+  const [ofertas, setOfertas] = useState<OfertaResumo[]>([]);
+  const [icpParaCriacaoId, setIcpParaCriacaoId] = useState<number | null>(null);
   const [listas, setListas] = useState<ListaProspeccao[]>([]);
   const [origemLote, setOrigemLote] = useState<"icp" | "lista" | "leads">("icp");
   const [icpParaLoteId, setIcpParaLoteId] = useState<number | null>(null);
@@ -133,9 +142,18 @@ export function Cadencias() {
     }
   }
 
+  async function carregarOfertas() {
+    try {
+      setOfertas(await api.get<OfertaResumo[]>("/ofertas"));
+    } catch {
+      setErro("Não foi possível carregar as ofertas.");
+    }
+  }
+
   useEffect(() => {
     carregarCadencias();
     carregarIcps();
+    carregarOfertas();
     carregarListas();
   }, []);
 
@@ -201,6 +219,7 @@ export function Cadencias() {
       await api.post("/cadencias", {
         nome: String(form.get("nome")),
         tipo: String(form.get("tipo")),
+        icp_id: icpParaCriacaoId,
         toques: rascunhoToques.map((toque) => ({
           ordem: toque.ordem,
           canal: toque.canal,
@@ -210,6 +229,7 @@ export function Cadencias() {
         })),
       });
       setModalCriarAberto(false);
+      setIcpParaCriacaoId(null);
       setRascunhoToques([
         toqueVazio(1, "email"),
         toqueVazio(2, "whatsapp"),
@@ -377,6 +397,10 @@ export function Cadencias() {
                   </>
                 )}
               </div>
+            </div>
+            <div className="mb-2 text-[11px] text-muted">
+              Campanha: {ofertas.find((o) => o.id === cadenciaSelecionada.oferta_id)?.nome ?? "—"} · ICP:{" "}
+              {icps.find((i) => i.id === cadenciaSelecionada.icp_id)?.nome ?? "—"}
             </div>
             <div className="flex flex-col gap-1.5">
               {toques.map((toque) => (
@@ -556,6 +580,31 @@ export function Cadencias() {
               <option value="nutricao">Nutrição</option>
             </Select>
           </div>
+
+          {icps.filter((icp) => icp.ativo).length > 1 && (
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+                ICP desta campanha
+              </div>
+              <Select
+                value={icpParaCriacaoId ?? ""}
+                onChange={(event) => setIcpParaCriacaoId(event.target.value ? Number(event.target.value) : null)}
+              >
+                <option value="">Usar o primeiro ICP ativo</option>
+                {icps
+                  .filter((icp) => icp.ativo)
+                  .map((icp) => (
+                    <option key={icp.id} value={icp.id}>
+                      {icp.nome}
+                    </option>
+                  ))}
+              </Select>
+              <div className="mt-1 text-[11px] text-muted">
+                Você tem mais de um ICP ativo — escolha a qual campanha esta cadência pertence, pra não misturar
+                o contexto de uma campanha com o de outra na hora de gerar as mensagens.
+              </div>
+            </div>
+          )}
 
           <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
             Toques (mínimo 5, em pelo menos 2 canais)

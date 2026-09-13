@@ -51,8 +51,23 @@ class ClaudeProvider(LLMProvider):
         # `AttributeError` sempre que isso acontecia, virando um 500 cru
         # em vez do resumo esperado.
         texto = next((bloco.text for bloco in message.content if bloco.type == "text"), None)
-        if texto is None:
+        # `not texto` (não só `is None`) — raio-X de produção real: um
+        # bloco de texto VAZIO (`""`) passava batido daqui (só o `None`
+        # era tratado como falha), e como `validar_texto("", restricoes)`
+        # não encontra nenhuma restrição numa string vazia, a mensagem
+        # "gerada" seguia adiante como válida — o usuário via só o
+        # rodapé de opt-out, sem corpo nenhum.
+        if not texto:
             raise LLMIndisponivel("A IA não retornou texto na resposta.")
+        # `stop_reason == "max_tokens"` = a resposta foi cortada no meio
+        # por atingir o teto de tokens, não por ter terminado sozinha —
+        # raio-X de produção real: mensagens chegavam cortadas ao meio da
+        # frase, sem conclusão, porque isso nunca era checado; qualquer
+        # texto parcial era aceito como se fosse a mensagem completa.
+        if message.stop_reason == "max_tokens":
+            raise LLMIndisponivel(
+                "A IA foi cortada antes de terminar a resposta (limite de tokens)."
+            )
 
         return LLMResponse(
             content=texto,
