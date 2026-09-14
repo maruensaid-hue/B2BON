@@ -73,9 +73,9 @@ const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
 const ADMIN_NAV_ITEM_INTEGRACOES: NavItem = { path: "/admin/integracoes", label: "Integrações", icon: "🔌" };
 
 const CLASSE_ITEM_BASE =
-  "mb-0.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] whitespace-nowrap text-muted transition-colors";
+  "mb-0.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] whitespace-nowrap text-nav-muted transition-colors";
 const CLASSE_ITEM_ATIVO = "border-cyan bg-cyan/15 font-bold text-cyan";
-const CLASSE_ITEM_INATIVO = "hover:bg-white/3 hover:text-text";
+const CLASSE_ITEM_INATIVO = "hover:bg-nav-hover hover:text-nav-text";
 
 function NavButton({ path, label, icon, end }: NavItem) {
   return (
@@ -113,7 +113,7 @@ function NavGroup({ label, icon, path, itens }: { label: string; icon: string; p
         setAberto((atual) => !atual);
       }}
       aria-label={aberto ? "Recolher submenu" : "Expandir submenu"}
-      className="flex-shrink-0 rounded px-1 text-[10px] text-muted hover:text-text"
+      className="flex-shrink-0 rounded px-1 text-[10px] text-nav-muted hover:text-nav-text"
     >
       {aberto ? "▾" : "▸"}
     </button>
@@ -147,7 +147,7 @@ function NavGroup({ label, icon, path, itens }: { label: string; icon: string; p
         </button>
       )}
       {aberto && (
-        <div className="mt-0.5 ml-4 flex flex-col gap-0.5 border-l border-border pl-2">
+        <div className="mt-0.5 ml-4 flex flex-col gap-0.5 border-l border-nav-border pl-2">
           {itens.map((item) => (
             <NavButton key={item.path} {...item} />
           ))}
@@ -263,21 +263,21 @@ export function AppShell() {
 
       <aside
         className={cn(
-          "relative z-20 flex flex-shrink-0 flex-col overflow-hidden border-r border-border bg-surf transition-[width] duration-200",
+          "relative z-20 flex flex-shrink-0 flex-col overflow-hidden border-r border-nav-border bg-nav-bg transition-[width] duration-200",
           collapsed ? "w-[58px]" : "w-[220px]",
           "max-sm:fixed max-sm:h-full max-sm:w-[220px] max-sm:-translate-x-full max-sm:transition-transform",
           mobileOpen && "max-sm:translate-x-0",
         )}
       >
-        <div className="flex items-center gap-2.5 border-b border-border p-3.5">
-          <div className="flex h-8.5 w-8.5 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan to-[#005F7A] font-head text-[17px] font-black text-bg">
+        <div className="flex items-center gap-2.5 border-b border-nav-border p-3.5">
+          <div className="flex h-8.5 w-8.5 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan to-[#005F7A] font-head text-[17px] font-black text-white">
             B
           </div>
           <div className="overflow-hidden whitespace-nowrap">
-            <div className="font-head text-[15px] leading-none font-extrabold">
+            <div className="font-head text-[15px] leading-none font-extrabold text-nav-text">
               B2B <span className="text-cyan">ON</span>
             </div>
-            <div className="text-[9px] tracking-widest text-muted">OPERATING NETWORK</div>
+            <div className="text-[9px] tracking-widest text-nav-muted">OPERATING NETWORK</div>
           </div>
         </div>
 
@@ -285,11 +285,11 @@ export function AppShell() {
           <button
             type="button"
             onClick={() => setBuscaAberta(true)}
-            className="mb-1.5 flex w-full items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-muted transition-colors hover:bg-white/3 hover:text-text"
+            className="mb-1.5 flex w-full items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-nav-muted transition-colors hover:bg-nav-hover hover:text-nav-text"
           >
             <span className="w-5 flex-shrink-0 text-center text-[15px]">🔍</span>
             <span className="flex-1 overflow-hidden text-left text-ellipsis">Buscar</span>
-            <span className="flex-shrink-0 rounded border border-border px-1 text-[9px] text-muted">Ctrl K</span>
+            <span className="flex-shrink-0 rounded border border-nav-border px-1 text-[9px] text-nav-muted">Ctrl K</span>
           </button>
 
           {temLicencaAtiva && (
@@ -322,7 +322,7 @@ export function AppShell() {
 
           {temLicencaAtiva && (
             <div data-tour-id="leads">
-              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">Leads</div>
+              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">Leads</div>
               {LEADS_NAV_ITEMS.map((item) => (
                 <NavButton key={item.path} {...item} />
               ))}
@@ -331,7 +331,7 @@ export function AppShell() {
 
           {temLicencaAtiva && (usuario?.recursos_plano.registro_oportunidade || isSuperAdmin) && (
             <div data-tour-id="ro">
-              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">RO</div>
+              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">RO</div>
               <NavButton {...RO_NAV_ITEM} />
               {(ehAdminDistribuidor || isSuperAdmin) && <NavButton {...RO_NAV_ITEM_APROVACOES} />}
             </div>
@@ -339,7 +339,7 @@ export function AppShell() {
 
           {(isSuperAdmin || ehGestorHierarquico) && (
             <div data-tour-id="admin">
-              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-muted uppercase">Admin</div>
+              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">Admin</div>
               {ADMIN_NAV_ITEMS_HIERARQUIA.map((item) => (
                 <NavButton key={item.path} {...item} />
               ))}
@@ -352,23 +352,23 @@ export function AppShell() {
         <button
           type="button"
           onClick={() => setFaqAberto(true)}
-          className="mx-1.5 mb-1.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-muted transition-colors hover:bg-white/3 hover:text-text"
+          className="mx-1.5 mb-1.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-nav-muted transition-colors hover:bg-nav-hover hover:text-nav-text"
         >
           <span className="w-5 flex-shrink-0 text-center text-[15px]">❓</span>
           <span>FAQ</span>
         </button>
 
-        <div className="flex items-center gap-2.5 border-t border-border p-2.5">
-          <div className="flex h-7.5 w-7.5 flex-shrink-0 items-center justify-center rounded-full bg-violet/15 text-xs font-bold text-violet">
+        <div className="flex items-center gap-2.5 border-t border-nav-border p-2.5">
+          <div className="flex h-7.5 w-7.5 flex-shrink-0 items-center justify-center rounded-full bg-violet/25 text-xs font-bold text-violet">
             {usuario?.nome?.[0]?.toUpperCase() ?? "?"}
           </div>
           <div className="min-w-0 flex-1 overflow-hidden">
-            <div className="overflow-hidden text-[12px] font-semibold text-ellipsis whitespace-nowrap">
+            <div className="overflow-hidden text-[12px] font-semibold text-ellipsis whitespace-nowrap text-nav-text">
               {usuario?.nome}
             </div>
-            <div className="text-[9px] tracking-wide text-violet">{usuario?.papel?.toUpperCase()}</div>
+            <div className="text-[9px] tracking-wide text-nav-muted">{usuario?.papel?.toUpperCase()}</div>
           </div>
-          <button onClick={sair} className="flex-shrink-0 text-[11px] text-muted hover:text-red">
+          <button onClick={sair} className="flex-shrink-0 text-[11px] text-nav-muted hover:text-red">
             Sair
           </button>
         </div>

@@ -25,6 +25,18 @@
   --color-muted: #4b5c72;
   --color-border: rgba(16, 24, 38, 0.1);
   --color-border2: rgba(16, 24, 38, 0.18);
+
+  /* Menu lateral "de duas cores" (raio-X 2026-09-14, pedido do usuário a
+     partir de um mockup): fundo escuro só no menu — o conteúdo continua
+     no tema claro acima, sem reabrir o problema do tema 100% escuro
+     original (cansava a vista em telas longas de leitura). Reaproveita
+     o mesmo tom de --color-text como fundo (já era o "tinta" mais escura
+     do app) em vez de inventar uma cor nova. */
+  --color-nav-bg: #101826;
+  --color-nav-text: #ffffff;
+  --color-nav-muted: #94a3b8;
+  --color-nav-border: rgba(255, 255, 255, 0.08);
+  --color-nav-hover: rgba(255, 255, 255, 0.06);
 }
 
 * {
