@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -25,6 +26,8 @@ from app.services import (
     optout_service,
 )
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
+
+logger = logging.getLogger(__name__)
 
 MINIMO_TOQUES = 5
 MINIMO_CANAIS_DISTINTOS = 2
@@ -224,7 +227,13 @@ def _gerar_conteudo_toque(
             # em português, com contexto de ICP/oferta, às vezes batiam no
             # teto padrão e voltavam cortadas ao meio (ver claude_provider.py).
             resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt, max_tokens=2048))
-        except RegraNegocioViolada:
+        except RegraNegocioViolada as erro:
+            # Raio-X: a retentativa engolia esse erro sem logar nada — o
+            # Render só mostrava "POST .../messages 400 Bad Request" (do
+            # httpx, sem o corpo do erro), impossível de diagnosticar sem
+            # isto. `str(erro)` já inclui a mensagem original da Anthropic
+            # (embutida por `llm_helpers.gerar`).
+            logger.warning("Falha ao gerar toque via IA (tentativa será refeita): %s", erro)
             falhou_por_erro_ia = True
             continue
         falhou_por_erro_ia = False
