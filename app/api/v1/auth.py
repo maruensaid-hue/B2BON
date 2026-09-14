@@ -88,6 +88,7 @@ def _resposta_token(
         update={
             "tenant_tipo": tenant.tipo if tenant is not None else "cliente",
             "recursos_plano": recursos_plano,
+            "aviso_whatsapp_template_confirmado": tenant.aviso_whatsapp_template_confirmado if tenant is not None else False,
         }
     )
     if primeiro_login and email_provider is not None:

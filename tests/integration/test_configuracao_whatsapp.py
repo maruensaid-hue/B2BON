@@ -130,6 +130,31 @@ def test_salvar_configuracao_whatsapp_sobrescreve_token_indecifravel(client, db_
     assert config.access_token == "token-novo-valido"
 
 
+def test_confirmar_aviso_template_marca_o_tenant(client, db_session):
+    """Raio-X 2026-09-14: sem template aprovado pela Meta, o primeiro
+    contato de qualquer cadência fica parado silenciosamente (janela de
+    24h) — o aviso na tela avisa disso; confirmar dispensa em definitivo,
+    e o próximo login já vem sem precisar mostrar de novo."""
+    from app.models.tenant import Tenant
+
+    tenant = db_session.query(Tenant).filter_by(id=TENANT_ID).one()
+    assert tenant.aviso_whatsapp_template_confirmado is False
+
+    resposta = client.post("/api/v1/configuracao-whatsapp/confirmar-aviso-template")
+
+    assert resposta.status_code == 204
+    db_session.refresh(tenant)
+    assert tenant.aviso_whatsapp_template_confirmado is True
+
+
+def test_confirmar_aviso_template_qualquer_papel_pode_confirmar(client, criar_usuario_autenticado):
+    headers_user = criar_usuario_autenticado(TENANT_ID, papel="user", email="user-aviso@teste.com.br")
+
+    resposta = client.post("/api/v1/configuracao-whatsapp/confirmar-aviso-template", headers=headers_user)
+
+    assert resposta.status_code == 204
+
+
 def test_configuracao_whatsapp_bloqueada_para_papel_user(client, criar_usuario_autenticado):
     headers_user = criar_usuario_autenticado(TENANT_ID, papel="user", email="user-comum@teste.com.br")
 

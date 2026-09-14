@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { AvisoWhatsAppTemplate } from "@/components/AvisoWhatsAppTemplate";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
@@ -330,6 +331,7 @@ export function Cadencias() {
 
   return (
     <div className="p-5.5">
+      <AvisoWhatsAppTemplate />
       <div className="mb-5 flex items-end justify-between">
         <div>
           <div className="font-head text-xl font-bold">Cadências</div>

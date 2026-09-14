@@ -33,6 +33,30 @@ def test_login_com_sucesso(client, db_session):
     assert corpo["usuario"]["email"] == "login@teste.com.br"
 
 
+def test_login_reflete_aviso_whatsapp_template_confirmado(client, db_session):
+    """Raio-X 2026-09-14: sem template do WhatsApp aprovado pela Meta,
+    qualquer primeiro contato de cadência fica parado silenciosamente —
+    o login carrega esse aviso pra tela decidir se mostra o pop-up,
+    default False pra tenant que nunca confirmou."""
+    from app.models.tenant import Tenant
+
+    _criar_usuario_senha(db_session, "aviso-whatsapp@teste.com.br", "senha-forte")
+
+    resposta_antes = client.post(
+        "/api/v1/auth/login", json={"email": "aviso-whatsapp@teste.com.br", "senha": "senha-forte"}
+    )
+    assert resposta_antes.json()["usuario"]["aviso_whatsapp_template_confirmado"] is False
+
+    tenant = db_session.query(Tenant).filter_by(id=TENANT_ID).one()
+    tenant.aviso_whatsapp_template_confirmado = True
+    db_session.commit()
+
+    resposta_depois = client.post(
+        "/api/v1/auth/login", json={"email": "aviso-whatsapp@teste.com.br", "senha": "senha-forte"}
+    )
+    assert resposta_depois.json()["usuario"]["aviso_whatsapp_template_confirmado"] is True
+
+
 def test_login_primeiro_login_true_so_na_primeira_vez(client, db_session):
     """Raio-X 2026-09-01: sinal pra disparar o tour guiado de onboarding
     no frontend uma única vez, sem campo novo no banco."""

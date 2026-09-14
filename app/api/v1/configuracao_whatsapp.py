@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_tenant_id
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.schemas.configuracao_whatsapp import ConfiguracaoWhatsAppSchema, ConfiguracaoWhatsAppUpsertSchema
-from app.services import auditoria_service
+from app.services import auditoria_service, tenant_service
 from app.services.errors import ValidacaoFalhou
 
 router = APIRouter(prefix="/configuracao-whatsapp", tags=["configuracao-whatsapp"])
@@ -86,3 +86,15 @@ def salvar_configuracao_whatsapp(
     db.commit()
     config = db.get(ConfiguracaoWhatsApp, config_id)
     return _para_schema(config)
+
+
+@router.post("/confirmar-aviso-template", status_code=204)
+def confirmar_aviso_template(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """Dispensa em definitivo o aviso de que o WhatsApp precisa de um
+    template aprovado pela Meta pra primeiro contato — qualquer usuário
+    autenticado do tenant pode confirmar (é só um lembrete, não uma
+    credencial)."""
+    tenant_service.confirmar_aviso_whatsapp_template(db, tenant_id)

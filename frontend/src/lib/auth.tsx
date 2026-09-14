@@ -1,6 +1,14 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-import { api, getTemLicencaAtiva, getToken, limparSessao, setSessao, setTemLicencaAtiva as persistirTemLicencaAtiva } from "@/lib/api";
+import {
+  api,
+  atualizarUsuarioSalvo,
+  getTemLicencaAtiva,
+  getToken,
+  limparSessao,
+  setSessao,
+  setTemLicencaAtiva as persistirTemLicencaAtiva,
+} from "@/lib/api";
 
 /** Gancho de upgrade além de volume (raio-X 2026-09-09) — usada pra
  * mostrar o cadeado direto na UI, sem esperar um 403. A checagem de
@@ -25,6 +33,7 @@ export interface Usuario {
   /** distribuidor | revendedor | cliente — raio-X: hierarquia de distribuidores. */
   tenant_tipo: string;
   recursos_plano: RecursosPlano;
+  aviso_whatsapp_template_confirmado: boolean;
 }
 
 interface TokenResponse {
@@ -75,6 +84,9 @@ interface AuthContextValue {
    * `temLicencaAtiva` na hora, sem exigir logout/login, pra desbloquear a
    * navegação assim que o back confirma a autodeclaração. */
   declararPagamento: () => Promise<void>;
+  /** Dispensa em definitivo o aviso de template do WhatsApp (raio-X
+   * 2026-09-14) — some da tela sem precisar de logout/login. */
+  confirmarAvisoWhatsappTemplate: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -144,6 +156,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTemLicencaAtiva(true);
   }, []);
 
+  const confirmarAvisoWhatsappTemplate = useCallback(async () => {
+    await api.post("/configuracao-whatsapp/confirmar-aviso-template");
+    setUsuario((atual) => {
+      if (!atual) return atual;
+      const atualizado = { ...atual, aviso_whatsapp_template_confirmado: true };
+      atualizarUsuarioSalvo(atualizado);
+      return atualizado;
+    });
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       usuario,
@@ -157,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       primeiroLoginPendente,
       consumirPrimeiroLoginPendente,
       declararPagamento,
+      confirmarAvisoWhatsappTemplate,
     }),
     [
       usuario,
@@ -169,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       primeiroLoginPendente,
       consumirPrimeiroLoginPendente,
       declararPagamento,
+      confirmarAvisoWhatsappTemplate,
     ],
   );
 

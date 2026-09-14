@@ -296,7 +296,58 @@ aprovação" do PREDATOR.
   validados e de alto volume; nos demais planos essa opção fica
   bloqueada.
 
-### 5.5 Disparo e rampa de aquecimento
+### 5.5 WhatsApp Business — configuração obrigatória por conta
+
+O canal WhatsApp **não é compartilhado entre clientes da B2B ON**: cada
+tenant configura a própria conta Meta em **Configuração → WhatsApp
+Business**, com número e token próprios. Não existe um número "da
+CyberFort" usado por todo mundo — se o seu tenant não tiver essa
+configuração feita, os toques de WhatsApp das suas cadências simplesmente
+nunca saem (silenciosamente, sem erro na tela).
+
+**Passo a passo para configurar:**
+
+1. Crie (ou reutilize) um app em [developers.facebook.com](https://developers.facebook.com/apps),
+   adicionando o produto **WhatsApp** a ele.
+2. No painel do app, em **WhatsApp → Configuração da API**, anote o
+   **Identificação do número de telefone** (`phone_number_id`) e o
+   **WhatsApp Business Account ID** (`business_account_id`).
+3. Gere um **token de acesso permanente**: em **Configurações da
+   empresa → Usuários do sistema**, crie (ou reaproveite) um usuário do
+   sistema com acesso ao app e à conta do WhatsApp, e gere um token para
+   ele (sem esse passo, o token temporário do painel expira em poucas
+   horas).
+4. Cole `phone_number_id`, `business_account_id` e o token gerado em
+   **Configuração → WhatsApp Business**, na B2B ON. As credenciais ficam
+   criptografadas no banco.
+
+**O requisito que trava o primeiro contato — template aprovado pela Meta:**
+
+A Meta exige um **modelo de mensagem (template) aprovado** para qualquer
+mensagem de WhatsApp enviada a um número que **nunca falou com a sua
+conta antes** (ou que já passou de 24h desde a última resposta dele).
+Texto livre só é permitido dentro dessa janela de 24h, depois que o
+próprio contato responder algo (mesmo um "oi").
+
+Isso significa que **toda cadência de prospecção fria** (primeiro
+contato) via WhatsApp depende de ter, no mínimo, um template aprovado:
+
+1. Em **Meta for Developers → WhatsApp → Modelos de mensagem**, crie um
+   modelo (categoria "Marketing" ou "Utilidade"), escreva o texto e
+   envie para aprovação da Meta — a aprovação costuma levar de minutos a
+   poucas horas.
+2. Ao criar o toque de WhatsApp de uma cadência (seção 5.3), informe o
+   **nome do template aprovado** no campo correspondente do toque. Sem
+   isso, a mensagem gerada pela IA fica **parada indefinidamente**,
+   aguardando uma janela de 24h que nunca abre, sem nenhum aviso visível
+   além do pop-up de alerta que aparece em Configuração e em Cadências
+   enquanto o tenant não confirmar que já fez esse procedimento.
+
+Depois que o contato responder pela primeira vez, a conversa entra na
+janela de 24h e as mensagens seguintes daquele mesmo toque podem ser
+texto livre (sem template), normalmente.
+
+### 5.6 Disparo e rampa de aquecimento
 
 Mensagens aprovadas ficam agendadas até o disparo automático rodar — em
 produção, um **GitHub Actions agendado** chama o disparo a cada 15
@@ -304,7 +355,7 @@ minutos (ver `DEPLOY.md`, seção 7). Cada canal segue uma rampa de
 aquecimento (limite diário de envios crescente conforme os dias de uso
 do canal), para preservar a reputação do domínio/número.
 
-### 5.6 Rastreio de abertura de e-mail
+### 5.7 Rastreio de abertura de e-mail
 
 Todo e-mail enviado carrega um pixel de rastreio invisível — quando o
 destinatário abre, o sistema registra automaticamente o horário da
@@ -312,7 +363,7 @@ abertura. A **taxa de abertura de e-mail** aparece nos indicadores do
 painel administrativo, dando visibilidade de quem abriu (ou não) cada
 prospecção sem precisar de nenhuma ação manual.
 
-### 5.7 Reuniões e dossiê
+### 5.8 Reuniões e dossiê
 
 Quando um decisor responde positivamente e uma reunião é proposta:
 

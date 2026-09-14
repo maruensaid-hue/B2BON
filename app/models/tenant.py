@@ -46,3 +46,13 @@ class Tenant(Base):
     # tenant_pai_id (quem fatura por fora é o Distribuidor/Revendedor) —
     # ver `exigir_licenca_ativa` em app/api/deps.py.
     modo_cobranca: Mapped[str] = mapped_column(String, default="direta", server_default="direta")
+
+    # Raio-X 2026-09-14: WhatsApp é BYO por tenant (config própria +
+    # template aprovado na Meta) — sem isso, o primeiro contato de
+    # qualquer cadência fica "adiado" silenciosamente (janela de 24h da
+    # Meta), sem erro nenhum visível. Guarda se o tenant já confirmou
+    # que fez esse procedimento, pra não repetir o aviso pra sempre —
+    # dispensado explicitamente pelo usuário (checkbox), não inferido
+    # automaticamente da existência de `ConfiguracaoWhatsApp` (que não
+    # implica ter cadastrado um template).
+    aviso_whatsapp_template_confirmado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

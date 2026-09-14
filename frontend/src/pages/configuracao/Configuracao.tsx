@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 
+import { AvisoWhatsAppTemplate } from "@/components/AvisoWhatsAppTemplate";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
@@ -615,6 +616,7 @@ export function Configuracao() {
 
   return (
     <div className="p-5.5">
+      <AvisoWhatsAppTemplate />
       <div className="mb-5">
         <div className="font-head text-xl font-bold">Configuração</div>
         <div className="mt-0.5 text-[11px] text-muted">

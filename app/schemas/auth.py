@@ -37,6 +37,9 @@ class UsuarioSchema(BaseModel):
     # Mesmo padrão de `tenant_tipo` acima — preenchido em `_resposta_token`
     # a partir do `PlanLimitsProvider`, não vem de `Usuario`.
     recursos_plano: RecursosPlanoSchema = RecursosPlanoSchema()
+    # Idem — vem de `Tenant.aviso_whatsapp_template_confirmado`, não de
+    # `Usuario` (raio-X 2026-09-14: aviso de template do WhatsApp).
+    aviso_whatsapp_template_confirmado: bool = False
 
 
 class LoginRequestSchema(BaseModel):

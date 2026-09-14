@@ -465,6 +465,15 @@ def _tem_filho(db: Session, tenant_id: str) -> bool:
     return db.query(Tenant).filter_by(tenant_pai_id=tenant_id).first() is not None
 
 
+def confirmar_aviso_whatsapp_template(db: Session, tenant_id: str) -> None:
+    """Dispensa em definitivo o aviso de configuração de template do
+    WhatsApp (Configuração e Cadências) — ver docstring de
+    `Tenant.aviso_whatsapp_template_confirmado`."""
+    tenant = _obter_tenant(db, tenant_id)
+    tenant.aviso_whatsapp_template_confirmado = True
+    db.commit()
+
+
 def desativar(db: Session, tenant_id: str, ator: Usuario) -> Tenant:
     """Desativação reversível: bloqueia login e API de parceiro sem apagar
     nada. Reaproveita a checagem `usuario.ativo` que `auth_service.

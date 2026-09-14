@@ -39,6 +39,14 @@ export function setTemLicencaAtiva(temLicencaAtiva: boolean): void {
   localStorage.setItem(TEM_LICENCA_KEY, JSON.stringify(temLicencaAtiva));
 }
 
+/** Atualiza o usuário salvo no localStorage sem tocar token/licença —
+ * mesmo padrão de `setTemLicencaAtiva`, usada quando algum dado do
+ * usuário muda no meio da sessão (raio-X 2026-09-14: aviso de template
+ * do WhatsApp dispensado). */
+export function atualizarUsuarioSalvo(usuario: unknown): void {
+  localStorage.setItem(USUARIO_KEY, JSON.stringify(usuario));
+}
+
 export function limparSessao(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USUARIO_KEY);
