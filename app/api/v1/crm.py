@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_tenant_id
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_tenant_id
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.negocio import Negocio
@@ -22,6 +22,8 @@ from app.schemas.crm import (
     DefinirCustoAquisicaoRequestSchema,
     DefinirEstagioRequestSchema,
     EstagioFunilSchema,
+    ImportarNegociosRequestSchema,
+    ImportarNegociosResponseSchema,
     MoverEstagioRequestSchema,
     NegocioSchema,
     PropostaNegocioSchema,
@@ -105,6 +107,37 @@ def criar_negocio(
         dados.estagio_id,
     )
     return _serializar_negocios(db, tenant_id, [negocio])[0]
+
+
+@router.post(
+    "/negocios/importar",
+    response_model=ImportarNegociosResponseSchema,
+    dependencies=[Depends(exigir_papel("super_admin", "admin"))],
+)
+def importar_negocios(
+    dados: ImportarNegociosRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ImportarNegociosResponseSchema:
+    """Import em lote de oportunidades vindas de outra plataforma — o
+    mapeamento de coluna do CSV acontece no frontend (raio-X 2026-09-14)."""
+    return ImportarNegociosResponseSchema(**crm_service.importar_negocios(db, tenant_id, ator_id, dados.linhas))
+
+
+@router.get("/negocios/exportar.csv", dependencies=[Depends(exigir_papel("super_admin", "admin"))])
+def exportar_negocios(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> Response:
+    """CSV com todas as oportunidades do tenant — para o cliente levar seu
+    histórico embora ao migrar para outra plataforma (raio-X 2026-09-14)."""
+    conteudo = crm_service.exportar_negocios_csv(db, tenant_id)
+    return Response(
+        content=conteudo,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=oportunidades.csv"},
+    )
 
 
 @router.put("/negocios/{negocio_id}", response_model=NegocioSchema)

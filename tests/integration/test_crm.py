@@ -1,7 +1,11 @@
+import csv
 from datetime import UTC, datetime
 
 from app.api.deps import get_crm_provider
 from app.main import app
+from app.models.conta import Conta
+from app.models.estagio_funil import EstagioFunil
+from app.models.negocio import Negocio
 from app.providers.crm.nucleo import NucleoCrmProvider
 
 TENANT_ID = "tenant-teste"
@@ -277,3 +281,199 @@ def test_retroalimentacao_reuniao_confirmada_cria_negocio_real(client, db_sessio
     # Ganho de brinde: o contato que conduziu a reunião já vira o
     # responsável pela oportunidade, sem precisar de ação manual.
     assert negocio_da_reuniao["decisor_id"] == decisor.id
+
+
+def test_importar_negocios_cria_conta_decisor_e_negocio(client, db_session):
+    """Raio-X 2026-09-14: cliente chegando de outra plataforma com
+    histórico de oportunidades — sem conta/decisor pré-cadastrados."""
+    resposta = client.post(
+        "/api/v1/crm/negocios/importar",
+        json={
+            "linhas": [
+                {
+                    "empresa_nome": "Acme Importada",
+                    "empresa_cnpj": "12.345.678/0001-90",
+                    "decisor_nome": "Fulano da Silva",
+                    "decisor_email": "fulano@acme.com.br",
+                    "nome": "Oportunidade Acme",
+                    "valor": 1500.0,
+                    "probabilidade": 40,
+                }
+            ]
+        },
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["negocios_criados"] == 1
+    assert corpo["contas_criadas"] == 1
+    assert corpo["decisores_criados"] == 1
+    assert corpo["erros"] == []
+
+    negocio = db_session.query(Negocio).filter_by(tenant_id=TENANT_ID, nome="Oportunidade Acme").one()
+    estagio = db_session.query(EstagioFunil).filter_by(id=negocio.estagio_id).one()
+    assert estagio.tipo == "aberto"
+
+
+def test_importar_negocios_reaproveita_conta_existente_por_cnpj(client, db_session):
+    """CNPJ formatado de forma diferente do CSV ainda casa (normalizado
+    pra dígitos antes de comparar)."""
+    conta_existente = Conta(tenant_id=TENANT_ID, nome="Beta Existente", cnpj="12345678000190", status="prospectada")
+    db_session.add(conta_existente)
+    db_session.commit()
+
+    resposta = client.post(
+        "/api/v1/crm/negocios/importar",
+        json={
+            "linhas": [
+                {
+                    "empresa_nome": "Beta Existente Ltda",
+                    "empresa_cnpj": "12.345.678/0001-90",
+                    "nome": "Oportunidade Beta",
+                }
+            ]
+        },
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["contas_criadas"] == 0
+    assert corpo["contas_reaproveitadas"] == 1
+
+    negocio = db_session.query(Negocio).filter_by(tenant_id=TENANT_ID, nome="Oportunidade Beta").one()
+    assert negocio.conta_id == conta_existente.id
+
+
+def test_importar_negocios_reimportar_com_mesma_chave_atualiza(client, db_session):
+    linha_base = {
+        "chave_importacao": "hubspot-123",
+        "empresa_nome": "Gamma Ltda",
+        "nome": "Oportunidade Gamma",
+        "valor": 1000.0,
+    }
+    client.post("/api/v1/crm/negocios/importar", json={"linhas": [linha_base]})
+
+    resposta = client.post(
+        "/api/v1/crm/negocios/importar",
+        json={"linhas": [{**linha_base, "valor": 2000.0, "nome": "Oportunidade Gamma Atualizada"}]},
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["negocios_criados"] == 0
+    assert corpo["negocios_atualizados"] == 1
+
+    negocios = db_session.query(Negocio).filter_by(tenant_id=TENANT_ID, chave_importacao="hubspot-123").all()
+    assert len(negocios) == 1
+    assert negocios[0].valor == 2000.0
+    assert negocios[0].nome == "Oportunidade Gamma Atualizada"
+
+
+def test_importar_negocios_sem_chave_reimportar_duplica(client, db_session):
+    """Comportamento aceito conscientemente (raio-X 2026-09-14): sem uma
+    coluna de ID externo mapeada, reimportar o mesmo CSV duplica."""
+    linha = {"empresa_nome": "Delta Ltda", "nome": "Oportunidade Delta", "valor": 500.0}
+    client.post("/api/v1/crm/negocios/importar", json={"linhas": [linha]})
+    client.post("/api/v1/crm/negocios/importar", json={"linhas": [linha]})
+
+    negocios = db_session.query(Negocio).filter_by(tenant_id=TENANT_ID, nome="Oportunidade Delta").all()
+    assert len(negocios) == 2
+
+
+def test_importar_negocios_estagio_invalido_gera_erro_sem_derrubar_lote(client):
+    resposta = client.post(
+        "/api/v1/crm/negocios/importar",
+        json={
+            "linhas": [
+                {"empresa_nome": "Epsilon Ltda", "nome": "Oportunidade Epsilon", "estagio_nome": "Estágio Inexistente"},
+                {"empresa_nome": "Zeta Ltda", "nome": "Oportunidade Zeta"},
+            ]
+        },
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["negocios_criados"] == 1
+    assert len(corpo["erros"]) == 1
+    assert corpo["erros"][0]["linha"] == 1
+    assert "Estágio Inexistente" in corpo["erros"][0]["motivo"]
+
+
+def test_importar_negocios_estagio_ganho_marca_data_e_cliente(client, db_session):
+    resposta = client.post(
+        "/api/v1/crm/negocios/importar",
+        json={
+            "linhas": [
+                {
+                    "empresa_nome": "Theta Ltda",
+                    "nome": "Oportunidade Theta",
+                    "estagio_nome": "Ganho",
+                    "criado_em": "2026-01-10T00:00:00",
+                }
+            ]
+        },
+    )
+
+    assert resposta.status_code == 200
+    negocio = db_session.query(Negocio).filter_by(tenant_id=TENANT_ID, nome="Oportunidade Theta").one()
+    conta = db_session.query(Conta).filter_by(id=negocio.conta_id).one()
+    assert negocio.ganho_em is not None
+    assert conta.cliente_desde is not None
+
+
+def test_importar_e_exportar_negocios_bloqueado_para_papel_user(client, criar_usuario_autenticado):
+    headers_user = criar_usuario_autenticado(TENANT_ID, papel="user", email="user-negocios@teste.com.br")
+
+    resposta_importar = client.post("/api/v1/crm/negocios/importar", json={"linhas": []}, headers=headers_user)
+    resposta_exportar = client.get("/api/v1/crm/negocios/exportar.csv", headers=headers_user)
+
+    assert resposta_importar.status_code == 403
+    assert resposta_exportar.status_code == 403
+
+
+def test_exportar_negocios_csv(client, criar_conta_com_decisor):
+    conta, decisor = criar_conta_com_decisor()
+    client.post(
+        "/api/v1/crm/negocios",
+        json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio Export", "valor": 100.0},
+    )
+
+    resposta = client.get("/api/v1/crm/negocios/exportar.csv")
+
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"].startswith("text/csv")
+    linhas = resposta.text.strip().splitlines()
+    assert linhas[0].startswith("chave_importacao,empresa_nome,empresa_cnpj")
+    assert any("Negócio Export" in linha for linha in linhas[1:])
+
+
+def test_exportar_e_reimportar_negocios_nao_duplica(client, criar_conta_com_decisor, db_session):
+    """Round-trip: exportar a própria B2B ON e reimportar não duplica —
+    a `chave_importacao` "b2bon-{id}" preenchida automaticamente no
+    export garante que a reimportação atualiza em vez de criar."""
+    conta, decisor = criar_conta_com_decisor()
+    client.post(
+        "/api/v1/crm/negocios",
+        json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio Roundtrip", "valor": 300.0},
+    )
+
+    csv_exportado = client.get("/api/v1/crm/negocios/exportar.csv").text
+    leitor = csv.DictReader(csv_exportado.strip().splitlines())
+    linhas_importacao = []
+    for linha in leitor:
+        linha_convertida: dict = {chave: (valor or None) for chave, valor in linha.items()}
+        if linha_convertida["valor"] is not None:
+            linha_convertida["valor"] = float(linha_convertida["valor"])
+        if linha_convertida["probabilidade"] is not None:
+            linha_convertida["probabilidade"] = int(linha_convertida["probabilidade"])
+        linhas_importacao.append(linha_convertida)
+
+    resposta = client.post("/api/v1/crm/negocios/importar", json={"linhas": linhas_importacao})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["negocios_criados"] == 0
+    assert corpo["negocios_atualizados"] == 1
+
+    total = db_session.query(Negocio).filter_by(tenant_id=TENANT_ID, nome="Negócio Roundtrip").count()
+    assert total == 1

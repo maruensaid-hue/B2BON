@@ -7,8 +7,10 @@ import { Card } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
+import { ImportarExportarNegocios } from "@/pages/crm/ImportarExportarNegocios";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { api, ApiError, getBlob, postFile } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 const MOTIVOS_PERDA = [
   "Preço/orçamento",
@@ -71,6 +73,7 @@ interface Conta {
 }
 
 export function Kanban() {
+  const { usuario } = useAuth();
   const [searchParams] = useSearchParams();
   const negocioIdPreSelecionadoId = Number(searchParams.get("negocio_id")) || null;
   const [estagios, setEstagios] = useState<EstagioFunil[]>([]);
@@ -78,6 +81,7 @@ export function Kanban() {
   const [icps, setIcps] = useState<ICP[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
+  const [modalImportarExportarAberto, setModalImportarExportarAberto] = useState(false);
   const [contaOrigem, setContaOrigem] = useState<"existente" | "nova">("existente");
   const [semIcp, setSemIcp] = useState(false);
   const [icpSelecionadoId, setIcpSelecionadoId] = useState<number | null>(null);
@@ -453,6 +457,11 @@ export function Kanban() {
             placeholder="Buscar por empresa, negócio ou contato..."
             className="w-64"
           />
+          {usuario?.papel !== "user" && (
+            <Button size="sm" variant="ghost" onClick={() => setModalImportarExportarAberto(true)}>
+              Importar/exportar CSV
+            </Button>
+          )}
           <Button size="sm" onClick={() => setModalAberto(true)}>
             + Novo negócio
           </Button>
@@ -806,6 +815,12 @@ export function Kanban() {
           onAtualizado={recarregarDecisoresDaContaEmEdicao}
         />
       )}
+
+      <ImportarExportarNegocios
+        open={modalImportarExportarAberto}
+        onClose={() => setModalImportarExportarAberto(false)}
+        onImportado={carregar}
+      />
 
       <Modal title="Motivo da perda" open={negocioParaMarcarPerdido !== null} onClose={() => setNegocioParaMarcarPerdido(null)}>
         {negocioParaMarcarPerdido && (

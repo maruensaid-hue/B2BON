@@ -101,6 +101,28 @@ Prospecção (PREDATOR) gerou ou que entraram por outro canal.
 - **Ligação automática com o PREDATOR**: quando uma reunião de
   prospecção é confirmada, o CRM ganha automaticamente uma oportunidade
   vinculada à conta — não é preciso lançar isso manualmente.
+- **Importar/exportar oportunidades (CSV)** — restrito a Admin/Super
+  Admin, botão "Importar/exportar CSV" no topo do Pipeline:
+  - **Exportar** baixa um CSV com todas as oportunidades do tenant
+    (empresa, CNPJ, contato, valor, estágio, datas etc.) — útil pra
+    levar o histórico a outra plataforma ao encerrar contrato, ou como
+    backup.
+  - **Importar** aceita colar o conteúdo de uma planilha ou selecionar
+    um arquivo `.csv` — pensado pra clientes que chegam de outra
+    plataforma já com histórico de negócios. O mapeamento de colunas é
+    sugerido automaticamente (por nome de cabeçalho reconhecido) e pode
+    ser ajustado na tela antes de confirmar; empresas e contatos já
+    cadastrados (mesmo CNPJ, ou mesmo nome/e-mail) são reaproveitados,
+    nunca duplicados. Linhas com um estágio que não existe no funil do
+    tenant entram como erro (mostrado após a importação), sem impedir
+    as demais linhas do arquivo de entrarem.
+  - **Reimportação**: só é garantida sem duplicar se o arquivo tiver
+    uma coluna de **ID externo** mapeada (o próprio ID do negócio na
+    plataforma de origem, quando existir) — sem essa coluna, importar o
+    mesmo arquivo duas vezes cria oportunidades duplicadas (a tela
+    avisa isso antes de confirmar). Um CSV exportado pela própria B2B
+    ON já vem com essa coluna preenchida, então reimportá-lo (ex.: após
+    restaurar um backup) nunca duplica.
 
 ---
 

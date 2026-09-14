@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { detectarColunas as detectarColunasGenerico, parseLinhasComMapa } from "@/lib/importarPlanilha";
 
 export interface ICP {
   id: number;
@@ -152,18 +153,6 @@ const SINONIMOS_CABECALHO: Record<string, CampoParticipante> = {
   comentarios: "observacoes",
 };
 
-function normalizarCabecalho(texto: string): string {
-  return texto
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-}
-
-function detectarSeparador(linha: string): string {
-  return linha.includes("\t") ? "\t" : linha.includes(";") ? ";" : ",";
-}
-
 const ORDEM_PADRAO: CampoParticipante[] = ["nome", "empresa", "cargo", "email", "telefone"];
 
 /** Lê só a primeira linha do que foi colado pra sugerir um mapeamento de
@@ -175,20 +164,7 @@ function detectarColunas(texto: string): {
   temCabecalho: boolean;
   mapeamentoInicial: CampoParticipante[];
 } {
-  const linhas = texto
-    .split("\n")
-    .map((linha) => linha.trim())
-    .filter(Boolean);
-  if (linhas.length === 0) return { colunas: [], temCabecalho: false, mapeamentoInicial: [] };
-
-  const separador = detectarSeparador(linhas[0]);
-  const colunas = linhas[0].split(separador).map((celula) => celula.trim());
-  const mapaSugerido = colunas.map((celula) => SINONIMOS_CABECALHO[normalizarCabecalho(celula)]);
-  const reconhecidos = mapaSugerido.filter(Boolean);
-  const temCabecalho = reconhecidos.includes("nome") && reconhecidos.includes("empresa");
-  const mapeamentoInicial = colunas.map((_, indice) => mapaSugerido[indice] ?? ORDEM_PADRAO[indice] ?? "ignorar");
-
-  return { colunas, temCabecalho, mapeamentoInicial };
+  return detectarColunasGenerico(texto, SINONIMOS_CABECALHO, ORDEM_PADRAO, "ignorar", ["nome", "empresa"]);
 }
 
 /** Aceita colar direto do Excel/Planilhas (separado por TAB) ou um CSV
@@ -200,30 +176,17 @@ function parseParticipantesComMapa(
   mapa: CampoParticipante[],
   pularPrimeiraLinha: boolean,
 ): ParticipanteEvento[] {
-  const linhas = texto
-    .split("\n")
-    .map((linha) => linha.trim())
-    .filter(Boolean);
-  const linhasDeDados = pularPrimeiraLinha ? linhas.slice(1) : linhas;
-
-  return linhasDeDados
-    .map((linha) => {
-      const separador = detectarSeparador(linha);
-      const campos = linha.split(separador).map((campo) => campo.trim());
-      const valores: Partial<Record<CampoParticipante, string>> = {};
-      mapa.forEach((campo, indice) => {
-        if (campo !== "ignorar" && campos[indice]) valores[campo] = campos[indice];
-      });
-      return {
-        nome: valores.nome ?? "",
-        empresa: valores.empresa ?? "",
-        cargo: valores.cargo || undefined,
-        email: valores.email || undefined,
-        telefone: valores.telefone || undefined,
-        observacoes: valores.observacoes || undefined,
-      };
-    })
-    .filter((participante) => participante.nome && participante.empresa);
+  return parseLinhasComMapa(texto, mapa, pularPrimeiraLinha, "ignorar", (valores) => {
+    if (!valores.nome || !valores.empresa) return null;
+    return {
+      nome: valores.nome,
+      empresa: valores.empresa,
+      cargo: valores.cargo || undefined,
+      email: valores.email || undefined,
+      telefone: valores.telefone || undefined,
+      observacoes: valores.observacoes || undefined,
+    };
+  });
 }
 
 function statusTone(status: string): "cyan" | "green" | "muted" {

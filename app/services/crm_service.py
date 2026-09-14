@@ -1,3 +1,5 @@
+import csv
+import io
 from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.exc import IntegrityError
@@ -10,6 +12,7 @@ from app.models.decisor import Decisor
 from app.models.estagio_funil import EstagioFunil
 from app.models.negocio import Negocio
 from app.models.usuario import Usuario
+from app.schemas.crm import LinhaImportacaoNegocioSchema
 from app.services import atividade_service, auditoria_service, metricas_service, panel_service, saude_conta_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
@@ -273,6 +276,282 @@ def excluir_negocio(db: Session, tenant_id: str, ator_id: str | None, negocio_id
     )
     db.delete(negocio)
     db.commit()
+
+
+def _normalizar_nome(nome: str) -> str:
+    """Mesmo critério de dedupe por nome usado em
+    `conta_service.importar_participantes` — duplicado aqui (1 linha) em
+    vez de promovido a utilitário compartilhado."""
+    return " ".join(nome.split()).lower()
+
+
+def _normalizar_cnpj(cnpj: str) -> str:
+    return "".join(caractere for caractere in cnpj if caractere.isdigit())
+
+
+def importar_negocios(
+    db: Session, tenant_id: str, ator_id: str | None, linhas: list[LinhaImportacaoNegocioSchema]
+) -> dict:
+    """Import em lote de oportunidades (raio-X 2026-09-14: cliente chegando
+    de outra plataforma já com histórico de negócios). O mapeamento de
+    coluna do CSV acontece no frontend — aqui só resolve/cria conta,
+    decisor, estágio e vendedor por linha, mesmo raciocínio de
+    `conta_service.importar_participantes` (empresa reaproveitada por
+    CNPJ/nome, decisor por e-mail/nome, nunca duplicados às ciegas).
+
+    Uma linha com `chave_importacao` que já existe neste tenant
+    **atualiza** o negócio existente em vez de criar outro — permite
+    reimportar o mesmo arquivo sem duplicar. Sem chave, sempre cria (
+    reimportar essa linha duplica; aviso disso fica a cargo da tela)."""
+    contas_por_nome: dict[str, Conta] = {}
+    contas_por_cnpj: dict[str, Conta] = {}
+    for conta in db.query(Conta).filter_by(tenant_id=tenant_id).all():
+        contas_por_nome[_normalizar_nome(conta.nome)] = conta
+        if conta.cnpj:
+            chave_cnpj = _normalizar_cnpj(conta.cnpj)
+            if chave_cnpj:
+                contas_por_cnpj[chave_cnpj] = conta
+
+    decisores_por_conta: dict[int, list[Decisor]] = {}
+    for decisor in db.query(Decisor).filter_by(tenant_id=tenant_id).all():
+        decisores_por_conta.setdefault(decisor.conta_id, []).append(decisor)
+
+    usuarios_por_email = {
+        usuario.email.strip().lower(): usuario for usuario in db.query(Usuario).filter_by(tenant_id=tenant_id).all()
+    }
+
+    estagios = garantir_estagios_padrao(db, tenant_id)
+    estagios_por_nome = {_normalizar_nome(estagio.nome): estagio for estagio in estagios}
+    primeiro_aberto = next((e for e in estagios if e.tipo == "aberto"), estagios[0])
+
+    negocios_por_chave: dict[str, Negocio] = {
+        negocio.chave_importacao: negocio
+        for negocio in db.query(Negocio)
+        .filter(Negocio.tenant_id == tenant_id, Negocio.chave_importacao.isnot(None))
+        .all()
+    }
+
+    contas_criadas = 0
+    contas_reaproveitadas: set[int] = set()
+    decisores_criados = 0
+    negocios_criados = 0
+    negocios_atualizados = 0
+    erros: list[dict] = []
+
+    for indice, linha in enumerate(linhas, start=1):
+        estagio = primeiro_aberto
+        if linha.estagio_nome:
+            estagio_encontrado = estagios_por_nome.get(_normalizar_nome(linha.estagio_nome))
+            if estagio_encontrado is None:
+                erros.append({"linha": indice, "motivo": f"Estágio '{linha.estagio_nome}' não encontrado"})
+                continue
+            estagio = estagio_encontrado
+
+        conta = None
+        if linha.empresa_cnpj:
+            chave_cnpj = _normalizar_cnpj(linha.empresa_cnpj)
+            if chave_cnpj:
+                conta = contas_por_cnpj.get(chave_cnpj)
+        if conta is None:
+            conta = contas_por_nome.get(_normalizar_nome(linha.empresa_nome))
+        if conta is None:
+            conta = Conta(
+                tenant_id=tenant_id,
+                cnpj=linha.empresa_cnpj.strip() if linha.empresa_cnpj else None,
+                nome=linha.empresa_nome.strip(),
+                status="priorizada",
+                origem="crm_import",
+            )
+            db.add(conta)
+            db.flush()
+            contas_por_nome[_normalizar_nome(conta.nome)] = conta
+            if conta.cnpj:
+                chave_cnpj = _normalizar_cnpj(conta.cnpj)
+                if chave_cnpj:
+                    contas_por_cnpj[chave_cnpj] = conta
+            contas_criadas += 1
+        else:
+            contas_reaproveitadas.add(conta.id)
+
+        existentes = decisores_por_conta.setdefault(conta.id, [])
+        email_linha = linha.decisor_email.strip().lower() if linha.decisor_email else None
+        nome_linha = _normalizar_nome(linha.decisor_nome) if linha.decisor_nome else None
+        decisor = None
+        if email_linha or nome_linha:
+            decisor = next(
+                (
+                    d
+                    for d in existentes
+                    if (email_linha and d.email and d.email.strip().lower() == email_linha)
+                    or (nome_linha and _normalizar_nome(d.nome) == nome_linha)
+                ),
+                None,
+            )
+            if decisor is None:
+                decisor = Decisor(
+                    tenant_id=tenant_id,
+                    conta_id=conta.id,
+                    nome=(linha.decisor_nome or linha.decisor_email or "").strip(),
+                    cargo=linha.decisor_cargo,
+                    email=linha.decisor_email,
+                    telefone=linha.decisor_telefone,
+                    origem="crm_import",
+                )
+                db.add(decisor)
+                db.flush()
+                existentes.append(decisor)
+                decisores_criados += 1
+
+        vendedor = usuarios_por_email.get(linha.vendedor_email.strip().lower()) if linha.vendedor_email else None
+
+        ganho_em = linha.ganho_em
+        perdido_em = linha.perdido_em
+        if estagio.tipo == "ganho" and ganho_em is None:
+            ganho_em = linha.criado_em or datetime.now(UTC)
+        if estagio.tipo == "perdido" and perdido_em is None:
+            perdido_em = linha.criado_em or datetime.now(UTC)
+        if estagio.tipo == "ganho" and conta.cliente_desde is None:
+            conta.cliente_desde = ganho_em
+
+        negocio_existente = negocios_por_chave.get(linha.chave_importacao) if linha.chave_importacao else None
+        if negocio_existente is not None:
+            negocio_existente.conta_id = conta.id
+            if decisor is not None:
+                negocio_existente.decisor_id = decisor.id
+            negocio_existente.estagio_id = estagio.id
+            negocio_existente.nome = linha.nome
+            negocio_existente.valor = linha.valor
+            negocio_existente.probabilidade = linha.probabilidade
+            if vendedor is not None:
+                negocio_existente.vendedor_usuario_id = vendedor.id
+            negocio_existente.motivo_perda = linha.motivo_perda or negocio_existente.motivo_perda
+            negocio_existente.ganho_em = negocio_existente.ganho_em or ganho_em
+            negocio_existente.perdido_em = negocio_existente.perdido_em or perdido_em
+            negocios_atualizados += 1
+        else:
+            novo_negocio = Negocio(
+                tenant_id=tenant_id,
+                conta_id=conta.id,
+                decisor_id=decisor.id if decisor else None,
+                vendedor_usuario_id=vendedor.id if vendedor else None,
+                estagio_id=estagio.id,
+                nome=linha.nome,
+                valor=linha.valor,
+                probabilidade=linha.probabilidade,
+                origem="crm_import",
+                ganho_em=ganho_em,
+                perdido_em=perdido_em,
+                motivo_perda=linha.motivo_perda,
+                chave_importacao=linha.chave_importacao,
+                criado_em=linha.criado_em or datetime.now(UTC),
+            )
+            db.add(novo_negocio)
+            db.flush()
+            if linha.chave_importacao:
+                negocios_por_chave[linha.chave_importacao] = novo_negocio
+            negocios_criados += 1
+
+    auditoria_service.registrar(
+        db,
+        tenant_id,
+        "negocios_importados",
+        "negocio",
+        0,
+        ator_id,
+        {"negocios_criados": negocios_criados, "negocios_atualizados": negocios_atualizados, "erros": len(erros)},
+    )
+    db.commit()
+
+    return {
+        "negocios_criados": negocios_criados,
+        "negocios_atualizados": negocios_atualizados,
+        "contas_criadas": contas_criadas,
+        "contas_reaproveitadas": len(contas_reaproveitadas),
+        "decisores_criados": decisores_criados,
+        "erros": erros,
+    }
+
+
+_CABECALHO_EXPORTACAO_NEGOCIOS = [
+    "chave_importacao",
+    "empresa_nome",
+    "empresa_cnpj",
+    "decisor_nome",
+    "decisor_email",
+    "decisor_telefone",
+    "decisor_cargo",
+    "nome",
+    "valor",
+    "probabilidade",
+    "estagio_nome",
+    "motivo_perda",
+    "vendedor_email",
+    "criado_em",
+    "ganho_em",
+    "perdido_em",
+]
+
+
+def exportar_negocios_csv(db: Session, tenant_id: str) -> str:
+    """Cabeçalho igual aos campos de `LinhaImportacaoNegocioSchema` — um
+    export da própria B2B ON é reimportável sem mapeamento manual de
+    coluna, e a `chave_importacao` ("b2bon-{id}") faz a reimportação
+    atualizar em vez de duplicar (raio-X 2026-09-14: import/export CSV).
+
+    Negócios que nunca passaram por importação (criados manualmente ou
+    pelo PREDATOR) não têm `chave_importacao` gravada no banco — é
+    preenchida aqui, na primeira exportação, pra que uma reimportação
+    subsequente do próprio CSV encontre a linha certa em vez de criar
+    outro negócio (sem isso, o round-trip export→import duplicaria)."""
+    negocios = db.query(Negocio).filter_by(tenant_id=tenant_id).order_by(Negocio.id).all()
+    for negocio in negocios:
+        if negocio.chave_importacao is None:
+            negocio.chave_importacao = f"b2bon-{negocio.id}"
+    db.commit()
+
+    conta_ids = {n.conta_id for n in negocios}
+    decisor_ids = {n.decisor_id for n in negocios if n.decisor_id is not None}
+    vendedor_ids = {n.vendedor_usuario_id for n in negocios if n.vendedor_usuario_id is not None}
+    estagio_ids = {n.estagio_id for n in negocios}
+
+    contas = {c.id: c for c in db.query(Conta).filter(Conta.id.in_(conta_ids)).all()} if conta_ids else {}
+    decisores = {d.id: d for d in db.query(Decisor).filter(Decisor.id.in_(decisor_ids)).all()} if decisor_ids else {}
+    vendedores = (
+        {u.id: u for u in db.query(Usuario).filter(Usuario.id.in_(vendedor_ids)).all()} if vendedor_ids else {}
+    )
+    estagios = (
+        {e.id: e for e in db.query(EstagioFunil).filter(EstagioFunil.id.in_(estagio_ids)).all()} if estagio_ids else {}
+    )
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(_CABECALHO_EXPORTACAO_NEGOCIOS)
+    for negocio in negocios:
+        conta = contas.get(negocio.conta_id)
+        decisor = decisores.get(negocio.decisor_id) if negocio.decisor_id else None
+        vendedor = vendedores.get(negocio.vendedor_usuario_id) if negocio.vendedor_usuario_id else None
+        estagio = estagios.get(negocio.estagio_id)
+        writer.writerow(
+            [
+                negocio.chave_importacao or f"b2bon-{negocio.id}",
+                conta.nome if conta else "",
+                conta.cnpj if conta else "",
+                decisor.nome if decisor else "",
+                decisor.email if decisor else "",
+                decisor.telefone if decisor else "",
+                decisor.cargo if decisor else "",
+                negocio.nome,
+                negocio.valor,
+                negocio.probabilidade,
+                estagio.nome if estagio else "",
+                negocio.motivo_perda or "",
+                vendedor.email if vendedor else "",
+                negocio.criado_em.isoformat(),
+                negocio.ganho_em.isoformat() if negocio.ganho_em else "",
+                negocio.perdido_em.isoformat() if negocio.perdido_em else "",
+            ]
+        )
+    return buffer.getvalue()
 
 
 def registrar_atividade(

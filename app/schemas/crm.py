@@ -41,6 +41,49 @@ class NegocioSchema(BaseModel):
     atualizado_em: datetime
 
 
+class LinhaImportacaoNegocioSchema(BaseModel):
+    """Uma linha já mapeada (coluna → campo) pelo frontend — o parsing e o
+    mapeamento de coluna do CSV/planilha colada acontecem no cliente, mesmo
+    padrão de `ParticipanteEventoSchema` (import de evento). Datas e valor
+    numérico já chegam convertidos; o backend só resolve/cria os
+    relacionamentos (conta, decisor, estágio, vendedor)."""
+
+    chave_importacao: str | None = None
+    empresa_nome: str
+    empresa_cnpj: str | None = None
+    decisor_nome: str | None = None
+    decisor_email: str | None = None
+    decisor_telefone: str | None = None
+    decisor_cargo: str | None = None
+    nome: str
+    valor: float = 0.0
+    probabilidade: int = 50
+    estagio_nome: str | None = None
+    motivo_perda: str | None = None
+    vendedor_email: str | None = None
+    criado_em: datetime | None = None
+    ganho_em: datetime | None = None
+    perdido_em: datetime | None = None
+
+
+class ImportarNegociosRequestSchema(BaseModel):
+    linhas: list[LinhaImportacaoNegocioSchema]
+
+
+class ErroImportacaoNegocioSchema(BaseModel):
+    linha: int
+    motivo: str
+
+
+class ImportarNegociosResponseSchema(BaseModel):
+    negocios_criados: int
+    negocios_atualizados: int
+    contas_criadas: int
+    contas_reaproveitadas: int
+    decisores_criados: int
+    erros: list[ErroImportacaoNegocioSchema]
+
+
 class CriarNegocioRequestSchema(BaseModel):
     conta_id: int
     decisor_id: int | None = None
