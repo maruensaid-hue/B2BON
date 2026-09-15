@@ -19,11 +19,12 @@ def _aprovar_tudo(client, cadencia_id: int) -> None:
         client.post(f"/api/v1/aprovacoes/{item['aprovacao_id']}/aprovar")
 
 
+# Raio-X 2026-09-15: só 1 toque de WhatsApp por cadência.
 _TOQUES_WHATSAPP_PRIMEIRO = [
     {"ordem": 1, "canal": "whatsapp", "intervalo_dias_apos_anterior": 0, "template_whatsapp_id": "prospeccao_inicial"},
     {"ordem": 2, "canal": "email", "intervalo_dias_apos_anterior": 2},
     {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 2},
-    {"ordem": 4, "canal": "whatsapp", "intervalo_dias_apos_anterior": 2, "template_whatsapp_id": "prospeccao_inicial"},
+    {"ordem": 4, "canal": "email", "intervalo_dias_apos_anterior": 2},
     {"ordem": 5, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
 ]
 

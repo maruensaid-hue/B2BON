@@ -7,7 +7,8 @@ _TOQUES_COM_AB_NO_PRIMEIRO = [
     {"ordem": 2, "canal": "whatsapp", "intervalo_dias_apos_anterior": 2, "template_whatsapp_id": "x"},
     {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 3},
     {"ordem": 4, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
-    {"ordem": 5, "canal": "whatsapp", "intervalo_dias_apos_anterior": 3, "template_whatsapp_id": "x"},
+    # Raio-X 2026-09-15: só 1 toque de WhatsApp por cadência.
+    {"ordem": 5, "canal": "email", "intervalo_dias_apos_anterior": 3},
 ]
 
 

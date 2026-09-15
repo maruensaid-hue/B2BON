@@ -151,7 +151,9 @@ def test_processar_pendentes_whatsapp_usa_template(db_session):
     resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, fake_whatsapp)
 
     assert resultado == {"enviadas": 1, "falhas": 0}
-    assert fake_whatsapp.envios == [{"tipo": "template", "telefone": "11999990000", "template_id": "prospeccao_inicial"}]
+    assert fake_whatsapp.envios == [
+        {"tipo": "template", "telefone": "11999990000", "template_id": "prospeccao_inicial", "variavel_botao": None}
+    ]
 
 
 def test_processar_pendentes_registra_falha(db_session):

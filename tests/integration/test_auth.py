@@ -628,3 +628,38 @@ def test_login_bloqueia_apos_muitas_tentativas(client, db_session):
     )
 
     assert bloqueado.status_code == 429
+
+
+def test_login_reflete_tem_conta_atribuida(client, db_session):
+    """Raio-X 2026-09-15: liga o aviso proativo de WhatsApp pessoal
+    faltando — só faz sentido incomodar o vendedor se ele de fato tiver
+    pelo menos uma `Conta` atribuída a ele (`Conta.vendedor_usuario_id`)."""
+    from app.models.conta import Conta
+
+    usuario = _criar_usuario_senha(db_session, "sem-conta@teste.com.br", "senha-forte")
+
+    resposta_sem_conta = client.post(
+        "/api/v1/auth/login", json={"email": "sem-conta@teste.com.br", "senha": "senha-forte"}
+    )
+    assert resposta_sem_conta.json()["usuario"]["tem_conta_atribuida"] is False
+
+    conta = Conta(tenant_id=TENANT_ID, nome="Conta Atribuída", status="prospectada", vendedor_usuario_id=usuario.id)
+    db_session.add(conta)
+    db_session.commit()
+
+    resposta_com_conta = client.post(
+        "/api/v1/auth/login", json={"email": "sem-conta@teste.com.br", "senha": "senha-forte"}
+    )
+    assert resposta_com_conta.json()["usuario"]["tem_conta_atribuida"] is True
+
+
+def test_atualizar_whatsapp_pessoal(client):
+    """"Meu Perfil" (raio-X 2026-09-15) — o vendedor cadastra o próprio
+    número de WhatsApp, usado no botão de redirecionamento dos templates."""
+    assert client.get("/api/v1/auth/eu").json()["whatsapp_pessoal"] is None
+
+    resposta = client.put("/api/v1/auth/whatsapp-pessoal", json={"whatsapp_pessoal": "+5511999998888"})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["whatsapp_pessoal"] == "+5511999998888"
+    assert client.get("/api/v1/auth/eu").json()["whatsapp_pessoal"] == "+5511999998888"

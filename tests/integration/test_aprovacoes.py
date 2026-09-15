@@ -218,3 +218,53 @@ def test_log_distingue_aprovacao_automatica_de_manual(client, db_session, cadenc
 
     assert "aprovacao_automatica_por_regra" in eventos
     assert "aprovacao_aprovada" in eventos
+
+
+def test_cancelar_mensagem_pendente(client, db_session, cadencia_e_decisor):
+    """Raio-X 2026-09-15: cancelamento manual e fino, por mensagem
+    individual — diferente de `excluir`, não apaga o registro."""
+    cadencia, decisor, _ = cadencia_e_decisor
+    mensagem = _propor_mensagem(db_session, cadencia, decisor)
+
+    resposta = client.post(f"/api/v1/aprovacoes/mensagens/{mensagem.id}/cancelar")
+
+    assert resposta.status_code == 200
+    assert resposta.json()["status"] == "cancelado"
+    db_session.refresh(mensagem)
+    assert mensagem.status == "cancelado"
+
+
+def test_cancelar_mensagem_ja_enviada_falha(client, db_session, cadencia_e_decisor):
+    cadencia, decisor, _ = cadencia_e_decisor
+    mensagem = _propor_mensagem(db_session, cadencia, decisor)
+    mensagem.status = "enviado"
+    db_session.commit()
+
+    resposta = client.post(f"/api/v1/aprovacoes/mensagens/{mensagem.id}/cancelar")
+
+    assert resposta.status_code == 409
+
+
+def test_cancelar_mensagem_ja_cancelada_falha(client, db_session, cadencia_e_decisor):
+    cadencia, decisor, _ = cadencia_e_decisor
+    mensagem = _propor_mensagem(db_session, cadencia, decisor)
+    client.post(f"/api/v1/aprovacoes/mensagens/{mensagem.id}/cancelar")
+
+    resposta = client.post(f"/api/v1/aprovacoes/mensagens/{mensagem.id}/cancelar")
+
+    assert resposta.status_code == 409
+
+
+def test_listar_fila_filtra_por_decisor(client, db_session, cadencia_e_decisor):
+    cadencia, decisor, conta = cadencia_e_decisor
+    outro_decisor = Decisor(tenant_id=TENANT_ID, conta_id=conta.id, nome="Outro Decisor")
+    db_session.add(outro_decisor)
+    db_session.commit()
+    _propor_mensagem(db_session, cadencia, decisor)
+    _propor_mensagem(db_session, cadencia, outro_decisor)
+
+    itens = client.get("/api/v1/aprovacoes", params={"decisor_id": decisor.id}).json()
+
+    assert len(itens) == 1
+    assert itens[0]["decisor_id"] == decisor.id
+    assert itens[0]["mensagem_status"] == "aguardando_aprovacao"

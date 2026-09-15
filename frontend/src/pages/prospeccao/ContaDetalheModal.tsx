@@ -69,6 +69,22 @@ interface RegistroOportunidadeResumo {
   status: string;
 }
 
+/** Raio-X 2026-09-15: mensagem agendada (já aprovada ou aguardando
+ * aprovação) de um decisor específico — permite cancelamento manual e
+ * individual, sem afetar os outros toques da mesma cadência (o padrão
+ * agora é "continuar nutrindo" mesmo depois de uma resposta). */
+interface MensagemAgendada {
+  aprovacao_id: number;
+  mensagem_id: number;
+  mensagem_status: string;
+  canal: string;
+  template_id: string | null;
+  conteudo: string;
+  agendado_para: string | null;
+}
+
+const ROTULOS_CANAL: Record<string, string> = { email: "E-mail", whatsapp: "WhatsApp", linkedin: "LinkedIn" };
+
 interface Props {
   contaId: number;
   onClose: () => void;
@@ -88,6 +104,10 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
   const [mostrarDescarte, setMostrarDescarte] = useState(false);
   const [editandoConta, setEditandoConta] = useState(false);
   const [decisorEmEdicaoId, setDecisorEmEdicaoId] = useState<number | null>(null);
+  const [decisorExpandidoId, setDecisorExpandidoId] = useState<number | null>(null);
+  const [mensagensAgendadasPorDecisor, setMensagensAgendadasPorDecisor] = useState<
+    Record<number, MensagemAgendada[]>
+  >({});
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState<string | null>(null);
 
@@ -236,6 +256,32 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
   async function mapearDecisores() {
     await executar("mapear-decisores", async () => {
       setDecisores(await api.post<Decisor[]>(`/contas/${contaId}/decisores/mapear`));
+    });
+  }
+
+  async function alternarExpansaoDecisor(decisorId: number) {
+    if (decisorExpandidoId === decisorId) {
+      setDecisorExpandidoId(null);
+      return;
+    }
+    setDecisorExpandidoId(decisorId);
+    if (mensagensAgendadasPorDecisor[decisorId]) return;
+    await executar(`mensagens-agendadas-${decisorId}`, async () => {
+      const itens = await api.get<MensagemAgendada[]>(`/aprovacoes?decisor_id=${decisorId}`);
+      setMensagensAgendadasPorDecisor((atual) => ({
+        ...atual,
+        [decisorId]: itens.filter((item) => item.mensagem_status !== "enviado" && item.mensagem_status !== "cancelado"),
+      }));
+    });
+  }
+
+  async function cancelarMensagemAgendada(decisorId: number, mensagemId: number) {
+    await executar(`cancelar-mensagem-${mensagemId}`, async () => {
+      await api.post(`/aprovacoes/mensagens/${mensagemId}/cancelar`);
+      setMensagensAgendadasPorDecisor((atual) => ({
+        ...atual,
+        [decisorId]: (atual[decisorId] ?? []).filter((item) => item.mensagem_id !== mensagemId),
+      }));
     });
   }
 
@@ -478,35 +524,80 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                       </div>
                     </form>
                   ) : (
-                    <div key={decisor.id} className="flex items-center justify-between border-b border-border py-1 gap-2">
-                      <div>
-                        <span className="font-semibold text-text">{decisor.nome}</span>
-                        {decisor.cargo && <span className="text-muted"> · {decisor.cargo}</span>}
-                        {decisor.email && <span className="text-muted"> · {decisor.email}</span>}
-                        {decisor.telefone && <span className="text-muted"> · {decisor.telefone}</span>}
-                        {decisor.canal_provavel && <span className="text-muted"> · canal: {decisor.canal_provavel}</span>}
+                    <div key={decisor.id} className="border-b border-border py-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <span className="font-semibold text-text">{decisor.nome}</span>
+                          {decisor.cargo && <span className="text-muted"> · {decisor.cargo}</span>}
+                          {decisor.email && <span className="text-muted"> · {decisor.email}</span>}
+                          {decisor.telefone && <span className="text-muted"> · {decisor.telefone}</span>}
+                          {decisor.canal_provavel && <span className="text-muted"> · canal: {decisor.canal_provavel}</span>}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {decisor.origem && ROTULOS_ORIGEM[decisor.origem] && (
+                            <Badge tone="muted">{ROTULOS_ORIGEM[decisor.origem]}</Badge>
+                          )}
+                          {decisor.linkedin_url &&
+                            (decisor.linkedin_conectado ? (
+                              <Badge tone="green">✓ Já conectado</Badge>
+                            ) : (
+                              <a
+                                href={decisor.linkedin_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-cyan hover:underline"
+                              >
+                                Conectar no LinkedIn ↗
+                              </a>
+                            ))}
+                          <button
+                            type="button"
+                            className="text-[10.5px] text-muted hover:text-cyan"
+                            onClick={() => alternarExpansaoDecisor(decisor.id)}
+                          >
+                            {decisorExpandidoId === decisor.id ? "▾" : "▸"} Mensagens agendadas
+                          </button>
+                          <Button size="sm" variant="ghost" onClick={() => setDecisorEmEdicaoId(decisor.id)}>
+                            Editar
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        {decisor.origem && ROTULOS_ORIGEM[decisor.origem] && (
-                          <Badge tone="muted">{ROTULOS_ORIGEM[decisor.origem]}</Badge>
-                        )}
-                        {decisor.linkedin_url &&
-                          (decisor.linkedin_conectado ? (
-                            <Badge tone="green">✓ Já conectado</Badge>
-                          ) : (
-                            <a
-                              href={decisor.linkedin_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-cyan hover:underline"
-                            >
-                              Conectar no LinkedIn ↗
-                            </a>
-                          ))}
-                        <Button size="sm" variant="ghost" onClick={() => setDecisorEmEdicaoId(decisor.id)}>
-                          Editar
-                        </Button>
-                      </div>
+                      {decisorExpandidoId === decisor.id && (
+                        <div className="mt-1.5 mb-1 rounded-lg bg-surf2 p-2">
+                          {carregando === `mensagens-agendadas-${decisor.id}` && (
+                            <div className="text-[11px] text-muted">Carregando...</div>
+                          )}
+                          {carregando !== `mensagens-agendadas-${decisor.id}` &&
+                            (mensagensAgendadasPorDecisor[decisor.id]?.length ?? 0) === 0 && (
+                              <div className="text-[11px] text-muted">Nenhuma mensagem agendada pendente.</div>
+                            )}
+                          <div className="flex flex-col gap-1">
+                            {(mensagensAgendadasPorDecisor[decisor.id] ?? []).map((mensagem) => (
+                              <div
+                                key={mensagem.mensagem_id}
+                                className="flex flex-wrap items-center justify-between gap-2 text-[11px]"
+                              >
+                                <span>
+                                  <Badge tone="cyan">{ROTULOS_CANAL[mensagem.canal] ?? mensagem.canal}</Badge>{" "}
+                                  <span className="text-muted">
+                                    {mensagem.mensagem_status === "aprovado" ? "aprovado" : "aguardando aprovação"}
+                                    {mensagem.agendado_para &&
+                                      ` · ${new Date(mensagem.agendado_para).toLocaleString("pt-BR")}`}
+                                  </span>
+                                </span>
+                                <button
+                                  type="button"
+                                  className="flex-shrink-0 text-[10.5px] text-muted hover:text-red"
+                                  disabled={carregando === `cancelar-mensagem-${mensagem.mensagem_id}`}
+                                  onClick={() => cancelarMensagemAgendada(decisor.id, mensagem.mensagem_id)}
+                                >
+                                  ✕ Cancelar este envio
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ),
                 )}

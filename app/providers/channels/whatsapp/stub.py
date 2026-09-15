@@ -8,8 +8,12 @@ class StubWhatsAppProvider(WhatsAppProvider):
     def __init__(self) -> None:
         self.envios: list[dict] = []
 
-    def enviar_template(self, telefone: str, template_id: str, variaveis: dict) -> ResultadoEnvio:
-        self.envios.append({"telefone": telefone, "template_id": template_id, "variaveis": variaveis})
+    def enviar_template(
+        self, telefone: str, template_id: str, variaveis: dict, variavel_botao: str | None = None
+    ) -> ResultadoEnvio:
+        self.envios.append(
+            {"telefone": telefone, "template_id": template_id, "variaveis": variaveis, "variavel_botao": variavel_botao}
+        )
         return ResultadoEnvio(sucesso=True, id_externo=f"stub-{len(self.envios)}")
 
     def enviar_texto_livre(self, telefone: str, texto: str) -> ResultadoEnvio:

@@ -355,32 +355,29 @@ def test_ativar_cadencia_consome_franquia(client, onboarding_completo, criar_con
     assert franquia_depois["usado"] == franquia_antes["usado"] + 1
 
 
-def test_definir_template_whatsapp_em_toque_existente(client, criar_cadencia):
+def test_definir_template_whatsapp_em_toque_existente(client, criar_cadencia, db_session):
     """Raio-X 2026-09-15: quem cria a cadência antes do template ser
     aprovado pela Meta precisa de um jeito de configurá-lo depois — o
-    template só podia ser escolhido na criação até aqui."""
-    cadencia = criar_cadencia(
-        toques=[
-            {"ordem": 1, "canal": "email", "intervalo_dias_apos_anterior": 0},
-            {"ordem": 2, "canal": "whatsapp", "intervalo_dias_apos_anterior": 2},
-            {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 3},
-            {"ordem": 4, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
-            {"ordem": 5, "canal": "whatsapp", "intervalo_dias_apos_anterior": 3},
-        ]
-    )
-    toques = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
-    toque_sem_template = next(t for t in toques if t["canal"] == "whatsapp")
-    assert toque_sem_template["template_whatsapp_id"] is None
+    template só podia ser escolhido na criação até aqui. Simula uma
+    cadência "legada" (toque de WhatsApp sem template) direto no banco,
+    já que criar uma cadência assim pela API não é mais permitido (regra
+    nova: todo toque de WhatsApp exige template já na criação)."""
+    from app.models.toque_cadencia import ToqueCadencia
+
+    cadencia = criar_cadencia()
+    toque_whatsapp = db_session.query(ToqueCadencia).filter_by(cadencia_id=cadencia["id"], canal="whatsapp").one()
+    toque_whatsapp.template_whatsapp_id = None
+    db_session.commit()
 
     resposta = client.put(
-        f"/api/v1/cadencias/{cadencia['id']}/toques/{toque_sem_template['id']}/template-whatsapp",
+        f"/api/v1/cadencias/{cadencia['id']}/toques/{toque_whatsapp.id}/template-whatsapp",
         json={"template_whatsapp_id": "prospeccao_inicial"},
     )
 
     assert resposta.status_code == 200
     assert resposta.json()["template_whatsapp_id"] == "prospeccao_inicial"
     atualizado = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
-    assert next(t for t in atualizado if t["id"] == toque_sem_template["id"])["template_whatsapp_id"] == "prospeccao_inicial"
+    assert next(t for t in atualizado if t["id"] == toque_whatsapp.id)["template_whatsapp_id"] == "prospeccao_inicial"
 
 
 def test_definir_template_whatsapp_em_toque_de_outro_canal_falha(client, criar_cadencia):
@@ -605,3 +602,74 @@ def test_ativar_sem_mensagem_nova_pendente_falha(
     resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
 
     assert resposta.status_code == 409
+
+
+def test_criar_cadencia_com_dois_toques_whatsapp_falha(client):
+    """Raio-X 2026-09-15: no máximo 1 toque de WhatsApp por cadência —
+    nenhum toque agendado pra depois tem garantia de a janela de 24h
+    ainda estar aberta quando a data chegar."""
+    toques = [
+        {"ordem": 1, "canal": "email", "intervalo_dias_apos_anterior": 0},
+        {"ordem": 2, "canal": "whatsapp", "intervalo_dias_apos_anterior": 1, "template_whatsapp_id": "x"},
+        {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 1},
+        {"ordem": 4, "canal": "whatsapp", "intervalo_dias_apos_anterior": 1, "template_whatsapp_id": "x"},
+        {"ordem": 5, "canal": "linkedin", "intervalo_dias_apos_anterior": 1},
+    ]
+    resposta = client.post("/api/v1/cadencias", json={"nome": "Dois WhatsApp", "toques": toques})
+
+    assert resposta.status_code == 409
+
+
+def test_criar_cadencia_com_whatsapp_sem_template_falha(client):
+    """Raio-X 2026-09-15: o único toque de WhatsApp é sempre obrigatório
+    ter template — nunca mais texto livre agendado por cadência."""
+    toques = [
+        {"ordem": 1, "canal": "email", "intervalo_dias_apos_anterior": 0},
+        {"ordem": 2, "canal": "whatsapp", "intervalo_dias_apos_anterior": 1},
+        {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 1},
+        {"ordem": 4, "canal": "linkedin", "intervalo_dias_apos_anterior": 1},
+        {"ordem": 5, "canal": "email", "intervalo_dias_apos_anterior": 1},
+    ]
+    resposta = client.post("/api/v1/cadencias", json={"nome": "WhatsApp sem template", "toques": toques})
+
+    assert resposta.status_code == 409
+
+
+def test_adicionar_segundo_toque_whatsapp_falha(client, criar_cadencia):
+    """Cadência padrão já tem 1 toque de WhatsApp (com template) — adicionar
+    um segundo deve falhar, mesmo em cadência já existente."""
+    cadencia = criar_cadencia()
+
+    resposta = client.post(
+        f"/api/v1/cadencias/{cadencia['id']}/toques",
+        json={"canal": "whatsapp", "template_whatsapp_id": "y"},
+    )
+
+    assert resposta.status_code == 409
+
+
+def test_atualizar_toque_para_whatsapp_sem_template_falha(client, criar_cadencia):
+    """`atualizar_toque` não recebe `template_whatsapp_id` — trocar um
+    toque de e-mail/LinkedIn pra WhatsApp por aqui nunca teria template,
+    então tem que falhar (a troca de canal pra whatsapp só é segura via
+    `adicionar_toque`, que já exige template)."""
+    cadencia = criar_cadencia()
+    toques = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
+    toque_email = next(t for t in toques if t["canal"] == "email")
+
+    resposta = client.put(f"/api/v1/cadencias/{cadencia['id']}/toques/{toque_email['id']}", json={"canal": "whatsapp"})
+
+    assert resposta.status_code == 409
+
+
+def test_definir_cancelamento_ao_responder(client, criar_cadencia):
+    cadencia = criar_cadencia()
+    assert cadencia["cancelar_ao_responder"] is False
+
+    resposta = client.put(
+        f"/api/v1/cadencias/{cadencia['id']}/cancelamento-ao-responder", json={"cancelar_ao_responder": True}
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["cancelar_ao_responder"] is True
+    assert client.get(f"/api/v1/cadencias/{cadencia['id']}").json()["cancelar_ao_responder"] is True

@@ -40,6 +40,15 @@ class UsuarioSchema(BaseModel):
     # Idem — vem de `Tenant.aviso_whatsapp_template_confirmado`, não de
     # `Usuario` (raio-X 2026-09-14: aviso de template do WhatsApp).
     aviso_whatsapp_template_confirmado: bool = False
+    # Raio-X 2026-09-15: número pessoal do próprio vendedor, cadastrado em
+    # "Meu Perfil" — vem direto de `Usuario.whatsapp_pessoal`.
+    whatsapp_pessoal: str | None = None
+    # Idem — computado em `_resposta_token` (não vem de `Usuario`): se
+    # existe pelo menos uma `Conta` com `vendedor_usuario_id` igual ao
+    # deste usuário. Liga o aviso proativo de WhatsApp pessoal faltando —
+    # sem isso, um vendedor sem conta nenhuma atribuída seria incomodado
+    # à toa (raio-X 2026-09-15).
+    tem_conta_atribuida: bool = False
 
 
 class LoginRequestSchema(BaseModel):
@@ -86,3 +95,7 @@ class TokenResponseSchema(BaseModel):
 
 class LicencaStatusResponseSchema(BaseModel):
     status: str
+
+
+class AtualizarWhatsappPessoalRequestSchema(BaseModel):
+    whatsapp_pessoal: str | None = None

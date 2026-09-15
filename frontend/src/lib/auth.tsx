@@ -34,6 +34,14 @@ export interface Usuario {
   tenant_tipo: string;
   recursos_plano: RecursosPlano;
   aviso_whatsapp_template_confirmado: boolean;
+  /** Raio-X 2026-09-15: número pessoal do vendedor, cadastrado em "Meu
+   * Perfil" — usado no botão de redirecionamento dos templates de WhatsApp. */
+  whatsapp_pessoal: string | null;
+  /** Idem — se este usuário tem pelo menos uma `Conta` atribuída
+   * (`vendedor_usuario_id`). Liga o aviso proativo de WhatsApp pessoal
+   * faltando; computado só no login (não se atualiza sozinho durante a
+   * sessão se uma conta nova for atribuída depois). */
+  tem_conta_atribuida: boolean;
 }
 
 interface TokenResponse {
@@ -87,6 +95,9 @@ interface AuthContextValue {
   /** Dispensa em definitivo o aviso de template do WhatsApp (raio-X
    * 2026-09-14) — some da tela sem precisar de logout/login. */
   confirmarAvisoWhatsappTemplate: () => Promise<void>;
+  /** "Meu Perfil" (raio-X 2026-09-15) — salva o WhatsApp pessoal do
+   * vendedor, usado no botão de redirecionamento dos templates. */
+  atualizarWhatsappPessoal: (whatsappPessoal: string | null) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -166,6 +177,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const atualizarWhatsappPessoal = useCallback(async (whatsappPessoal: string | null) => {
+    await api.put<Usuario>("/auth/whatsapp-pessoal", { whatsapp_pessoal: whatsappPessoal });
+    setUsuario((atual) => {
+      if (!atual) return atual;
+      const atualizado = { ...atual, whatsapp_pessoal: whatsappPessoal };
+      atualizarUsuarioSalvo(atualizado);
+      return atualizado;
+    });
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       usuario,
@@ -180,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       consumirPrimeiroLoginPendente,
       declararPagamento,
       confirmarAvisoWhatsappTemplate,
+      atualizarWhatsappPessoal,
     }),
     [
       usuario,
@@ -193,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       consumirPrimeiroLoginPendente,
       declararPagamento,
       confirmarAvisoWhatsappTemplate,
+      atualizarWhatsappPessoal,
     ],
   );
 

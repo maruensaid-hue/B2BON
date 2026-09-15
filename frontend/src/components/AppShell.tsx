@@ -208,6 +208,35 @@ function BannerLicencaSuspensa() {
   );
 }
 
+/** Aviso proativo (raio-X 2026-09-15) — nudge leve, não bloqueante, pro
+ * vendedor que tem conta(s) atribuída(s) mas ainda não cadastrou o
+ * WhatsApp pessoal em "Meu Perfil": sem esse número, o botão de
+ * redirecionamento dos templates de WhatsApp não leva a lugar nenhum.
+ * Descartável só pela sessão atual — reaparece num F5, de propósito,
+ * até a pessoa de fato preencher o número (diferente do aviso de
+ * template, que é "confirme que já leu" e fica salvo pra sempre). */
+function AvisoWhatsappPessoalFaltando() {
+  const { usuario } = useAuth();
+  const [dispensado, setDispensado] = useState(false);
+
+  if (dispensado || !usuario?.tem_conta_atribuida || usuario.whatsapp_pessoal) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-b border-cyan/30 bg-cyan/10 px-4 py-2.5 text-[12.5px] text-text">
+      <span className="flex-1">
+        Você ainda não cadastrou seu WhatsApp pessoal — sem ele, o botão de redirecionamento dos templates de
+        WhatsApp da cadência não leva o cliente a lugar nenhum.
+      </span>
+      <NavLink to="/perfil" className="flex-shrink-0 rounded-lg bg-cyan px-3 py-1.5 font-semibold text-white">
+        Cadastrar agora
+      </NavLink>
+      <button onClick={() => setDispensado(true)} className="flex-shrink-0 text-[11px] text-muted hover:text-text">
+        Depois
+      </button>
+    </div>
+  );
+}
+
 export function AppShell() {
   const { usuario, temLicencaAtiva, sair, primeiroLoginPendente, consumirPrimeiroLoginPendente } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -359,15 +388,15 @@ export function AppShell() {
         </button>
 
         <div className="flex items-center gap-2.5 border-t border-nav-border p-2.5">
-          <div className="flex h-7.5 w-7.5 flex-shrink-0 items-center justify-center rounded-full bg-violet/25 text-xs font-bold text-violet">
+          <NavLink to="/perfil" className="flex h-7.5 w-7.5 flex-shrink-0 items-center justify-center rounded-full bg-violet/25 text-xs font-bold text-violet">
             {usuario?.nome?.[0]?.toUpperCase() ?? "?"}
-          </div>
-          <div className="min-w-0 flex-1 overflow-hidden">
+          </NavLink>
+          <NavLink to="/perfil" className="min-w-0 flex-1 overflow-hidden">
             <div className="overflow-hidden text-[12px] font-semibold text-ellipsis whitespace-nowrap text-nav-text">
               {usuario?.nome}
             </div>
             <div className="text-[9px] tracking-wide text-nav-muted">{usuario?.papel?.toUpperCase()}</div>
-          </div>
+          </NavLink>
           <button onClick={sair} className="flex-shrink-0 text-[11px] text-nav-muted hover:text-red">
             Sair
           </button>
@@ -394,6 +423,7 @@ export function AppShell() {
         </header>
 
         {!temLicencaAtiva && <BannerLicencaSuspensa />}
+        {temLicencaAtiva && <AvisoWhatsappPessoalFaltando />}
 
         <main className="flex-1 overflow-auto pb-20 sm:pb-0">
           <Outlet />

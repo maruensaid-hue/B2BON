@@ -11,7 +11,9 @@ class WhatsAppDesativadoProvider(WhatsAppProvider):
 
     _MOTIVO = "Envio de WhatsApp não está configurado para este tenant."
 
-    def enviar_template(self, telefone: str, template_id: str, variaveis: dict) -> ResultadoEnvio:
+    def enviar_template(
+        self, telefone: str, template_id: str, variaveis: dict, variavel_botao: str | None = None
+    ) -> ResultadoEnvio:
         return ResultadoEnvio(sucesso=False, motivo_falha=self._MOTIVO)
 
     def enviar_texto_livre(self, telefone: str, texto: str) -> ResultadoEnvio:

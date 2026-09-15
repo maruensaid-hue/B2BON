@@ -186,8 +186,12 @@ class FakeWhatsAppProvider(WhatsAppProvider):
             return ResultadoEnvioWhatsApp(sucesso=False, motivo_falha="falha simulada")
         return ResultadoEnvioWhatsApp(sucesso=True, id_externo=f"fake-{len(self.envios)}")
 
-    def enviar_template(self, telefone: str, template_id: str, variaveis: dict) -> ResultadoEnvioWhatsApp:
-        self.envios.append({"tipo": "template", "telefone": telefone, "template_id": template_id})
+    def enviar_template(
+        self, telefone: str, template_id: str, variaveis: dict, variavel_botao: str | None = None
+    ) -> ResultadoEnvioWhatsApp:
+        self.envios.append(
+            {"tipo": "template", "telefone": telefone, "template_id": template_id, "variavel_botao": variavel_botao}
+        )
         return self._resultado()
 
     def enviar_texto_livre(self, telefone: str, texto: str) -> ResultadoEnvioWhatsApp:

@@ -1,10 +1,11 @@
 from app.services import optout_service
 
+# Raio-X 2026-09-15: só 1 toque de WhatsApp por cadência.
 _TOQUES_WHATSAPP_PRIMEIRO = [
     {"ordem": 1, "canal": "whatsapp", "intervalo_dias_apos_anterior": 0, "template_whatsapp_id": "x"},
     {"ordem": 2, "canal": "email", "intervalo_dias_apos_anterior": 2},
     {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 2},
-    {"ordem": 4, "canal": "whatsapp", "intervalo_dias_apos_anterior": 2, "template_whatsapp_id": "x"},
+    {"ordem": 4, "canal": "email", "intervalo_dias_apos_anterior": 2},
     {"ordem": 5, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
 ]
 

@@ -7,12 +7,13 @@ Joao,Silva,https://www.linkedin.com/in/joao-silva,joao@example.com,Alpha Tech,CE
 Maria,Souza,https://www.linkedin.com/in/maria-souza/,,Beta Clinica,Diretora,15 Mar 2023
 """
 
+# Raio-X 2026-09-15: só 1 toque de WhatsApp por cadência.
 _TOQUES_LINKEDIN_PRIMEIRO = [
     {"ordem": 1, "canal": "linkedin", "intervalo_dias_apos_anterior": 0},
     {"ordem": 2, "canal": "email", "intervalo_dias_apos_anterior": 2},
     {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 2},
     {"ordem": 4, "canal": "whatsapp", "intervalo_dias_apos_anterior": 2, "template_whatsapp_id": "x"},
-    {"ordem": 5, "canal": "whatsapp", "intervalo_dias_apos_anterior": 2, "template_whatsapp_id": "x"},
+    {"ordem": 5, "canal": "email", "intervalo_dias_apos_anterior": 2},
 ]
 
 

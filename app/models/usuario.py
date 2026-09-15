@@ -26,3 +26,11 @@ class Usuario(Base):
     # cadastro (LGPD) — nulo para quem foi criado antes deste campo
     # existir; todo cadastro novo passa a exigir e a gravar a data.
     termos_aceitos_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Raio-X 2026-09-15: número pessoal/comercial do próprio vendedor —
+    # preenchido por ele mesmo em "Meu Perfil". Usado como variável do
+    # botão de redirecionamento (URL dinâmica "wa.me/{{1}}") dos
+    # templates de WhatsApp, pra tirar a conversa da API assim que o
+    # cliente responder (sem regra de janela de 24h a partir daí, ao
+    # custo de perder o registro automático no CRM). Opcional — sem ele,
+    # o envio do template segue normalmente, só sem preencher o botão.
+    whatsapp_pessoal: Mapped[str | None] = mapped_column(String, nullable=True)

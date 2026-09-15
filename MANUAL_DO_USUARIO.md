@@ -286,14 +286,30 @@ IA para abordar as contas.
    canal e intervalo de dias em relação ao toque anterior. Nasce como
    `rascunho`. Num toque, é possível marcar **teste A/B** (exclusivo do
    plano Professional ou superior — nos demais planos a opção aparece
-   bloqueada) pra comparar duas variações de texto no mesmo passo.
-2. **Gerar mensagens para um lote**: com a cadência em rascunho,
+   bloqueada) pra comparar duas variações de texto no mesmo passo. Uma
+   cadência aceita **no máximo 1 toque de WhatsApp**, sempre com um
+   template aprovado selecionado (ver seção 5.5 — o motivo é a janela de
+   24h da Meta, que nenhum toque agendado pra depois tem garantia de
+   encontrar aberta). O canal WhatsApp fica desabilitado no seletor de
+   qualquer outro toque assim que um já estiver usando esse canal.
+2. Por padrão, uma resposta do decisor **não cancela mais os outros
+   toques** da cadência — a nutrição por e-mail/LinkedIn continua
+   normalmente. Marque a opção **"Parar esta cadência automaticamente
+   se o cliente responder"** (na criação, ou depois no cabeçalho da
+   cadência) se preferir o comportamento antigo — cancelar tudo que
+   estiver pendente, em qualquer canal, assim que o decisor responder.
+   Alternativamente, cancele manualmente um toque específico de um
+   contato: em qualquer tela que abre a ficha da conta (Prospecção,
+   Kanban, Leads), expanda **"Mensagens agendadas"** no card do decisor
+   e use **"✕ Cancelar este envio"** na mensagem que não deve mais sair
+   — os demais toques daquele mesmo contato continuam agendados.
+3. **Gerar mensagens para um lote**: com a cadência em rascunho,
    escolha um ICP e marque as contas — a IA gera o texto de cada
    mensagem de cada toque, respeitando oferta/tom/restrições. Contas
    sem decisor mapeado ficam de fora (é preciso mapear um decisor
    antes). As mensagens geradas vão para a **fila de Aprovação**, e a
    cadência muda para `aguardando_aprovacao`.
-3. **Ativar cadência**: depois que a fila de aprovação está revisada,
+4. **Ativar cadência**: depois que a fila de aprovação está revisada,
    ativar a cadência (`ativa`) faz os envios entrarem na fila de envio
    real, respeitando o agendamento de cada toque. É neste momento que a
    franquia é consumida para as contas novas do lote (ver seção 8).
@@ -324,8 +340,8 @@ O canal WhatsApp **não é compartilhado entre clientes da B2B ON**: cada
 tenant configura a própria conta Meta em **Configuração → WhatsApp
 Business**, com número e token próprios. Não existe um número "da
 CyberFort" usado por todo mundo — se o seu tenant não tiver essa
-configuração feita, os toques de WhatsApp das suas cadências simplesmente
-nunca saem (silenciosamente, sem erro na tela).
+configuração feita, o toque de WhatsApp das suas cadências simplesmente
+nunca sai (silenciosamente, sem erro na tela).
 
 **Passo a passo para configurar:**
 
@@ -343,38 +359,52 @@ nunca saem (silenciosamente, sem erro na tela).
    **Configuração → WhatsApp Business**, na B2B ON. As credenciais ficam
    criptografadas no banco.
 
-**O requisito que trava o primeiro contato — template aprovado pela Meta:**
+**Por que o toque de WhatsApp é sempre via template, com botão de
+redirecionamento:**
 
 A Meta exige um **modelo de mensagem (template) aprovado** para qualquer
 mensagem de WhatsApp enviada a um número que **nunca falou com a sua
-conta antes** (ou que já passou de 24h desde a última resposta dele).
-Texto livre só é permitido dentro dessa janela de 24h, depois que o
-próprio contato responder algo (mesmo um "oi").
+conta antes** (ou que já passou de 24h desde a última resposta dele) —
+essa regra é puramente mecânica (contada em horas desde a última
+mensagem do contato), sem exceção de contexto: mesmo um retorno que o
+próprio cliente pediu ("me chama semana que vem") conta como "frio" de
+novo se passar mais de 24h. Por isso uma cadência aceita **só 1 toque de
+WhatsApp**, e ele é sempre um template — não existe mais um segundo
+toque de WhatsApp "de texto livre" agendado pra depois, porque nenhuma
+data futura tem garantia de encontrar a janela de 24h aberta.
 
-Isso significa que **toda cadência de prospecção fria** (primeiro
-contato) via WhatsApp depende de ter, no mínimo, um template aprovado:
+Pra não perder a conversa por causa dessa limitação, o template usa um
+**botão de redirecionamento** (`https://wa.me/{{1}}`) que leva o
+contato direto pro **WhatsApp pessoal do vendedor responsável pela
+conta** (app do celular ou WhatsApp Web) — a partir daí a conversa
+acontece no aplicativo de verdade, sem nenhuma restrição de janela ou
+template, exatamente como qualquer contato feito fora da plataforma. O
+custo dessa troca: as mensagens trocadas por lá **não ficam registradas
+automaticamente no CRM** — registre manualmente na aba de Atividade da
+conta quando fizer sentido, do mesmo jeito que já se faz para qualquer
+outro contato feito fora do sistema.
+
+**Passo a passo:**
 
 1. Em **Meta for Developers → WhatsApp → Modelos de mensagem**, crie um
    modelo (categoria "Marketing" ou "Utilidade"), escreva o texto e
-   envie para aprovação da Meta — a aprovação costuma levar de minutos a
-   poucas horas.
-2. Ao criar o toque de WhatsApp de uma cadência (seção 5.3), selecione o
+   adicione um botão do tipo **"Visitar site"** com **URL dinâmica**
+   `https://wa.me/{{1}}` (a variável `{{1}}` do botão é preenchida pela
+   B2B ON, na hora do envio, com o WhatsApp pessoal do vendedor). Envie
+   para aprovação da Meta — costuma levar de minutos a poucas horas.
+2. Cada vendedor cadastra o **próprio número de WhatsApp** em **Meu
+   Perfil** (clique no seu nome/avatar no canto inferior do menu) — é
+   esse número que o botão do template usa. Sem ele preenchido, o botão
+   não leva a lugar nenhum; um aviso aparece no topo da tela para quem
+   tem conta(s) atribuída(s) e ainda não cadastrou o próprio número.
+3. Ao criar o toque de WhatsApp de uma cadência (seção 5.3), selecione o
    **template aprovado** no campo correspondente do toque — a lista já
    vem sincronizada com os templates aprovados na Meta, sem precisar
-   digitar nada. Sem isso, a mensagem gerada pela IA fica **parada
-   indefinidamente**, aguardando uma janela de 24h que nunca abre, sem
-   nenhum aviso visível além do pop-up de alerta que aparece em
-   Configuração e em Cadências enquanto o tenant não confirmar que já
-   fez esse procedimento. Se a cadência já existia antes do template ser
-   aprovado, não é preciso recriá-la: a tela de Cadências mostra um
-   aviso "sem template" ao lado de cada toque de WhatsApp sem um
-   definido, com um seletor pra escolher o template ali mesmo — só vale
-   pras mensagens geradas a partir daquele momento, não retroage sobre
-   mensagens já geradas antes da troca.
-
-Depois que o contato responder pela primeira vez, a conversa entra na
-janela de 24h e as mensagens seguintes daquele mesmo toque podem ser
-texto livre (sem template), normalmente.
+   digitar nada; o campo é obrigatório, não é possível salvar o toque de
+   WhatsApp sem um template. Se a cadência já existia antes do template
+   ser aprovado, não é preciso recriá-la: a tela de Cadências mostra um
+   aviso "sem template" ao lado do toque de WhatsApp sem um definido,
+   com um seletor pra escolher o template ali mesmo.
 
 ### 5.6 Disparo e rampa de aquecimento
 

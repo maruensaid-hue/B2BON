@@ -159,8 +159,12 @@ def listar_fila(
     conta_id: int | None = None,
     cadencia_id: int | None = None,
     status: str | None = None,
+    decisor_id: int | None = None,
 ) -> list[dict]:
-    """Fila com filtros por canal, conta e cadência (E4-H1)."""
+    """Fila com filtros por canal, conta, cadência e decisor (E4-H1).
+    `decisor_id` (raio-X 2026-09-15) é o que alimenta a tela de
+    "mensagens agendadas" de um contato específico, pra cancelamento
+    manual fino (`cancelar_mensagem`)."""
     query = (
         db.query(Aprovacao, Mensagem, Decisor)
         .join(Mensagem, Aprovacao.mensagem_id == Mensagem.id)
@@ -175,18 +179,22 @@ def listar_fila(
         query = query.filter(Mensagem.cadencia_id == cadencia_id)
     if status:
         query = query.filter(Aprovacao.status == status)
+    if decisor_id:
+        query = query.filter(Mensagem.decisor_id == decisor_id)
 
     return [
         {
             "aprovacao_id": aprovacao.id,
             "status": aprovacao.status,
             "mensagem_id": mensagem.id,
+            "mensagem_status": mensagem.status,
             "canal": mensagem.canal,
             "template_id": mensagem.template_id,
             "conteudo": mensagem.conteudo,
             "cadencia_id": mensagem.cadencia_id,
             "conta_id": decisor.conta_id,
             "decisor_id": decisor.id,
+            "agendado_para": mensagem.agendado_para,
             "criado_em": mensagem.criado_em,
         }
         for aprovacao, mensagem, decisor in query.all()
@@ -335,6 +343,38 @@ def excluir_lote(db: Session, tenant_id: str, ator_id: str | None, aprovacao_ids
         excluidas += 1
     db.commit()
     return excluidas
+
+
+def cancelar_mensagem(db: Session, tenant_id: str, ator_id: str | None, mensagem_id: int) -> Mensagem:
+    """Cancelamento manual e fino, por mensagem individual — raio-X
+    2026-09-15: diferente de `excluir` (que APAGA o registro e já bloqueia
+    mensagem `"enviado"`), aqui só marca `status="cancelado"`, preservando
+    o histórico — mesmo padrão que `resposta_service.marcar_resposta` já
+    usa. Dá pro vendedor decidir, contato a contato e toque a toque, quais
+    envios futuros ainda fazem sentido (ex.: cliente não responde
+    LinkedIn mas abre e-mail — cancela só o toque de LinkedIn dele, sem
+    afetar o resto da cadência nem outros contatos)."""
+    mensagem = db.query(Mensagem).filter_by(id=mensagem_id, tenant_id=tenant_id).one_or_none()
+    if mensagem is None:
+        raise NaoEncontrado(f"Mensagem {mensagem_id} não encontrada")
+    if mensagem.status not in ("aguardando_aprovacao", "aprovado"):
+        raise RegraNegocioViolada("Só é possível cancelar mensagens ainda não enviadas.")
+
+    mensagem.status = "cancelado"
+    auditoria_service.registrar(
+        db,
+        tenant_id,
+        "mensagem_cancelada_manualmente",
+        "mensagem",
+        mensagem.id,
+        ator_id,
+        {},
+        conta_id=_conta_id_da_mensagem(db, mensagem),
+        canal=mensagem.canal,
+    )
+    db.commit()
+    db.refresh(mensagem)
+    return mensagem
 
 
 def editar_mensagem(

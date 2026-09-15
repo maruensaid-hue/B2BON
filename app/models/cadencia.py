@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -34,4 +34,11 @@ class Cadencia(Base):
     )  # rascunho | aguardando_aprovacao | ativa | cancelada
     tipo: Mapped[str] = mapped_column(String, default="prospeccao")  # prospeccao | nutricao
     data_inicio: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Raio-X 2026-09-15: resposta do decisor NÃO interrompe mais a
+    # cadência por padrão (uma resposta pedindo mais informação não é
+    # motivo pra parar de nutrir por e-mail/LinkedIn) — só cancela tudo
+    # se o próprio tenant marcar essa opção explicitamente. Cancelamento
+    # fino (por mensagem individual) continua disponível via
+    # `aprovacao_service.cancelar_mensagem`, independente desta flag.
+    cancelar_ao_responder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

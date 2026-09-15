@@ -16,6 +16,7 @@ class CadenciaSchema(BaseModel):
     status: str
     tipo: str
     data_inicio: datetime | None
+    cancelar_ao_responder: bool
     criado_em: datetime
 
 
@@ -47,6 +48,10 @@ class RenomearCadenciaRequestSchema(BaseModel):
     nome: str
 
 
+class DefinirCancelamentoAoResponderRequestSchema(BaseModel):
+    cancelar_ao_responder: bool
+
+
 class CancelarCadenciaResponseSchema(BaseModel):
     cadencia: CadenciaSchema
     mensagens_canceladas: int
@@ -74,6 +79,9 @@ class CadenciaCreateSchema(BaseModel):
     # informar, cai no ICP ativo (o primeiro encontrado, mesmo
     # comportamento de antes desta correção).
     icp_id: int | None = None
+    # Raio-X 2026-09-15: desligado por padrão — uma resposta do decisor
+    # não interrompe mais a cadência a menos que isto seja marcado.
+    cancelar_ao_responder: bool = False
 
 
 class GerarCadenciaRequestSchema(BaseModel):

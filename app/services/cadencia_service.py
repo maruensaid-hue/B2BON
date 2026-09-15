@@ -82,6 +82,23 @@ def _exigir_nao_cancelada(cadencia: Cadencia) -> None:
         raise RegraNegocioViolada("Cadência cancelada — não é possível alterá-la.")
 
 
+def _validar_no_maximo_um_whatsapp_com_template(toques) -> None:
+    """`toques`: qualquer sequência com atributos `.canal`/`.template_whatsapp_id`
+    — funciona tanto com `ToqueCadenciaCreateSchema` (na criação) quanto
+    com `ToqueCadencia` do banco (nas edições). Raio-X 2026-09-15: no
+    máximo 1 toque de WhatsApp por cadência, e sempre com template —
+    nenhum toque agendado pra depois do primeiro contato tem garantia de
+    que a janela de 24h da Meta ainda vai estar aberta quando a data
+    chegar (mesmo se o próprio cliente pediu o retorno — a regra da Meta
+    é só sobre horas corridas desde a última mensagem dele, sem exceção
+    de contexto)."""
+    toques_whatsapp = [t for t in toques if t.canal == "whatsapp"]
+    if len(toques_whatsapp) > 1:
+        raise RegraNegocioViolada("No máximo 1 toque de WhatsApp por cadência — os demais devem ser e-mail ou LinkedIn.")
+    if toques_whatsapp and not toques_whatsapp[0].template_whatsapp_id:
+        raise RegraNegocioViolada("O toque de WhatsApp precisa de um template aprovado.")
+
+
 def _validar_minimos(toques: list[ToqueCadencia]) -> None:
     """Mesmas regras de `criar()` — reaplicadas depois de remover/trocar o
     canal de um toque, pra a cadência continuar um blueprint válido pra
@@ -90,6 +107,7 @@ def _validar_minimos(toques: list[ToqueCadencia]) -> None:
         raise RegraNegocioViolada(f"Uma cadência precisa de no mínimo {MINIMO_TOQUES} toques.")
     if len({toque.canal for toque in toques}) < MINIMO_CANAIS_DISTINTOS:
         raise RegraNegocioViolada("Os toques precisam estar distribuídos entre pelo menos 2 canais.")
+    _validar_no_maximo_um_whatsapp_com_template(toques)
 
 
 def cancelar(db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int) -> dict:
@@ -139,6 +157,24 @@ def renomear(db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int,
     return cadencia
 
 
+def definir_cancelamento_ao_responder(
+    db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int, cancelar_ao_responder: bool
+) -> Cadencia:
+    """Liga/desliga o cancelamento automático ao responder (raio-X
+    2026-09-15) — desligado por padrão desde a criação; permitido em
+    qualquer status, sem retroagir sobre nenhuma `Mensagem` já cancelada
+    ou não."""
+    cadencia = obter(db, tenant_id, cadencia_id)
+    cadencia.cancelar_ao_responder = cancelar_ao_responder
+    auditoria_service.registrar(
+        db, tenant_id, "cadencia_cancelamento_ao_responder_alterado", "cadencia", cadencia.id, ator_id,
+        {"cancelar_ao_responder": cancelar_ao_responder},
+    )
+    db.commit()
+    db.refresh(cadencia)
+    return cadencia
+
+
 def adicionar_toque(
     db: Session,
     tenant_id: str,
@@ -168,6 +204,7 @@ def adicionar_toque(
     )
     db.add(toque)
     db.flush()
+    _validar_no_maximo_um_whatsapp_com_template(toques_da_cadencia(db, cadencia.id))
     _recalcular_canais(db, cadencia)
     auditoria_service.registrar(
         db, tenant_id, "toque_adicionado", "toque_cadencia", toque.id, ator_id, {"canal": canal}
@@ -284,6 +321,8 @@ def criar(
     if len(canais) < MINIMO_CANAIS_DISTINTOS:
         raise RegraNegocioViolada("Os toques precisam estar distribuídos entre pelo menos 2 canais.")
 
+    _validar_no_maximo_um_whatsapp_com_template(dados.toques)
+
     # Capturado AGORA, na criação — não re-avaliado a cada geração (raio-X:
     # bug real de produção, ver docstring de `Cadencia.icp_id`/`oferta_id`
     # e de `_contexto_de_geracao`). `dados.icp_id` explícito serve pra quem
@@ -303,7 +342,7 @@ def criar(
 
     cadencia = Cadencia(
         tenant_id=tenant_id, nome=dados.nome, canais=sorted(canais), status="rascunho", tipo=dados.tipo,
-        icp_id=icp_id, oferta_id=oferta_id,
+        icp_id=icp_id, oferta_id=oferta_id, cancelar_ao_responder=dados.cancelar_ao_responder,
     )
     db.add(cadencia)
     db.flush()

@@ -3,10 +3,12 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.models.conta import Conta
 from app.models.configuracao_envio import ConfiguracaoEnvio
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
 from app.models.tarefa_linkedin import TarefaLinkedin
+from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider, ResultadoEnvio
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.email_validation.base import EmailVerificationProvider
@@ -34,7 +36,23 @@ def _dentro_da_janela_dias_uteis_e_horario(config: ConfiguracaoEnvio | None) -> 
     return config.horario_inicio <= agora.time() <= config.horario_fim
 
 
-def _processar_whatsapp(mensagem: Mensagem, decisor: Decisor, provider: WhatsAppProvider) -> ResultadoEnvio | None:
+def _variavel_botao_whatsapp(db: Session, decisor: Decisor) -> str | None:
+    """Número de WhatsApp pessoal do vendedor responsável pela conta do
+    decisor — raio-X 2026-09-15, preenche a URL dinâmica do botão de
+    redirecionamento do template ("https://wa.me/{{1}}"), cadastrado pelo
+    próprio vendedor em "Meu Perfil". `None` se a conta não tiver
+    vendedor atribuído ou ele não tiver cadastrado o número — o envio do
+    template segue normalmente, só sem preencher o botão."""
+    conta = db.query(Conta).filter_by(id=decisor.conta_id).one_or_none()
+    if conta is None or conta.vendedor_usuario_id is None:
+        return None
+    vendedor = db.query(Usuario).filter_by(id=conta.vendedor_usuario_id).one_or_none()
+    return vendedor.whatsapp_pessoal if vendedor else None
+
+
+def _processar_whatsapp(
+    db: Session, mensagem: Mensagem, decisor: Decisor, provider: WhatsAppProvider
+) -> ResultadoEnvio | None:
     if mensagem.template_id is None:
         fora_da_janela = (
             decisor.ultima_interacao_em is None
@@ -46,7 +64,8 @@ def _processar_whatsapp(mensagem: Mensagem, decisor: Decisor, provider: WhatsApp
             # não trata como falha (E3-H2).
             return None
         return provider.enviar_texto_livre(decisor.telefone, mensagem.conteudo)
-    return provider.enviar_template(decisor.telefone, mensagem.template_id, {})
+    variavel_botao = _variavel_botao_whatsapp(db, decisor)
+    return provider.enviar_template(decisor.telefone, mensagem.template_id, {}, variavel_botao)
 
 
 def _processar_email(
@@ -159,7 +178,7 @@ def processar_pendentes(
             continue
 
         if mensagem.canal == "whatsapp":
-            envio = _processar_whatsapp(mensagem, decisor, whatsapp)
+            envio = _processar_whatsapp(db, mensagem, decisor, whatsapp)
             if envio is None:
                 resultado["adiadas"] += 1
                 continue

@@ -13,9 +13,10 @@ def _dados_cadencia(ab_teste_no_primeiro_toque: bool) -> CadenciaCreateSchema:
         nome="Cadência Teste",
         toques=[
             ToqueCadenciaCreateSchema(ordem=1, canal="email", ab_teste_habilitado=ab_teste_no_primeiro_toque),
-            ToqueCadenciaCreateSchema(ordem=2, canal="whatsapp"),
+            # Raio-X 2026-09-15: só 1 toque de WhatsApp por cadência, sempre com template.
+            ToqueCadenciaCreateSchema(ordem=2, canal="whatsapp", template_whatsapp_id="x"),
             ToqueCadenciaCreateSchema(ordem=3, canal="email"),
-            ToqueCadenciaCreateSchema(ordem=4, canal="whatsapp"),
+            ToqueCadenciaCreateSchema(ordem=4, canal="linkedin"),
             ToqueCadenciaCreateSchema(ordem=5, canal="email"),
         ],
     )

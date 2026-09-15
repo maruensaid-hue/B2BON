@@ -11,6 +11,7 @@ from app.schemas.cadencia import (
     CadenciaCreateSchema,
     CadenciaSchema,
     CancelarCadenciaResponseSchema,
+    DefinirCancelamentoAoResponderRequestSchema,
     DefinirTemplateWhatsAppRequestSchema,
     GerarCadenciaRequestSchema,
     GerarCadenciaResponseSchema,
@@ -141,6 +142,21 @@ def renomear_cadencia(
     db: Session = Depends(get_db),
 ) -> CadenciaSchema:
     return cadencia_service.renomear(db, tenant_id, ator_id, cadencia_id, dados.nome)
+
+
+@router.put("/{cadencia_id}/cancelamento-ao-responder", response_model=CadenciaSchema)
+def definir_cancelamento_ao_responder(
+    cadencia_id: int,
+    dados: DefinirCancelamentoAoResponderRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> CadenciaSchema:
+    """Liga/desliga o cancelamento automático ao responder — desligado
+    por padrão desde a criação (raio-X 2026-09-15)."""
+    return cadencia_service.definir_cancelamento_ao_responder(
+        db, tenant_id, ator_id, cadencia_id, dados.cancelar_ao_responder
+    )
 
 
 @router.post("/{cadencia_id}/cancelar", response_model=CancelarCadenciaResponseSchema)

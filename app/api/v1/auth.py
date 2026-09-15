@@ -20,6 +20,7 @@ from app.core.rate_limit import limitar_por_ip
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
+from app.models.conta import Conta
 from app.models.licenca import Licenca
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
@@ -30,6 +31,7 @@ from app.providers.payment.base import PaymentProvider
 from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.schemas.auth import (
+    AtualizarWhatsappPessoalRequestSchema,
     LicencaStatusResponseSchema,
     LoginGoogleRequestSchema,
     LoginRequestSchema,
@@ -84,11 +86,15 @@ def _resposta_token(
         registro_oportunidade=plan_limits.permite_registro_oportunidade(usuario.tenant_id),
         retencao_dias_relatorio=plan_limits.obter_retencao_dias_relatorio(usuario.tenant_id),
     )
+    tem_conta_atribuida = (
+        db.query(Conta).filter_by(tenant_id=usuario.tenant_id, vendedor_usuario_id=usuario.id).first() is not None
+    )
     usuario_schema = UsuarioSchema.model_validate(usuario).model_copy(
         update={
             "tenant_tipo": tenant.tipo if tenant is not None else "cliente",
             "recursos_plano": recursos_plano,
             "aviso_whatsapp_template_confirmado": tenant.aviso_whatsapp_template_confirmado if tenant is not None else False,
+            "tem_conta_atribuida": tem_conta_atribuida,
         }
     )
     if primeiro_login and email_provider is not None:
@@ -179,6 +185,21 @@ def registrar_vitrine(
 
 @router.get("/eu", response_model=UsuarioSchema)
 def eu(usuario: Usuario = Depends(get_usuario_atual)) -> UsuarioSchema:
+    return usuario
+
+
+@router.put("/whatsapp-pessoal", response_model=UsuarioSchema)
+def atualizar_whatsapp_pessoal(
+    dados: AtualizarWhatsappPessoalRequestSchema,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> UsuarioSchema:
+    """"Meu Perfil" (raio-X 2026-09-15) — cada vendedor cadastra o próprio
+    número, usado como variável do botão de redirecionamento dos
+    templates de WhatsApp. Qualquer papel edita o próprio número."""
+    usuario.whatsapp_pessoal = dados.whatsapp_pessoal
+    db.commit()
+    db.refresh(usuario)
     return usuario
 
 

@@ -19,12 +19,18 @@ class AprovacaoFilaItemSchema(BaseModel):
     aprovacao_id: int
     status: str
     mensagem_id: int
+    # Status da própria Mensagem (distinto do status da Aprovacao, que
+    # fica "aprovado" pra sempre mesmo depois de enviada) — raio-X
+    # 2026-09-15: é o que diferencia "aprovado, ainda não enviado" de
+    # "já enviado" na tela de mensagens agendadas de um contato.
+    mensagem_status: str
     canal: str
     template_id: str | None
     conteudo: str
     cadencia_id: int | None
     conta_id: int
     decisor_id: int
+    agendado_para: datetime | None
     criado_em: datetime
 
 

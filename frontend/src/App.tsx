@@ -34,6 +34,7 @@ const LeadsAcoesConta = lazy(() => import("@/pages/leads/LeadsAcoesConta").then(
 const LeadsContatos = lazy(() => import("@/pages/leads/LeadsContatos").then((m) => ({ default: m.LeadsContatos })));
 const LeadsEmpresas = lazy(() => import("@/pages/leads/LeadsEmpresas").then((m) => ({ default: m.LeadsEmpresas })));
 const Map = lazy(() => import("@/pages/map/Map").then((m) => ({ default: m.Map })));
+const Perfil = lazy(() => import("@/pages/perfil/Perfil").then((m) => ({ default: m.Perfil })));
 const Prospeccao = lazy(() => import("@/pages/prospeccao/Prospeccao").then((m) => ({ default: m.Prospeccao })));
 const RedeSocial = lazy(() => import("@/pages/rede-social/RedeSocial").then((m) => ({ default: m.RedeSocial })));
 const Reunioes = lazy(() => import("@/pages/reunioes/Reunioes").then((m) => ({ default: m.Reunioes })));
@@ -183,6 +184,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <Configuracao />
+              </Suspense>
+            }
+          />
+          <Route
+            path="perfil"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Perfil />
               </Suspense>
             }
           />

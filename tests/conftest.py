@@ -382,12 +382,10 @@ def criar_cadencia(client: TestClient):
                 },
                 {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 3},
                 {"ordem": 4, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
-                {
-                    "ordem": 5,
-                    "canal": "whatsapp",
-                    "intervalo_dias_apos_anterior": 3,
-                    "template_whatsapp_id": "prospeccao_inicial",
-                },
+                # Raio-X 2026-09-15: só 1 toque de WhatsApp por cadência é
+                # permitido (o de ordem 2, acima) — este é e-mail, não
+                # whatsapp de novo.
+                {"ordem": 5, "canal": "email", "intervalo_dias_apos_anterior": 3},
             ],
         }
         payload.update(overrides)
@@ -409,7 +407,7 @@ def criar_cadencia_nutricao(client: TestClient):
                 {"ordem": 2, "canal": "whatsapp", "intervalo_dias_apos_anterior": 7, "template_whatsapp_id": "x"},
                 {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 7},
                 {"ordem": 4, "canal": "linkedin", "intervalo_dias_apos_anterior": 7},
-                {"ordem": 5, "canal": "whatsapp", "intervalo_dias_apos_anterior": 7, "template_whatsapp_id": "x"},
+                {"ordem": 5, "canal": "email", "intervalo_dias_apos_anterior": 7},
             ],
         }
         payload.update(overrides)

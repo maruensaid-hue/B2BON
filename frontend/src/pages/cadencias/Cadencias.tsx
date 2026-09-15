@@ -20,6 +20,11 @@ interface Cadencia {
   data_inicio: string | null;
   icp_id: number | null;
   oferta_id: number | null;
+  /** Raio-X 2026-09-15: se `true`, uma resposta do decisor cancela todos
+   * os toques pendentes dessa cadência (comportamento antigo); se
+   * `false` (padrão), a nutrição continua e o cancelamento passa a ser
+   * manual, toque a toque. */
+  cancelar_ao_responder: boolean;
 }
 
 interface OfertaResumo {
@@ -77,6 +82,14 @@ function toqueVazio(ordem: number, canal: string): ToqueRascunho {
   return { ordem, canal, intervalo_dias_apos_anterior: ordem === 1 ? 0 : 2, template_whatsapp_id: "", ab_teste_habilitado: false };
 }
 
+// Raio-X 2026-09-15: no máximo 1 toque de WhatsApp por cadência — usado
+// pra desabilitar a opção "WhatsApp" nos <Select> de canal quando outro
+// toque da mesma lista já usa esse canal (evita a viagem ao servidor só
+// pra descobrir o 409 da validação equivalente no backend).
+function outroToqueJaUsaWhatsapp<T extends { canal: string }>(toques: T[], atual: T | null): boolean {
+  return toques.some((toque) => toque !== atual && toque.canal === "whatsapp");
+}
+
 function toneStatus(status: string): "cyan" | "amber" | "green" | "muted" {
   if (status === "ativa") return "green";
   if (status === "aguardando_aprovacao") return "amber";
@@ -103,13 +116,17 @@ export function Cadencias() {
   const [contasDoIcp, setContasDoIcp] = useState<Conta[]>([]);
   const [contasSelecionadas, setContasSelecionadas] = useState<Set<number>>(new Set());
   const [modalCriarAberto, setModalCriarAberto] = useState(false);
+  // Raio-X 2026-09-15: no máximo 1 toque de WhatsApp por cadência (sempre
+  // com template) — o segundo toque de WhatsApp do padrão antigo virou e-mail.
   const [rascunhoToques, setRascunhoToques] = useState<ToqueRascunho[]>([
     toqueVazio(1, "email"),
     toqueVazio(2, "whatsapp"),
     toqueVazio(3, "email"),
     toqueVazio(4, "linkedin"),
-    toqueVazio(5, "whatsapp"),
+    toqueVazio(5, "email"),
   ]);
+  const [cancelarAoResponderNaCriacao, setCancelarAoResponderNaCriacao] = useState(false);
+  const [salvandoCancelamentoAoResponder, setSalvandoCancelamentoAoResponder] = useState(false);
   const [resultadoGeracao, setResultadoGeracao] = useState<GerarLoteResultado | null>(null);
   const [progressoGeracao, setProgressoGeracao] = useState<{ atual: number; total: number } | null>(null);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
@@ -256,12 +273,20 @@ export function Cadencias() {
 
   async function criarCadencia(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const toquesWhatsappSemTemplate = rascunhoToques.filter(
+      (toque) => toque.canal === "whatsapp" && !toque.template_whatsapp_id,
+    );
+    if (toquesWhatsappSemTemplate.length > 0) {
+      setErro("O toque de WhatsApp precisa de um template aprovado selecionado.");
+      return;
+    }
     const form = new FormData(event.currentTarget);
     try {
       await api.post("/cadencias", {
         nome: String(form.get("nome")),
         tipo: String(form.get("tipo")),
         icp_id: icpParaCriacaoId,
+        cancelar_ao_responder: cancelarAoResponderNaCriacao,
         toques: rascunhoToques.map((toque) => ({
           ordem: toque.ordem,
           canal: toque.canal,
@@ -272,16 +297,33 @@ export function Cadencias() {
       });
       setModalCriarAberto(false);
       setIcpParaCriacaoId(null);
+      setCancelarAoResponderNaCriacao(false);
       setRascunhoToques([
         toqueVazio(1, "email"),
         toqueVazio(2, "whatsapp"),
         toqueVazio(3, "email"),
         toqueVazio(4, "linkedin"),
-        toqueVazio(5, "whatsapp"),
+        toqueVazio(5, "email"),
       ]);
       await carregarCadencias();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível criar a cadência.");
+    }
+  }
+
+  async function alternarCancelamentoAoResponder() {
+    if (cadenciaSelecionadaId === null || salvandoCancelamentoAoResponder) return;
+    setSalvandoCancelamentoAoResponder(true);
+    setErro(null);
+    try {
+      await api.put(`/cadencias/${cadenciaSelecionadaId}/cancelamento-ao-responder`, {
+        cancelar_ao_responder: !cadenciaSelecionada?.cancelar_ao_responder,
+      });
+      await carregarCadencias();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível atualizar essa opção.");
+    } finally {
+      setSalvandoCancelamentoAoResponder(false);
     }
   }
 
@@ -577,6 +619,17 @@ export function Cadencias() {
               Campanha: {ofertas.find((o) => o.id === cadenciaSelecionada.oferta_id)?.nome ?? "—"} · ICP:{" "}
               {icps.find((i) => i.id === cadenciaSelecionada.icp_id)?.nome ?? "—"}
             </div>
+            {cadenciaSelecionada.status !== "cancelada" && (
+              <label className="mb-2 flex items-center gap-1.5 text-[11px] text-muted">
+                <input
+                  type="checkbox"
+                  checked={cadenciaSelecionada.cancelar_ao_responder}
+                  disabled={salvandoCancelamentoAoResponder}
+                  onChange={alternarCancelamentoAoResponder}
+                />
+                Parar esta cadência automaticamente se o cliente responder
+              </label>
+            )}
             <div className="flex flex-col gap-1.5">
               {toques.map((toque) => (
                 <div key={toque.id} className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
@@ -590,7 +643,9 @@ export function Cadencias() {
                       onChange={(event) => atualizarToqueReal(toque.id, "canal", event.target.value)}
                     >
                       <option value="email">E-mail</option>
-                      <option value="whatsapp">WhatsApp</option>
+                      <option value="whatsapp" disabled={outroToqueJaUsaWhatsapp(toques, toque)}>
+                        WhatsApp
+                      </option>
                       <option value="linkedin">LinkedIn</option>
                     </Select>
                   )}
@@ -677,7 +732,9 @@ export function Cadencias() {
                   onChange={(event) => setNovoToqueCanal(event.target.value)}
                 >
                   <option value="email">E-mail</option>
-                  <option value="whatsapp">WhatsApp</option>
+                  <option value="whatsapp" disabled={outroToqueJaUsaWhatsapp(toques, null)}>
+                    WhatsApp
+                  </option>
                   <option value="linkedin">LinkedIn</option>
                 </Select>
                 <Input
@@ -899,6 +956,22 @@ export function Cadencias() {
             </div>
           )}
 
+          <label className="flex items-start gap-2 text-[12px] text-muted">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={cancelarAoResponderNaCriacao}
+              onChange={(event) => setCancelarAoResponderNaCriacao(event.target.checked)}
+            />
+            <span>
+              Parar esta cadência automaticamente se o cliente responder
+              <span className="block text-[11px] text-muted/70">
+                Desmarcado (padrão): a nutrição continua nos outros canais mesmo depois de uma resposta — você
+                cancela manualmente, toque a toque, se quiser parar algum específico.
+              </span>
+            </span>
+          </label>
+
           <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
             Toques (mínimo 5, em pelo menos 2 canais)
           </div>
@@ -912,7 +985,9 @@ export function Cadencias() {
                   onChange={(event) => atualizarToque(indice, "canal", event.target.value)}
                 >
                   <option value="email">E-mail</option>
-                  <option value="whatsapp">WhatsApp</option>
+                  <option value="whatsapp" disabled={outroToqueJaUsaWhatsapp(rascunhoToques, toque)}>
+                    WhatsApp
+                  </option>
                   <option value="linkedin">LinkedIn</option>
                 </Select>
                 {toque.canal === "whatsapp" &&

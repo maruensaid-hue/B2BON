@@ -23,7 +23,16 @@ class WhatsAppProvider(ABC):
     """
 
     @abstractmethod
-    def enviar_template(self, telefone: str, template_id: str, variaveis: dict) -> ResultadoEnvio:
+    def enviar_template(
+        self, telefone: str, template_id: str, variaveis: dict, variavel_botao: str | None = None
+    ) -> ResultadoEnvio:
+        """`variavel_botao` (raio-X 2026-09-15): preenche a URL dinâmica de
+        um botão de "Visitar site" do template (ex.: `https://wa.me/{{1}}`),
+        pensado pra redirecionar o cliente pro WhatsApp pessoal do
+        vendedor responsável pela conta assim que ele quiser responder —
+        tira a conversa da API (sem regra de janela de 24h a partir daí).
+        `None` quando não há vendedor com número cadastrado; o envio segue
+        sem preencher o botão."""
         raise NotImplementedError
 
     @abstractmethod

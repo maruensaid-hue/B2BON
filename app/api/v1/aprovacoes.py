@@ -25,11 +25,24 @@ def listar_fila(
     conta_id: int | None = None,
     cadencia_id: int | None = None,
     status: str | None = None,
+    decisor_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> list[AprovacaoFilaItemSchema]:
-    itens = aprovacao_service.listar_fila(db, tenant_id, canal, conta_id, cadencia_id, status)
+    itens = aprovacao_service.listar_fila(db, tenant_id, canal, conta_id, cadencia_id, status, decisor_id)
     return [AprovacaoFilaItemSchema(**item) for item in itens]
+
+
+@router.post("/mensagens/{mensagem_id}/cancelar", response_model=MensagemSchema)
+def cancelar_mensagem(
+    mensagem_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> MensagemSchema:
+    """Cancela uma mensagem agendada/pendente individualmente, sem apagar
+    o histórico — raio-X 2026-09-15 (ver `aprovacao_service.cancelar_mensagem`)."""
+    return aprovacao_service.cancelar_mensagem(db, tenant_id, ator_id, mensagem_id)
 
 
 @router.post("/aprovar-lote", response_model=list[AprovacaoSchema])

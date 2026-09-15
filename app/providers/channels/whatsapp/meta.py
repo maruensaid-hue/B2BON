@@ -20,7 +20,23 @@ class MetaWhatsAppProvider(WhatsAppProvider):
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self._token}"}
 
-    def enviar_template(self, telefone: str, template_id: str, variaveis: dict) -> ResultadoEnvio:
+    def enviar_template(
+        self, telefone: str, template_id: str, variaveis: dict, variavel_botao: str | None = None
+    ) -> ResultadoEnvio:
+        components = (
+            [{"type": "body", "parameters": [{"type": "text", "text": str(v)} for v in variaveis.values()]}]
+            if variaveis
+            else []
+        )
+        if variavel_botao:
+            # Raio-X 2026-09-15: preenche a URL dinâmica de um botão
+            # "Visitar site" do template (ex.: "https://wa.me/{{1}}") —
+            # o template com o botão em si é cadastrado pelo próprio
+            # tenant direto no WhatsApp Manager da Meta; aqui só
+            # preenchemos a variável na hora do envio.
+            components.append(
+                {"type": "button", "sub_type": "url", "index": "0", "parameters": [{"type": "text", "text": variavel_botao}]}
+            )
         payload = {
             "messaging_product": "whatsapp",
             "to": telefone,
@@ -28,16 +44,7 @@ class MetaWhatsAppProvider(WhatsAppProvider):
             "template": {
                 "name": template_id,
                 "language": {"code": "pt_BR"},
-                "components": (
-                    [
-                        {
-                            "type": "body",
-                            "parameters": [{"type": "text", "text": str(v)} for v in variaveis.values()],
-                        }
-                    ]
-                    if variaveis
-                    else []
-                ),
+                "components": components,
             },
         }
         return self._enviar(payload)
