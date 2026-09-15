@@ -43,6 +43,28 @@ class DefinirTemplateWhatsAppRequestSchema(BaseModel):
     template_whatsapp_id: str
 
 
+class RenomearCadenciaRequestSchema(BaseModel):
+    nome: str
+
+
+class CancelarCadenciaResponseSchema(BaseModel):
+    cadencia: CadenciaSchema
+    mensagens_canceladas: int
+
+
+class AdicionarToqueRequestSchema(BaseModel):
+    canal: str
+    intervalo_dias_apos_anterior: int = 0
+    template_whatsapp_id: str | None = None
+    ab_teste_habilitado: bool = False
+
+
+class AtualizarToqueRequestSchema(BaseModel):
+    canal: str | None = None
+    intervalo_dias_apos_anterior: int | None = None
+    ab_teste_habilitado: bool | None = None
+
+
 class CadenciaCreateSchema(BaseModel):
     nome: str
     toques: list[ToqueCadenciaCreateSchema]

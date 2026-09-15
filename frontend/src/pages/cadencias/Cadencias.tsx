@@ -15,7 +15,7 @@ interface Cadencia {
   id: number;
   nome: string;
   canais: string[];
-  status: "rascunho" | "aguardando_aprovacao" | "ativa";
+  status: "rascunho" | "aguardando_aprovacao" | "ativa" | "cancelada";
   tipo: string;
   data_inicio: string | null;
   icp_id: number | null;
@@ -77,9 +77,10 @@ function toqueVazio(ordem: number, canal: string): ToqueRascunho {
   return { ordem, canal, intervalo_dias_apos_anterior: ordem === 1 ? 0 : 2, template_whatsapp_id: "", ab_teste_habilitado: false };
 }
 
-function toneStatus(status: string): "cyan" | "amber" | "green" {
+function toneStatus(status: string): "cyan" | "amber" | "green" | "muted" {
   if (status === "ativa") return "green";
   if (status === "aguardando_aprovacao") return "amber";
+  if (status === "cancelada") return "muted";
   return "cyan";
 }
 
@@ -112,6 +113,15 @@ export function Cadencias() {
   const [resultadoGeracao, setResultadoGeracao] = useState<GerarLoteResultado | null>(null);
   const [progressoGeracao, setProgressoGeracao] = useState<{ atual: number; total: number } | null>(null);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+  const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [editandoNome, setEditandoNome] = useState(false);
+  const [nomeEditavel, setNomeEditavel] = useState("");
+  const [salvandoNome, setSalvandoNome] = useState(false);
+  const [novoToqueCanal, setNovoToqueCanal] = useState("email");
+  const [novoToqueIntervalo, setNovoToqueIntervalo] = useState(2);
+  const [novoToqueTemplateId, setNovoToqueTemplateId] = useState("");
+  const [adicionandoToque, setAdicionandoToque] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
 
@@ -360,6 +370,91 @@ export function Cadencias() {
     }
   }
 
+  async function cancelarCadencia() {
+    if (cadenciaSelecionadaId === null || cancelando) return;
+    setCancelando(true);
+    setErro(null);
+    try {
+      const resultado = await api.post<{ mensagens_canceladas: number }>(
+        `/cadencias/${cadenciaSelecionadaId}/cancelar`,
+      );
+      setConfirmandoCancelamento(false);
+      setMensagem(
+        `Cadência cancelada — ${resultado.mensagens_canceladas} mensagem(ns) que ainda não tinham saído foram canceladas. As já enviadas continuam no histórico.`,
+      );
+      await carregarCadencias();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível cancelar a cadência.");
+    } finally {
+      setCancelando(false);
+    }
+  }
+
+  function iniciarEdicaoNome() {
+    if (!cadenciaSelecionada) return;
+    setNomeEditavel(cadenciaSelecionada.nome);
+    setEditandoNome(true);
+  }
+
+  async function salvarNome() {
+    if (cadenciaSelecionadaId === null || !nomeEditavel.trim() || salvandoNome) return;
+    setSalvandoNome(true);
+    setErro(null);
+    try {
+      await api.put(`/cadencias/${cadenciaSelecionadaId}`, { nome: nomeEditavel.trim() });
+      setEditandoNome(false);
+      await carregarCadencias();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível renomear a cadência.");
+    } finally {
+      setSalvandoNome(false);
+    }
+  }
+
+  async function adicionarToqueReal() {
+    if (cadenciaSelecionadaId === null || adicionandoToque) return;
+    setAdicionandoToque(true);
+    setErro(null);
+    try {
+      await api.post(`/cadencias/${cadenciaSelecionadaId}/toques`, {
+        canal: novoToqueCanal,
+        intervalo_dias_apos_anterior: Number(novoToqueIntervalo) || 0,
+        template_whatsapp_id: novoToqueCanal === "whatsapp" ? novoToqueTemplateId || null : null,
+      });
+      setNovoToqueCanal("email");
+      setNovoToqueIntervalo(2);
+      setNovoToqueTemplateId("");
+      await carregarToques(cadenciaSelecionadaId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível adicionar o toque.");
+    } finally {
+      setAdicionandoToque(false);
+    }
+  }
+
+  async function atualizarToqueReal(toqueId: number, campo: "canal" | "intervalo_dias_apos_anterior", valor: string) {
+    if (cadenciaSelecionadaId === null) return;
+    try {
+      await api.put(`/cadencias/${cadenciaSelecionadaId}/toques/${toqueId}`, {
+        [campo]: campo === "intervalo_dias_apos_anterior" ? Number(valor) || 0 : valor,
+      });
+      await carregarToques(cadenciaSelecionadaId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível atualizar o toque.");
+    }
+  }
+
+  async function removerToqueReal(toqueId: number) {
+    if (cadenciaSelecionadaId === null) return;
+    setErro(null);
+    try {
+      await api.delete(`/cadencias/${cadenciaSelecionadaId}/toques/${toqueId}`);
+      await carregarToques(cadenciaSelecionadaId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível remover o toque.");
+    }
+  }
+
   return (
     <div className="p-5.5">
       <AvisoWhatsAppTemplate />
@@ -405,12 +500,39 @@ export function Cadencias() {
         <>
           <Card className="mb-4">
             <div className="mb-2 flex items-center justify-between">
-              <SectionLabel>{cadenciaSelecionada.nome}</SectionLabel>
+              {editandoNome ? (
+                <div className="flex flex-1 items-center gap-1.5">
+                  <Input
+                    value={nomeEditavel}
+                    onChange={(event) => setNomeEditavel(event.target.value)}
+                    className="max-w-xs"
+                    autoFocus
+                  />
+                  <Button size="sm" disabled={salvandoNome} onClick={salvarNome}>
+                    {salvandoNome ? "Salvando..." : "Salvar"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditandoNome(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <SectionLabel>{cadenciaSelecionada.nome}</SectionLabel>
+                  <button
+                    type="button"
+                    onClick={iniciarEdicaoNome}
+                    title="Renomear cadência"
+                    className="text-[11px] text-muted hover:text-cyan"
+                  >
+                    ✎
+                  </button>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Badge tone={toneStatus(cadenciaSelecionada.status)}>{cadenciaSelecionada.status}</Badge>
-                {cadenciaSelecionada.status === "aguardando_aprovacao" && (
+                {(cadenciaSelecionada.status === "aguardando_aprovacao" || cadenciaSelecionada.status === "ativa") && (
                   <Button size="sm" onClick={ativarCadencia}>
-                    Ativar cadência
+                    {cadenciaSelecionada.status === "ativa" ? "Agendar novas mensagens" : "Ativar cadência"}
                   </Button>
                 )}
                 {cadenciaSelecionada.status === "rascunho" && !confirmandoExclusao && (
@@ -429,6 +551,26 @@ export function Cadencias() {
                     </Button>
                   </>
                 )}
+                {(cadenciaSelecionada.status === "aguardando_aprovacao" || cadenciaSelecionada.status === "ativa") &&
+                  !confirmandoCancelamento && (
+                    <Button size="sm" variant="danger" onClick={() => setConfirmandoCancelamento(true)}>
+                      Cancelar cadência
+                    </Button>
+                  )}
+                {confirmandoCancelamento && (
+                  <>
+                    <span className="text-[11px] text-muted">
+                      Cancelar esta cadência? Mensagens já enviadas continuam no histórico; as pendentes deixam de
+                      sair.
+                    </span>
+                    <Button size="sm" variant="danger" disabled={cancelando} onClick={cancelarCadencia}>
+                      {cancelando ? "Cancelando..." : "Confirmar"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmandoCancelamento(false)}>
+                      Voltar
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
             <div className="mb-2 text-[11px] text-muted">
@@ -437,12 +579,37 @@ export function Cadencias() {
             </div>
             <div className="flex flex-col gap-1.5">
               {toques.map((toque) => (
-                <div key={toque.id} className="flex items-center gap-2 text-[12px] text-muted">
+                <div key={toque.id} className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
                   <span className="font-head font-bold text-text">#{toque.ordem}</span>
-                  <Badge tone="cyan">{toque.canal}</Badge>
-                  <span>
-                    {toque.ordem === 1 ? "imediato" : `${toque.intervalo_dias_apos_anterior}d depois do anterior`}
-                  </span>
+                  {cadenciaSelecionada.status === "cancelada" ? (
+                    <Badge tone="cyan">{toque.canal}</Badge>
+                  ) : (
+                    <Select
+                      className="w-28 flex-shrink-0 text-[11px]"
+                      value={toque.canal}
+                      onChange={(event) => atualizarToqueReal(toque.id, "canal", event.target.value)}
+                    >
+                      <option value="email">E-mail</option>
+                      <option value="whatsapp">WhatsApp</option>
+                      <option value="linkedin">LinkedIn</option>
+                    </Select>
+                  )}
+                  {toque.ordem === 1 ? (
+                    <span>imediato</span>
+                  ) : cadenciaSelecionada.status === "cancelada" ? (
+                    <span>{toque.intervalo_dias_apos_anterior}d depois do anterior</span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={toque.intervalo_dias_apos_anterior}
+                        onChange={(event) => atualizarToqueReal(toque.id, "intervalo_dias_apos_anterior", event.target.value)}
+                        className="w-16 flex-shrink-0"
+                      />
+                      d depois do anterior
+                    </span>
+                  )}
                   {toque.canal === "whatsapp" &&
                     (toque.template_whatsapp_id ? (
                       <>
@@ -451,7 +618,7 @@ export function Cadencias() {
                           {templatesWhatsapp.find((t) => String(t.id) === toque.template_whatsapp_id)?.nome ??
                             toque.template_whatsapp_id}
                         </Badge>
-                        {templatesWhatsapp.length > 0 && (
+                        {templatesWhatsapp.length > 0 && cadenciaSelecionada.status !== "cancelada" && (
                           <Select
                             className="w-auto flex-shrink-0 text-[11px]"
                             value={toque.template_whatsapp_id}
@@ -466,7 +633,7 @@ export function Cadencias() {
                           </Select>
                         )}
                       </>
-                    ) : templatesWhatsapp.length > 0 ? (
+                    ) : templatesWhatsapp.length > 0 && cadenciaSelecionada.status !== "cancelada" ? (
                       <>
                         <Badge tone="red">sem template — 1º contato fica parado</Badge>
                         <Select
@@ -488,12 +655,61 @@ export function Cadencias() {
                       <Badge tone="red">sem template — 1º contato fica parado</Badge>
                     ))}
                   {toque.ab_teste_habilitado && <Badge tone="amber">teste A/B</Badge>}
+                  {cadenciaSelecionada.status !== "cancelada" && (
+                    <button
+                      type="button"
+                      className="text-[11px] text-muted hover:text-red"
+                      title="Remover toque"
+                      onClick={() => removerToqueReal(toque.id)}
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
+
+            {cadenciaSelecionada.status !== "cancelada" && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border pt-2">
+                <Select
+                  className="w-28 flex-shrink-0 text-[11px]"
+                  value={novoToqueCanal}
+                  onChange={(event) => setNovoToqueCanal(event.target.value)}
+                >
+                  <option value="email">E-mail</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="linkedin">LinkedIn</option>
+                </Select>
+                <Input
+                  type="number"
+                  min={0}
+                  value={novoToqueIntervalo}
+                  onChange={(event) => setNovoToqueIntervalo(Number(event.target.value))}
+                  title="Dias após o toque anterior"
+                  className="w-20 flex-shrink-0"
+                />
+                {novoToqueCanal === "whatsapp" && templatesWhatsapp.length > 0 && (
+                  <Select
+                    className="min-w-[160px] flex-1 text-[11px]"
+                    value={novoToqueTemplateId}
+                    onChange={(event) => setNovoToqueTemplateId(event.target.value)}
+                  >
+                    <option value="">Selecione o template aprovado</option>
+                    {templatesWhatsapp.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.nome}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+                <Button size="sm" variant="ghost" disabled={adicionandoToque} onClick={adicionarToqueReal}>
+                  {adicionandoToque ? "Adicionando..." : "+ Adicionar toque"}
+                </Button>
+              </div>
+            )}
           </Card>
 
-          {cadenciaSelecionada.status === "rascunho" && (
+          {cadenciaSelecionada.status !== "cancelada" && (
             <Card>
               <SectionLabel>Selecionar contas para gerar mensagens</SectionLabel>
               <div className="mb-3 flex gap-2">

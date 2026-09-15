@@ -5,13 +5,17 @@ from app.api.deps import get_ator_id, get_db, get_llm_provider, get_plan_limits_
 from app.llm.base import LLMProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.cadencia import (
+    AdicionarToqueRequestSchema,
     AtivarCadenciaResponseSchema,
+    AtualizarToqueRequestSchema,
     CadenciaCreateSchema,
     CadenciaSchema,
+    CancelarCadenciaResponseSchema,
     DefinirTemplateWhatsAppRequestSchema,
     GerarCadenciaRequestSchema,
     GerarCadenciaResponseSchema,
     RelatorioAbTesteSchema,
+    RenomearCadenciaRequestSchema,
     ToqueCadenciaSchema,
 )
 from app.services import ab_teste_service, cadencia_service
@@ -58,6 +62,50 @@ def listar_toques(
     return cadencia_service.toques_da_cadencia(db, cadencia_id)
 
 
+@router.post("/{cadencia_id}/toques", response_model=ToqueCadenciaSchema, status_code=201)
+def adicionar_toque(
+    cadencia_id: int,
+    dados: AdicionarToqueRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ToqueCadenciaSchema:
+    """Adiciona um toque a uma cadência já existente — só afeta contas
+    geradas a partir de agora (raio-X 2026-09-15)."""
+    return cadencia_service.adicionar_toque(
+        db, tenant_id, ator_id, cadencia_id, dados.canal, dados.intervalo_dias_apos_anterior,
+        dados.template_whatsapp_id, dados.ab_teste_habilitado,
+    )
+
+
+@router.put("/{cadencia_id}/toques/{toque_id}", response_model=ToqueCadenciaSchema)
+def atualizar_toque(
+    cadencia_id: int,
+    toque_id: int,
+    dados: AtualizarToqueRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ToqueCadenciaSchema:
+    """Troca canal/intervalo/teste A/B de um toque já existente — raio-X
+    2026-09-15, distinto de `.../template-whatsapp`."""
+    return cadencia_service.atualizar_toque(
+        db, tenant_id, ator_id, cadencia_id, toque_id,
+        dados.canal, dados.intervalo_dias_apos_anterior, dados.ab_teste_habilitado,
+    )
+
+
+@router.delete("/{cadencia_id}/toques/{toque_id}", status_code=204)
+def remover_toque(
+    cadencia_id: int,
+    toque_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    cadencia_service.remover_toque(db, tenant_id, ator_id, cadencia_id, toque_id)
+
+
 @router.put("/{cadencia_id}/toques/{toque_id}/template-whatsapp", response_model=ToqueCadenciaSchema)
 def definir_template_whatsapp(
     cadencia_id: int,
@@ -82,6 +130,30 @@ def obter_cadencia(
     db: Session = Depends(get_db),
 ) -> CadenciaSchema:
     return cadencia_service.obter(db, tenant_id, cadencia_id)
+
+
+@router.put("/{cadencia_id}", response_model=CadenciaSchema)
+def renomear_cadencia(
+    cadencia_id: int,
+    dados: RenomearCadenciaRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> CadenciaSchema:
+    return cadencia_service.renomear(db, tenant_id, ator_id, cadencia_id, dados.nome)
+
+
+@router.post("/{cadencia_id}/cancelar", response_model=CancelarCadenciaResponseSchema)
+def cancelar_cadencia(
+    cadencia_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> CancelarCadenciaResponseSchema:
+    """Para qualquer envio futuro a partir de agora, sem apagar nada do
+    histórico já enviado (raio-X 2026-09-15 — "excluir mesmo já
+    disparada" virou "cancelar", ver `cadencia_service.cancelar`)."""
+    return CancelarCadenciaResponseSchema(**cadencia_service.cancelar(db, tenant_id, ator_id, cadencia_id))
 
 
 @router.post("/{cadencia_id}/gerar", response_model=GerarCadenciaResponseSchema)

@@ -31,7 +31,7 @@ class Cadencia(Base):
     canais: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(
         String
-    )  # rascunho | aguardando_aprovacao | ativa
+    )  # rascunho | aguardando_aprovacao | ativa | cancelada
     tipo: Mapped[str] = mapped_column(String, default="prospeccao")  # prospeccao | nutricao
     data_inicio: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

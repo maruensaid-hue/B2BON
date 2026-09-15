@@ -407,3 +407,201 @@ def test_definir_template_whatsapp_toque_de_outra_cadencia_falha(client, criar_c
     )
 
     assert resposta.status_code == 404
+
+
+def test_cancelar_cadencia_ativa_para_pendentes_mas_preserva_enviadas(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, db_session
+):
+    """Raio-X 2026-09-15: "excluir mesmo já disparada" virou "cancelar" —
+    mensagens já enviadas (histórico real de comunicação) nunca são
+    tocadas; só as pendentes/aprovadas ainda não enviadas viram
+    "cancelado" (mesmo padrão de `resposta_service.marcar_resposta`)."""
+    from app.models.mensagem import Mensagem
+
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    _aprovar_tudo(client, cadencia["id"])
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    mensagens = db_session.query(Mensagem).filter_by(cadencia_id=cadencia["id"]).all()
+    assert len(mensagens) == 5
+    ja_enviada = mensagens[0]
+    ja_enviada.status = "enviado"
+    db_session.commit()
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/cancelar")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["cadencia"]["status"] == "cancelada"
+    assert corpo["mensagens_canceladas"] == 4
+
+    db_session.refresh(ja_enviada)
+    assert ja_enviada.status == "enviado"
+    for outra in mensagens[1:]:
+        db_session.refresh(outra)
+        assert outra.status == "cancelado"
+
+
+def test_cancelar_cadencia_ja_cancelada_falha(client, criar_cadencia):
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/cancelar")
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/cancelar")
+
+    assert resposta.status_code == 409
+
+
+def test_gerar_e_ativar_em_cadencia_cancelada_falha(client, onboarding_completo, criar_conta_com_decisor, criar_cadencia):
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/cancelar")
+
+    resposta_gerar = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    resposta_ativar = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    assert resposta_gerar.status_code == 409
+    assert resposta_ativar.status_code == 409
+
+
+def test_renomear_cadencia(client, criar_cadencia):
+    cadencia = criar_cadencia()
+
+    resposta = client.put(f"/api/v1/cadencias/{cadencia['id']}", json={"nome": "Nome Novo"})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["nome"] == "Nome Novo"
+    assert client.get(f"/api/v1/cadencias/{cadencia['id']}").json()["nome"] == "Nome Novo"
+
+
+def test_adicionar_toque_em_cadencia_existente(client, criar_cadencia):
+    cadencia = criar_cadencia()
+
+    resposta = client.post(
+        f"/api/v1/cadencias/{cadencia['id']}/toques",
+        json={"canal": "email", "intervalo_dias_apos_anterior": 5},
+    )
+
+    assert resposta.status_code == 201
+    novo = resposta.json()
+    assert novo["ordem"] == 6
+    toques = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
+    assert len(toques) == 6
+    assert client.get(f"/api/v1/cadencias/{cadencia['id']}").json()["canais"] == ["email", "linkedin", "whatsapp"]
+
+
+def test_remover_toque_desvincula_mensagem_em_vez_de_bloquear(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, db_session
+):
+    """Mesmo padrão de `crm_service.excluir_negocio` pra `Atividade`:
+    desvincula a mensagem já gerada em vez de bloquear a remoção do toque."""
+    from app.models.mensagem import Mensagem
+
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/toques", json={"canal": "email", "intervalo_dias_apos_anterior": 5})
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    toques = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
+    toque_a_remover = toques[0]
+
+    resposta = client.delete(f"/api/v1/cadencias/{cadencia['id']}/toques/{toque_a_remover['id']}")
+
+    assert resposta.status_code == 204
+    assert len(client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()) == 5
+    mensagens = db_session.query(Mensagem).filter_by(cadencia_id=cadencia["id"]).all()
+    assert len(mensagens) == 6  # nenhuma mensagem foi apagada
+    orfas = [m for m in mensagens if m.toque_cadencia_id is None]
+    assert len(orfas) == 1
+
+
+def test_remover_toque_abaixo_do_minimo_falha(client, criar_cadencia):
+    cadencia = criar_cadencia()
+    toques = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
+
+    resposta = client.delete(f"/api/v1/cadencias/{cadencia['id']}/toques/{toques[0]['id']}")
+
+    assert resposta.status_code == 409
+
+
+def test_atualizar_toque_troca_canal_e_intervalo(client, criar_cadencia):
+    cadencia = criar_cadencia()
+    toques = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
+    toque_linkedin = next(t for t in toques if t["canal"] == "linkedin")
+
+    resposta = client.put(
+        f"/api/v1/cadencias/{cadencia['id']}/toques/{toque_linkedin['id']}",
+        json={"canal": "email", "intervalo_dias_apos_anterior": 10},
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["canal"] == "email"
+    assert corpo["intervalo_dias_apos_anterior"] == 10
+
+
+def test_atualizar_toque_abaixo_do_minimo_de_canais_falha(client, criar_cadencia):
+    """Cadência padrão tem canais {email, whatsapp, linkedin} — trocar o
+    único toque de linkedin AND algum whatsapp por email reduziria pra 1
+    canal só, abaixo do mínimo de 2."""
+    cadencia = criar_cadencia()
+    toques = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
+    toque_linkedin = next(t for t in toques if t["canal"] == "linkedin")
+    client.put(f"/api/v1/cadencias/{cadencia['id']}/toques/{toque_linkedin['id']}", json={"canal": "email"})
+
+    for toque in [t for t in toques if t["canal"] == "whatsapp"]:
+        resposta = client.put(f"/api/v1/cadencias/{cadencia['id']}/toques/{toque['id']}", json={"canal": "email"})
+
+    assert resposta.status_code == 409
+
+
+def test_adicionar_conta_nova_em_cadencia_ja_ativa_nao_reagenda_a_antiga(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, db_session
+):
+    """Raio-X 2026-09-15: `ativar` agora só processa mensagens com
+    `agendado_para IS NULL` — chamar de novo numa cadência já ativa (após
+    gerar pra uma conta nova) não reagenda o que já estava correto."""
+    from app.models.mensagem import Mensagem
+
+    conta_antiga, decisor_antigo = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta_antiga.id]})
+    _aprovar_tudo(client, cadencia["id"])
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    agendamento_antes = {
+        m.id: m.agendado_para
+        for m in db_session.query(Mensagem).filter_by(cadencia_id=cadencia["id"], decisor_id=decisor_antigo.id)
+    }
+    assert len(agendamento_antes) == 5
+    assert all(valor is not None for valor in agendamento_antes.values())
+
+    conta_nova, decisor_novo = criar_conta_com_decisor()
+    resultado_gerar = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta_nova.id]}).json()
+    assert resultado_gerar["mensagens_geradas"] == 5
+    _aprovar_tudo(client, cadencia["id"])
+
+    resposta_ativar = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+    assert resposta_ativar.status_code == 200
+
+    for mensagem_id, valor_antigo in agendamento_antes.items():
+        atual = db_session.query(Mensagem).filter_by(id=mensagem_id).one()
+        assert atual.agendado_para == valor_antigo
+
+    novas = db_session.query(Mensagem).filter_by(cadencia_id=cadencia["id"], decisor_id=decisor_novo.id).all()
+    assert len(novas) == 5
+    assert all(m.agendado_para is not None for m in novas)
+
+
+def test_ativar_sem_mensagem_nova_pendente_falha(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia
+):
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    _aprovar_tudo(client, cadencia["id"])
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    assert resposta.status_code == 409

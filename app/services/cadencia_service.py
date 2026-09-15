@@ -71,6 +71,174 @@ def toques_da_cadencia(db: Session, cadencia_id: int) -> list[ToqueCadencia]:
     return db.query(ToqueCadencia).filter_by(cadencia_id=cadencia_id).order_by(ToqueCadencia.ordem).all()
 
 
+def _recalcular_canais(db: Session, cadencia: Cadencia) -> None:
+    """Mesma lista calculada em `criar()` — mantém `Cadencia.canais`
+    coerente depois de adicionar/remover/trocar o canal de um toque."""
+    cadencia.canais = sorted({toque.canal for toque in toques_da_cadencia(db, cadencia.id)})
+
+
+def _exigir_nao_cancelada(cadencia: Cadencia) -> None:
+    if cadencia.status == "cancelada":
+        raise RegraNegocioViolada("Cadência cancelada — não é possível alterá-la.")
+
+
+def _validar_minimos(toques: list[ToqueCadencia]) -> None:
+    """Mesmas regras de `criar()` — reaplicadas depois de remover/trocar o
+    canal de um toque, pra a cadência continuar um blueprint válido pra
+    qualquer conta nova que vier a ser gerada depois."""
+    if len(toques) < MINIMO_TOQUES:
+        raise RegraNegocioViolada(f"Uma cadência precisa de no mínimo {MINIMO_TOQUES} toques.")
+    if len({toque.canal for toque in toques}) < MINIMO_CANAIS_DISTINTOS:
+        raise RegraNegocioViolada("Os toques precisam estar distribuídos entre pelo menos 2 canais.")
+
+
+def cancelar(db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int) -> dict:
+    """Para qualquer envio futuro a partir de agora, sem apagar nada do
+    histórico — raio-X 2026-09-15: "excluir mesmo já disparada" colidiria
+    com a proteção que `aprovacao_service.excluir` já dá a mensagens
+    `status="enviado"` (histórico real de comunicação com o cliente), e
+    não existe (nem é seguro inventar agora) uma forma de devolver a
+    franquia já consumida na ativação. Mesmo padrão de
+    `resposta_service.marcar_resposta` (que já faz isso por decisor
+    quando ele responde), generalizado pra cadência inteira: qualquer
+    `Mensagem` ainda não enviada vira "cancelado" — `envio_service.
+    processar_pendentes` só recolhe `status in ("aprovado","falhou")`,
+    então essas linhas nunca mais são tocadas pelo cron."""
+    cadencia = obter(db, tenant_id, cadencia_id)
+    if cadencia.status == "cancelada":
+        raise RegraNegocioViolada("Esta cadência já está cancelada.")
+
+    mensagens_canceladas = (
+        db.query(Mensagem)
+        .filter(
+            Mensagem.tenant_id == tenant_id,
+            Mensagem.cadencia_id == cadencia.id,
+            Mensagem.status.in_(["aguardando_aprovacao", "aprovado"]),
+        )
+        .update({"status": "cancelado"}, synchronize_session=False)
+    )
+    cadencia.status = "cancelada"
+    auditoria_service.registrar(
+        db, tenant_id, "cadencia_cancelada", "cadencia", cadencia.id, ator_id,
+        {"mensagens_canceladas": mensagens_canceladas},
+    )
+    db.commit()
+    db.refresh(cadencia)
+    return {"cadencia": cadencia, "mensagens_canceladas": mensagens_canceladas}
+
+
+def renomear(db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int, novo_nome: str) -> Cadencia:
+    """Só cosmético — não afeta nenhuma `Mensagem`, permitido em qualquer
+    status (inclusive cancelada, pra ainda poder identificar o motivo do
+    cancelamento no nome, por exemplo)."""
+    cadencia = obter(db, tenant_id, cadencia_id)
+    cadencia.nome = novo_nome
+    auditoria_service.registrar(db, tenant_id, "cadencia_renomeada", "cadencia", cadencia.id, ator_id, {"nome": novo_nome})
+    db.commit()
+    db.refresh(cadencia)
+    return cadencia
+
+
+def adicionar_toque(
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    cadencia_id: int,
+    canal: str,
+    intervalo_dias_apos_anterior: int = 0,
+    template_whatsapp_id: str | None = None,
+    ab_teste_habilitado: bool = False,
+) -> ToqueCadencia:
+    """Só afeta contas que vierem a ser geradas a partir de agora — não
+    retroage sobre `Mensagem` já existentes (mesmo raciocínio de
+    `definir_template_whatsapp`)."""
+    cadencia = obter(db, tenant_id, cadencia_id)
+    _exigir_nao_cancelada(cadencia)
+
+    toques_atuais = toques_da_cadencia(db, cadencia.id)
+    proxima_ordem = (max((t.ordem for t in toques_atuais), default=0)) + 1
+    toque = ToqueCadencia(
+        tenant_id=tenant_id,
+        cadencia_id=cadencia.id,
+        ordem=proxima_ordem,
+        canal=canal,
+        intervalo_dias_apos_anterior=intervalo_dias_apos_anterior,
+        template_whatsapp_id=template_whatsapp_id if canal == "whatsapp" else None,
+        ab_teste_habilitado=ab_teste_habilitado,
+    )
+    db.add(toque)
+    db.flush()
+    _recalcular_canais(db, cadencia)
+    auditoria_service.registrar(
+        db, tenant_id, "toque_adicionado", "toque_cadencia", toque.id, ator_id, {"canal": canal}
+    )
+    db.commit()
+    db.refresh(toque)
+    return toque
+
+
+def remover_toque(db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int, toque_id: int) -> None:
+    """Desvincula em vez de bloquear — mesmo padrão de
+    `crm_service.excluir_negocio` pra `Atividade`: `Mensagem.
+    toque_cadencia_id` não tem `ondelete=CASCADE`, e as mensagens já
+    geradas por este toque são histórico real, preservado intacto."""
+    cadencia = obter(db, tenant_id, cadencia_id)
+    _exigir_nao_cancelada(cadencia)
+    toque = db.query(ToqueCadencia).filter_by(id=toque_id, cadencia_id=cadencia.id).one_or_none()
+    if toque is None:
+        raise NaoEncontrado(f"Toque {toque_id} não encontrado nesta cadência")
+
+    restantes = [t for t in toques_da_cadencia(db, cadencia.id) if t.id != toque.id]
+    _validar_minimos(restantes)
+
+    db.query(Mensagem).filter_by(toque_cadencia_id=toque.id).update({"toque_cadencia_id": None}, synchronize_session=False)
+    db.delete(toque)
+    db.flush()
+    _recalcular_canais(db, cadencia)
+    auditoria_service.registrar(db, tenant_id, "toque_removido", "toque_cadencia", toque_id, ator_id, {})
+    db.commit()
+
+
+def atualizar_toque(
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    cadencia_id: int,
+    toque_id: int,
+    canal: str | None = None,
+    intervalo_dias_apos_anterior: int | None = None,
+    ab_teste_habilitado: bool | None = None,
+) -> ToqueCadencia:
+    """Só afeta contas que vierem a ser geradas a partir de agora — mesmo
+    raciocínio de `definir_template_whatsapp`/`adicionar_toque`."""
+    cadencia = obter(db, tenant_id, cadencia_id)
+    _exigir_nao_cancelada(cadencia)
+    toque = db.query(ToqueCadencia).filter_by(id=toque_id, cadencia_id=cadencia.id).one_or_none()
+    if toque is None:
+        raise NaoEncontrado(f"Toque {toque_id} não encontrado nesta cadência")
+
+    if canal is not None:
+        toque.canal = canal
+        if canal != "whatsapp":
+            # Evita deixar um id de template órfão num toque que não é
+            # mais WhatsApp.
+            toque.template_whatsapp_id = None
+    if intervalo_dias_apos_anterior is not None:
+        toque.intervalo_dias_apos_anterior = intervalo_dias_apos_anterior
+    if ab_teste_habilitado is not None:
+        toque.ab_teste_habilitado = ab_teste_habilitado
+
+    _validar_minimos(toques_da_cadencia(db, cadencia.id))
+    _recalcular_canais(db, cadencia)
+    auditoria_service.registrar(
+        db, tenant_id, "toque_atualizado", "toque_cadencia", toque.id, ator_id,
+        {"canal": canal, "intervalo_dias_apos_anterior": intervalo_dias_apos_anterior},
+    )
+    db.commit()
+    db.refresh(toque)
+    return toque
+
+
 def definir_template_whatsapp(
     db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int, toque_id: int, template_whatsapp_id: str
 ) -> ToqueCadencia:
@@ -299,6 +467,7 @@ def gerar_para_lote(
             "conexão antes de terminar. Gere em lotes menores."
         )
     cadencia = obter(db, tenant_id, cadencia_id)
+    _exigir_nao_cancelada(cadencia)
     toques = toques_da_cadencia(db, cadencia.id)
     icp, oferta, config = _contexto_de_geracao(db, tenant_id, cadencia.icp_id, cadencia.oferta_id)
 
@@ -373,12 +542,29 @@ def ativar(
 ) -> dict:
     """Ativa a cadência: exige todos os toques aprovados, calcula o
     agendamento e consome a franquia das contas envolvidas (E3-H1, gancho
-    da Onda 1 em `franquia_service.consumir_para_ativacao`)."""
-    cadencia = obter(db, tenant_id, cadencia_id)
+    da Onda 1 em `franquia_service.consumir_para_ativacao`).
 
-    mensagens = db.query(Mensagem).filter_by(tenant_id=tenant_id, cadencia_id=cadencia.id).all()
+    Raio-X 2026-09-15 ("adicionar mais contas a uma cadência já ativa"):
+    escopado só às mensagens com `agendado_para IS NULL` — ou seja, as
+    que nenhuma chamada anterior a `ativar` ainda processou. Numa
+    cadência nova isso é exatamente todas as mensagens (nenhuma foi
+    agendada ainda, então o resultado é idêntico ao de sempre); numa
+    cadência já `"ativa"` que recebeu contas novas (`gerar_para_lote`
+    não tem guard de status, já funciona em qualquer status), chamar
+    `ativar` de novo processa só as mensagens novas, sem re-agendar (ou
+    piorar) as que já foram enviadas ou já estavam corretamente
+    agendadas antes."""
+    cadencia = obter(db, tenant_id, cadencia_id)
+    if cadencia.status == "cancelada":
+        raise RegraNegocioViolada("Cadência cancelada não pode ser ativada.")
+
+    mensagens = (
+        db.query(Mensagem)
+        .filter_by(tenant_id=tenant_id, cadencia_id=cadencia.id, agendado_para=None)
+        .all()
+    )
     if not mensagens:
-        raise RegraNegocioViolada("Cadência não tem toques gerados para nenhuma conta.")
+        raise RegraNegocioViolada("Cadência não tem mensagens novas pendentes de agendamento.")
 
     for mensagem in mensagens:
         aprovacao = (
@@ -417,7 +603,8 @@ def ativar(
     franquia = franquia_service.consumir_para_ativacao(db, tenant_id, ator_id, sorted(conta_ids), plan_limits)
 
     cadencia.status = "ativa"
-    cadencia.data_inicio = agora
+    if cadencia.data_inicio is None:
+        cadencia.data_inicio = agora
     auditoria_service.registrar(
         db, tenant_id, "cadencia_ativada", "cadencia", cadencia.id, ator_id, {"contas": sorted(conta_ids)}
     )
