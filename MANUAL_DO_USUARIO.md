@@ -358,12 +358,19 @@ contato) via WhatsApp depende de ter, no mínimo, um template aprovado:
    modelo (categoria "Marketing" ou "Utilidade"), escreva o texto e
    envie para aprovação da Meta — a aprovação costuma levar de minutos a
    poucas horas.
-2. Ao criar o toque de WhatsApp de uma cadência (seção 5.3), informe o
-   **nome do template aprovado** no campo correspondente do toque. Sem
-   isso, a mensagem gerada pela IA fica **parada indefinidamente**,
-   aguardando uma janela de 24h que nunca abre, sem nenhum aviso visível
-   além do pop-up de alerta que aparece em Configuração e em Cadências
-   enquanto o tenant não confirmar que já fez esse procedimento.
+2. Ao criar o toque de WhatsApp de uma cadência (seção 5.3), selecione o
+   **template aprovado** no campo correspondente do toque — a lista já
+   vem sincronizada com os templates aprovados na Meta, sem precisar
+   digitar nada. Sem isso, a mensagem gerada pela IA fica **parada
+   indefinidamente**, aguardando uma janela de 24h que nunca abre, sem
+   nenhum aviso visível além do pop-up de alerta que aparece em
+   Configuração e em Cadências enquanto o tenant não confirmar que já
+   fez esse procedimento. Se a cadência já existia antes do template ser
+   aprovado, não é preciso recriá-la: a tela de Cadências mostra um
+   aviso "sem template" ao lado de cada toque de WhatsApp sem um
+   definido, com um seletor pra escolher o template ali mesmo — só vale
+   pras mensagens geradas a partir daquele momento, não retroage sobre
+   mensagens já geradas antes da troca.
 
 Depois que o contato responder pela primeira vez, a conversa entra na
 janela de 24h e as mensagens seguintes daquele mesmo toque podem ser

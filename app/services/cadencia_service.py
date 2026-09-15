@@ -71,6 +71,35 @@ def toques_da_cadencia(db: Session, cadencia_id: int) -> list[ToqueCadencia]:
     return db.query(ToqueCadencia).filter_by(cadencia_id=cadencia_id).order_by(ToqueCadencia.ordem).all()
 
 
+def definir_template_whatsapp(
+    db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int, toque_id: int, template_whatsapp_id: str
+) -> ToqueCadencia:
+    """Define/troca o template aprovado de um toque de WhatsApp já
+    existente — raio-X 2026-09-15: o template só pode ser escolhido na
+    criação da cadência, então quem criasse a cadência antes da Meta
+    aprovar o template ficava sem nenhuma forma de configurá-lo depois.
+
+    Só afeta mensagens geradas A PARTIR de agora — `Mensagem.template_id`
+    é copiado do toque no momento da geração (`aprovacao_service.criar_proposta`),
+    então mensagens já geradas antes desta troca continuam com o valor
+    antigo (nulo ou outro template), sem retroatividade."""
+    cadencia = obter(db, tenant_id, cadencia_id)
+    toque = db.query(ToqueCadencia).filter_by(id=toque_id, cadencia_id=cadencia.id).one_or_none()
+    if toque is None:
+        raise NaoEncontrado(f"Toque {toque_id} não encontrado nesta cadência")
+    if toque.canal != "whatsapp":
+        raise RegraNegocioViolada("Só toques de WhatsApp têm template.")
+
+    toque.template_whatsapp_id = template_whatsapp_id
+    auditoria_service.registrar(
+        db, tenant_id, "toque_template_whatsapp_definido", "toque_cadencia", toque.id, ator_id,
+        {"template_whatsapp_id": template_whatsapp_id},
+    )
+    db.commit()
+    db.refresh(toque)
+    return toque
+
+
 def criar(
     db: Session, tenant_id: str, ator_id: str | None, dados: CadenciaCreateSchema, plan_limits: PlanLimitsProvider
 ) -> Cadencia:

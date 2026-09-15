@@ -27,6 +27,12 @@ interface OfertaResumo {
   nome: string;
 }
 
+interface TemplateWhatsApp {
+  id: number;
+  nome: string;
+  status: string;
+}
+
 interface ToqueCadencia {
   id: number;
   ordem: number;
@@ -89,6 +95,7 @@ export function Cadencias() {
   const [ofertas, setOfertas] = useState<OfertaResumo[]>([]);
   const [icpParaCriacaoId, setIcpParaCriacaoId] = useState<number | null>(null);
   const [listas, setListas] = useState<ListaProspeccao[]>([]);
+  const [templatesWhatsapp, setTemplatesWhatsapp] = useState<TemplateWhatsApp[]>([]);
   const [origemLote, setOrigemLote] = useState<"icp" | "lista" | "leads">("icp");
   const [icpParaLoteId, setIcpParaLoteId] = useState<number | null>(null);
   const [listaParaLoteId, setListaParaLoteId] = useState<number | null>(null);
@@ -156,16 +163,40 @@ export function Cadencias() {
     carregarIcps();
     carregarOfertas();
     carregarListas();
+    // Sincroniza com a Meta a cada carregamento (mesmo padrão de
+    // Campanhas.tsx) — um template recém-aprovado já aparece aqui sem
+    // precisar de nenhum botão de "atualizar" separado.
+    api
+      .get<TemplateWhatsApp[]>("/whatsapp/templates")
+      .then((resposta) => setTemplatesWhatsapp(resposta.filter((template) => template.status === "aprovado")))
+      .catch(() => undefined);
   }, []);
+
+  async function carregarToques(cadenciaId: number) {
+    try {
+      setToques(await api.get<ToqueCadencia[]>(`/cadencias/${cadenciaId}/toques`));
+    } catch {
+      setErro("Não foi possível carregar os toques da cadência.");
+    }
+  }
 
   useEffect(() => {
     if (cadenciaSelecionadaId === null) return;
     setResultadoGeracao(null);
-    api
-      .get<ToqueCadencia[]>(`/cadencias/${cadenciaSelecionadaId}/toques`)
-      .then(setToques)
-      .catch(() => setErro("Não foi possível carregar os toques da cadência."));
+    carregarToques(cadenciaSelecionadaId);
   }, [cadenciaSelecionadaId]);
+
+  async function definirTemplateWhatsapp(toqueId: number, templateId: string) {
+    if (cadenciaSelecionadaId === null || !templateId) return;
+    try {
+      await api.put(`/cadencias/${cadenciaSelecionadaId}/toques/${toqueId}/template-whatsapp`, {
+        template_whatsapp_id: templateId,
+      });
+      await carregarToques(cadenciaSelecionadaId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível definir o template deste toque.");
+    }
+  }
 
   useEffect(() => {
     setContasSelecionadas(new Set());
@@ -412,6 +443,50 @@ export function Cadencias() {
                   <span>
                     {toque.ordem === 1 ? "imediato" : `${toque.intervalo_dias_apos_anterior}d depois do anterior`}
                   </span>
+                  {toque.canal === "whatsapp" &&
+                    (toque.template_whatsapp_id ? (
+                      <>
+                        <Badge tone="cyan">
+                          template:{" "}
+                          {templatesWhatsapp.find((t) => String(t.id) === toque.template_whatsapp_id)?.nome ??
+                            toque.template_whatsapp_id}
+                        </Badge>
+                        {templatesWhatsapp.length > 0 && (
+                          <Select
+                            className="w-auto flex-shrink-0 text-[11px]"
+                            value={toque.template_whatsapp_id}
+                            onChange={(event) => definirTemplateWhatsapp(toque.id, event.target.value)}
+                            title="Trocar o template"
+                          >
+                            {templatesWhatsapp.map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.nome}
+                              </option>
+                            ))}
+                          </Select>
+                        )}
+                      </>
+                    ) : templatesWhatsapp.length > 0 ? (
+                      <>
+                        <Badge tone="red">sem template — 1º contato fica parado</Badge>
+                        <Select
+                          className="w-auto flex-shrink-0 text-[11px]"
+                          value=""
+                          onChange={(event) => definirTemplateWhatsapp(toque.id, event.target.value)}
+                        >
+                          <option value="" disabled>
+                            Definir template aprovado
+                          </option>
+                          {templatesWhatsapp.map((template) => (
+                            <option key={template.id} value={template.id}>
+                              {template.nome}
+                            </option>
+                          ))}
+                        </Select>
+                      </>
+                    ) : (
+                      <Badge tone="red">sem template — 1º contato fica parado</Badge>
+                    ))}
                   {toque.ab_teste_habilitado && <Badge tone="amber">teste A/B</Badge>}
                 </div>
               ))}
@@ -613,10 +688,10 @@ export function Cadencias() {
           </div>
           <div className="flex flex-col gap-2">
             {rascunhoToques.map((toque, indice) => (
-              <div key={indice} className="flex items-center gap-1.5 rounded-lg border border-border p-2">
+              <div key={indice} className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border p-2">
                 <span className="w-5 flex-shrink-0 text-center text-[11px] text-muted">#{toque.ordem}</span>
                 <Select
-                  className="flex-1"
+                  className="w-28 flex-shrink-0"
                   value={toque.canal}
                   onChange={(event) => atualizarToque(indice, "canal", event.target.value)}
                 >
@@ -624,6 +699,29 @@ export function Cadencias() {
                   <option value="whatsapp">WhatsApp</option>
                   <option value="linkedin">LinkedIn</option>
                 </Select>
+                {toque.canal === "whatsapp" &&
+                  (templatesWhatsapp.length > 0 ? (
+                    <Select
+                      className="min-w-[180px] flex-1"
+                      required
+                      value={toque.template_whatsapp_id}
+                      onChange={(event) => atualizarToque(indice, "template_whatsapp_id", event.target.value)}
+                    >
+                      <option value="" disabled>
+                        Selecione o template aprovado
+                      </option>
+                      {templatesWhatsapp.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.nome}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <span className="basis-full text-[10.5px] text-amber">
+                      ⚠ Nenhum template aprovado ainda — configure em Configuração → WhatsApp Business e crie um
+                      template na Meta antes de ativar esta cadência.
+                    </span>
+                  ))}
                 <Input
                   type="number"
                   min={0}

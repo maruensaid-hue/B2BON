@@ -353,3 +353,57 @@ def test_ativar_cadencia_consome_franquia(client, onboarding_completo, criar_con
     franquia_depois = client.get("/api/v1/contas/franquia").json()
 
     assert franquia_depois["usado"] == franquia_antes["usado"] + 1
+
+
+def test_definir_template_whatsapp_em_toque_existente(client, criar_cadencia):
+    """Raio-X 2026-09-15: quem cria a cadência antes do template ser
+    aprovado pela Meta precisa de um jeito de configurá-lo depois — o
+    template só podia ser escolhido na criação até aqui."""
+    cadencia = criar_cadencia(
+        toques=[
+            {"ordem": 1, "canal": "email", "intervalo_dias_apos_anterior": 0},
+            {"ordem": 2, "canal": "whatsapp", "intervalo_dias_apos_anterior": 2},
+            {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 3},
+            {"ordem": 4, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
+            {"ordem": 5, "canal": "whatsapp", "intervalo_dias_apos_anterior": 3},
+        ]
+    )
+    toques = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
+    toque_sem_template = next(t for t in toques if t["canal"] == "whatsapp")
+    assert toque_sem_template["template_whatsapp_id"] is None
+
+    resposta = client.put(
+        f"/api/v1/cadencias/{cadencia['id']}/toques/{toque_sem_template['id']}/template-whatsapp",
+        json={"template_whatsapp_id": "prospeccao_inicial"},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["template_whatsapp_id"] == "prospeccao_inicial"
+    atualizado = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
+    assert next(t for t in atualizado if t["id"] == toque_sem_template["id"])["template_whatsapp_id"] == "prospeccao_inicial"
+
+
+def test_definir_template_whatsapp_em_toque_de_outro_canal_falha(client, criar_cadencia):
+    cadencia = criar_cadencia()
+    toques = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
+    toque_email = next(t for t in toques if t["canal"] == "email")
+
+    resposta = client.put(
+        f"/api/v1/cadencias/{cadencia['id']}/toques/{toque_email['id']}/template-whatsapp",
+        json={"template_whatsapp_id": "prospeccao_inicial"},
+    )
+
+    assert resposta.status_code == 409
+
+
+def test_definir_template_whatsapp_toque_de_outra_cadencia_falha(client, criar_cadencia):
+    cadencia_a = criar_cadencia(nome="Cadência A")
+    cadencia_b = criar_cadencia(nome="Cadência B")
+    toque_da_b = next(t for t in client.get(f"/api/v1/cadencias/{cadencia_b['id']}/toques").json() if t["canal"] == "whatsapp")
+
+    resposta = client.put(
+        f"/api/v1/cadencias/{cadencia_a['id']}/toques/{toque_da_b['id']}/template-whatsapp",
+        json={"template_whatsapp_id": "prospeccao_inicial"},
+    )
+
+    assert resposta.status_code == 404

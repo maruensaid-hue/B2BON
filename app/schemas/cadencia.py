@@ -39,6 +39,10 @@ class ToqueCadenciaSchema(BaseModel):
     ab_teste_habilitado: bool
 
 
+class DefinirTemplateWhatsAppRequestSchema(BaseModel):
+    template_whatsapp_id: str
+
+
 class CadenciaCreateSchema(BaseModel):
     nome: str
     toques: list[ToqueCadenciaCreateSchema]

@@ -8,6 +8,7 @@ from app.schemas.cadencia import (
     AtivarCadenciaResponseSchema,
     CadenciaCreateSchema,
     CadenciaSchema,
+    DefinirTemplateWhatsAppRequestSchema,
     GerarCadenciaRequestSchema,
     GerarCadenciaResponseSchema,
     RelatorioAbTesteSchema,
@@ -55,6 +56,23 @@ def listar_toques(
 ) -> list[ToqueCadenciaSchema]:
     cadencia_service.obter(db, tenant_id, cadencia_id)
     return cadencia_service.toques_da_cadencia(db, cadencia_id)
+
+
+@router.put("/{cadencia_id}/toques/{toque_id}/template-whatsapp", response_model=ToqueCadenciaSchema)
+def definir_template_whatsapp(
+    cadencia_id: int,
+    toque_id: int,
+    dados: DefinirTemplateWhatsAppRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ToqueCadenciaSchema:
+    """Define/troca o template de um toque de WhatsApp já existente — pra
+    quem criou a cadência antes do template ser aprovado pela Meta
+    (raio-X 2026-09-15)."""
+    return cadencia_service.definir_template_whatsapp(
+        db, tenant_id, ator_id, cadencia_id, toque_id, dados.template_whatsapp_id
+    )
 
 
 @router.get("/{cadencia_id}", response_model=CadenciaSchema)
