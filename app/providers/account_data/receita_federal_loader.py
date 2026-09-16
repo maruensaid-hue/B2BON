@@ -183,28 +183,45 @@ def carregar_recorte(
 
         if indice % 20_000 == 0:
             print(f"  {indice}/{total} gravado(s)...", flush=True)
+            # Mesmo raciocínio do checkpoint na varredura de estabelecimentos
+            # (raio-X 2026-08-27) — só que aqui não é a leitura do CSV que é
+            # lenta, é o volume de `db.add()` sem nenhum `commit()` no meio.
+            # Confirmado em produção (raio-X 2026-09-16): mesmo com o
+            # checkpoint da varredura já corrigido, a carga ainda morria de
+            # `IdleInTransactionSessionTimeout` mais adiante, exatamente
+            # porque este trecho (gravação) e o de sócios abaixo não tinham
+            # nenhum ping/commit intermediário. Commitar no meio é seguro:
+            # cada linha grava um `CnpjEstabelecimento` já completo, e a
+            # carga é idempotente por natureza (upsert por CNPJ) — se cair
+            # depois daqui, o que já foi commitado não se perde.
+            db.execute(text("SELECT 1"))
+            db.commit()
 
     print("Vinculando sócios do recorte...", flush=True)
     socios_existentes = _buscar_socios_existentes_em_lotes(db, cnpjs_basicos_no_recorte)
 
-    for linha in _linhas(caminho_socios):
+    for indice, linha in enumerate(_linhas(caminho_socios), start=1):
         cnpj_basico = linha[0]
-        if cnpj_basico not in cnpjs_basicos_no_recorte:
-            continue
+        if cnpj_basico in cnpjs_basicos_no_recorte:
+            chave = (cnpj_basico, linha[2], linha[4])
+            if chave not in socios_existentes:
+                socios_existentes.add(chave)
+                db.add(
+                    CnpjSocio(
+                        cnpj_basico=cnpj_basico,
+                        nome_socio=linha[2],
+                        qualificacao=linha[4],
+                        carregado_em=agora,
+                    )
+                )
 
-        chave = (cnpj_basico, linha[2], linha[4])
-        if chave in socios_existentes:
-            continue
-        socios_existentes.add(chave)
-
-        db.add(
-            CnpjSocio(
-                cnpj_basico=cnpj_basico,
-                nome_socio=linha[2],
-                qualificacao=linha[4],
-                carregado_em=agora,
-            )
-        )
+        if indice % 1_000_000 == 0:
+            # Este arquivo também é a base nacional completa (dezenas de
+            # milhões de linhas) — mesmo checkpoint da varredura de
+            # estabelecimentos, faltava aqui (raio-X 2026-09-16).
+            print(f"  {indice:,} linha(s) de sócios varrida(s)...", flush=True)
+            db.execute(text("SELECT 1"))
+            db.commit()
 
     print("Salvando no banco (pode levar alguns segundos)...", flush=True)
     db.commit()
