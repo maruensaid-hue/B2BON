@@ -116,7 +116,7 @@ def carregar_recorte(
                 ja_cobertos_ignorados += 1
             else:
                 estabelecimentos_no_recorte.append(linha)
-        if indice % 1_000_000 == 0:
+        if indice % 250_000 == 0:
             print(f"  {indice:,} linha(s) varrida(s), {len(estabelecimentos_no_recorte)} no recorte...", flush=True)
             # A varredura é só em Python (sem tocar o banco) e passa de 70
             # milhões de linhas na base nacional — uma conexão sem nenhum
@@ -129,6 +129,12 @@ def carregar_recorte(
             # Postgres do Neon mata isso de propósito
             # (`IdleInTransactionSessionTimeout`) — descobrimos isso
             # exatamente no meio desta varredura (raio-X 2026-08-27).
+            # Intervalo reduzido de 1M pra 250k linhas (raio-X 2026-09-16):
+            # um runner mais lento levava tempo suficiente entre um
+            # checkpoint e o próximo pra já disparar o mesmo timeout — ver
+            # também o ping novo logo antes desta função ser chamada, em
+            # `cnpj_recorte_service.atualizar_recorte_automatico`, que cobre
+            # o intervalo dos downloads (sem nenhum checkpoint antes disso).
             db.execute(text("SELECT 1"))
             db.commit()
     cnpjs_basicos_no_recorte = {linha[0] for linha in estabelecimentos_no_recorte}

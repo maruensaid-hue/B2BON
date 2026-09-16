@@ -89,6 +89,21 @@ def atualizar_recorte_automatico(db: Session) -> dict:
         caminhos_estabelecimentos = baixar_shards(mes_competencia, "Estabelecimentos", diretorio)
         caminhos_socios = baixar_shards(mes_competencia, "Socios", diretorio)
 
+        # Raio-X 2026-09-16: os 3 downloads acima (Estabelecimentos sozinho
+        # passa de 4GB) podem levar minutos sem nenhum tráfego de banco —
+        # a conexão do Neon ficava tempo suficiente sem uso pra já cair
+        # (ou entrar num estado que o servidor trata como idle-in-transaction)
+        # antes mesmo do primeiro checkpoint de `carregar_recorte` (a cada
+        # 1M linhas varridas), derrubando a carga com
+        # `IdleInTransactionSessionTimeout` bem no início da varredura, logo
+        # depois do primeiro checkpoint. Um commit "vazio" aqui, logo após
+        # os downloads e antes da varredura longa, garante uma conexão
+        # fresca pro loop que vem a seguir — mesmo raciocínio do
+        # `db.commit()` já existente ANTES dos downloads, só que do lado de
+        # depois.
+        db.execute(text("SELECT 1"))
+        db.commit()
+
         carregados = carregar_recorte(
             db,
             cnae_codigos=cnae_codigos,
