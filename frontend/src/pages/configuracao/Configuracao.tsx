@@ -387,7 +387,16 @@ export function Configuracao() {
   async function salvarOferta(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (salvandoOferta) return;
-    const form = new FormData(event.currentTarget);
+    // Capturado ANTES do primeiro `await` (raio-X 2026-09-16): salvar uma
+    // edição troca `ofertaEmEdicaoId` pra null, o que muda a `key` do
+    // formulário e o remonta — `event.currentTarget`, acessado só depois
+    // do await, já não apontava mais pro form antigo (undefined behavior
+    // entre navegador/React), lançando um erro que não é `ApiError` e
+    // caía no aviso genérico "Não foi possível salvar a oferta.", mesmo
+    // com o PUT já tendo salvo com sucesso — bug só de exibição, os dados
+    // sempre chegaram a salvar; guardar a referência aqui evita o erro.
+    const formulario = event.currentTarget;
+    const form = new FormData(formulario);
     const dados = {
       nome: String(form.get("nome")),
       descricao: String(form.get("descricao")),
@@ -405,7 +414,7 @@ export function Configuracao() {
         await api.post("/ofertas", dados);
         setMensagem("Oferta salva.");
       }
-      event.currentTarget.reset();
+      formulario.reset();
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível salvar a oferta.");

@@ -46,12 +46,16 @@ export function ConversaModal({ tenantId, nomeExibicao, onClose }: Props) {
 
   async function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    // Capturado antes do `await` (mesmo raio-X de Configuracao.tsx/
+    // salvarOferta, 2026-09-16) — evita depender de `event.currentTarget`
+    // depois de um await, que pode não apontar mais pro form.
+    const formulario = event.currentTarget;
+    const form = new FormData(formulario);
     const texto = String(form.get("texto") ?? "").trim();
     if (!texto) return;
     try {
       await api.post("/rede-social/mensagens", { tenant_id_destinatario: tenantId, texto });
-      event.currentTarget.reset();
+      formulario.reset();
       await carregar();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível enviar a mensagem.");
