@@ -403,10 +403,27 @@ export function Prospeccao() {
     event.preventDefault();
     if (icpSelecionadoId === null) return;
     const form = new FormData(event.currentTarget);
+    setErro(null);
+    setMensagem(null);
     try {
-      await api.post(`/icp/${icpSelecionadoId}/contas/gerar`, { quantidade: Number(form.get("quantidade")) });
+      const resultado = await api.post<{ contas: unknown[] }>(`/icp/${icpSelecionadoId}/contas/gerar`, {
+        quantidade: Number(form.get("quantidade")),
+      });
       setModalGerarAberto(false);
       await carregarContas(icpSelecionadoId);
+      // Raio-X 2026-09-16: a chamada pode retornar sucesso com 0 contas
+      // (nenhuma empresa no banco de CNPJ bate com os critérios do ICP
+      // ainda — se o ICP é recém-criado, o recorte de CNPJ só é
+      // atualizado a cada 30min via cron) — sem este aviso, a tela só
+      // fechava o modal sem nada de novo aparecer, parecendo que o
+      // clique não fez nada.
+      if (resultado.contas.length === 0) {
+        setMensagem(
+          "Nenhuma conta nova encontrada para os critérios deste ICP. Se o ICP foi criado ou alterado há pouco " +
+            "tempo, o banco de CNPJ pode ainda não ter sido atualizado com esse recorte (isso acontece automaticamente, " +
+            "a cada 30 minutos) — tente novamente em alguns minutos.",
+        );
+      }
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível gerar a lista de contas.");
     }
