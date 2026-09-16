@@ -436,7 +436,13 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
             <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={enriquecerSite}>
               Pesquisar empresa (site)
             </Button>
-            <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={enriquecerBrasilApi}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={carregando !== null || !conta.cnpj}
+              title={!conta.cnpj ? "Sem CNPJ cadastrado — preencha o CNPJ da conta pra habilitar este enriquecimento." : undefined}
+              onClick={enriquecerBrasilApi}
+            >
               Enriquecer (BrasilAPI)
             </Button>
             <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={mapearDecisores}>
@@ -456,6 +462,12 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
             tem domínio cadastrado, o sistema tenta descobrir o site sozinho
             e já salva na ficha.
           </div>
+          {!conta.cnpj && (
+            <div className="mb-4 text-[11px] text-amber">
+              "Enriquecer (BrasilAPI)" precisa do CNPJ da conta pra funcionar — é a chave que a BrasilAPI usa pra
+              buscar os dados. Preencha o CNPJ em "Editar dados da conta" acima pra habilitar esse enriquecimento.
+            </div>
+          )}
 
           {mostrarDescarte && (
             <form

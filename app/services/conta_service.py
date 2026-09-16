@@ -156,7 +156,7 @@ def criar_manual(
         tenant_id=tenant_id,
         icp_id=icp_id,
         nome=nome,
-        cnpj=cnpj,
+        cnpj=_normalizar_cnpj(cnpj),
         dominio=_normalizar_dominio(dominio),
         status="prospectada",
         origem="manual",
@@ -193,7 +193,7 @@ def criar_lead(
         tenant_id=tenant_id,
         icp_id=None,
         nome=nome,
-        cnpj=cnpj,
+        cnpj=_normalizar_cnpj(cnpj),
         dominio=_normalizar_dominio(dominio),
         segmento=segmento,
         porte=porte,
@@ -230,7 +230,7 @@ def criar_a_partir_de_convite_rede_social(
         tenant_id=tenant_id,
         icp_id=None,
         nome=nome,
-        cnpj=cnpj,
+        cnpj=_normalizar_cnpj(cnpj),
         status="prospectada",
         origem="rede_social_convite",
     )
@@ -897,6 +897,23 @@ def executar_limpeza_leads_nao_trabalhados(db: Session, tenant_id: str, ator_id:
     return _excluir_contas_com_bloqueios(db, tenant_id, ator_id, contas, protecoes)
 
 
+def _normalizar_cnpj(cnpj: str | None) -> str | None:
+    """Guarda só os 14 dígitos, sem pontuação — mesmo raciocínio de
+    `_normalizar_dominio` (bug real em produção, raio-X 2026-09-16): a
+    pessoa digita/cola o CNPJ formatado ("14.568.725/0001-95"), e esse
+    valor ia direto pra URL da BrasilAPI (`consultar_cnpj_brasilapi`), que
+    interpretava a barra como separador de caminho e devolvia 404 — a
+    BrasilAPI só aceita os dígitos puros. Também evita duplicar conta na
+    geração de lista por ICP (`gerar_lista`), que compara contra CNPJ da
+    Receita Federal, sempre em dígitos puros. Permissivo de propósito
+    (não valida quantidade de dígitos) — cadastro manual/lead nem sempre
+    tem o CNPJ completo à mão."""
+    if not cnpj:
+        return None
+    digitos = re.sub(r"\D", "", cnpj)
+    return digitos or None
+
+
 def _normalizar_dominio(dominio: str | None) -> str | None:
     """Aceita o que a pessoa colar (com ou sem `https://`, com ou sem
     caminho/barra final) e guarda só o host — `site_fetcher` monta a URL
@@ -1033,7 +1050,7 @@ def atualizar(
     conta já existe."""
     conta = obter(db, tenant_id, conta_id)
     conta.nome = nome
-    conta.cnpj = cnpj
+    conta.cnpj = _normalizar_cnpj(cnpj)
     conta.nome_fantasia = nome_fantasia
     conta.dominio = _normalizar_dominio(dominio)
     conta.segmento = segmento

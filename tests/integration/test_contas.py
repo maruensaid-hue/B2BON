@@ -250,6 +250,21 @@ def test_criar_conta_manual_via_crm(client, criar_icp):
     assert corpo["status"] == "prospectada"
 
 
+def test_criar_conta_manual_normaliza_cnpj_formatado(client, criar_icp):
+    """Raio-X 2026-09-16: CNPJ digitado com pontuação ("14.568.725/0001-95")
+    quebrava o enriquecimento via BrasilAPI depois (a barra ia direto pra
+    URL) — guardar só os dígitos evita o problema desde o cadastro."""
+    icp = criar_icp()
+
+    resposta = client.post(
+        f"/api/v1/icp/{icp['id']}/contas",
+        json={"nome": "Sicoob UniMais Rio", "cnpj": "14.568.725/0001-95", "dominio": None},
+    )
+
+    assert resposta.status_code == 201
+    assert resposta.json()["cnpj"] == "14568725000195"
+
+
 def test_atualizar_conta_nome_fantasia_e_dominio(client, criar_icp, fake_account_data):
     """Bug reportado: a Receita Federal não traz site, e a razão social nem
     sempre é a marca comercial conhecida — precisa dar pra editar os dois."""
@@ -333,6 +348,22 @@ def test_atualizar_conta_todos_os_campos(client, criar_icp, fake_account_data):
     assert corpo["segmento"] == "Consultoria Financeira"
     assert corpo["porte"] == "MEDIO"
     assert corpo["regiao"] == "RJ"
+
+
+def test_atualizar_conta_normaliza_cnpj_formatado(client, criar_icp, fake_account_data):
+    """Mesmo raio-X 2026-09-16 do cadastro manual — editar a conta com um
+    CNPJ colado com pontuação também precisa gravar só os dígitos."""
+    icp = criar_icp()
+    fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech")]
+    conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
+
+    resposta = client.put(
+        f"/api/v1/contas/{conta_id}",
+        json={"nome": "Alpha Tech", "cnpj": "14.568.725/0001-95"},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["cnpj"] == "14568725000195"
 
 
 def test_atualizar_decisor_move_para_outra_conta(client, criar_icp, fake_account_data):

@@ -314,6 +314,12 @@ def test_importar_negocios_cria_conta_decisor_e_negocio(client, db_session):
     estagio = db_session.query(EstagioFunil).filter_by(id=negocio.estagio_id).one()
     assert estagio.tipo == "aberto"
 
+    # Raio-X 2026-09-16: guarda só os dígitos, não o CNPJ formatado da
+    # planilha — senão a conta criada aqui ficava com um CNPJ num
+    # formato diferente do usado pra BrasilAPI/geração de lista por ICP.
+    conta_criada = db_session.query(Conta).filter_by(tenant_id=TENANT_ID, nome="Acme Importada").one()
+    assert conta_criada.cnpj == "12345678000190"
+
 
 def test_importar_negocios_reaproveita_conta_existente_por_cnpj(client, db_session):
     """CNPJ formatado de forma diferente do CSV ainda casa (normalizado

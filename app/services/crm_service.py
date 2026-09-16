@@ -355,9 +355,15 @@ def importar_negocios(
         if conta is None:
             conta = contas_por_nome.get(_normalizar_nome(linha.empresa_nome))
         if conta is None:
+            # Raio-X 2026-09-16: guarda o CNPJ já normalizado (só
+            # dígitos) — antes gravava o valor bruto da planilha
+            # (`.strip()` só tira espaço, não pontuação), então a conta
+            # criada aqui ficava com um CNPJ num formato diferente do
+            # usado por `_normalizar_cnpj`/BrasilAPI/geração de lista por
+            # ICP em qualquer lugar mais adiante.
             conta = Conta(
                 tenant_id=tenant_id,
-                cnpj=linha.empresa_cnpj.strip() if linha.empresa_cnpj else None,
+                cnpj=_normalizar_cnpj(linha.empresa_cnpj) or None if linha.empresa_cnpj else None,
                 nome=linha.empresa_nome.strip(),
                 status="priorizada",
                 origem="crm_import",
