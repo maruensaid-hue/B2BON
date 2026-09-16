@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from app.services import cadencia_service, envio_service
+from app.services import cadencia_service, envio_service, reputacao_service
 
 TENANT_ID = "tenant-teste"
 
@@ -87,3 +87,55 @@ def test_reativar_canal_permite_envio_apos_pausa(
     resultado = client.post("/api/v1/envios/processar").json()
 
     assert resultado["enviadas"] == 1
+
+
+_TOQUES_SEM_EMAIL = [
+    {"ordem": 1, "canal": "whatsapp", "intervalo_dias_apos_anterior": 0, "template_whatsapp_id": "prospeccao_inicial"},
+    {"ordem": 2, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
+    {"ordem": 3, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
+    {"ordem": 4, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
+    {"ordem": 5, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
+]
+
+
+def test_ativar_cadencia_com_toque_de_email_bloqueada_por_canal_pausado(
+    client, onboarding_completo, criar_conta_com_decisor, db_session, monkeypatch
+):
+    """Raio-X 2026-09-16 (Relatório de Entrega): não deixa ativar uma nova
+    cadência com toque de e-mail enquanto o canal está pausado por
+    bounce — antes disso passava direto e só adiava na hora do envio."""
+    monkeypatch.setattr(cadencia_service, "datetime", _RelogioFixo)
+    monkeypatch.setattr(envio_service, "datetime", _RelogioFixo)
+
+    conta, decisor = criar_conta_com_decisor()
+    cadencia = client.post("/api/v1/cadencias", json={"nome": "Cadência", "toques": _TOQUES_WHATSAPP_PRIMEIRO}).json()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    _aprovar_tudo(client, cadencia["id"])
+
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "enviado", 10)
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "bounce", 1)
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    assert resposta.status_code == 409
+
+
+def test_ativar_cadencia_sem_toque_de_email_nao_e_bloqueada_por_email_pausado(
+    client, onboarding_completo, criar_conta_com_decisor, db_session, monkeypatch
+):
+    """Só o canal de fato usado pela cadência é checado — uma cadência
+    sem toque de e-mail não deveria ser afetada pela pausa do e-mail."""
+    monkeypatch.setattr(cadencia_service, "datetime", _RelogioFixo)
+    monkeypatch.setattr(envio_service, "datetime", _RelogioFixo)
+
+    conta, decisor = criar_conta_com_decisor()
+    cadencia = client.post("/api/v1/cadencias", json={"nome": "Cadência", "toques": _TOQUES_SEM_EMAIL}).json()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    _aprovar_tudo(client, cadencia["id"])
+
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "enviado", 10)
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "bounce", 1)
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    assert resposta.status_code == 200

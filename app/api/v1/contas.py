@@ -47,6 +47,7 @@ from app.services import (
     enriquecimento_limite_service,
     franquia_service,
     linkedin_conexao_service,
+    optout_service,
 )
 
 router = APIRouter(tags=["contas"])
@@ -213,6 +214,21 @@ def atualizar_decisor(
         db, tenant_id, ator_id, conta_id, decisor_id, dados.nome, dados.cargo, dados.email, dados.telefone,
         dados.linkedin_url, dados.conta_id,
     )
+
+
+@router.post("/contas/{conta_id}/decisores/{decisor_id}/suprimir")
+def suprimir_decisor(
+    conta_id: int,
+    decisor_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> dict:
+    """"Excluir contato" no Relatório de Entrega (raio-X 2026-09-16) —
+    reaproveita a supressão já usada no opt-out (cancela mensagens
+    pendentes, marca `Decisor.suprimido_em`) em vez de criar exclusão de
+    decisor isolado nova; exclusão de conta/decisor continua
+    deliberadamente restrita."""
+    return optout_service.processar(db, tenant_id, decisor_id, origem="manual")
 
 
 @router.post("/contas/{conta_id}/enriquecer", response_model=EnriquecerContaResponseSchema)

@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { BuscaGlobal } from "@/components/busca/BuscaGlobal";
 import { InstallBanner } from "@/components/InstallBanner";
 import { FaqModal } from "@/components/onboarding/FaqModal";
 import { TourGuiado } from "@/components/onboarding/TourGuiado";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth";
@@ -34,6 +36,7 @@ const PREDATOR_NAV_ITEMS: NavItem[] = [
   { path: "/campanhas", label: "Campanhas", icon: "📣" },
   { path: "/aprovacoes", label: "Aprovações", icon: "✅" },
   { path: "/reunioes", label: "Reuniões", icon: "📅" },
+  { path: "/relatorio-entrega", label: "Relatório de Entrega", icon: "📊" },
   { path: "/configuracao", label: "Configuração", icon: "⚙" },
 ];
 
@@ -205,6 +208,58 @@ function BannerLicencaSuspensa() {
         {enviando ? "Enviando..." : "Já fiz o pagamento"}
       </button>
     </div>
+  );
+}
+
+/** Pop-up de canal de e-mail pausado por bounce/spam (raio-X 2026-09-16,
+ * Relatório de Entrega) — `reputacao_service` já pausava o canal
+ * automaticamente antes disso, mas nada avisava o usuário na tela; sem
+ * isso, campanhas/cadências de e-mail simplesmente paravam de sair sem
+ * explicação nenhuma visível. Fecha só pra esta sessão — reabre no
+ * próximo login/reload enquanto o canal continuar pausado (diferente do
+ * aviso de template do WhatsApp, que é "confirme que já leu" e some pra
+ * sempre: aqui é um bloqueio operacional real, não uma leitura única). */
+function AvisoCanalEmailPausado() {
+  const navigate = useNavigate();
+  const [pausado, setPausado] = useState(false);
+  const [taxaBounce, setTaxaBounce] = useState<number | null>(null);
+  const [aberto, setAberto] = useState(true);
+
+  useEffect(() => {
+    api
+      .get<{ pausado: boolean; taxa_bounce: number }>("/canais/email/saude")
+      .then((resposta) => {
+        setPausado(resposta.pausado);
+        setTaxaBounce(resposta.taxa_bounce);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  if (!pausado || !aberto) return null;
+
+  return (
+    <Modal title="Canal de e-mail pausado por reputação" open onClose={() => setAberto(false)}>
+      <div className="flex flex-col gap-3 text-[12.5px]">
+        <p>
+          O envio de e-mail deste tenant foi pausado automaticamente
+          {taxaBounce !== null && ` (taxa de bounce de ${(taxaBounce * 100).toFixed(1)}%)`} — acima do limite
+          seguro pra não comprometer a reputação do domínio e cair em SPAM. Novas campanhas e cadências de e-mail
+          não podem ser ativadas enquanto isso não for resolvido.
+        </p>
+        <p>
+          Corrija ou exclua os contatos com e-mail inválido no Relatório de Entrega e reative o canal por lá.
+        </p>
+        <Button
+          onClick={() => {
+            setAberto(false);
+            navigate("/relatorio-entrega");
+          }}
+          className="mt-1 w-full justify-center"
+        >
+          Ver Relatório de Entrega
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -424,6 +479,7 @@ export function AppShell() {
 
         {!temLicencaAtiva && <BannerLicencaSuspensa />}
         {temLicencaAtiva && <AvisoWhatsappPessoalFaltando />}
+        {temLicencaAtiva && <AvisoCanalEmailPausado />}
 
         <main className="flex-1 overflow-auto pb-20 sm:pb-0">
           <Outlet />

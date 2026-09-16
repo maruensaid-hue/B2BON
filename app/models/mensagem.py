@@ -30,6 +30,13 @@ class Mensagem(Base):
     # Só e-mail tem pixel de rastreio (Onda I) — fica nulo pra whatsapp/linkedin
     # e para e-mails cujo cliente do destinatário bloqueia carregamento de imagem.
     aberto_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Raio-X 2026-09-16 (Relatório de Entrega): bounce/dropped/blocked
+    # assíncrono do SendGrid Event Webhook, correlacionado por
+    # `mensagem_id` em `custom_args` — distinto de `motivo_falha`, que só
+    # cobre a falha síncrona na hora do envio (a mensagem pode ter
+    # "enviado" com sucesso e só quicar depois).
+    bounce_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    motivo_bounce: Mapped[str | None] = mapped_column(String, nullable=True)
     motivo_falha: Mapped[str | None] = mapped_column(String, nullable=True)
     tentativas_envio: Mapped[int] = mapped_column(Integer, default=0)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

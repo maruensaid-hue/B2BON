@@ -41,6 +41,7 @@ from app.api.v1.rotulos_hierarquia import router as rotulos_hierarquia_router
 from app.api.v1.qualificacao import router as qualificacao_router
 from app.api.v1.rede_social import router as rede_social_router
 from app.api.v1.registro_oportunidade import router as registro_oportunidade_router
+from app.api.v1.relatorio_entrega import router as relatorio_entrega_router
 from app.api.v1.reunioes import router as reunioes_router
 from app.api.v1.ropa import router as ropa_router
 from app.api.v1.saude_conta import router as saude_conta_router
@@ -81,6 +82,7 @@ router.include_router(configuracao_whatsapp_router, dependencies=_exige_licenca)
 router.include_router(configuracao_email_smtp_router, dependencies=_exige_licenca)
 router.include_router(linkedin_router, dependencies=_exige_licenca)
 router.include_router(canais_router, dependencies=_exige_licenca)
+router.include_router(relatorio_entrega_router, dependencies=_exige_licenca)
 router.include_router(qualificacao_router, dependencies=_exige_licenca)
 router.include_router(conversas_router, dependencies=_exige_licenca)
 router.include_router(notificacoes_router, dependencies=_exige_licenca)

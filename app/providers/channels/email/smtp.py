@@ -39,6 +39,8 @@ class SmtpEmailProvider(EmailProvider):
         remetente_email: str,
         tenant_id: str,
         pixel_url: str | None = None,
+        mensagem_id: int | None = None,
+        campanha_destinatario_id: int | None = None,
     ) -> ResultadoEnvio:
         mensagem = EmailMessage()
         mensagem["Subject"] = assunto

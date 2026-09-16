@@ -76,7 +76,14 @@ def _processar_email(
     corpo = f"{mensagem.conteudo}\n\n{config.assinatura}" if config else mensagem.conteudo
     pixel_url = rastreamento_service.url_pixel(mensagem.tenant_id, mensagem.id)
     return provider.enviar(
-        decisor.email, "Contato", corpo, remetente_nome, remetente_email, mensagem.tenant_id, pixel_url
+        decisor.email,
+        "Contato",
+        corpo,
+        remetente_nome,
+        remetente_email,
+        mensagem.tenant_id,
+        pixel_url,
+        mensagem_id=mensagem.id,
     )
 
 

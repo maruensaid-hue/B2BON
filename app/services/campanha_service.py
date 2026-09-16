@@ -10,7 +10,7 @@ from app.models.decisor import Decisor
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.schemas.campanha import DestinatarioAvulsoSchema
-from app.services import atividade_service, auditoria_service, optout_service
+from app.services import atividade_service, auditoria_service, optout_service, reputacao_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 _SEPARADOR = ":"
@@ -251,6 +251,8 @@ def remover_destinatario(db: Session, tenant_id: str, ator_id: str | None, campa
 def marcar_pronta(db: Session, tenant_id: str, ator_id: str | None, campanha_id: int) -> Campanha:
     campanha = obter(db, tenant_id, campanha_id)
     _exigir_rascunho(campanha)
+    if "email" in campanha.canais:
+        reputacao_service.exigir_canal_nao_pausado(db, tenant_id, "email")
     total = db.query(CampanhaDestinatario).filter_by(campanha_id=campanha.id).count()
     if total == 0:
         raise ValidacaoFalhou("Adicione ao menos um destinatário antes de marcar a campanha como pronta.")
@@ -267,7 +269,7 @@ def processar_pendentes(db: Session, tenant_id: str, email_provider: EmailProvid
     idempotente de `envio_service.processar_pendentes`) — cada campanha
     `pronta` ou já `enviando` tem seus destinatários `pendente` disparados
     nesta chamada; ao esgotar, a campanha vira `concluida`."""
-    resultado = {"enviadas": 0, "falhas": 0}
+    resultado = {"enviadas": 0, "falhas": 0, "adiadas": 0}
 
     campanhas = db.query(Campanha).filter(Campanha.tenant_id == tenant_id, Campanha.status.in_(["pronta", "enviando"])).all()
     for campanha in campanhas:
@@ -277,8 +279,11 @@ def processar_pendentes(db: Session, tenant_id: str, email_provider: EmailProvid
             .filter_by(campanha_id=campanha.id, tenant_id=tenant_id, status="pendente")
             .all()
         )
+        algum_adiado_nesta_campanha = False
         for destinatario in pendentes:
-            sucesso, motivo_falha = _disparar_destinatario(campanha, destinatario, email_provider, whatsapp_provider)
+            sucesso, motivo_falha, adiado = _disparar_destinatario(
+                db, campanha, destinatario, email_provider, whatsapp_provider
+            )
             if sucesso:
                 destinatario.status = "enviado"
                 destinatario.enviado_em = datetime.now(UTC)
@@ -290,43 +295,67 @@ def processar_pendentes(db: Session, tenant_id: str, email_provider: EmailProvid
                             descricao=f"Campanha '{campanha.nome}' enviada",
                         )
                 resultado["enviadas"] += 1
+            elif adiado:
+                # Canal de e-mail pausado por reputação (raio-X 2026-09-16)
+                # — não é falha, fica "pendente" pra tentar de novo no
+                # próximo cron, quando o canal for reativado.
+                algum_adiado_nesta_campanha = True
+                resultado["adiadas"] += 1
             else:
                 destinatario.status = "falhou"
                 destinatario.motivo_falha = motivo_falha
                 resultado["falhas"] += 1
 
-        # `pendentes` já é a lista inteira de destinatários pendentes desta
-        # campanha (sem lote/limite artificial) e todos foram atualizados
-        # no laço acima — não sobra ninguém "pendente" depois disto, então
-        # a campanha está concluída. (Reconsultar o banco aqui seria
-        # arriscado: a sessão usa `autoflush=False`, então a query não
-        # veria as mudanças de status ainda não commitadas.)
-        campanha.status = "concluida"
+        # `pendentes` é a lista inteira de destinatários pendentes desta
+        # campanha (sem lote/limite artificial); se nenhum ficou adiado,
+        # todos foram atualizados no laço acima e a campanha está
+        # concluída. Com algum adiado, a campanha volta pro cron seguinte
+        # (fica "enviando", não "concluida") até o canal reabrir — senão
+        # "concluida" com destinatários ainda "pendente" nunca mais
+        # seria reprocessada. (Reconsultar o banco aqui seria arriscado:
+        # a sessão usa `autoflush=False`, então a query não veria as
+        # mudanças de status ainda não commitadas.)
+        if not algum_adiado_nesta_campanha:
+            campanha.status = "concluida"
 
     db.commit()
     return resultado
 
 
 def _disparar_destinatario(
-    campanha: Campanha, destinatario: CampanhaDestinatario, email_provider: EmailProvider, whatsapp_provider: WhatsAppProvider
-) -> tuple[bool, str | None]:
+    db: Session,
+    campanha: Campanha,
+    destinatario: CampanhaDestinatario,
+    email_provider: EmailProvider,
+    whatsapp_provider: WhatsAppProvider,
+) -> tuple[bool, str | None, bool]:
+    """Retorna `(sucesso, motivo_falha, adiado)` — `adiado=True` quando o
+    e-mail não foi tentado por o canal estar pausado por reputação
+    (raio-X 2026-09-16: distinto de falha real, `processar_pendentes`
+    deixa o destinatário `pendente` pra tentar de novo depois, em vez de
+    `falhou`), mesmo raciocínio já aplicado em `envio_service.py`."""
     enviou_algum = False
     ultimo_motivo: str | None = None
+    email_adiado = False
 
     if "email" in campanha.canais and destinatario.email:
-        corpo = f"{campanha.conteudo_email}\n\n{_link_optout(campanha.tenant_id, destinatario.id)}"
-        resultado = email_provider.enviar(
-            destinatario.email,
-            campanha.assunto or "",
-            corpo,
-            _REMETENTE_NOME,
-            settings.sendgrid_remetente_email,
-            campanha.tenant_id,
-        )
-        if resultado.sucesso:
-            enviou_algum = True
+        if reputacao_service.canal_pausado(db, campanha.tenant_id, "email"):
+            email_adiado = True
         else:
-            ultimo_motivo = resultado.motivo_falha
+            corpo = f"{campanha.conteudo_email}\n\n{_link_optout(campanha.tenant_id, destinatario.id)}"
+            resultado = email_provider.enviar(
+                destinatario.email,
+                campanha.assunto or "",
+                corpo,
+                _REMETENTE_NOME,
+                settings.sendgrid_remetente_email,
+                campanha.tenant_id,
+                campanha_destinatario_id=destinatario.id,
+            )
+            if resultado.sucesso:
+                enviou_algum = True
+            else:
+                ultimo_motivo = resultado.motivo_falha
 
     if "whatsapp" in campanha.canais and destinatario.telefone and campanha.template_whatsapp_id:
         resultado = whatsapp_provider.enviar_template(destinatario.telefone, campanha.template_whatsapp_id, {})
@@ -335,9 +364,10 @@ def _disparar_destinatario(
         else:
             ultimo_motivo = resultado.motivo_falha
 
-    if not enviou_algum and ultimo_motivo is None:
+    adiado = email_adiado and not enviou_algum and ultimo_motivo is None
+    if not enviou_algum and not adiado and ultimo_motivo is None:
         ultimo_motivo = "Destinatário sem e-mail/telefone compatível com os canais da campanha."
-    return enviou_algum, ultimo_motivo
+    return enviou_algum, ultimo_motivo, adiado
 
 
 def _link_optout(tenant_id: str, destinatario_id: int) -> str:

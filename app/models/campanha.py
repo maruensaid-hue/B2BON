@@ -51,4 +51,9 @@ class CampanhaDestinatario(Base):
     status: Mapped[str] = mapped_column(String, default="pendente")  # pendente | enviado | falhou | optout
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     motivo_falha: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Raio-X 2026-09-16 (Relatório de Entrega) — mesmo raciocínio de
+    # `Mensagem.bounce_em`: bounce/dropped/blocked assíncrono do SendGrid,
+    # correlacionado por `campanha_destinatario_id` em `custom_args`.
+    bounce_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    motivo_bounce: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

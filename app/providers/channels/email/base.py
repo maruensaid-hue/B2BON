@@ -35,6 +35,8 @@ class EmailProvider(ABC):
         remetente_email: str,
         tenant_id: str,
         pixel_url: str | None = None,
+        mensagem_id: int | None = None,
+        campanha_destinatario_id: int | None = None,
     ) -> ResultadoEnvio:
         """`tenant_id` viaja até o provider pra permitir anexar contexto de
         tenant em eventos assíncronos do ESP (ex.: `custom_args` do SendGrid,
@@ -44,5 +46,13 @@ class EmailProvider(ABC):
         `pixel_url`, quando presente, é o rastreio de abertura (Onda I) —
         exige mandar uma parte HTML do e-mail (texto puro não carrega
         imagem), então implementações reais devem enviar multipart/
-        alternative com o pixel de 1x1 embutido na parte HTML."""
+        alternative com o pixel de 1x1 embutido na parte HTML.
+
+        `mensagem_id`/`campanha_destinatario_id` (raio-X 2026-09-16, no
+        máximo um dos dois presente, dependendo se o envio veio de
+        cadência ou de campanha) — igual a `tenant_id`, viajam até o ESP
+        (`custom_args`, só implementado no SendGrid) pra que um bounce
+        assíncrono depois seja correlacionado à mensagem/destinatário
+        exatos, não só ao tenant. Sem eles, o `sendgrid_webhook_service`
+        só sabe pausar o canal inteiro, sem saber qual contato causou."""
         raise NotImplementedError

@@ -24,6 +24,7 @@ from app.services import (
     franquia_service,
     llm_helpers,
     optout_service,
+    reputacao_service,
 )
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
@@ -596,6 +597,8 @@ def ativar(
     cadencia = obter(db, tenant_id, cadencia_id)
     if cadencia.status == "cancelada":
         raise RegraNegocioViolada("Cadência cancelada não pode ser ativada.")
+    if any(toque.canal == "email" for toque in toques_da_cadencia(db, cadencia.id)):
+        reputacao_service.exigir_canal_nao_pausado(db, tenant_id, "email")
 
     mensagens = (
         db.query(Mensagem)

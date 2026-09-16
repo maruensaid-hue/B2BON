@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.models.pausa_canal import PausaCanal
 from app.models.registro_reputacao_canal import RegistroReputacaoCanal
 from app.services import auditoria_service
+from app.services.errors import RegraNegocioViolada
 
 _JANELA_DIAS = 7
 _TIPOS_VALIDOS = {"enviado", "bounce", "spam_report"}
@@ -42,6 +43,21 @@ def _agregado_janela(db: Session, tenant_id: str, canal: str) -> tuple[int, int,
 def canal_pausado(db: Session, tenant_id: str, canal: str) -> bool:
     pausa = db.query(PausaCanal).filter_by(tenant_id=tenant_id, canal=canal, ativa=True).one_or_none()
     return pausa is not None
+
+
+def exigir_canal_nao_pausado(db: Session, tenant_id: str, canal: str) -> None:
+    """Bloqueia a ativação de uma nova cadência/campanha nesse canal
+    (raio-X 2026-09-16: Relatório de Entrega) — distinto de
+    `canal_pausado`, usado em `envio_service`/`campanha_service` só pra
+    *adiar* envios já agendados. Aqui a intenção é impedir de colocar
+    ainda mais e-mail na fila enquanto o canal está degradado; rascunho/
+    geração de conteúdo pela IA continuam liberados, só a ativação (que
+    de fato programa envio) é que trava."""
+    if canal_pausado(db, tenant_id, canal):
+        raise RegraNegocioViolada(
+            f"Canal {canal} pausado por alta taxa de bounce/spam — corrija ou remova os contatos "
+            "problemáticos no Relatório de Entrega e reative o canal antes de continuar."
+        )
 
 
 def _verificar_e_pausar(db: Session, tenant_id: str, canal: str) -> None:

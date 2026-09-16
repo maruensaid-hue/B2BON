@@ -22,19 +22,29 @@ class SendGridEmailProvider(EmailProvider):
         remetente_email: str,
         tenant_id: str,
         pixel_url: str | None = None,
+        mensagem_id: int | None = None,
+        campanha_destinatario_id: int | None = None,
     ) -> ResultadoEnvio:
         conteudo = [{"type": "text/plain", "value": corpo}]
         if pixel_url:
             conteudo.append({"type": "text/html", "value": montar_html_com_pixel(corpo, pixel_url)})
 
+        # Ecoados de volta no Event Webhook — é assim que
+        # `sendgrid_webhook_service` sabe de qual tenant/mensagem/
+        # destinatário é um bounce/spam report chegado depois, de forma
+        # assíncrona (raio-X 2026-09-16: sem mensagem_id/campanha_
+        # destinatario_id só dava pra pausar o canal, não saber o contato).
+        custom_args = {"tenant_id": tenant_id}
+        if mensagem_id is not None:
+            custom_args["mensagem_id"] = str(mensagem_id)
+        if campanha_destinatario_id is not None:
+            custom_args["campanha_destinatario_id"] = str(campanha_destinatario_id)
+
         corpo_requisicao = {
             "personalizations": [
                 {
                     "to": [{"email": destinatario}],
-                    # Ecoado de volta no Event Webhook — é assim que
-                    # `sendgrid_webhook_service` sabe de qual tenant é um
-                    # bounce/spam report chegado depois, de forma assíncrona.
-                    "custom_args": {"tenant_id": tenant_id},
+                    "custom_args": custom_args,
                 }
             ],
             "from": {"email": settings.sendgrid_remetente_email, "name": remetente_nome},

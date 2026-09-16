@@ -3,6 +3,10 @@ import base64
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from app.models.campanha import Campanha, CampanhaDestinatario
+from app.models.conta import Conta
+from app.models.decisor import Decisor
+from app.models.mensagem import Mensagem
 from app.services import reputacao_service, sendgrid_webhook_service
 
 
@@ -78,3 +82,72 @@ def test_processar_eventos_mapeia_tipo_e_agrupa_por_tenant(db_session) -> None:
     assert saude["enviados"] == 1
     assert saude["bounces"] == 1
     assert saude["spam_reports"] == 1
+
+
+def test_evento_blocked_conta_como_bounce(db_session) -> None:
+    """Raio-X 2026-09-16: "blocked" é o mesmo conceito de "entregue com
+    erro" que bounce/dropped — antes ficava de fora do mapa e nunca
+    pausava nada."""
+    sendgrid_webhook_service.processar_eventos(db_session, [{"event": "blocked", "tenant_id": "tenant-b"}])
+
+    saude = reputacao_service.status_saude(db_session, "tenant-b", "email")
+    assert saude["bounces"] == 1
+
+
+def _criar_mensagem_com_decisor(db_session, tenant_id: str) -> Mensagem:
+    conta = Conta(tenant_id=tenant_id, nome="Conta Teste", status="prospectada")
+    db_session.add(conta)
+    db_session.flush()
+    decisor = Decisor(tenant_id=tenant_id, conta_id=conta.id, nome="Fulano", email="fulano@teste.com")
+    db_session.add(decisor)
+    db_session.flush()
+    mensagem = Mensagem(
+        tenant_id=tenant_id, decisor_id=decisor.id, canal="email", conteudo="Oi", status="enviado",
+    )
+    db_session.add(mensagem)
+    db_session.commit()
+    return mensagem
+
+
+def test_bounce_grava_na_mensagem_correlacionada_por_mensagem_id(db_session) -> None:
+    """Raio-X 2026-09-16 (Relatório de Entrega): sem `mensagem_id` no
+    evento, o bounce só pausava o canal — agora também marca a mensagem
+    exata, pra dar pra saber qual contato corrigir/excluir."""
+    mensagem = _criar_mensagem_com_decisor(db_session, "tenant-c")
+
+    sendgrid_webhook_service.processar_eventos(
+        db_session,
+        [{"event": "bounce", "tenant_id": "tenant-c", "mensagem_id": str(mensagem.id), "reason": "550 mailbox não existe"}],
+    )
+
+    db_session.refresh(mensagem)
+    assert mensagem.bounce_em is not None
+    assert mensagem.motivo_bounce == "550 mailbox não existe"
+
+
+def test_bounce_grava_no_destinatario_de_campanha_correlacionado(db_session) -> None:
+    campanha = Campanha(tenant_id="tenant-d", nome="Campanha", tipo="marketing", canais=["email"])
+    db_session.add(campanha)
+    db_session.flush()
+    destinatario = CampanhaDestinatario(
+        tenant_id="tenant-d", campanha_id=campanha.id, nome="Ciclano", email="ciclano@teste.com", status="enviado",
+    )
+    db_session.add(destinatario)
+    db_session.commit()
+
+    sendgrid_webhook_service.processar_eventos(
+        db_session,
+        [{"event": "dropped", "tenant_id": "tenant-d", "campanha_destinatario_id": str(destinatario.id)}],
+    )
+
+    db_session.refresh(destinatario)
+    assert destinatario.bounce_em is not None
+
+
+def test_evento_sem_mensagem_id_nao_levanta_excecao(db_session) -> None:
+    """Evento de bounce legítimo (ex.: e-mail de sistema, fora do fluxo de
+    cadência/campanha) sem `mensagem_id`/`campanha_destinatario_id` só
+    não grava nada por contato — continua pausando o canal normalmente."""
+    sendgrid_webhook_service.processar_eventos(db_session, [{"event": "bounce", "tenant_id": "tenant-e"}])
+
+    assert reputacao_service.status_saude(db_session, "tenant-e", "email")["bounces"] == 1

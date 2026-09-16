@@ -418,8 +418,8 @@ do canal), para preservar a reputação do domínio/número.
 
 Todo e-mail enviado carrega um pixel de rastreio invisível — quando o
 destinatário abre, o sistema registra automaticamente o horário da
-abertura. A **taxa de abertura de e-mail** aparece nos indicadores do
-painel administrativo, dando visibilidade de quem abriu (ou não) cada
+abertura. A **taxa de abertura de e-mail** aparece no **Relatório de
+Entrega** (seção 5.9), dando visibilidade de quem abriu (ou não) cada
 prospecção sem precisar de nenhuma ação manual.
 
 ### 5.8 Reuniões e dossiê
@@ -446,6 +446,42 @@ Quando um decisor responde positivamente e uma reunião é proposta:
 Lembretes e NPS rodam no mesmo agendador que dispara as cadências (a
 cada 15 minutos, ver `DEPLOY.md` seção 7) — nenhum dos dois depende de
 alguém abrir a plataforma para acontecer.
+
+### 5.9 Relatório de Entrega e proteção contra bounce de e-mail
+
+Em **Predator → Relatório de Entrega**: entregabilidade de e-mail e
+taxa de resposta por canal — o que a plataforma consegue de fato medir
+(WhatsApp e LinkedIn não têm confirmação de entrega/leitura rastreada,
+só a taxa de resposta é medida pra eles).
+
+**Proteção automática contra bounce (só para e-mail):** a B2B ON
+monitora, numa janela de 7 dias, a taxa de e-mails que **quicaram**
+(endereço inválido, caixa cheia, bloqueado pelo provedor do
+destinatário) ou foram marcados como spam. Se essa taxa passar de 5%
+(bounce) ou 0,1% (spam), o canal de e-mail do seu tenant é **pausado
+automaticamente** — nenhuma campanha ou cadência de e-mail nova pode
+ser ativada, e os toques de e-mail já agendados ficam parados, até você
+resolver. Isso existe pra proteger a reputação do domínio e evitar que
+os e-mails de todo mundo passem a cair em SPAM.
+
+**Como resolver:**
+
+1. No Relatório de Entrega, a seção "Contatos com e-mail rejeitado"
+   lista exatamente quem causou cada bounce — nome, conta, e-mail e o
+   motivo reportado pelo provedor.
+2. Pra cada contato: **"Editar e-mail"** abre a ficha da conta pra
+   corrigir um endereço digitado errado, ou **"Excluir contato"**
+   suprime o contato (ele para de receber qualquer mensagem, de
+   qualquer cadência — mesma supressão usada no opt-out, não apaga o
+   histórico).
+3. Depois de corrigir/excluir os contatos problemáticos, clique em
+   **"Reativar canal"** — o bloqueio não expira sozinho, é sempre
+   manual, feito só depois que a causa foi tratada.
+
+Essa proteção só vale pra quem usa o e-mail compartilhado da B2B ON
+(SendGrid) — contas com **SMTP próprio** configurado em Configuração →
+E-mail (SMTP) não passam por esse rastreio de bounce, já que o
+provedor deles não avisa a B2B ON quando um e-mail quica.
 
 ---
 

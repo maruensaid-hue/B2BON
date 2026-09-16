@@ -5,7 +5,7 @@ import pytest
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.schemas.campanha import DestinatarioAvulsoSchema
-from app.services import campanha_service
+from app.services import campanha_service, reputacao_service
 from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 from tests.fakes import FakeEmailProvider, FakeWhatsAppProvider
 
@@ -128,7 +128,7 @@ def test_processar_pendentes_envia_email_e_marca_concluida(db_session):
     fake_whatsapp = FakeWhatsAppProvider()
     resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, fake_whatsapp)
 
-    assert resultado == {"enviadas": 1, "falhas": 0}
+    assert resultado == {"enviadas": 1, "falhas": 0, "adiadas": 0}
     assert len(fake_email.envios) == 1
     assert fake_email.envios[0]["destinatario"] == "fulano@teste.com"
 
@@ -150,7 +150,7 @@ def test_processar_pendentes_whatsapp_usa_template(db_session):
     fake_whatsapp = FakeWhatsAppProvider()
     resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, fake_whatsapp)
 
-    assert resultado == {"enviadas": 1, "falhas": 0}
+    assert resultado == {"enviadas": 1, "falhas": 0, "adiadas": 0}
     assert fake_whatsapp.envios == [
         {"tipo": "template", "telefone": "11999990000", "template_id": "prospeccao_inicial", "variavel_botao": None}
     ]
@@ -167,10 +167,86 @@ def test_processar_pendentes_registra_falha(db_session):
     fake_whatsapp = FakeWhatsAppProvider()
     resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, fake_whatsapp)
 
-    assert resultado == {"enviadas": 0, "falhas": 1}
+    assert resultado == {"enviadas": 0, "falhas": 1, "adiadas": 0}
     destinatarios = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)
     assert destinatarios[0].status == "falhou"
     assert destinatarios[0].motivo_falha
+
+
+def _pausar_canal_email(db_session) -> None:
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "enviado", 10)
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "bounce", 1)
+    assert reputacao_service.canal_pausado(db_session, TENANT_ID, "email") is True
+
+
+def test_marcar_pronta_com_email_pausado_falha(db_session):
+    """Raio-X 2026-09-16: bloqueia ativar uma nova campanha de e-mail
+    enquanto o canal está pausado por bounce — antes disso passava
+    direto e a campanha ficava presa tentando enviar pra sempre."""
+    _pausar_canal_email(db_session)
+    campanha_id = _criar_campanha_email(db_session)
+    decisor = _criar_decisor(db_session, "Fulano")
+    campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+
+    with pytest.raises(RegraNegocioViolada):
+        campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+
+
+def test_marcar_pronta_whatsapp_nao_bloqueado_por_email_pausado(db_session):
+    """Só o canal de fato usado pela campanha é checado — uma campanha só
+    de WhatsApp não deveria ser afetada pela pausa do e-mail."""
+    _pausar_canal_email(db_session)
+    campanha = campanha_service.criar(
+        db_session, TENANT_ID, None, "Campanha WhatsApp", "vendas", ["whatsapp"], None, None, "prospeccao_inicial"
+    )
+    decisor = _criar_decisor(db_session, "Fulano")
+    campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha.id, [decisor.id])
+
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha.id)  # não levanta
+
+
+def test_processar_pendentes_email_pausado_fica_pendente_em_vez_de_falhar(db_session):
+    """Raio-X 2026-09-16: canal pausado no meio de uma campanha já
+    `enviando` (pausa disparada depois do `marcar_pronta`) não deve
+    marcar o destinatário como "falhou" — fica "pendente" pra tentar de
+    novo quando o canal reabrir."""
+    campanha_id = _criar_campanha_email(db_session)
+    decisor = _criar_decisor(db_session, "Fulano")
+    campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    _pausar_canal_email(db_session)
+
+    fake_email = FakeEmailProvider()
+    fake_whatsapp = FakeWhatsAppProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, fake_whatsapp)
+
+    assert resultado == {"enviadas": 0, "falhas": 0, "adiadas": 1}
+    assert fake_email.envios == []
+    destinatarios = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)
+    assert destinatarios[0].status == "pendente"
+    campanha = campanha_service.obter(db_session, TENANT_ID, campanha_id)
+    assert campanha.status == "enviando"
+
+
+def test_processar_pendentes_email_pausado_ainda_tenta_whatsapp(db_session):
+    """Destinatário multicanal com e-mail pausado ainda recebe o WhatsApp
+    — só o e-mail é pulado, não o destinatário inteiro."""
+    campanha = campanha_service.criar(
+        db_session, TENANT_ID, None, "Campanha Multicanal", "vendas", ["email", "whatsapp"],
+        "Assunto", "Corpo", "prospeccao_inicial",
+    )
+    decisor = _criar_decisor(db_session, "Fulano")
+    campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha.id, [decisor.id])
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha.id)
+    _pausar_canal_email(db_session)
+
+    fake_email = FakeEmailProvider()
+    fake_whatsapp = FakeWhatsAppProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, fake_whatsapp)
+
+    assert resultado == {"enviadas": 1, "falhas": 0, "adiadas": 0}
+    assert fake_email.envios == []
+    assert len(fake_whatsapp.envios) == 1
 
 
 def test_optout_por_token_suprime_destinatario_e_decisor(db_session):

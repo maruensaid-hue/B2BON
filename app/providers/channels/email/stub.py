@@ -16,6 +16,8 @@ class StubEmailProvider(EmailProvider):
         remetente_email: str,
         tenant_id: str,
         pixel_url: str | None = None,
+        mensagem_id: int | None = None,
+        campanha_destinatario_id: int | None = None,
     ) -> ResultadoEnvio:
         self.envios.append(
             {
@@ -26,6 +28,8 @@ class StubEmailProvider(EmailProvider):
                 "remetente_email": remetente_email,
                 "tenant_id": tenant_id,
                 "pixel_url": pixel_url,
+                "mensagem_id": mensagem_id,
+                "campanha_destinatario_id": campanha_destinatario_id,
             }
         )
         return ResultadoEnvio(sucesso=True, id_externo=f"stub-{len(self.envios)}")
