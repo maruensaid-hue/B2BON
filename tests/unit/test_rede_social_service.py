@@ -1,5 +1,12 @@
-import pytest
+import tempfile
+import threading
+from pathlib import Path
 
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.db.base import Base
 from app.models.oferta import Oferta
 from app.services import rede_social_service
 from app.services.errors import RegraNegocioViolada
@@ -15,6 +22,49 @@ def test_perfil_lazy_criado_na_primeira_chamada(db_session):
     assert perfil.nome_exibicao == TENANT_A  # fallback, sem razão social conhecida
     # idempotente
     assert rede_social_service.obter_perfil(db_session, TENANT_A).id == perfil.id
+
+
+def test_garantir_perfil_e_seguro_sob_concorrencia(tmp_path):
+    """Duas requisições concorrentes pro perfil de um tenant recém-criado
+    podem ambas fazer o SELECT antes de qualquer uma comitar o INSERT —
+    a segunda perdia a corrida no UNIQUE de tenant_id e derrubava a
+    requisição com 500 (achado real testando MAP com um tenant novo).
+    Usa um sqlite em arquivo (não `:memory:`) com duas conexões reais
+    pra reproduzir a corrida de verdade, não só simular."""
+    caminho_db = Path(tempfile.mkdtemp()) / "teste_race.db"
+    engine = create_engine(f"sqlite:///{caminho_db}")
+    Base.metadata.create_all(engine)
+    SessionLocalTeste = sessionmaker(bind=engine)
+
+    erros: list[Exception] = []
+    barreira = threading.Barrier(2)
+
+    def tentar_garantir():
+        sessao = SessionLocalTeste()
+        try:
+            barreira.wait(timeout=5)
+            rede_social_service.garantir_perfil(sessao, TENANT_A)
+        except Exception as exc:  # pragma: no cover - só popular em caso de falha
+            erros.append(exc)
+        finally:
+            sessao.close()
+
+    threads = [threading.Thread(target=tentar_garantir) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert erros == []
+
+    sessao_verificacao = SessionLocalTeste()
+    try:
+        from app.models.perfil_empresa import PerfilEmpresa
+
+        perfis = sessao_verificacao.query(PerfilEmpresa).filter_by(tenant_id=TENANT_A).all()
+        assert len(perfis) == 1
+    finally:
+        sessao_verificacao.close()
 
 
 def test_atualizar_perfil(db_session):

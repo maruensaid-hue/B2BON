@@ -45,6 +45,13 @@ def excluir(db: Session, tenant_id: str, ator_id: str | None, post_id: int) -> N
         raise NaoAutorizado("Só a própria empresa autora pode excluir este post.")
 
     auditoria_service.registrar(db, tenant_id, "post_rede_social_excluido", "post_rede_social", post.id, ator_id, {})
+    # Sem isso, comentário/reação ficam órfãos (post_id apontando pra um
+    # post que não existe mais) — achado real testando E2E: o `id`
+    # (INTEGER PRIMARY KEY sem AUTOINCREMENT) pode ser reciclado pelo
+    # SQLite, e um post novo "herdava" comentários/reações de um post
+    # antigo já excluído que por coincidência tinha o mesmo id.
+    db.query(ComentarioPost).filter_by(post_id=post.id).delete()
+    db.query(ReacaoPost).filter_by(post_id=post.id).delete()
     db.delete(post)
     db.commit()
 

@@ -60,6 +60,25 @@ def test_excluir_post_pelo_proprio_autor(db_session):
     assert post_rede_social_service.listar_feed(db_session) == []
 
 
+def test_excluir_post_remove_comentarios_e_reacoes_orfaos(db_session):
+    """Regressão: excluir um post sem apagar seus comentários/reações
+    deixava linhas órfãs que "ressurgiam" se um post novo reciclasse o
+    mesmo id (achado real testando E2E com SQLite)."""
+    from app.models.comentario_post import ComentarioPost
+    from app.models.reacao_post import ReacaoPost
+
+    autor_a = _criar_usuario(db_session, TENANT_A)
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post com engajamento", None, None)
+    post_rede_social_service.comentar(db_session, TENANT_B, str(autor_b.id), post["id"], "Comentário")
+    post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"])
+
+    post_rede_social_service.excluir(db_session, TENANT_A, str(autor_a.id), post["id"])
+
+    assert db_session.query(ComentarioPost).filter_by(post_id=post["id"]).count() == 0
+    assert db_session.query(ReacaoPost).filter_by(post_id=post["id"]).count() == 0
+
+
 def test_excluir_post_de_outro_tenant_falha(db_session):
     autor = _criar_usuario(db_session, TENANT_A)
     post = post_rede_social_service.criar(db_session, TENANT_A, str(autor.id), "Não apagar", None, None)

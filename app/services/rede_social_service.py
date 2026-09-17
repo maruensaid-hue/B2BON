@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.conexao_empresa import ConexaoEmpresa
@@ -29,7 +30,16 @@ def garantir_perfil(db: Session, tenant_id: str) -> PerfilEmpresa:
         return perfil
     perfil = PerfilEmpresa(tenant_id=tenant_id, nome_exibicao=tenant_id)
     db.add(perfil)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Duas requisições concorrentes podem "não achar" o perfil ao
+        # mesmo tempo e tentar criar as duas — a segunda perde a corrida
+        # no UNIQUE de tenant_id; nesse caso o perfil da primeira já
+        # existe, então só precisamos devolvê-lo.
+        db.rollback()
+        perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one()
+        return perfil
     db.refresh(perfil)
     return perfil
 
