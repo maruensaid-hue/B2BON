@@ -77,3 +77,74 @@ def test_excluir_post_inexistente_levanta_erro(db_session):
         assert False, "deveria ter levantado NaoEncontrado"
     except NaoEncontrado:
         pass
+
+
+def test_comentar_post(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A)
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post comentado", None, None)
+
+    comentario = post_rede_social_service.comentar(db_session, TENANT_B, str(autor_b.id), post["id"], "Muito bom!")
+
+    assert comentario["texto"] == "Muito bom!"
+    assert comentario["tenant_id"] == TENANT_B
+    assert comentario["autor_nome"] == "Autor Teste"
+
+
+def test_listar_comentarios_ordem_cronologica(db_session):
+    autor = _criar_usuario(db_session, TENANT_A)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor.id), "Post", None, None)
+    post_rede_social_service.comentar(db_session, TENANT_A, str(autor.id), post["id"], "Primeiro")
+    post_rede_social_service.comentar(db_session, TENANT_A, str(autor.id), post["id"], "Segundo")
+
+    comentarios = post_rede_social_service.listar_comentarios(db_session, post["id"])
+
+    assert [item["texto"] for item in comentarios] == ["Primeiro", "Segundo"]
+
+
+def test_comentar_post_inexistente_levanta_erro(db_session):
+    autor = _criar_usuario(db_session, TENANT_A)
+    try:
+        post_rede_social_service.comentar(db_session, TENANT_A, str(autor.id), 9999, "Oi")
+        assert False, "deveria ter levantado NaoEncontrado"
+    except NaoEncontrado:
+        pass
+
+
+def test_reagir_toggle_cria_e_remove(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A)
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post", None, None)
+
+    resultado_1 = post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"])
+    assert resultado_1 == {"reagiu": True, "total": 1}
+
+    resultado_2 = post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"])
+    assert resultado_2 == {"reagiu": False, "total": 0}
+
+
+def test_reagir_uma_reacao_por_tenant(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A)
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post", None, None)
+
+    post_rede_social_service.reagir(db_session, TENANT_A, str(autor_a.id), post["id"])
+    resultado = post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"])
+
+    assert resultado == {"reagiu": True, "total": 2}
+
+
+def test_listar_feed_traz_contagens_e_eu_reagi(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A)
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post", None, None)
+    post_rede_social_service.comentar(db_session, TENANT_B, str(autor_b.id), post["id"], "Comentário")
+    post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"])
+
+    feed_visto_por_b = post_rede_social_service.listar_feed(db_session, tenant_id_atual=TENANT_B)
+    feed_visto_por_a = post_rede_social_service.listar_feed(db_session, tenant_id_atual=TENANT_A)
+
+    assert feed_visto_por_b[0]["total_comentarios"] == 1
+    assert feed_visto_por_b[0]["total_reacoes"] == 1
+    assert feed_visto_por_b[0]["eu_reagi"] is True
+    assert feed_visto_por_a[0]["eu_reagi"] is False

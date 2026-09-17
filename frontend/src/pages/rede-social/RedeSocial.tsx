@@ -70,6 +70,19 @@ interface PostRedeSocial {
   imagem_url: string | null;
   link_url: string | null;
   criado_em: string;
+  total_comentarios: number;
+  total_reacoes: number;
+  eu_reagi: boolean;
+}
+
+interface ComentarioPost {
+  id: number;
+  post_id: number;
+  tenant_id: string;
+  empresa_nome: string;
+  autor_nome: string;
+  texto: string;
+  criado_em: string;
 }
 
 interface Conexao {
@@ -104,6 +117,11 @@ export function RedeSocial() {
   const [conexoesAtivas, setConexoesAtivas] = useState<Conexao[]>([]);
   const [posts, setPosts] = useState<PostRedeSocial[]>([]);
   const [publicando, setPublicando] = useState(false);
+  const [comentariosAbertos, setComentariosAbertos] = useState<Record<number, boolean>>({});
+  const [comentariosPorPost, setComentariosPorPost] = useState<Record<number, ComentarioPost[]>>({});
+  const [novoComentarioTexto, setNovoComentarioTexto] = useState<Record<number, string>>({});
+  const [enviandoComentarioId, setEnviandoComentarioId] = useState<number | null>(null);
+  const [reagindoId, setReagindoId] = useState<number | null>(null);
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
   const [modalVerificacaoAberto, setModalVerificacaoAberto] = useState(false);
   const [modalConviteAberto, setModalConviteAberto] = useState(false);
@@ -308,6 +326,54 @@ export function RedeSocial() {
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível excluir o post.");
+    }
+  }
+
+  async function reagirPost(postId: number) {
+    if (reagindoId !== null) return;
+    setReagindoId(postId);
+    try {
+      const resultado = await api.post<{ reagiu: boolean; total: number }>(`/rede-social/posts/${postId}/reagir`);
+      setPosts((atual) =>
+        atual.map((post) =>
+          post.id === postId ? { ...post, eu_reagi: resultado.reagiu, total_reacoes: resultado.total } : post,
+        ),
+      );
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível reagir a este post.");
+    } finally {
+      setReagindoId(null);
+    }
+  }
+
+  async function alternarComentarios(postId: number) {
+    const abrindo = !comentariosAbertos[postId];
+    setComentariosAbertos((atual) => ({ ...atual, [postId]: abrindo }));
+    if (abrindo && !comentariosPorPost[postId]) {
+      try {
+        const comentarios = await api.get<ComentarioPost[]>(`/rede-social/posts/${postId}/comentarios`);
+        setComentariosPorPost((atual) => ({ ...atual, [postId]: comentarios }));
+      } catch {
+        setErro("Não foi possível carregar os comentários.");
+      }
+    }
+  }
+
+  async function enviarComentario(postId: number) {
+    const texto = (novoComentarioTexto[postId] ?? "").trim();
+    if (!texto || enviandoComentarioId !== null) return;
+    setEnviandoComentarioId(postId);
+    try {
+      const comentario = await api.post<ComentarioPost>(`/rede-social/posts/${postId}/comentarios`, { texto });
+      setComentariosPorPost((atual) => ({ ...atual, [postId]: [...(atual[postId] ?? []), comentario] }));
+      setNovoComentarioTexto((atual) => ({ ...atual, [postId]: "" }));
+      setPosts((atual) =>
+        atual.map((post) => (post.id === postId ? { ...post, total_comentarios: post.total_comentarios + 1 } : post)),
+      );
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível comentar neste post.");
+    } finally {
+      setEnviandoComentarioId(null);
     }
   }
 
@@ -519,6 +585,52 @@ export function RedeSocial() {
                 <a href={post.link_url} target="_blank" rel="noreferrer" className="mt-1 block text-cyan">
                   {post.link_url}
                 </a>
+              )}
+              <div className="mt-2 flex items-center gap-3 text-muted">
+                <button
+                  type="button"
+                  onClick={() => reagirPost(post.id)}
+                  disabled={reagindoId === post.id}
+                  className={post.eu_reagi ? "font-semibold text-cyan" : ""}
+                >
+                  👍 {post.eu_reagi ? "Você reagiu" : "Reagir"} {post.total_reacoes > 0 && `(${post.total_reacoes})`}
+                </button>
+                <button type="button" onClick={() => alternarComentarios(post.id)}>
+                  💬 Comentários {post.total_comentarios > 0 && `(${post.total_comentarios})`}
+                </button>
+              </div>
+              {comentariosAbertos[post.id] && (
+                <div className="mt-2 flex flex-col gap-2 border-t border-border pt-2">
+                  {(comentariosPorPost[post.id] ?? []).map((comentario) => (
+                    <div key={comentario.id} className="text-[11px]">
+                      <span className="font-semibold text-text">{comentario.empresa_nome}</span>
+                      <span className="text-muted"> · {comentario.autor_nome}: </span>
+                      <span className="text-text">{comentario.texto}</span>
+                    </div>
+                  ))}
+                  {(comentariosPorPost[post.id] ?? []).length === 0 && (
+                    <div className="text-[11px] text-muted">Nenhum comentário ainda.</div>
+                  )}
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Escreva um comentário..."
+                      value={novoComentarioTexto[post.id] ?? ""}
+                      onChange={(event) =>
+                        setNovoComentarioTexto((atual) => ({ ...atual, [post.id]: event.target.value }))
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") enviarComentario(post.id);
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => enviarComentario(post.id)}
+                      disabled={enviandoComentarioId === post.id}
+                    >
+                      Enviar
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
           ))}

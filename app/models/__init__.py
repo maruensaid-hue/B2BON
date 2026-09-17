@@ -63,7 +63,9 @@ from app.models.tarefa_linkedin import TarefaLinkedin
 from app.models.template_whatsapp import TemplateWhatsApp
 from app.models.tenant import Tenant
 from app.models.toque_cadencia import ToqueCadencia
+from app.models.comentario_post import ComentarioPost
 from app.models.post_rede_social import PostRedeSocial
+from app.models.reacao_post import ReacaoPost
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
 from app.models.seguidor_empresa import SeguidorEmpresa
 from app.models.turno_conversa import TurnoConversa
@@ -137,6 +139,8 @@ __all__ = [
     "RelacionamentoEmpresarial",
     "SeguidorEmpresa",
     "PostRedeSocial",
+    "ComentarioPost",
+    "ReacaoPost",
     "MensagemRedeSocial",
     "InteracaoTenant",
     "InteracaoConta",

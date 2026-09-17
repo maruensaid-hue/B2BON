@@ -131,6 +131,28 @@ class PostRedeSocialSchema(BaseModel):
     imagem_url: str | None
     link_url: str | None
     criado_em: datetime
+    total_comentarios: int
+    total_reacoes: int
+    eu_reagi: bool
+
+
+class CriarComentarioRequestSchema(BaseModel):
+    texto: str
+
+
+class ComentarioPostSchema(BaseModel):
+    id: int
+    post_id: int
+    tenant_id: str
+    empresa_nome: str
+    autor_nome: str
+    texto: str
+    criado_em: datetime
+
+
+class ReacaoPostSchema(BaseModel):
+    reagiu: bool
+    total: int
 
 
 class SeguidorEmpresaSchema(BaseModel):

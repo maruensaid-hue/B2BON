@@ -39,3 +39,44 @@ def test_excluir_post_proprio_via_api(client):
 
     assert resposta.status_code == 204
     assert client.get("/api/v1/rede-social/posts").json() == []
+
+
+def test_comentar_e_listar_comentarios_via_api(client, criar_usuario_autenticado):
+    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+    post = client.post("/api/v1/rede-social/posts", json={"texto": "Post com comentário"}).json()
+
+    resposta = client.post(
+        f"/api/v1/rede-social/posts/{post['id']}/comentarios", json={"texto": "Muito bom!"}, headers=headers_b
+    )
+
+    assert resposta.status_code == 201
+    assert resposta.json()["texto"] == "Muito bom!"
+
+    comentarios = client.get(f"/api/v1/rede-social/posts/{post['id']}/comentarios").json()
+    assert len(comentarios) == 1
+    assert comentarios[0]["texto"] == "Muito bom!"
+
+
+def test_reagir_toggle_via_api(client):
+    post = client.post("/api/v1/rede-social/posts", json={"texto": "Post com reação"}).json()
+
+    resposta_1 = client.post(f"/api/v1/rede-social/posts/{post['id']}/reagir")
+    assert resposta_1.json() == {"reagiu": True, "total": 1}
+
+    resposta_2 = client.post(f"/api/v1/rede-social/posts/{post['id']}/reagir")
+    assert resposta_2.json() == {"reagiu": False, "total": 0}
+
+
+def test_feed_traz_contagens_e_eu_reagi_via_api(client, criar_usuario_autenticado):
+    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+    post = client.post("/api/v1/rede-social/posts", json={"texto": "Post"}).json()
+    client.post(f"/api/v1/rede-social/posts/{post['id']}/comentarios", json={"texto": "Oi"}, headers=headers_b)
+    client.post(f"/api/v1/rede-social/posts/{post['id']}/reagir", headers=headers_b)
+
+    feed_b = client.get("/api/v1/rede-social/posts", headers=headers_b).json()
+    feed_a = client.get("/api/v1/rede-social/posts").json()
+
+    assert feed_b[0]["total_comentarios"] == 1
+    assert feed_b[0]["total_reacoes"] == 1
+    assert feed_b[0]["eu_reagi"] is True
+    assert feed_a[0]["eu_reagi"] is False

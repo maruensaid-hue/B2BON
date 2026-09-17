@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_ator_id, get_db, get_tenant_id
 from app.schemas.rede_social import (
     AtualizarPerfilRequestSchema,
+    ComentarioPostSchema,
     ConexaoEmpresaSchema,
+    CriarComentarioRequestSchema,
     CriarPostRequestSchema,
     DeclararRelacionamentoRequestSchema,
     EmpresaDiretorioSchema,
@@ -12,6 +14,7 @@ from app.schemas.rede_social import (
     MensagemRedeSocialSchema,
     PerfilEmpresaSchema,
     PostRedeSocialSchema,
+    ReacaoPostSchema,
     RelacionamentoEmpresarialSchema,
     ResponderConexaoRequestSchema,
     SeguidorEmpresaSchema,
@@ -251,7 +254,7 @@ def listar_feed(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> list[PostRedeSocialSchema]:
-    return post_rede_social_service.listar_feed(db)
+    return post_rede_social_service.listar_feed(db, tenant_id_atual=tenant_id)
 
 
 @router.delete("/posts/{post_id}", status_code=204)
@@ -262,3 +265,34 @@ def excluir_post(
     db: Session = Depends(get_db),
 ) -> None:
     post_rede_social_service.excluir(db, tenant_id, ator_id, post_id)
+
+
+@router.post("/posts/{post_id}/comentarios", response_model=ComentarioPostSchema, status_code=201)
+def comentar_post(
+    post_id: int,
+    dados: CriarComentarioRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ComentarioPostSchema:
+    """Comentários em post (master prompt §45, Fase 2C)."""
+    return post_rede_social_service.comentar(db, tenant_id, ator_id, post_id, dados.texto)
+
+
+@router.get("/posts/{post_id}/comentarios", response_model=list[ComentarioPostSchema])
+def listar_comentarios(
+    post_id: int,
+    db: Session = Depends(get_db),
+) -> list[ComentarioPostSchema]:
+    return post_rede_social_service.listar_comentarios(db, post_id)
+
+
+@router.post("/posts/{post_id}/reagir", response_model=ReacaoPostSchema)
+def reagir_post(
+    post_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ReacaoPostSchema:
+    """Reação toggle em post (master prompt §45, Fase 2C)."""
+    return post_rede_social_service.reagir(db, tenant_id, ator_id, post_id)
