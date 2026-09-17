@@ -5,14 +5,16 @@ from app.api.deps import get_ator_id, get_db, get_tenant_id
 from app.schemas.rede_social import (
     AtualizarPerfilRequestSchema,
     ConexaoEmpresaSchema,
+    DeclararRelacionamentoRequestSchema,
     EmpresaDiretorioSchema,
     EnviarMensagemRequestSchema,
     MensagemRedeSocialSchema,
     PerfilEmpresaSchema,
+    RelacionamentoEmpresarialSchema,
     ResponderConexaoRequestSchema,
     SolicitarConexaoRequestSchema,
 )
-from app.services import rede_social_service
+from app.services import rede_social_service, relacionamento_empresarial_service
 
 router = APIRouter(prefix="/rede-social", tags=["rede-social"])
 
@@ -126,3 +128,45 @@ def marcar_lida(
     db: Session = Depends(get_db),
 ) -> MensagemRedeSocialSchema:
     return rede_social_service.marcar_lida(db, tenant_id, mensagem_id)
+
+
+@router.post("/relacionamentos", response_model=RelacionamentoEmpresarialSchema, status_code=201)
+def declarar_relacionamento(
+    dados: DeclararRelacionamentoRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> RelacionamentoEmpresarialSchema:
+    """Business Graph foundation (master prompt §40, Fase 1D)."""
+    return relacionamento_empresarial_service.declarar(
+        db, tenant_id, ator_id, dados.tenant_id_destino, dados.tipo, dados.visibilidade
+    )
+
+
+@router.get("/relacionamentos/{tenant_id_alvo}", response_model=list[RelacionamentoEmpresarialSchema])
+def listar_relacionamentos(
+    tenant_id_alvo: str,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[RelacionamentoEmpresarialSchema]:
+    return relacionamento_empresarial_service.listar_da_empresa(db, tenant_id, tenant_id_alvo)
+
+
+@router.post("/relacionamentos/{relacionamento_id}/confirmar", response_model=RelacionamentoEmpresarialSchema)
+def confirmar_relacionamento(
+    relacionamento_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> RelacionamentoEmpresarialSchema:
+    return relacionamento_empresarial_service.confirmar(db, tenant_id, ator_id, relacionamento_id)
+
+
+@router.delete("/relacionamentos/{relacionamento_id}", status_code=204)
+def remover_relacionamento(
+    relacionamento_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    relacionamento_empresarial_service.remover(db, tenant_id, ator_id, relacionamento_id)

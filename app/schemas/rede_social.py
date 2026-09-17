@@ -90,3 +90,21 @@ class MensagemRedeSocialSchema(BaseModel):
 class EnviarMensagemRequestSchema(BaseModel):
     tenant_id_destinatario: str
     texto: str
+
+
+class RelacionamentoEmpresarialSchema(BaseModel):
+    id: int
+    tenant_id_origem: str
+    tenant_id_destino: str
+    outro_tenant_nome: str
+    tipo: str
+    visibilidade: str
+    confianca: str
+    pode_confirmar: bool
+    criado_em: datetime
+
+
+class DeclararRelacionamentoRequestSchema(BaseModel):
+    tenant_id_destino: str
+    tipo: str
+    visibilidade: str = "publica"
