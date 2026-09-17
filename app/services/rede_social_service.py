@@ -8,10 +8,15 @@ from app.models.mensagem_rede_social import MensagemRedeSocial
 from app.models.oferta import Oferta
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.seguidor_empresa import SeguidorEmpresa
-from app.services import auditoria_service
+from app.services import auditoria_service, notificacao_rede_social_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 _STATUS_CONEXAO_VALIDOS = {"pendente", "aceita", "recusada", "bloqueada", "desconectada"}
+
+
+def _nome_empresa(db: Session, tenant_id: str) -> str:
+    perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
+    return perfil.nome_exibicao if perfil is not None else tenant_id
 
 
 def garantir_perfil(db: Session, tenant_id: str) -> PerfilEmpresa:
@@ -214,6 +219,10 @@ def solicitar_conexao(db: Session, tenant_id_origem: str, ator_id: str | None, t
     auditoria_service.registrar(
         db, tenant_id_origem, "conexao_solicitada", "conexao_empresa", conexao.id, ator_id, {"tenant_id_destino": tenant_id_destino}
     )
+    notificacao_rede_social_service.criar(
+        db, tenant_id_destino, "connection_request", "conexao_empresa", conexao.id,
+        f"{_nome_empresa(db, tenant_id_origem)} quer se conectar com sua empresa.",
+    )
     db.commit()
     db.refresh(conexao)
     return conexao
@@ -232,6 +241,11 @@ def responder_conexao(db: Session, tenant_id: str, ator_id: str | None, conexao_
     auditoria_service.registrar(
         db, tenant_id, "conexao_respondida", "conexao_empresa", conexao.id, ator_id, {"aceitar": aceitar}
     )
+    if aceitar:
+        notificacao_rede_social_service.criar(
+            db, conexao.tenant_id_origem, "connection_accepted", "conexao_empresa", conexao.id,
+            f"{_nome_empresa(db, tenant_id)} aceitou sua solicitação de conexão.",
+        )
     db.commit()
     db.refresh(conexao)
     return conexao
@@ -345,6 +359,10 @@ def enviar_mensagem(
     auditoria_service.registrar(
         db, tenant_id_remetente, "mensagem_rede_social_enviada", "mensagem_rede_social", mensagem.id, ator_id,
         {"tenant_id_destinatario": tenant_id_destinatario},
+    )
+    notificacao_rede_social_service.criar(
+        db, tenant_id_destinatario, "new_message", "mensagem_rede_social", mensagem.id,
+        f"Nova mensagem de {_nome_empresa(db, tenant_id_remetente)}.",
     )
     db.commit()
     db.refresh(mensagem)

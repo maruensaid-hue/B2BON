@@ -18,6 +18,18 @@ interface NavItem {
   end?: boolean;
 }
 
+interface NotificacaoRedeSocial {
+  id: number;
+  tipo: string;
+  referencia_tipo: string;
+  referencia_id: number;
+  mensagem: string;
+  lida: boolean;
+  criado_em: string;
+}
+
+const INTERVALO_POLLING_NOTIFICACOES_MS = 30_000;
+
 const NAV_ITEMS_PAGOS: NavItem[] = [
   { path: "/", label: "Dashboard", icon: "⬡", end: true },
   { path: "/map", label: "MAP", icon: "⚡" },
@@ -301,6 +313,9 @@ export function AppShell() {
   const [tourAberto, setTourAberto] = useState(false);
   const [faqAberto, setFaqAberto] = useState(false);
   const [buscaAberta, setBuscaAberta] = useState(false);
+  const [notificacoesAbertas, setNotificacoesAbertas] = useState(false);
+  const [notificacoes, setNotificacoes] = useState<NotificacaoRedeSocial[]>([]);
+  const [contagemNaoLidas, setContagemNaoLidas] = useState(0);
   // `key` do TourGuiado — incrementado toda vez que o tour (re)abre, pra
   // forçar o React a remontar o componente do zero (raio-X 2026-09-01:
   // sem isto, reabrir via "Refazer o tour" quando `tourAberto` já
@@ -335,6 +350,57 @@ export function AppShell() {
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
   }, []);
+
+  // Notificações da Rede Social (master prompt §65, Fase 2D) — polling
+  // simples a cada 30s, sem WebSocket/SSE (infra de tempo real fora de
+  // escopo desta fase). Rede Social é livre pra qualquer tenant (mesmo
+  // sem licença ativa), então o sino independe de `temLicencaAtiva`.
+  useEffect(() => {
+    if (!usuario) return;
+    async function buscarContagem() {
+      try {
+        const resposta = await api.get<{ total: number }>("/rede-social/notificacoes/contagem-nao-lidas");
+        setContagemNaoLidas(resposta.total);
+      } catch {
+        // silencioso — não é crítico o suficiente pra interromper a navegação
+      }
+    }
+    buscarContagem();
+    const intervalo = setInterval(buscarContagem, INTERVALO_POLLING_NOTIFICACOES_MS);
+    return () => clearInterval(intervalo);
+  }, [usuario]);
+
+  async function abrirNotificacoes() {
+    const abrindo = !notificacoesAbertas;
+    setNotificacoesAbertas(abrindo);
+    if (abrindo) {
+      try {
+        setNotificacoes(await api.get<NotificacaoRedeSocial[]>("/rede-social/notificacoes"));
+      } catch {
+        // silencioso — igual ao polling de contagem
+      }
+    }
+  }
+
+  async function marcarNotificacaoLida(id: number) {
+    try {
+      await api.post(`/rede-social/notificacoes/${id}/marcar-lida`);
+      setNotificacoes((atual) => atual.map((n) => (n.id === id ? { ...n, lida: true } : n)));
+      setContagemNaoLidas((atual) => Math.max(0, atual - 1));
+    } catch {
+      // silencioso
+    }
+  }
+
+  async function marcarTodasNotificacoesLidas() {
+    try {
+      await api.post("/rede-social/notificacoes/marcar-todas-lidas");
+      setNotificacoes((atual) => atual.map((n) => ({ ...n, lida: true })));
+      setContagemNaoLidas(0);
+    } catch {
+      // silencioso
+    }
+  }
 
   const isSuperAdmin = usuario?.papel === "super_admin";
   const ehGestorHierarquico = usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo);
@@ -377,6 +443,55 @@ export function AppShell() {
             <span className="flex-1 overflow-hidden text-left text-ellipsis">Buscar</span>
             <span className="flex-shrink-0 rounded border border-nav-border px-1 text-[9px] text-nav-muted">Ctrl K</span>
           </button>
+
+          <div className="relative mb-1.5">
+            <button
+              type="button"
+              onClick={abrirNotificacoes}
+              className="flex w-full items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-nav-muted transition-colors hover:bg-nav-hover hover:text-nav-text"
+            >
+              <span className="w-5 flex-shrink-0 text-center text-[15px]">🔔</span>
+              <span className="flex-1 overflow-hidden text-left text-ellipsis">Notificações</span>
+              {contagemNaoLidas > 0 && (
+                <span className="flex-shrink-0 rounded-full bg-red px-1.5 text-[9px] font-semibold text-white">
+                  {contagemNaoLidas}
+                </span>
+              )}
+            </button>
+            {notificacoesAbertas && (
+              <div className="absolute left-0 top-full z-30 mt-1 w-[280px] rounded-lg border border-border bg-surf p-2 shadow-lg">
+                <div className="mb-1.5 flex items-center justify-between px-1">
+                  <span className="text-[11px] font-semibold text-text">Notificações</span>
+                  {contagemNaoLidas > 0 && (
+                    <button type="button" onClick={marcarTodasNotificacoesLidas} className="text-[10px] text-cyan">
+                      Marcar todas como lidas
+                    </button>
+                  )}
+                </div>
+                <div className="flex max-h-[320px] flex-col gap-1 overflow-y-auto">
+                  {notificacoes.map((notificacao) => (
+                    <button
+                      key={notificacao.id}
+                      type="button"
+                      onClick={() => !notificacao.lida && marcarNotificacaoLida(notificacao.id)}
+                      className={cn(
+                        "rounded-md p-1.5 text-left text-[11px] text-text",
+                        notificacao.lida ? "opacity-60" : "bg-surf2",
+                      )}
+                    >
+                      <div>{notificacao.mensagem}</div>
+                      <div className="text-[9px] text-muted">
+                        {new Date(notificacao.criado_em).toLocaleString("pt-BR")}
+                      </div>
+                    </button>
+                  ))}
+                  {notificacoes.length === 0 && (
+                    <div className="p-1.5 text-[11px] text-muted">Nenhuma notificação ainda.</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {temLicencaAtiva && (
             <div data-tour-id="dashboard">

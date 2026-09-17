@@ -155,6 +155,20 @@ class ReacaoPostSchema(BaseModel):
     total: int
 
 
+class NotificacaoRedeSocialSchema(BaseModel):
+    id: int
+    tipo: str
+    referencia_tipo: str
+    referencia_id: int
+    mensagem: str
+    lida: bool
+    criado_em: datetime
+
+
+class ContagemNaoLidasSchema(BaseModel):
+    total: int
+
+
 class SeguidorEmpresaSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -6,12 +6,14 @@ from app.schemas.rede_social import (
     AtualizarPerfilRequestSchema,
     ComentarioPostSchema,
     ConexaoEmpresaSchema,
+    ContagemNaoLidasSchema,
     CriarComentarioRequestSchema,
     CriarPostRequestSchema,
     DeclararRelacionamentoRequestSchema,
     EmpresaDiretorioSchema,
     EnviarMensagemRequestSchema,
     MensagemRedeSocialSchema,
+    NotificacaoRedeSocialSchema,
     PerfilEmpresaSchema,
     PostRedeSocialSchema,
     ReacaoPostSchema,
@@ -22,6 +24,7 @@ from app.schemas.rede_social import (
     SolicitarConexaoRequestSchema,
 )
 from app.services import (
+    notificacao_rede_social_service,
     post_rede_social_service,
     rede_social_service,
     relacionamento_empresarial_service,
@@ -296,3 +299,37 @@ def reagir_post(
 ) -> ReacaoPostSchema:
     """Reação toggle em post (master prompt §45, Fase 2C)."""
     return post_rede_social_service.reagir(db, tenant_id, ator_id, post_id)
+
+
+@router.get("/notificacoes", response_model=list[NotificacaoRedeSocialSchema])
+def listar_notificacoes(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[NotificacaoRedeSocialSchema]:
+    """Notificações da Rede Social (master prompt §65, Fase 2D)."""
+    return notificacao_rede_social_service.listar(db, tenant_id)
+
+
+@router.get("/notificacoes/contagem-nao-lidas", response_model=ContagemNaoLidasSchema)
+def contar_notificacoes_nao_lidas(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> ContagemNaoLidasSchema:
+    return {"total": notificacao_rede_social_service.contar_nao_lidas(db, tenant_id)}
+
+
+@router.post("/notificacoes/{notificacao_id}/marcar-lida", status_code=204)
+def marcar_notificacao_lida(
+    notificacao_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> None:
+    notificacao_rede_social_service.marcar_lida(db, tenant_id, notificacao_id)
+
+
+@router.post("/notificacoes/marcar-todas-lidas", status_code=204)
+def marcar_todas_notificacoes_lidas(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> None:
+    notificacao_rede_social_service.marcar_todas_lidas(db, tenant_id)

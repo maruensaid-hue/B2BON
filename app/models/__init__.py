@@ -38,6 +38,7 @@ from app.models.material_oferta import MaterialOferta
 from app.models.mensagem import Mensagem
 from app.models.mensagem_rede_social import MensagemRedeSocial
 from app.models.negocio import Negocio
+from app.models.notificacao_rede_social import NotificacaoRedeSocial
 from app.models.notificacao_vendedor import NotificacaoVendedor
 from app.models.oferta import Oferta
 from app.models.pagamento_licenca import PagamentoLicenca
@@ -141,6 +142,7 @@ __all__ = [
     "PostRedeSocial",
     "ComentarioPost",
     "ReacaoPost",
+    "NotificacaoRedeSocial",
     "MensagemRedeSocial",
     "InteracaoTenant",
     "InteracaoConta",

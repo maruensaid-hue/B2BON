@@ -6,7 +6,7 @@ from app.models.perfil_empresa import PerfilEmpresa
 from app.models.post_rede_social import PostRedeSocial
 from app.models.reacao_post import ReacaoPost
 from app.models.usuario import Usuario
-from app.services import auditoria_service
+from app.services import auditoria_service, notificacao_rede_social_service
 from app.services.errors import NaoAutorizado, NaoEncontrado
 
 _LIMITE_FEED_PADRAO = 50
@@ -101,7 +101,7 @@ def _serializar_comentario(db: Session, comentario: ComentarioPost) -> dict:
 
 
 def comentar(db: Session, tenant_id: str, ator_id: str, post_id: int, texto: str) -> dict:
-    _obter(db, post_id)
+    post = _obter(db, post_id)
     comentario = ComentarioPost(post_id=post_id, tenant_id=tenant_id, usuario_id=int(ator_id), texto=texto)
     db.add(comentario)
     db.flush()
@@ -109,6 +109,12 @@ def comentar(db: Session, tenant_id: str, ator_id: str, post_id: int, texto: str
     auditoria_service.registrar(
         db, tenant_id, "post_rede_social_comentado", "comentario_post", comentario.id, ator_id, {"post_id": post_id}
     )
+    if post.tenant_id != tenant_id:
+        perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
+        nome = perfil.nome_exibicao if perfil is not None else tenant_id
+        notificacao_rede_social_service.criar(
+            db, post.tenant_id, "new_comment", "post_rede_social", post.id, f"{nome} comentou no seu post."
+        )
     db.commit()
     db.refresh(comentario)
     return _serializar_comentario(db, comentario)
@@ -129,7 +135,7 @@ def listar_comentarios(db: Session, post_id: int, limite: int = _LIMITE_COMENTAR
 def reagir(db: Session, tenant_id: str, ator_id: str, post_id: int) -> dict:
     """Toggle de reação (master prompt §45) — tipo único ("curtir"),
     1 reação por tenant por post: cria se não existe, remove se já existe."""
-    _obter(db, post_id)
+    post = _obter(db, post_id)
     reacao = db.query(ReacaoPost).filter_by(post_id=post_id, tenant_id=tenant_id).one_or_none()
     if reacao is None:
         reacao = ReacaoPost(post_id=post_id, tenant_id=tenant_id, usuario_id=int(ator_id))
@@ -138,6 +144,12 @@ def reagir(db: Session, tenant_id: str, ator_id: str, post_id: int) -> dict:
         auditoria_service.registrar(
             db, tenant_id, "post_rede_social_reagido", "reacao_post", reacao.id, ator_id, {"post_id": post_id}
         )
+        if post.tenant_id != tenant_id:
+            perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
+            nome = perfil.nome_exibicao if perfil is not None else tenant_id
+            notificacao_rede_social_service.criar(
+                db, post.tenant_id, "new_reaction", "post_rede_social", post.id, f"{nome} reagiu ao seu post."
+            )
         reagiu = True
     else:
         auditoria_service.registrar(
