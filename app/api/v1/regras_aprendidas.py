@@ -2,10 +2,21 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_tenant_id
-from app.schemas.regra_aprendida import RegraAprendidaCreateSchema, RegraAprendidaSchema
+from app.schemas.regra_aprendida import CorrecaoRecenteSchema, RegraAprendidaCreateSchema, RegraAprendidaSchema
 from app.services import regra_aprendida_service
 
 router = APIRouter(prefix="/regras-aprendidas", tags=["regras-aprendidas"])
+
+
+@router.get("/correcoes-recentes", response_model=list[CorrecaoRecenteSchema])
+def listar_correcoes_recentes(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[CorrecaoRecenteSchema]:
+    """Edições/rejeições recentes de mensagens geradas por IA (raio-X
+    2026-09-17) — o humano decide, ao ver o padrão, se cria uma
+    `RegraAprendida` durável a partir daquele caso."""
+    return regra_aprendida_service.listar_correcoes_recentes(db, tenant_id)
 
 
 @router.post("", response_model=RegraAprendidaSchema, status_code=201)

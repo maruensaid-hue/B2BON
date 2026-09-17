@@ -38,3 +38,39 @@ def test_ativar_desativar_excluir_regra_aprendida(client, onboarding_completo):
 def test_regra_inexistente_retorna_404(client, onboarding_completo):
     resposta = client.post("/api/v1/regras-aprendidas/9999/desativar")
     assert resposta.status_code == 404
+
+
+def _obter_aprovacao_id(client, cadencia_id: int) -> int:
+    itens = client.get("/api/v1/aprovacoes", params={"cadencia_id": cadencia_id}).json()
+    return itens[0]["aprovacao_id"]
+
+
+def test_correcoes_recentes_lista_edicao_e_rejeicao(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm
+):
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    fake_llm.definir_respostas(["Texto original 1", "Texto original 2", "Texto original 3", "Texto original 4", "Texto original 5"])
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    aprovacao_id_1 = _obter_aprovacao_id(client, cadencia["id"])
+    editada = client.put(f"/api/v1/aprovacoes/{aprovacao_id_1}/mensagem", json={"conteudo": "Texto editado"})
+    assert editada.status_code == 200
+
+    itens = client.get("/api/v1/aprovacoes", params={"cadencia_id": cadencia["id"]}).json()
+    aprovacao_id_2 = next(item["aprovacao_id"] for item in itens if item["aprovacao_id"] != aprovacao_id_1)
+    rejeitada = client.post(f"/api/v1/aprovacoes/{aprovacao_id_2}/rejeitar", json={"motivo": "Muito genérico"})
+    assert rejeitada.status_code == 200
+
+    correcoes = client.get("/api/v1/regras-aprendidas/correcoes-recentes").json()
+
+    assert len(correcoes) == 2
+    edicao = next(item for item in correcoes if item["tipo"] == "edicao")
+    # Toque de e-mail ganha rodapé de opt-out (`_rodape_por_canal`) antes
+    # de salvar — a comparação exata não vale aqui, só a resposta pura da IA.
+    assert edicao["conteudo_anterior"].startswith("Texto original 1")
+    assert edicao["conteudo_novo"] == "Texto editado"
+    assert edicao["icp_id"] == cadencia["icp_id"]
+    assert edicao["oferta_id"] == cadencia["oferta_id"]
+    rejeicao = next(item for item in correcoes if item["tipo"] == "rejeicao")
+    assert rejeicao["motivo"] == "Muito genérico"

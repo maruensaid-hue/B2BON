@@ -27,21 +27,45 @@ interface OfertaResumo {
   nome: string;
 }
 
+interface CorrecaoRecente {
+  id: number;
+  tipo: "edicao" | "rejeicao";
+  conta_nome: string | null;
+  canal: string | null;
+  icp_id: number | null;
+  oferta_id: number | null;
+  conteudo_anterior: string | null;
+  conteudo_novo: string | null;
+  motivo: string | null;
+  criado_em: string;
+}
+
+interface EscopoInicial {
+  icp_id: number | null;
+  oferta_id: number | null;
+  canal: string | null;
+}
+
 const ROTULOS_CANAL: Record<string, string> = { email: "E-mail", whatsapp: "WhatsApp", linkedin: "LinkedIn" };
 
 function FormularioRegra({
   regra,
+  escopoInicial,
   icps,
   ofertas,
   onSalvar,
   salvando,
 }: {
   regra: RegraAprendida | null;
+  escopoInicial?: EscopoInicial | null;
   icps: IcpResumo[];
   ofertas: OfertaResumo[];
   onSalvar: (event: FormEvent<HTMLFormElement>) => void;
   salvando: boolean;
 }) {
+  const icpPadrao = regra?.icp_id ?? escopoInicial?.icp_id ?? "";
+  const ofertaPadrao = regra?.oferta_id ?? escopoInicial?.oferta_id ?? "";
+  const canalPadrao = regra?.canal ?? escopoInicial?.canal ?? "";
   return (
     <form onSubmit={onSalvar} className="flex flex-col gap-3">
       <div>
@@ -57,7 +81,7 @@ function FormularioRegra({
       <div className="grid grid-cols-3 gap-3">
         <div>
           <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">ICP</div>
-          <Select name="icp_id" defaultValue={regra?.icp_id ?? ""}>
+          <Select name="icp_id" defaultValue={icpPadrao}>
             <option value="">Todos</option>
             {icps.map((icp) => (
               <option key={icp.id} value={icp.id}>
@@ -68,7 +92,7 @@ function FormularioRegra({
         </div>
         <div>
           <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Oferta</div>
-          <Select name="oferta_id" defaultValue={regra?.oferta_id ?? ""}>
+          <Select name="oferta_id" defaultValue={ofertaPadrao}>
             <option value="">Todas</option>
             {ofertas.map((oferta) => (
               <option key={oferta.id} value={oferta.id}>
@@ -79,7 +103,7 @@ function FormularioRegra({
         </div>
         <div>
           <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Canal</div>
-          <Select name="canal" defaultValue={regra?.canal ?? ""}>
+          <Select name="canal" defaultValue={canalPadrao}>
             <option value="">Todos</option>
             <option value="email">E-mail</option>
             <option value="whatsapp">WhatsApp</option>
@@ -100,23 +124,27 @@ function FormularioRegra({
 
 export function RegrasAprendidas() {
   const [regras, setRegras] = useState<RegraAprendida[]>([]);
+  const [correcoes, setCorrecoes] = useState<CorrecaoRecente[]>([]);
   const [icps, setIcps] = useState<IcpResumo[]>([]);
   const [ofertas, setOfertas] = useState<OfertaResumo[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [regraEmEdicao, setRegraEmEdicao] = useState<RegraAprendida | null>(null);
+  const [escopoInicial, setEscopoInicial] = useState<EscopoInicial | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [processandoId, setProcessandoId] = useState<number | null>(null);
   const [confirmandoExcluirId, setConfirmandoExcluirId] = useState<number | null>(null);
 
   async function carregar() {
     try {
-      const [listaRegras, listaIcps, listaOfertas] = await Promise.all([
+      const [listaRegras, listaCorrecoes, listaIcps, listaOfertas] = await Promise.all([
         api.get<RegraAprendida[]>("/regras-aprendidas"),
+        api.get<CorrecaoRecente[]>("/regras-aprendidas/correcoes-recentes"),
         api.get<IcpResumo[]>("/icp"),
         api.get<OfertaResumo[]>("/ofertas"),
       ]);
       setRegras(listaRegras);
+      setCorrecoes(listaCorrecoes);
       setIcps(listaIcps);
       setOfertas(listaOfertas);
     } catch (error) {
@@ -130,11 +158,19 @@ export function RegrasAprendidas() {
 
   function abrirCriacao() {
     setRegraEmEdicao(null);
+    setEscopoInicial(null);
     setModalAberto(true);
   }
 
   function abrirEdicao(regra: RegraAprendida) {
     setRegraEmEdicao(regra);
+    setEscopoInicial(null);
+    setModalAberto(true);
+  }
+
+  function criarRegraAPartirDaCorrecao(correcao: CorrecaoRecente) {
+    setRegraEmEdicao(null);
+    setEscopoInicial({ icp_id: correcao.icp_id, oferta_id: correcao.oferta_id, canal: correcao.canal });
     setModalAberto(true);
   }
 
@@ -269,12 +305,61 @@ export function RegrasAprendidas() {
         </div>
       </Card>
 
+      <Card className="mt-4">
+        <SectionLabel>Correções recentes</SectionLabel>
+        <div className="mb-3 text-[11px] text-muted">
+          Edições e rejeições de mensagens geradas pela IA — se notar um padrão se repetindo, crie uma regra a
+          partir dele.
+        </div>
+        <div className="flex flex-col gap-2">
+          {correcoes.map((correcao) => (
+            <div key={correcao.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-2.5 text-[12px]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Badge tone={correcao.tipo === "edicao" ? "amber" : "red"}>
+                    {correcao.tipo === "edicao" ? "Edição" : "Rejeição"}
+                  </Badge>
+                  <span className="text-muted">
+                    {correcao.conta_nome ?? "Conta sem nome"} ·{" "}
+                    {correcao.canal ? ROTULOS_CANAL[correcao.canal] ?? correcao.canal : "—"} ·{" "}
+                    {new Date(correcao.criado_em).toLocaleString("pt-BR")}
+                  </span>
+                </div>
+                {correcao.tipo === "edicao" ? (
+                  <div className="mt-1 text-text">
+                    <span className="text-muted line-through">{correcao.conteudo_anterior}</span>
+                    <span className="mx-1 text-muted">→</span>
+                    <span>{correcao.conteudo_novo}</span>
+                  </div>
+                ) : (
+                  <div className="mt-1 text-text">Motivo: {correcao.motivo ?? "não informado"}</div>
+                )}
+              </div>
+              <Button size="sm" variant="violet" onClick={() => criarRegraAPartirDaCorrecao(correcao)}>
+                Criar regra a partir disso
+              </Button>
+            </div>
+          ))}
+          {correcoes.length === 0 && (
+            <div className="text-[12px] text-muted">Nenhuma edição ou rejeição registrada ainda.</div>
+          )}
+        </div>
+      </Card>
+
       <Modal
         title={regraEmEdicao ? "Editar regra aprendida" : "Nova regra aprendida"}
         open={modalAberto}
         onClose={() => setModalAberto(false)}
       >
-        <FormularioRegra key={regraEmEdicao?.id ?? "novo"} regra={regraEmEdicao} icps={icps} ofertas={ofertas} onSalvar={salvar} salvando={salvando} />
+        <FormularioRegra
+          key={regraEmEdicao?.id ?? JSON.stringify(escopoInicial) ?? "novo"}
+          regra={regraEmEdicao}
+          escopoInicial={escopoInicial}
+          icps={icps}
+          ofertas={ofertas}
+          onSalvar={salvar}
+          salvando={salvando}
+        />
       </Modal>
     </div>
   );

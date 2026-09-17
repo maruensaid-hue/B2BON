@@ -20,3 +20,16 @@ class RegraAprendidaSchema(BaseModel):
     regra: str
     ativa: bool
     criado_em: datetime
+
+
+class CorrecaoRecenteSchema(BaseModel):
+    id: int
+    tipo: str  # "edicao" | "rejeicao"
+    conta_nome: str | None
+    canal: str | None
+    icp_id: int | None
+    oferta_id: int | None
+    conteudo_anterior: str | None
+    conteudo_novo: str | None
+    motivo: str | None
+    criado_em: datetime

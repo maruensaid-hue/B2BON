@@ -1,7 +1,10 @@
+from app.models.aprovacao import Aprovacao
+from app.models.cadencia import Cadencia
 from app.models.icp import ICP
 from app.models.oferta import Oferta
+from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.schemas.regra_aprendida import RegraAprendidaCreateSchema
-from app.services import regra_aprendida_service
+from app.services import aprovacao_service, regra_aprendida_service
 from app.services.errors import NaoEncontrado
 
 TENANT_ID = "tenant-regra"
@@ -123,3 +126,93 @@ def test_regras_aplicaveis_texto_sem_regra_nenhuma_retorna_vazio(db_session):
     texto = regra_aprendida_service.regras_aplicaveis_texto(db_session, "tenant-sem-regras", None, None, "email")
 
     assert texto == ""
+
+
+def _criar_conta_decisor_cadencia(db_session, icp, oferta):
+    from app.models.conta import Conta
+    from app.models.decisor import Decisor
+
+    conta = Conta(tenant_id=TENANT_ID, nome="Conta Correção", status="prospectada")
+    db_session.add(conta)
+    db_session.flush()
+    decisor = Decisor(tenant_id=TENANT_ID, conta_id=conta.id, nome="Decisor Correção", email="d@teste.com")
+    db_session.add(decisor)
+    cadencia = Cadencia(
+        tenant_id=TENANT_ID, nome="Cadência Correção", status="ativa", canais=["email"],
+        icp_id=icp.id, oferta_id=oferta.id,
+    )
+    db_session.add(cadencia)
+    db_session.flush()
+    return conta, decisor, cadencia
+
+
+def test_listar_correcoes_recentes_resolve_edicao_com_icp_oferta_da_cadencia(db_session):
+    icp = _criar_icp(db_session, nome="ICP Correção")
+    oferta = _criar_oferta(db_session, nome="Oferta Correção")
+    _, decisor, cadencia = _criar_conta_decisor_cadencia(db_session, icp, oferta)
+    mensagem = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, cadencia.id, decisor.id, "email", None, "Texto original", StubPlanLimitsProvider(),
+    )
+    aprovacao = db_session.query(Aprovacao).filter_by(mensagem_id=mensagem.id).one()
+
+    aprovacao_service.editar_mensagem(db_session, TENANT_ID, "usuario-1", aprovacao.id, "Texto editado pelo humano")
+
+    correcoes = regra_aprendida_service.listar_correcoes_recentes(db_session, TENANT_ID)
+
+    assert len(correcoes) == 1
+    correcao = correcoes[0]
+    assert correcao["tipo"] == "edicao"
+    assert correcao["conteudo_anterior"] == "Texto original"
+    assert correcao["conteudo_novo"] == "Texto editado pelo humano"
+    assert correcao["icp_id"] == icp.id
+    assert correcao["oferta_id"] == oferta.id
+    assert correcao["canal"] == "email"
+    assert correcao["conta_nome"] == "Conta Correção"
+
+
+def test_listar_correcoes_recentes_resolve_rejeicao_via_aprovacao(db_session):
+    icp = _criar_icp(db_session, nome="ICP Rejeição")
+    oferta = _criar_oferta(db_session, nome="Oferta Rejeição")
+    _, decisor, cadencia = _criar_conta_decisor_cadencia(db_session, icp, oferta)
+    mensagem = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, cadencia.id, decisor.id, "whatsapp", None, "Texto", StubPlanLimitsProvider(),
+    )
+    aprovacao = db_session.query(Aprovacao).filter_by(mensagem_id=mensagem.id).one()
+
+    aprovacao_service.rejeitar(db_session, TENANT_ID, "usuario-1", aprovacao.id, "Tom agressivo demais")
+
+    correcoes = regra_aprendida_service.listar_correcoes_recentes(db_session, TENANT_ID)
+
+    assert len(correcoes) == 1
+    correcao = correcoes[0]
+    assert correcao["tipo"] == "rejeicao"
+    assert correcao["motivo"] == "Tom agressivo demais"
+    assert correcao["conteudo_anterior"] is None
+    assert correcao["icp_id"] == icp.id
+    assert correcao["oferta_id"] == oferta.id
+    assert correcao["canal"] == "whatsapp"
+
+
+def test_listar_correcoes_recentes_mensagem_avulsa_sem_cadencia_nao_quebra(db_session):
+    from app.models.conta import Conta
+    from app.models.decisor import Decisor
+
+    conta = Conta(tenant_id=TENANT_ID, nome="Conta Avulsa", status="prospectada")
+    db_session.add(conta)
+    db_session.flush()
+    decisor = Decisor(tenant_id=TENANT_ID, conta_id=conta.id, nome="Decisor Avulso", email="avulso@teste.com")
+    db_session.add(decisor)
+    db_session.flush()
+
+    mensagem = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, None, decisor.id, "email", None, "Texto avulso", StubPlanLimitsProvider(),
+    )
+    aprovacao = db_session.query(Aprovacao).filter_by(mensagem_id=mensagem.id).one()
+
+    aprovacao_service.editar_mensagem(db_session, TENANT_ID, "usuario-1", aprovacao.id, "Texto avulso editado")
+
+    correcoes = regra_aprendida_service.listar_correcoes_recentes(db_session, TENANT_ID)
+
+    assert len(correcoes) == 1
+    assert correcoes[0]["icp_id"] is None
+    assert correcoes[0]["oferta_id"] is None

@@ -1,9 +1,23 @@
 from sqlalchemy.orm import Session
 
+from app.models.aprovacao import Aprovacao
+from app.models.auditoria import AuditLog
+from app.models.cadencia import Cadencia
+from app.models.conta import Conta
+from app.models.mensagem import Mensagem
 from app.models.regra_aprendida import RegraAprendida
 from app.schemas.regra_aprendida import RegraAprendidaCreateSchema
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado
+
+# Correções recentes (raio-X 2026-09-17, Peça 2 do loop de aprendizado)
+# — só esses dois eventos de AuditLog documentam uma correção humana
+# de conteúdo gerado por IA (ver aprovacao_service.editar_mensagem/
+# rejeitar); "aprovacao_rejeitada" mira o rejeitado, mas o conteúdo
+# em si pode ter sido reaproveitado sem edição, então não expomos
+# conteudo_anterior/novo pra rejeição, só o motivo.
+_EVENTOS_CORRECAO = ("mensagem_editada", "aprovacao_rejeitada")
+_LIMITE_CORRECOES = 50
 
 
 def listar(db: Session, tenant_id: str) -> list[RegraAprendida]:
@@ -98,3 +112,56 @@ def regras_aplicaveis_texto(db: Session, tenant_id: str, icp_id: int | None, ofe
     if not regras:
         return ""
     return " Regras aprendidas com este cliente (respeite ao escrever): " + "; ".join(r.regra for r in regras) + "."
+
+
+def _icp_e_oferta_da_mensagem(db: Session, mensagem_id: int | None) -> tuple[int | None, int | None]:
+    if mensagem_id is None:
+        return None, None
+    mensagem = db.query(Mensagem).filter_by(id=mensagem_id).one_or_none()
+    if mensagem is None or mensagem.cadencia_id is None:
+        return None, None
+    cadencia = db.query(Cadencia).filter_by(id=mensagem.cadencia_id).one_or_none()
+    if cadencia is None:
+        return None, None
+    return cadencia.icp_id, cadencia.oferta_id
+
+
+def listar_correcoes_recentes(db: Session, tenant_id: str) -> list[dict]:
+    """Correções humanas (edição/rejeição) que hoje ficam órfãs dentro do
+    `AuditLog` — nenhuma tela expõe `conteudo_anterior`/`conteudo_novo`/
+    `motivo` (raio-X 2026-09-17). Serve pro humano decidir se aquele
+    padrão merece virar uma `RegraAprendida` durável."""
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.tenant_id == tenant_id, AuditLog.evento_tipo.in_(_EVENTOS_CORRECAO))
+        .order_by(AuditLog.criado_em.desc())
+        .limit(_LIMITE_CORRECOES)
+        .all()
+    )
+
+    resultado = []
+    for log in logs:
+        if log.entidade_tipo == "mensagem":
+            mensagem_id = log.entidade_id
+        else:
+            aprovacao = db.query(Aprovacao).filter_by(id=log.entidade_id).one_or_none()
+            mensagem_id = aprovacao.mensagem_id if aprovacao is not None else None
+
+        icp_id, oferta_id = _icp_e_oferta_da_mensagem(db, mensagem_id)
+        conta = db.query(Conta).filter_by(id=log.conta_id).one_or_none() if log.conta_id is not None else None
+
+        resultado.append(
+            {
+                "id": log.id,
+                "tipo": "edicao" if log.evento_tipo == "mensagem_editada" else "rejeicao",
+                "conta_nome": (conta.nome_fantasia or conta.nome) if conta is not None else None,
+                "canal": log.canal,
+                "icp_id": icp_id,
+                "oferta_id": oferta_id,
+                "conteudo_anterior": log.detalhes.get("conteudo_anterior"),
+                "conteudo_novo": log.detalhes.get("conteudo_novo"),
+                "motivo": log.detalhes.get("motivo"),
+                "criado_em": log.criado_em,
+            }
+        )
+    return resultado
