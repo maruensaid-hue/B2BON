@@ -69,6 +69,22 @@ const ROTULO_STATUS_SINAL: Record<string, { texto: string; tone: "green" | "ambe
   convertido: { texto: "Convertido em conta", tone: "amber" },
 };
 
+interface SaudeRelacionamento {
+  tenant_id_alvo: string;
+  empresa_nome: string;
+  dias_sem_interacao: number | null;
+  tem_relacionamento_declarado: boolean;
+  classificacao: "aquecido" | "neutro" | "esfriando" | "sem_interacao";
+  sugestoes: string[];
+}
+
+const ROTULO_CLASSIFICACAO_SAUDE: Record<string, { texto: string; tone: "green" | "amber" | "muted" | "red" }> = {
+  aquecido: { texto: "Aquecido", tone: "green" },
+  neutro: { texto: "Neutro", tone: "amber" },
+  esfriando: { texto: "Esfriando", tone: "red" },
+  sem_interacao: { texto: "Sem interação ainda", tone: "muted" },
+};
+
 export function InteligenciaRede() {
   const [icps, setIcps] = useState<IcpResumo[]>([]);
   const [icpSelecionado, setIcpSelecionado] = useState<string>("");
@@ -85,12 +101,17 @@ export function InteligenciaRede() {
   const [gerandoSinais, setGerandoSinais] = useState(false);
   const [convertendoId, setConvertendoId] = useState<number | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [saudeRelacionamentos, setSaudeRelacionamentos] = useState<SaudeRelacionamento[]>([]);
 
   useEffect(() => {
     api
       .get<SinalOportunidade[]>("/inteligencia-rede/sinais")
       .then(setSinais)
       .catch(() => setErro("Não foi possível carregar os sinais de oportunidade."));
+    api
+      .get<SaudeRelacionamento[]>("/inteligencia-rede/saude-relacionamentos")
+      .then(setSaudeRelacionamentos)
+      .catch(() => setErro("Não foi possível carregar a saúde dos relacionamentos."));
   }, []);
 
   useEffect(() => {
@@ -366,6 +387,42 @@ export function InteligenciaRede() {
             <div className="text-[12px] text-muted">
               Nenhum sinal gerado ainda — clique em "Atualizar sinais" para calcular.
             </div>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <SectionLabel>Saúde dos Relacionamentos</SectionLabel>
+        <p className="mb-3 text-[12px] text-muted">
+          Relationship Agent: cruza a última interação (mensagem direta ou sala corporativa) com a existência de um
+          relacionamento comercial declarado, pra cada conexão aceita da rede.
+        </p>
+        <div className="flex flex-col gap-2">
+          {saudeRelacionamentos.map((saude) => {
+            const classificacao = ROTULO_CLASSIFICACAO_SAUDE[saude.classificacao] ?? ROTULO_CLASSIFICACAO_SAUDE.neutro;
+            return (
+              <div key={saude.tenant_id_alvo} className="rounded-lg border border-border p-3 text-[12px]">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="font-semibold text-text">{saude.empresa_nome}</span>
+                  <div className="flex items-center gap-2">
+                    <Badge tone={classificacao.tone}>{classificacao.texto}</Badge>
+                    {saude.dias_sem_interacao !== null && (
+                      <span className="text-muted">{saude.dias_sem_interacao}d sem interação</span>
+                    )}
+                  </div>
+                </div>
+                {saude.sugestoes.length > 0 && (
+                  <ul className="list-disc pl-4 text-text">
+                    {saude.sugestoes.map((sugestao) => (
+                      <li key={sugestao}>{sugestao}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+          {saudeRelacionamentos.length === 0 && (
+            <div className="text-[12px] text-muted">Nenhuma conexão aceita na rede ainda.</div>
           )}
         </div>
       </Card>

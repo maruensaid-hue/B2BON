@@ -8,6 +8,7 @@ from app.schemas.inteligencia_rede import (
     ExplicacaoMatchSchema,
     FitIcpRedeSchema,
     MatchIntentSchema,
+    SaudeRelacionamentoSchema,
     SinalOportunidadeSchema,
 )
 from app.services import intent_service, sinal_oportunidade_service
@@ -97,3 +98,12 @@ def converter_sinal_em_oportunidade(
     Conta a partir do sinal; o humano fecha o Negócio manualmente no
     CRM (ver decisão de escopo 5 do plano — sem decisor inventado)."""
     return sinal_oportunidade_service.converter_em_oportunidade(db, tenant_id, ator_id, sinal_id)
+
+
+@router.get("/saude-relacionamentos", response_model=list[SaudeRelacionamentoSchema])
+def listar_saude_relacionamentos(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[SaudeRelacionamentoSchema]:
+    """Relationship Agent (master prompt §31, Fase 4B)."""
+    return sinal_oportunidade_service.listar_saude_relacionamentos(db, tenant_id)
