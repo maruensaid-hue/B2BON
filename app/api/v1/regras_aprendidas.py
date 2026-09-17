@@ -1,8 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_tenant_id
-from app.schemas.regra_aprendida import CorrecaoRecenteSchema, RegraAprendidaCreateSchema, RegraAprendidaSchema
+from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id
+from app.llm.base import LLMProvider
+from app.schemas.regra_aprendida import (
+    CorrecaoRecenteSchema,
+    RegraAprendidaCreateSchema,
+    RegraAprendidaSchema,
+    SugestaoRegraSchema,
+)
 from app.services import regra_aprendida_service
 
 router = APIRouter(prefix="/regras-aprendidas", tags=["regras-aprendidas"])
@@ -17,6 +23,18 @@ def listar_correcoes_recentes(
     2026-09-17) — o humano decide, ao ver o padrão, se cria uma
     `RegraAprendida` durável a partir daquele caso."""
     return regra_aprendida_service.listar_correcoes_recentes(db, tenant_id)
+
+
+@router.post("/correcoes-recentes/{log_id}/sugerir-regra", response_model=SugestaoRegraSchema)
+def sugerir_regra_com_ia(
+    log_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    llm: LLMProvider = Depends(get_llm_provider),
+    db: Session = Depends(get_db),
+) -> SugestaoRegraSchema:
+    """Peça 3 do loop de aprendizado (raio-X 2026-09-17) — sugere só o
+    texto, nunca cria a regra: o humano ainda decide no formulário."""
+    return SugestaoRegraSchema(regra_sugerida=regra_aprendida_service.sugerir_regra_com_ia(db, tenant_id, log_id, llm))
 
 
 @router.post("", response_model=RegraAprendidaSchema, status_code=201)

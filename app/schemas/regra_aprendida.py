@@ -33,3 +33,7 @@ class CorrecaoRecenteSchema(BaseModel):
     conteudo_novo: str | None
     motivo: str | None
     criado_em: datetime
+
+
+class SugestaoRegraSchema(BaseModel):
+    regra_sugerida: str

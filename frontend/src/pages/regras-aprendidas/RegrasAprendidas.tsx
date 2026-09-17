@@ -44,6 +44,7 @@ interface EscopoInicial {
   icp_id: number | null;
   oferta_id: number | null;
   canal: string | null;
+  regraSugerida?: string;
 }
 
 const ROTULOS_CANAL: Record<string, string> = { email: "E-mail", whatsapp: "WhatsApp", linkedin: "LinkedIn" };
@@ -74,7 +75,7 @@ function FormularioRegra({
           name="regra"
           required
           rows={3}
-          defaultValue={regra?.regra}
+          defaultValue={regra?.regra ?? escopoInicial?.regraSugerida}
           placeholder="Ex.: Nunca usar a palavra 'sinergia' — o cliente já reclamou disso em 3 edições diferentes."
         />
       </div>
@@ -134,6 +135,7 @@ export function RegrasAprendidas() {
   const [salvando, setSalvando] = useState(false);
   const [processandoId, setProcessandoId] = useState<number | null>(null);
   const [confirmandoExcluirId, setConfirmandoExcluirId] = useState<number | null>(null);
+  const [sugerindoId, setSugerindoId] = useState<number | null>(null);
 
   async function carregar() {
     try {
@@ -172,6 +174,27 @@ export function RegrasAprendidas() {
     setRegraEmEdicao(null);
     setEscopoInicial({ icp_id: correcao.icp_id, oferta_id: correcao.oferta_id, canal: correcao.canal });
     setModalAberto(true);
+  }
+
+  async function sugerirComIa(correcao: CorrecaoRecente) {
+    if (sugerindoId !== null) return;
+    setSugerindoId(correcao.id);
+    setErro(null);
+    try {
+      const { regra_sugerida } = await api.post<{ regra_sugerida: string }>(
+        `/regras-aprendidas/correcoes-recentes/${correcao.id}/sugerir-regra`,
+      );
+      setRegraEmEdicao(null);
+      setEscopoInicial({
+        icp_id: correcao.icp_id, oferta_id: correcao.oferta_id, canal: correcao.canal,
+        regraSugerida: regra_sugerida,
+      });
+      setModalAberto(true);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível sugerir uma regra com IA.");
+    } finally {
+      setSugerindoId(null);
+    }
   }
 
   async function salvar(event: FormEvent<HTMLFormElement>) {
@@ -335,9 +358,19 @@ export function RegrasAprendidas() {
                   <div className="mt-1 text-text">Motivo: {correcao.motivo ?? "não informado"}</div>
                 )}
               </div>
-              <Button size="sm" variant="violet" onClick={() => criarRegraAPartirDaCorrecao(correcao)}>
-                Criar regra a partir disso
-              </Button>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={sugerindoId === correcao.id}
+                  onClick={() => sugerirComIa(correcao)}
+                >
+                  {sugerindoId === correcao.id ? "Sugerindo..." : "✨ Sugerir com IA"}
+                </Button>
+                <Button size="sm" variant="violet" onClick={() => criarRegraAPartirDaCorrecao(correcao)}>
+                  Criar regra a partir disso
+                </Button>
+              </div>
             </div>
           ))}
           {correcoes.length === 0 && (

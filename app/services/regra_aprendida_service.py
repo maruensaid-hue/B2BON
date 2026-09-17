@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
 
+from app.llm.base import LLMProvider
+from app.llm.schemas import LLMRequest
 from app.models.aprovacao import Aprovacao
 from app.models.auditoria import AuditLog
 from app.models.cadencia import Cadencia
@@ -7,7 +9,7 @@ from app.models.conta import Conta
 from app.models.mensagem import Mensagem
 from app.models.regra_aprendida import RegraAprendida
 from app.schemas.regra_aprendida import RegraAprendidaCreateSchema
-from app.services import auditoria_service
+from app.services import auditoria_service, llm_helpers
 from app.services.errors import NaoEncontrado
 
 # Correções recentes (raio-X 2026-09-17, Peça 2 do loop de aprendizado)
@@ -165,3 +167,35 @@ def listar_correcoes_recentes(db: Session, tenant_id: str) -> list[dict]:
             }
         )
     return resultado
+
+
+def sugerir_regra_com_ia(db: Session, tenant_id: str, correcao_log_id: int, llm: LLMProvider) -> str:
+    """Peça 3 do loop de aprendizado (raio-X 2026-09-17) — primeira
+    chamada de IA nova do loop, deliberadamente pequena: sugere só o
+    TEXTO da regra a partir de uma única correção, nunca cria a
+    `RegraAprendida` diretamente. Quem chama decide se usa, edita ou
+    descarta antes de salvar (mesma cautela das Peças 1/2 — nenhuma
+    regra passa a valer sem um humano confirmar)."""
+    log = db.query(AuditLog).filter_by(id=correcao_log_id, tenant_id=tenant_id).one_or_none()
+    if log is None or log.evento_tipo not in _EVENTOS_CORRECAO:
+        raise NaoEncontrado(f"Correção {correcao_log_id} não encontrada")
+
+    if log.evento_tipo == "mensagem_editada":
+        prompt = (
+            "Um vendedor editou manualmente uma mensagem de prospecção gerada por IA.\n"
+            f"Texto original: \"{log.detalhes.get('conteudo_anterior')}\"\n"
+            f"Texto editado pelo vendedor: \"{log.detalhes.get('conteudo_novo')}\"\n"
+            "Em uma frase curta e objetiva, escreva uma regra reutilizável de estilo/conteúdo "
+            "que evite o problema do texto original nas próximas mensagens geradas. "
+            "Responda só com a regra, sem explicações nem aspas."
+        )
+    else:
+        prompt = (
+            "Um vendedor rejeitou uma mensagem de prospecção gerada por IA.\n"
+            f"Motivo da rejeição: \"{log.detalhes.get('motivo')}\"\n"
+            "Em uma frase curta e objetiva, escreva uma regra reutilizável que ajude a evitar esse "
+            "motivo nas próximas mensagens geradas. Responda só com a regra, sem explicações nem aspas."
+        )
+
+    resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt, max_tokens=200))
+    return resposta.content.strip()

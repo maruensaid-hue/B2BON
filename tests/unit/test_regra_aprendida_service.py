@@ -6,6 +6,7 @@ from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.schemas.regra_aprendida import RegraAprendidaCreateSchema
 from app.services import aprovacao_service, regra_aprendida_service
 from app.services.errors import NaoEncontrado
+from tests.fakes import FakeLLMProvider
 
 TENANT_ID = "tenant-regra"
 
@@ -216,3 +217,54 @@ def test_listar_correcoes_recentes_mensagem_avulsa_sem_cadencia_nao_quebra(db_se
     assert len(correcoes) == 1
     assert correcoes[0]["icp_id"] is None
     assert correcoes[0]["oferta_id"] is None
+
+
+def test_sugerir_regra_com_ia_para_edicao_cita_antes_e_depois_no_prompt(db_session):
+    icp = _criar_icp(db_session, nome="ICP Sugestão")
+    oferta = _criar_oferta(db_session, nome="Oferta Sugestão")
+    _, decisor, cadencia = _criar_conta_decisor_cadencia(db_session, icp, oferta)
+    mensagem = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, cadencia.id, decisor.id, "email", None, "Temos uma sinergia incrível", StubPlanLimitsProvider(),
+    )
+    aprovacao = db_session.query(Aprovacao).filter_by(mensagem_id=mensagem.id).one()
+    aprovacao_service.editar_mensagem(db_session, TENANT_ID, "usuario-1", aprovacao.id, "Temos uma proposta relevante")
+    log = regra_aprendida_service.listar_correcoes_recentes(db_session, TENANT_ID)[0]
+
+    fake_llm = FakeLLMProvider(respostas=["Nunca usar a palavra sinergia"])
+
+    sugestao = regra_aprendida_service.sugerir_regra_com_ia(db_session, TENANT_ID, log["id"], fake_llm)
+
+    assert sugestao == "Nunca usar a palavra sinergia"
+    prompt = fake_llm.chamadas[0].prompt
+    assert "Temos uma sinergia incrível" in prompt
+    assert "Temos uma proposta relevante" in prompt
+
+
+def test_sugerir_regra_com_ia_para_rejeicao_cita_motivo_no_prompt(db_session):
+    icp = _criar_icp(db_session, nome="ICP Sugestão 2")
+    oferta = _criar_oferta(db_session, nome="Oferta Sugestão 2")
+    _, decisor, cadencia = _criar_conta_decisor_cadencia(db_session, icp, oferta)
+    mensagem = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, cadencia.id, decisor.id, "whatsapp", None, "Texto", StubPlanLimitsProvider(),
+    )
+    aprovacao = db_session.query(Aprovacao).filter_by(mensagem_id=mensagem.id).one()
+    aprovacao_service.rejeitar(db_session, TENANT_ID, "usuario-1", aprovacao.id, "Tom agressivo demais")
+    log = regra_aprendida_service.listar_correcoes_recentes(db_session, TENANT_ID)[0]
+
+    fake_llm = FakeLLMProvider(respostas=["Evitar tom agressivo nas mensagens"])
+
+    sugestao = regra_aprendida_service.sugerir_regra_com_ia(db_session, TENANT_ID, log["id"], fake_llm)
+
+    assert sugestao == "Evitar tom agressivo nas mensagens"
+    assert "Tom agressivo demais" in fake_llm.chamadas[0].prompt
+
+
+def test_sugerir_regra_com_ia_correcao_inexistente_ou_de_outro_tenant_levanta_erro(db_session):
+    fake_llm = FakeLLMProvider()
+
+    try:
+        regra_aprendida_service.sugerir_regra_com_ia(db_session, TENANT_ID, 9999, fake_llm)
+        assert False, "deveria ter levantado NaoEncontrado"
+    except NaoEncontrado:
+        pass
+    assert fake_llm.chamadas == []

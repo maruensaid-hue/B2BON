@@ -74,3 +74,26 @@ def test_correcoes_recentes_lista_edicao_e_rejeicao(
     assert edicao["oferta_id"] == cadencia["oferta_id"]
     rejeicao = next(item for item in correcoes if item["tipo"] == "rejeicao")
     assert rejeicao["motivo"] == "Muito genérico"
+
+
+def test_sugerir_regra_com_ia_retorna_texto_sugerido(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm
+):
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    fake_llm.definir_respostas(["Texto original"] * 5)
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    aprovacao_id = _obter_aprovacao_id(client, cadencia["id"])
+    client.put(f"/api/v1/aprovacoes/{aprovacao_id}/mensagem", json={"conteudo": "Texto editado"})
+    correcao = client.get("/api/v1/regras-aprendidas/correcoes-recentes").json()[0]
+
+    fake_llm.definir_respostas(["Nunca usar a palavra sinergia"])
+    resposta = client.post(f"/api/v1/regras-aprendidas/correcoes-recentes/{correcao['id']}/sugerir-regra")
+
+    assert resposta.status_code == 200
+    assert resposta.json()["regra_sugerida"] == "Nunca usar a palavra sinergia"
+
+
+def test_sugerir_regra_com_ia_correcao_inexistente_retorna_404(client, onboarding_completo):
+    resposta = client.post("/api/v1/regras-aprendidas/correcoes-recentes/9999/sugerir-regra")
+    assert resposta.status_code == 404
