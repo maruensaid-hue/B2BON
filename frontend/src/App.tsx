@@ -16,6 +16,9 @@ import { Termos } from "@/pages/Termos";
 const AdminConvites = lazy(() => import("@/pages/admin/AdminConvites").then((m) => ({ default: m.AdminConvites })));
 const AdminLicencas = lazy(() => import("@/pages/admin/AdminLicencas").then((m) => ({ default: m.AdminLicencas })));
 const AdminPlanos = lazy(() => import("@/pages/admin/AdminPlanos").then((m) => ({ default: m.AdminPlanos })));
+const AdminVerificacoesEmpresa = lazy(() =>
+  import("@/pages/admin/AdminVerificacoesEmpresa").then((m) => ({ default: m.AdminVerificacoesEmpresa })),
+);
 const AdminTenants = lazy(() => import("@/pages/admin/AdminTenants").then((m) => ({ default: m.AdminTenants })));
 const Integracoes = lazy(() => import("@/pages/admin/Integracoes").then((m) => ({ default: m.Integracoes })));
 const Relatorios = lazy(() => import("@/pages/admin/Relatorios").then((m) => ({ default: m.Relatorios })));
@@ -262,6 +265,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <AdminPlanos />
+              </Suspense>
+            }
+          />
+          <Route
+            path="admin/verificacoes-empresa"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <AdminVerificacoesEmpresa />
               </Suspense>
             }
           />

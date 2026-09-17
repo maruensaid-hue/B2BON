@@ -49,6 +49,7 @@ from app.api.v1.saude_conta import router as saude_conta_router
 from app.api.v1.template_proposta import router as template_proposta_router
 from app.api.v1.titulares import router as titulares_router
 from app.api.v1.usuarios import router as usuarios_router
+from app.api.v1.verificacao_empresa import router as verificacao_empresa_router
 from app.api.v1.webhooks import router as webhooks_router
 from app.api.v1.whatsapp import router as whatsapp_router
 
@@ -111,6 +112,7 @@ router.include_router(parceiros_router)
 router.include_router(relatorios_router)
 router.include_router(crm_router, dependencies=_exige_licenca)
 router.include_router(rede_social_router)
+router.include_router(verificacao_empresa_router)
 router.include_router(motor_router, dependencies=_exige_licenca)
 # MAP de contas — visível a user/admin/super_admin dentro do próprio
 # tenant (escopo aplicado no serviço), distinto do /motor acima (só

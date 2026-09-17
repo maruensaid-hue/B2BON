@@ -71,6 +71,7 @@ const ADMIN_NAV_ITEMS_HIERARQUIA: NavItem[] = [
 const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
   { path: "/admin/convites", label: "Convites", icon: "🔑" },
   { path: "/admin/planos", label: "Planos", icon: "💳" },
+  { path: "/admin/verificacoes-empresa", label: "Verificações", icon: "🛡️" },
 ];
 // API de provisionamento/billing (Fase 2 da hierarquia, raio-X) — exclusivo
 // de admin de tenant tipo="distribuidor" (decisão validada com o usuário).

@@ -30,6 +30,13 @@ export interface PerfilEmpresa {
   status_verificacao: string;
 }
 
+const ROTULO_VERIFICACAO: Record<string, { texto: string; tone: "green" | "amber" | "muted" | "red" }> = {
+  verificada: { texto: "Verificada", tone: "green" },
+  pendente: { texto: "Verificação em análise", tone: "amber" },
+  rejeitada: { texto: "Verificação recusada", tone: "red" },
+  nao_verificada: { texto: "Não verificada", tone: "muted" },
+};
+
 function listaParaTexto(valores: string[]): string {
   return valores.join(", ");
 }
@@ -82,6 +89,7 @@ export function RedeSocial() {
   const [empresas, setEmpresas] = useState<EmpresaDiretorio[]>([]);
   const [conexoesPendentes, setConexoesPendentes] = useState<Conexao[]>([]);
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
+  const [modalVerificacaoAberto, setModalVerificacaoAberto] = useState(false);
   const [modalConviteAberto, setModalConviteAberto] = useState(false);
   const [conversaTenantId, setConversaTenantId] = useState<string | null>(null);
   const [perfilDetalheTenantId, setPerfilDetalheTenantId] = useState<string | null>(null);
@@ -141,6 +149,19 @@ export function RedeSocial() {
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível salvar o perfil.");
+    }
+  }
+
+  async function solicitarVerificacao(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setErro(null);
+    try {
+      await api.post("/verificacao-empresa", { email_verificacao: String(form.get("email_verificacao")) });
+      setModalVerificacaoAberto(false);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível solicitar a verificação.");
     }
   }
 
@@ -233,15 +254,25 @@ export function RedeSocial() {
         <div className="flex items-start justify-between">
           <div>
             <SectionLabel>Meu perfil</SectionLabel>
-            <div className="text-[14px] font-bold">{perfil?.nome_exibicao}</div>
+            <div className="flex items-center gap-2">
+              <div className="text-[14px] font-bold">{perfil?.nome_exibicao}</div>
+              {perfil && <Badge tone={ROTULO_VERIFICACAO[perfil.status_verificacao]?.tone ?? "muted"}>{ROTULO_VERIFICACAO[perfil.status_verificacao]?.texto ?? perfil.status_verificacao}</Badge>}
+            </div>
             <div className="mt-1 text-[11px] text-muted">
               {perfil?.setor ?? "Sem setor"} {perfil?.site ? `· ${perfil.site}` : ""}
             </div>
             {perfil?.descricao && <div className="mt-1 text-[11px] text-muted">{perfil.descricao}</div>}
           </div>
-          <Button size="sm" variant="ghost" onClick={() => setModalPerfilAberto(true)}>
-            Editar
-          </Button>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            {(perfil?.status_verificacao === "nao_verificada" || perfil?.status_verificacao === "rejeitada") && (
+              <Button size="sm" variant="violet" onClick={() => setModalVerificacaoAberto(true)}>
+                Solicitar verificação
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setModalPerfilAberto(true)}>
+              Editar
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -456,6 +487,22 @@ export function RedeSocial() {
           </div>
           <Button type="submit" className="w-full justify-center">
             Salvar
+          </Button>
+        </form>
+      </Modal>
+
+      <Modal title="Solicitar verificação" open={modalVerificacaoAberto} onClose={() => setModalVerificacaoAberto(false)}>
+        <form onSubmit={solicitarVerificacao} className="flex flex-col gap-3">
+          <div className="text-[11px] text-muted">
+            Informe um e-mail corporativo do domínio da sua empresa — se o domínio conferir com o site cadastrado
+            no perfil, isso já ajuda na análise. Um administrador da B2B ON revisa e aprova ou recusa manualmente.
+          </div>
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">E-mail corporativo</div>
+            <Input name="email_verificacao" type="email" required placeholder="voce@suaempresa.com.br" />
+          </div>
+          <Button type="submit" className="w-full justify-center">
+            Enviar solicitação
           </Button>
         </form>
       </Modal>

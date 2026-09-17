@@ -65,6 +65,7 @@ from app.models.tenant import Tenant
 from app.models.toque_cadencia import ToqueCadencia
 from app.models.turno_conversa import TurnoConversa
 from app.models.usuario import Usuario
+from app.models.verificacao_empresa import VerificacaoEmpresa
 from app.providers.account_data.receita_federal_models import CnpjEstabelecimento, CnpjSocio
 
 __all__ = [
@@ -129,6 +130,7 @@ __all__ = [
     "CustoAquisicao",
     "PerfilEmpresa",
     "ConexaoEmpresa",
+    "VerificacaoEmpresa",
     "MensagemRedeSocial",
     "InteracaoTenant",
     "InteracaoConta",
