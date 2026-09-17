@@ -47,6 +47,24 @@ def test_normalizar_cnae_remove_qualquer_pontuacao(bruto: str, esperado: str):
     assert downloader.normalizar_cnae(bruto) == esperado
 
 
+@pytest.mark.parametrize(
+    ("bruto", "esperado"),
+    [
+        ("SP", "SP"),  # já normalizado, não mexe
+        ("sp", "SP"),  # caixa baixa
+        ("  sp  ", "SP"),  # com espaços
+        ("São Paulo", "SP"),  # nome completo do estado
+        ("sao paulo", "SP"),  # nome completo sem acento
+        ("Rio de Janeiro", "RJ"),
+        ("Minas Gerais", "MG"),
+        ("Distrito Federal", "DF"),
+        ("XX", "XX"),  # sigla desconhecida passa intacta (permissivo)
+    ],
+)
+def test_normalizar_uf_aceita_sigla_ou_nome_completo_do_estado(bruto: str, esperado: str):
+    assert downloader.normalizar_uf(bruto) == esperado
+
+
 class _StreamFalso:
     def __init__(self, status_code: int, conteudo: bytes = b"") -> None:
         self.status_code = status_code
