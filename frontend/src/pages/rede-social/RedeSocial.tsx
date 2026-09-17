@@ -55,8 +55,9 @@ interface OfertaResumo {
 
 interface EmpresaDiretorio {
   perfil: PerfilEmpresa;
-  status_conexao: "nenhuma" | "pendente_enviada" | "pendente_recebida" | "aceita";
+  status_conexao: "nenhuma" | "pendente_enviada" | "pendente_recebida" | "aceita" | "bloqueada";
   oferta_principal: OfertaResumo | null;
+  seguindo: boolean;
 }
 
 interface Conexao {
@@ -88,6 +89,7 @@ export function RedeSocial() {
   const [perfil, setPerfil] = useState<PerfilEmpresa | null>(null);
   const [empresas, setEmpresas] = useState<EmpresaDiretorio[]>([]);
   const [conexoesPendentes, setConexoesPendentes] = useState<Conexao[]>([]);
+  const [conexoesAtivas, setConexoesAtivas] = useState<Conexao[]>([]);
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
   const [modalVerificacaoAberto, setModalVerificacaoAberto] = useState(false);
   const [modalConviteAberto, setModalConviteAberto] = useState(false);
@@ -123,15 +125,17 @@ export function RedeSocial() {
 
   async function carregarTudo() {
     try {
-      const [perfilResp, empresasResp, conexoesResp, convitesResp] = await Promise.all([
+      const [perfilResp, empresasResp, conexoesResp, conexoesAtivasResp, convitesResp] = await Promise.all([
         api.get<PerfilEmpresa>("/rede-social/perfil"),
         api.get<EmpresaDiretorio[]>(`/rede-social/empresas${paramsDiretorio()}`),
         api.get<Conexao[]>("/rede-social/conexoes?status=pendente"),
+        api.get<Conexao[]>("/rede-social/conexoes"),
         api.get<ConviteVitrine[]>("/convites/vitrine"),
       ]);
       setPerfil(perfilResp);
       setEmpresas(empresasResp);
       setConexoesPendentes(conexoesResp);
+      setConexoesAtivas(conexoesAtivasResp);
       setConvites(convitesResp);
     } catch {
       setErro("Não foi possível carregar a Rede Social.");
@@ -150,6 +154,12 @@ export function RedeSocial() {
   function conexaoRecebidaDe(tenantId: string): Conexao | undefined {
     return conexoesPendentes.find(
       (conexao) => conexao.tenant_id_origem === tenantId && conexao.tenant_id_destino === usuario?.tenant_id,
+    );
+  }
+
+  function conexaoComTenant(tenantId: string): Conexao | undefined {
+    return conexoesAtivas.find(
+      (conexao) => conexao.tenant_id_origem === tenantId || conexao.tenant_id_destino === tenantId,
     );
   }
 
@@ -209,6 +219,46 @@ export function RedeSocial() {
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível responder à conexão.");
+    }
+  }
+
+  async function alternarSeguir(tenantId: string, jaSegue: boolean) {
+    try {
+      if (jaSegue) {
+        await api.delete(`/rede-social/seguir/${tenantId}`);
+      } else {
+        await api.post("/rede-social/seguir", { tenant_id_seguido: tenantId });
+      }
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível atualizar quem você segue.");
+    }
+  }
+
+  async function bloquearEmpresa(tenantId: string) {
+    try {
+      await api.post(`/rede-social/bloquear/${tenantId}`);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível bloquear esta empresa.");
+    }
+  }
+
+  async function desbloquearConexao(conexaoId: number) {
+    try {
+      await api.post(`/rede-social/conexoes/${conexaoId}/desbloquear`);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível desbloquear esta empresa.");
+    }
+  }
+
+  async function desconectarConexao(conexaoId: number) {
+    try {
+      await api.post(`/rede-social/conexoes/${conexaoId}/desconectar`);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível desconectar desta empresa.");
     }
   }
 
@@ -421,7 +471,7 @@ export function RedeSocial() {
                 >
                   {empresa.perfil.nome_exibicao}
                 </button>
-                <Badge tone={empresa.status_conexao === "aceita" ? "green" : "muted"}>
+                <Badge tone={empresa.status_conexao === "aceita" ? "green" : empresa.status_conexao === "bloqueada" ? "red" : "muted"}>
                   {empresa.status_conexao}
                 </Badge>
               </div>
@@ -433,36 +483,68 @@ export function RedeSocial() {
                 </div>
               )}
 
-              {empresa.status_conexao === "nenhuma" && (
-                <Button size="sm" onClick={() => conectar(empresa.perfil.tenant_id)}>
-                  Conectar
-                </Button>
-              )}
-              {empresa.status_conexao === "pendente_enviada" && (
-                <Badge tone="amber">Pendente (enviada)</Badge>
-              )}
-              {empresa.status_conexao === "pendente_recebida" && (
-                <div className="flex gap-2">
+              {empresa.status_conexao === "bloqueada" ? (
+                <div className="flex flex-wrap gap-2">
                   {(() => {
-                    const conexao = conexaoRecebidaDe(empresa.perfil.tenant_id);
+                    const conexao = conexaoComTenant(empresa.perfil.tenant_id);
                     if (!conexao) return null;
                     return (
-                      <>
-                        <Button size="sm" variant="green" onClick={() => responder(conexao.id, true)}>
-                          Aceitar
-                        </Button>
-                        <Button size="sm" variant="danger" onClick={() => responder(conexao.id, false)}>
-                          Recusar
-                        </Button>
-                      </>
+                      <Button size="sm" variant="ghost" onClick={() => desbloquearConexao(conexao.id)}>
+                        Desbloquear
+                      </Button>
                     );
                   })()}
                 </div>
-              )}
-              {empresa.status_conexao === "aceita" && (
-                <Button size="sm" variant="ghost" onClick={() => setConversaTenantId(empresa.perfil.tenant_id)}>
-                  Mensagens
-                </Button>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  {empresa.status_conexao === "nenhuma" && (
+                    <Button size="sm" onClick={() => conectar(empresa.perfil.tenant_id)}>
+                      Conectar
+                    </Button>
+                  )}
+                  {empresa.status_conexao === "pendente_enviada" && <Badge tone="amber">Pendente (enviada)</Badge>}
+                  {empresa.status_conexao === "pendente_recebida" &&
+                    (() => {
+                      const conexao = conexaoRecebidaDe(empresa.perfil.tenant_id);
+                      if (!conexao) return null;
+                      return (
+                        <>
+                          <Button size="sm" variant="green" onClick={() => responder(conexao.id, true)}>
+                            Aceitar
+                          </Button>
+                          <Button size="sm" variant="danger" onClick={() => responder(conexao.id, false)}>
+                            Recusar
+                          </Button>
+                        </>
+                      );
+                    })()}
+                  {empresa.status_conexao === "aceita" && (
+                    <>
+                      <Button size="sm" variant="ghost" onClick={() => setConversaTenantId(empresa.perfil.tenant_id)}>
+                        Mensagens
+                      </Button>
+                      {(() => {
+                        const conexao = conexaoComTenant(empresa.perfil.tenant_id);
+                        if (!conexao) return null;
+                        return (
+                          <Button size="sm" variant="ghost" onClick={() => desconectarConexao(conexao.id)}>
+                            Desconectar
+                          </Button>
+                        );
+                      })()}
+                    </>
+                  )}
+                  <Button
+                    size="sm"
+                    variant={empresa.seguindo ? "ghost" : "violet"}
+                    onClick={() => alternarSeguir(empresa.perfil.tenant_id, empresa.seguindo)}
+                  >
+                    {empresa.seguindo ? "Deixar de seguir" : "Seguir"}
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => bloquearEmpresa(empresa.perfil.tenant_id)}>
+                    Bloquear
+                  </Button>
+                </div>
               )}
             </div>
           ))}

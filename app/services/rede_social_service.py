@@ -7,10 +7,11 @@ from app.models.conexao_empresa import ConexaoEmpresa
 from app.models.mensagem_rede_social import MensagemRedeSocial
 from app.models.oferta import Oferta
 from app.models.perfil_empresa import PerfilEmpresa
+from app.models.seguidor_empresa import SeguidorEmpresa
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
-_STATUS_CONEXAO_VALIDOS = {"pendente", "aceita", "recusada"}
+_STATUS_CONEXAO_VALIDOS = {"pendente", "aceita", "recusada", "bloqueada", "desconectada"}
 
 
 def garantir_perfil(db: Session, tenant_id: str) -> PerfilEmpresa:
@@ -120,7 +121,9 @@ def _status_conexao_com(db: Session, tenant_id_atual: str, tenant_id_outro: str)
         return "aceita"
     if conexao.status == "pendente":
         return "pendente_enviada" if conexao.tenant_id_origem == tenant_id_atual else "pendente_recebida"
-    return "nenhuma"  # recusada volta a poder ser solicitada
+    if conexao.status == "bloqueada":
+        return "bloqueada"
+    return "nenhuma"  # recusada/desconectada voltam a poder ser solicitadas
 
 
 def listar_empresas(
@@ -155,6 +158,11 @@ def listar_empresas(
         # sem depender de operador JSON específico do dialeto).
         perfis = [perfil for perfil in perfis if mercado in perfil.mercados]
 
+    tenants_seguidos = set(
+        row[0]
+        for row in db.query(SeguidorEmpresa.tenant_id_seguido).filter_by(tenant_id_seguidor=tenant_id_atual).all()
+    )
+
     resultado = []
     for perfil in perfis:
         oferta = (
@@ -165,6 +173,7 @@ def listar_empresas(
                 "perfil": perfil,
                 "status_conexao": _status_conexao_com(db, tenant_id_atual, perfil.tenant_id),
                 "oferta_principal": {"nome": oferta.nome, "descricao": oferta.descricao} if oferta else None,
+                "seguindo": perfil.tenant_id in tenants_seguidos,
             }
         )
     return resultado
@@ -188,10 +197,10 @@ def solicitar_conexao(db: Session, tenant_id_origem: str, ator_id: str | None, t
         )
         .one_or_none()
     )
-    if existente is not None and existente.status in ("pendente", "aceita"):
-        raise RegraNegocioViolada("Já existe uma conexão pendente ou aceita com este tenant.")
+    if existente is not None and existente.status in ("pendente", "aceita", "bloqueada"):
+        raise RegraNegocioViolada("Já existe uma conexão pendente, aceita ou bloqueada com este tenant.")
 
-    if existente is not None:  # estava "recusada" — reabre a solicitação
+    if existente is not None:  # estava "recusada"/"desconectada" — reabre a solicitação
         existente.tenant_id_origem = tenant_id_origem
         existente.tenant_id_destino = tenant_id_destino
         existente.status = "pendente"
@@ -223,6 +232,68 @@ def responder_conexao(db: Session, tenant_id: str, ator_id: str | None, conexao_
     auditoria_service.registrar(
         db, tenant_id, "conexao_respondida", "conexao_empresa", conexao.id, ator_id, {"aceitar": aceitar}
     )
+    db.commit()
+    db.refresh(conexao)
+    return conexao
+
+
+def bloquear(db: Session, tenant_id: str, ator_id: str | None, tenant_id_outro: str) -> ConexaoEmpresa:
+    """BLOCKED (master prompt §43, Fase 2A) — impede qualquer nova
+    solicitação de conexão ou mensagem entre os dois lados. Reaproveita
+    a mesma linha de `ConexaoEmpresa` (cria uma se não existir)."""
+    if tenant_id == tenant_id_outro:
+        raise ValidacaoFalhou("Não é possível bloquear o próprio tenant.")
+    conexao = (
+        db.query(ConexaoEmpresa)
+        .filter(
+            ((ConexaoEmpresa.tenant_id_origem == tenant_id) & (ConexaoEmpresa.tenant_id_destino == tenant_id_outro))
+            | ((ConexaoEmpresa.tenant_id_origem == tenant_id_outro) & (ConexaoEmpresa.tenant_id_destino == tenant_id))
+        )
+        .one_or_none()
+    )
+    if conexao is None:
+        conexao = ConexaoEmpresa(tenant_id_origem=tenant_id, tenant_id_destino=tenant_id_outro, status="bloqueada")
+        db.add(conexao)
+    else:
+        conexao.status = "bloqueada"
+        conexao.respondida_em = datetime.now(UTC)
+    db.flush()
+
+    auditoria_service.registrar(
+        db, tenant_id, "conexao_bloqueada", "conexao_empresa", conexao.id, ator_id, {"tenant_id_outro": tenant_id_outro}
+    )
+    db.commit()
+    db.refresh(conexao)
+    return conexao
+
+
+def desbloquear(db: Session, tenant_id: str, ator_id: str | None, conexao_id: int) -> ConexaoEmpresa:
+    conexao = db.query(ConexaoEmpresa).filter_by(id=conexao_id).one_or_none()
+    if conexao is None or tenant_id not in (conexao.tenant_id_origem, conexao.tenant_id_destino):
+        raise NaoEncontrado(f"Conexão {conexao_id} não encontrada")
+    if conexao.status != "bloqueada":
+        raise RegraNegocioViolada("Só é possível desbloquear uma conexão bloqueada.")
+
+    conexao.status = "recusada"  # volta a poder ser solicitada, mesmo estado neutro de uma recusa comum
+
+    auditoria_service.registrar(db, tenant_id, "conexao_desbloqueada", "conexao_empresa", conexao.id, ator_id, {})
+    db.commit()
+    db.refresh(conexao)
+    return conexao
+
+
+def desconectar(db: Session, tenant_id: str, ator_id: str | None, conexao_id: int) -> ConexaoEmpresa:
+    """DISCONNECTED (master prompt §43, Fase 2A) — desfaz uma conexão já
+    aceita, distinto de recusar um pedido (`responder_conexao`)."""
+    conexao = db.query(ConexaoEmpresa).filter_by(id=conexao_id).one_or_none()
+    if conexao is None or tenant_id not in (conexao.tenant_id_origem, conexao.tenant_id_destino):
+        raise NaoEncontrado(f"Conexão {conexao_id} não encontrada")
+    if conexao.status != "aceita":
+        raise RegraNegocioViolada("Só é possível desconectar uma conexão aceita.")
+
+    conexao.status = "desconectada"
+
+    auditoria_service.registrar(db, tenant_id, "conexao_desconectada", "conexao_empresa", conexao.id, ator_id, {})
     db.commit()
     db.refresh(conexao)
     return conexao

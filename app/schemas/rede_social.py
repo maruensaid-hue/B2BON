@@ -52,8 +52,9 @@ class OfertaResumoSchema(BaseModel):
 
 class EmpresaDiretorioSchema(BaseModel):
     perfil: PerfilEmpresaSchema
-    status_conexao: str  # nenhuma | pendente_enviada | pendente_recebida | aceita
+    status_conexao: str  # nenhuma | pendente_enviada | pendente_recebida | aceita | bloqueada
     oferta_principal: OfertaResumoSchema | None
+    seguindo: bool
 
 
 class ConexaoEmpresaSchema(BaseModel):
@@ -108,3 +109,16 @@ class DeclararRelacionamentoRequestSchema(BaseModel):
     tenant_id_destino: str
     tipo: str
     visibilidade: str = "publica"
+
+
+class SeguirRequestSchema(BaseModel):
+    tenant_id_seguido: str
+
+
+class SeguidorEmpresaSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tenant_id_seguidor: str
+    tenant_id_seguido: str
+    criado_em: datetime

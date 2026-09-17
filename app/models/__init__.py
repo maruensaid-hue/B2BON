@@ -64,6 +64,7 @@ from app.models.template_whatsapp import TemplateWhatsApp
 from app.models.tenant import Tenant
 from app.models.toque_cadencia import ToqueCadencia
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
+from app.models.seguidor_empresa import SeguidorEmpresa
 from app.models.turno_conversa import TurnoConversa
 from app.models.usuario import Usuario
 from app.models.verificacao_empresa import VerificacaoEmpresa
@@ -133,6 +134,7 @@ __all__ = [
     "ConexaoEmpresa",
     "VerificacaoEmpresa",
     "RelacionamentoEmpresarial",
+    "SeguidorEmpresa",
     "MensagemRedeSocial",
     "InteracaoTenant",
     "InteracaoConta",

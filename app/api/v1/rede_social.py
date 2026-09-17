@@ -12,9 +12,11 @@ from app.schemas.rede_social import (
     PerfilEmpresaSchema,
     RelacionamentoEmpresarialSchema,
     ResponderConexaoRequestSchema,
+    SeguidorEmpresaSchema,
+    SeguirRequestSchema,
     SolicitarConexaoRequestSchema,
 )
-from app.services import rede_social_service, relacionamento_empresarial_service
+from app.services import rede_social_service, relacionamento_empresarial_service, seguidor_empresa_service
 
 router = APIRouter(prefix="/rede-social", tags=["rede-social"])
 
@@ -99,6 +101,60 @@ def responder_conexao(
     db: Session = Depends(get_db),
 ) -> ConexaoEmpresaSchema:
     return rede_social_service.responder_conexao(db, tenant_id, ator_id, conexao_id, dados.aceitar)
+
+
+@router.post("/conexoes/{conexao_id}/desconectar", response_model=ConexaoEmpresaSchema)
+def desconectar(
+    conexao_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ConexaoEmpresaSchema:
+    """DISCONNECTED (master prompt §43, Fase 2A)."""
+    return rede_social_service.desconectar(db, tenant_id, ator_id, conexao_id)
+
+
+@router.post("/bloquear/{tenant_id_outro}", response_model=ConexaoEmpresaSchema)
+def bloquear(
+    tenant_id_outro: str,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ConexaoEmpresaSchema:
+    """BLOCKED (master prompt §43, Fase 2A)."""
+    return rede_social_service.bloquear(db, tenant_id, ator_id, tenant_id_outro)
+
+
+@router.post("/conexoes/{conexao_id}/desbloquear", response_model=ConexaoEmpresaSchema)
+def desbloquear(
+    conexao_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ConexaoEmpresaSchema:
+    return rede_social_service.desbloquear(db, tenant_id, ator_id, conexao_id)
+
+
+@router.post("/seguir", response_model=SeguidorEmpresaSchema, status_code=201)
+def seguir(
+    dados: SeguirRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> SeguidorEmpresaSchema:
+    """FOLLOWING (master prompt §43, Fase 2A) — independente do status
+    de conexão."""
+    return seguidor_empresa_service.seguir(db, tenant_id, ator_id, dados.tenant_id_seguido)
+
+
+@router.delete("/seguir/{tenant_id_seguido}", status_code=204)
+def deixar_de_seguir(
+    tenant_id_seguido: str,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    seguidor_empresa_service.deixar_de_seguir(db, tenant_id, ator_id, tenant_id_seguido)
 
 
 @router.post("/mensagens", response_model=MensagemRedeSocialSchema, status_code=201)

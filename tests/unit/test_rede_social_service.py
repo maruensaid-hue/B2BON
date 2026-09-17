@@ -100,6 +100,69 @@ def test_recusar_conexao(db_session):
     assert recusada.status == "recusada"
 
 
+def test_bloquear_impede_nova_solicitacao(db_session):
+    rede_social_service.bloquear(db_session, TENANT_A, None, TENANT_B)
+
+    try:
+        rede_social_service.solicitar_conexao(db_session, TENANT_B, None, TENANT_A)
+        assert False, "deveria ter levantado RegraNegocioViolada"
+    except RegraNegocioViolada:
+        pass
+
+
+def test_bloquear_impede_mensagem(db_session):
+    conexao = rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B)
+    rede_social_service.responder_conexao(db_session, TENANT_B, None, conexao.id, aceitar=True)
+
+    rede_social_service.bloquear(db_session, TENANT_A, None, TENANT_B)
+
+    try:
+        rede_social_service.enviar_mensagem(db_session, TENANT_B, None, TENANT_A, "Oi")
+        assert False, "deveria ter levantado RegraNegocioViolada"
+    except RegraNegocioViolada:
+        pass
+
+
+def test_desbloquear_permite_solicitar_de_novo(db_session):
+    bloqueio = rede_social_service.bloquear(db_session, TENANT_A, None, TENANT_B)
+
+    rede_social_service.desbloquear(db_session, TENANT_A, None, bloqueio.id)
+    conexao = rede_social_service.solicitar_conexao(db_session, TENANT_B, None, TENANT_A)
+
+    assert conexao.status == "pendente"
+
+
+def test_desconectar_conexao_aceita(db_session):
+    conexao = rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B)
+    rede_social_service.responder_conexao(db_session, TENANT_B, None, conexao.id, aceitar=True)
+
+    desconectada = rede_social_service.desconectar(db_session, TENANT_A, None, conexao.id)
+
+    assert desconectada.status == "desconectada"
+
+
+def test_desconectar_conexao_nao_aceita_falha(db_session):
+    conexao = rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B)
+
+    try:
+        rede_social_service.desconectar(db_session, TENANT_A, None, conexao.id)
+        assert False, "deveria ter levantado RegraNegocioViolada"
+    except RegraNegocioViolada:
+        pass
+
+
+def test_listar_empresas_marca_seguindo(db_session):
+    from app.services import seguidor_empresa_service
+
+    rede_social_service.atualizar_perfil(db_session, TENANT_B, None, nome_exibicao="Beta")
+    seguidor_empresa_service.seguir(db_session, TENANT_A, None, TENANT_B)
+
+    resultado = rede_social_service.listar_empresas(db_session, TENANT_A)
+
+    item_b = next(item for item in resultado if item["perfil"].tenant_id == TENANT_B)
+    assert item_b["seguindo"] is True
+
+
 def test_nao_permite_solicitar_conexao_duplicada_pendente(db_session):
     rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B)
 

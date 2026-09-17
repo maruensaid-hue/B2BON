@@ -55,6 +55,48 @@ def test_diretorio_filtra_por_porte_via_api(client, criar_usuario_autenticado):
     assert sem_filtro == []
 
 
+def test_seguir_e_deixar_de_seguir_via_api(client, criar_usuario_autenticado):
+    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+    client.put("/api/v1/rede-social/perfil", json={"nome_exibicao": "Empresa B"}, headers=headers_b)
+
+    resposta = client.post("/api/v1/rede-social/seguir", json={"tenant_id_seguido": TENANT_B})
+    assert resposta.status_code == 201
+
+    diretorio = client.get("/api/v1/rede-social/empresas").json()
+    assert next(item for item in diretorio if item["perfil"]["tenant_id"] == TENANT_B)["seguindo"] is True
+
+    parar = client.delete(f"/api/v1/rede-social/seguir/{TENANT_B}")
+    assert parar.status_code == 204
+    diretorio2 = client.get("/api/v1/rede-social/empresas").json()
+    assert next(item for item in diretorio2 if item["perfil"]["tenant_id"] == TENANT_B)["seguindo"] is False
+
+
+def test_bloquear_e_desbloquear_via_api(client, criar_usuario_autenticado):
+    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+
+    bloqueado = client.post(f"/api/v1/rede-social/bloquear/{TENANT_B}")
+    assert bloqueado.status_code == 200
+    assert bloqueado.json()["status"] == "bloqueada"
+
+    negada = client.post("/api/v1/rede-social/conexoes", json={"tenant_id_destino": TENANT_A}, headers=headers_b)
+    assert negada.status_code == 409
+
+    desbloqueado = client.post(f"/api/v1/rede-social/conexoes/{bloqueado.json()['id']}/desbloquear")
+    assert desbloqueado.status_code == 200
+    assert desbloqueado.json()["status"] == "recusada"
+
+
+def test_desconectar_via_api(client, criar_usuario_autenticado):
+    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+    conexao = client.post("/api/v1/rede-social/conexoes", json={"tenant_id_destino": TENANT_B}).json()
+    client.put(f"/api/v1/rede-social/conexoes/{conexao['id']}", json={"aceitar": True}, headers=headers_b)
+
+    resposta = client.post(f"/api/v1/rede-social/conexoes/{conexao['id']}/desconectar")
+
+    assert resposta.status_code == 200
+    assert resposta.json()["status"] == "desconectada"
+
+
 def test_diretorio_solicitar_e_aceitar_conexao(client, criar_usuario_autenticado):
     headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
     client.put("/api/v1/rede-social/perfil", json={"nome_exibicao": "Empresa B"}, headers=headers_b)
