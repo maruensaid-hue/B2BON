@@ -53,6 +53,7 @@ from app.models.registro_envio_diario import RegistroEnvioDiario
 from app.models.registro_reputacao_canal import RegistroReputacaoCanal
 from app.models.registro_supressao_permanente import RegistroSupressaoPermanente
 from app.models.registro_tratamento import RegistroTratamento
+from app.models.regra_aprendida import RegraAprendida
 from app.models.regra_auto_aprovacao import RegraAutoAprovacao
 from app.models.registro_oportunidade import RegistroOportunidade
 from app.models.reuniao import Reuniao
@@ -97,6 +98,7 @@ __all__ = [
     "PausaCanal",
     "Aprovacao",
     "RegraAutoAprovacao",
+    "RegraAprendida",
     "AuditLog",
     "RegistroTratamento",
     "RegistroSupressaoPermanente",

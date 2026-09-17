@@ -36,6 +36,7 @@ from app.api.v1.optout import router as optout_router
 from app.api.v1.painel import router as painel_router
 from app.api.v1.parceiros import router as parceiros_router
 from app.api.v1.planos import router as planos_router
+from app.api.v1.regras_aprendidas import router as regras_aprendidas_router
 from app.api.v1.relatorios import router as relatorios_router
 from app.api.v1.rotulos_hierarquia import router as rotulos_hierarquia_router
 from app.api.v1.qualificacao import router as qualificacao_router
@@ -70,6 +71,7 @@ router.include_router(aprovacoes_router, dependencies=_exige_licenca)
 router.include_router(auditoria_router)
 router.include_router(ropa_router, dependencies=_exige_licenca)
 router.include_router(cadencias_router, dependencies=_exige_licenca)
+router.include_router(regras_aprendidas_router, dependencies=_exige_licenca)
 router.include_router(busca_router, dependencies=_exige_licenca)
 router.include_router(campanhas_router, dependencies=_exige_licenca)
 router.include_router(envios_router, dependencies=_exige_licenca)

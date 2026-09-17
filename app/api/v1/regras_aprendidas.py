@@ -1,0 +1,67 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_ator_id, get_db, get_tenant_id
+from app.schemas.regra_aprendida import RegraAprendidaCreateSchema, RegraAprendidaSchema
+from app.services import regra_aprendida_service
+
+router = APIRouter(prefix="/regras-aprendidas", tags=["regras-aprendidas"])
+
+
+@router.post("", response_model=RegraAprendidaSchema, status_code=201)
+def criar_regra_aprendida(
+    dados: RegraAprendidaCreateSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> RegraAprendidaSchema:
+    return regra_aprendida_service.criar(db, tenant_id, ator_id, dados)
+
+
+@router.get("", response_model=list[RegraAprendidaSchema])
+def listar_regras_aprendidas(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[RegraAprendidaSchema]:
+    return regra_aprendida_service.listar(db, tenant_id)
+
+
+@router.put("/{regra_id}", response_model=RegraAprendidaSchema)
+def atualizar_regra_aprendida(
+    regra_id: int,
+    dados: RegraAprendidaCreateSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> RegraAprendidaSchema:
+    return regra_aprendida_service.atualizar(db, tenant_id, ator_id, regra_id, dados)
+
+
+@router.post("/{regra_id}/ativar", response_model=RegraAprendidaSchema)
+def ativar_regra_aprendida(
+    regra_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> RegraAprendidaSchema:
+    return regra_aprendida_service.ativar(db, tenant_id, ator_id, regra_id)
+
+
+@router.post("/{regra_id}/desativar", response_model=RegraAprendidaSchema)
+def desativar_regra_aprendida(
+    regra_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> RegraAprendidaSchema:
+    return regra_aprendida_service.desativar(db, tenant_id, ator_id, regra_id)
+
+
+@router.delete("/{regra_id}", status_code=204)
+def excluir_regra_aprendida(
+    regra_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    regra_aprendida_service.excluir(db, tenant_id, ator_id, regra_id)

@@ -24,6 +24,7 @@ from app.services import (
     franquia_service,
     llm_helpers,
     optout_service,
+    regra_aprendida_service,
     reputacao_service,
 )
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
@@ -420,6 +421,7 @@ def _gerar_conteudo_toque(
     decisor: Decisor,
     toque: ToqueCadencia,
     variante: str | None = None,
+    regras_aprendidas: str = "",
 ) -> tuple[str | None, bool]:
     """Mensagem personalizada por conta/decisor — não mala direta (E3-H1).
 
@@ -442,7 +444,13 @@ def _gerar_conteudo_toque(
     sem nem chegar a tentar de novo, e derrubava a requisição INTEIRA
     (todo o lote, todas as contas) com 409, mesmo com só 1 conta
     selecionada — o "melhor esforço" de pular só o toque problemático
-    nunca chegava a valer pra esse caso."""
+    nunca chegava a valer pra esse caso.
+
+    `regras_aprendidas` (raio-X 2026-09-17, loop de aprendizado do master
+    prompt) já vem formatado como trecho de prompt pronto (ou string
+    vazia) por `regra_aprendida_service.regras_aplicaveis_texto` — texto
+    escrito por um humano depois de observar edição/rejeição repetida
+    neste tenant/ICP/oferta/canal."""
     enquadramento_variante = f" {_ENQUADRAMENTO_VARIANTE[variante]}" if variante else ""
     dores_e_gatilhos = (
         f" Dores prováveis desse perfil de cliente: {', '.join(icp.dores)}." if icp.dores else ""
@@ -453,7 +461,7 @@ def _gerar_conteudo_toque(
         f"Escreva o toque {toque.ordem} (canal {toque.canal}) de uma cadência de prospecção "
         f"para {decisor.nome} ({decisor.cargo or 'decisor'}) na empresa {conta.nome}, "
         f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento}).{dores_e_gatilhos} "
-        f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais} "
+        f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais}{regras_aprendidas} "
         f"Tom: {config.tom}.{enquadramento_variante} Nunca mencione: "
         f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
     )
@@ -510,6 +518,13 @@ def gerar_para_lote(
     _exigir_nao_cancelada(cadencia)
     toques = toques_da_cadencia(db, cadencia.id)
     icp, oferta, config = _contexto_de_geracao(db, tenant_id, cadencia.icp_id, cadencia.oferta_id)
+    # Loop de aprendizado (raio-X 2026-09-17) — uma consulta por canal
+    # distinto dos toques, não por (conta x toque): o escopo (tenant/ICP/
+    # oferta/canal) é o mesmo pra todas as contas deste lote.
+    regras_por_canal = {
+        canal: regra_aprendida_service.regras_aplicaveis_texto(db, tenant_id, cadencia.icp_id, cadencia.oferta_id, canal)
+        for canal in {toque.canal for toque in toques}
+    }
 
     contas_processadas: list[int] = []
     contas_sem_decisor: list[int] = []
@@ -531,7 +546,7 @@ def gerar_para_lote(
         for toque in toques:
             variante = variante_ab_para_decisor(decisor.id) if toque.ab_teste_habilitado else None
             conteudo, falhou_por_erro_ia = _gerar_conteudo_toque(
-                llm, icp, oferta, config, conta, decisor, toque, variante
+                llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal]
             )
             if conteudo is None:
                 if falhou_por_erro_ia:

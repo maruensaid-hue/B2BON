@@ -95,6 +95,40 @@ def test_mensagens_personalizadas_usam_dados_do_decisor(
     assert all("dor1" in prompt and "gatilho1" in prompt for prompt in prompts)
 
 
+def test_regra_aprendida_ativa_entra_no_prompt_da_cadencia(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm
+):
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(
+        "/api/v1/regras-aprendidas",
+        json={
+            "icp_id": cadencia["icp_id"], "oferta_id": cadencia["oferta_id"], "canal": "email",
+            "regra": "Nunca usar a palavra sinergia",
+        },
+    )
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    assert resposta.status_code == 200
+    prompts_email = [chamada.prompt for chamada in fake_llm.chamadas if "canal email" in chamada.prompt]
+    prompts_whatsapp = [chamada.prompt for chamada in fake_llm.chamadas if "canal whatsapp" in chamada.prompt]
+    assert len(prompts_email) == 3  # toques 1, 3 e 5 da cadencia-padrao sao email
+    assert all("Nunca usar a palavra sinergia" in prompt for prompt in prompts_email)
+    assert all("Nunca usar a palavra sinergia" not in prompt for prompt in prompts_whatsapp)
+
+
+def test_sem_regra_aprendida_prompt_nao_ganha_o_trecho(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm
+):
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    assert all("Regras aprendidas" not in chamada.prompt for chamada in fake_llm.chamadas)
+
+
 def test_gerar_para_lote_grande_e_bloqueado(client, onboarding_completo, criar_conta_com_decisor, criar_cadencia):
     """Bug real de produção: um lote grande (muitas contas x vários toques)
     fazia chamadas demais à IA numa única requisição e estourava o tempo

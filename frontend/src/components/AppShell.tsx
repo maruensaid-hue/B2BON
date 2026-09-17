@@ -37,6 +37,7 @@ const PREDATOR_NAV_ITEMS: NavItem[] = [
   { path: "/aprovacoes", label: "Aprovações", icon: "✅" },
   { path: "/reunioes", label: "Reuniões", icon: "📅" },
   { path: "/relatorio-entrega", label: "Relatório de Entrega", icon: "📊" },
+  { path: "/regras-aprendidas", label: "Regras Aprendidas", icon: "🧠" },
   { path: "/configuracao", label: "Configuração", icon: "⚙" },
 ];
 
