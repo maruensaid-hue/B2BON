@@ -6,6 +6,7 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { ConversaModal } from "@/pages/rede-social/ConversaModal";
+import { SalaCorporativaModal } from "@/pages/rede-social/SalaCorporativaModal";
 import { PerfilEmpresaDetalheModal } from "@/pages/rede-social/PerfilEmpresaDetalheModal";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -153,6 +154,7 @@ export function RedeSocial() {
   const [modalVerificacaoAberto, setModalVerificacaoAberto] = useState(false);
   const [modalConviteAberto, setModalConviteAberto] = useState(false);
   const [conversaTenantId, setConversaTenantId] = useState<string | null>(null);
+  const [salaCorporativa, setSalaCorporativa] = useState<{ id: number; nome: string } | null>(null);
   const [perfilDetalheTenantId, setPerfilDetalheTenantId] = useState<string | null>(null);
   const [convites, setConvites] = useState<ConviteVitrine[]>([]);
   const [erro, setErro] = useState<string | null>(null);
@@ -323,6 +325,15 @@ export function RedeSocial() {
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível desconectar desta empresa.");
+    }
+  }
+
+  async function abrirSalaCorporativa(tenantIdAlvo: string, nomeExibicao: string) {
+    try {
+      const sala = await api.post<{ id: number }>("/rede-social/salas", { tenant_id_alvo: tenantIdAlvo });
+      setSalaCorporativa({ id: sala.id, nome: nomeExibicao });
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível abrir a sala corporativa.");
     }
   }
 
@@ -879,6 +890,13 @@ export function RedeSocial() {
                       <Button size="sm" variant="ghost" onClick={() => setConversaTenantId(empresa.perfil.tenant_id)}>
                         Mensagens
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => abrirSalaCorporativa(empresa.perfil.tenant_id, empresa.perfil.nome_exibicao)}
+                      >
+                        Sala Corporativa
+                      </Button>
                       {(() => {
                         const conexao = conexaoComTenant(empresa.perfil.tenant_id);
                         if (!conexao) return null;
@@ -1044,6 +1062,14 @@ export function RedeSocial() {
             conversaTenantId
           }
           onClose={() => setConversaTenantId(null)}
+        />
+      )}
+
+      {salaCorporativa !== null && (
+        <SalaCorporativaModal
+          salaId={salaCorporativa.id}
+          nomeExibicao={salaCorporativa.nome}
+          onClose={() => setSalaCorporativa(null)}
         />
       )}
 

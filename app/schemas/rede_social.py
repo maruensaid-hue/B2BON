@@ -206,3 +206,42 @@ class SeguidorEmpresaSchema(BaseModel):
     tenant_id_seguidor: str
     tenant_id_seguido: str
     criado_em: datetime
+
+
+class AbrirSalaRequestSchema(BaseModel):
+    tenant_id_alvo: str
+
+
+class SalaCorporativaSchema(BaseModel):
+    id: int
+    tenant_id_alvo: str
+    empresa_nome: str
+    criado_em: datetime
+
+
+class CriarCanalRequestSchema(BaseModel):
+    tipo: str
+    nome: str | None = None
+
+
+class CanalSalaSchema(BaseModel):
+    id: int
+    sala_id: int
+    tipo: str
+    nome: str | None
+    criado_em: datetime
+
+
+class EnviarMensagemSalaRequestSchema(BaseModel):
+    texto: str
+    documento_url: str | None = None
+
+
+class MensagemSalaSchema(BaseModel):
+    id: int
+    canal_id: int
+    tenant_id_remetente: str
+    empresa_nome: str
+    texto: str
+    documento_url: str | None
+    criado_em: datetime

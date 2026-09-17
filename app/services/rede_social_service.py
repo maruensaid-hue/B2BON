@@ -336,7 +336,10 @@ def listar_conexoes(db: Session, tenant_id: str, status: str | None = None) -> l
     return query.order_by(ConexaoEmpresa.id.desc()).all()
 
 
-def _conexao_aceita_entre(db: Session, tenant_a: str, tenant_b: str) -> bool:
+def conexao_aceita_entre(db: Session, tenant_a: str, tenant_b: str) -> bool:
+    """Não-privada: reaproveitada por `sala_corporativa_service`
+    (Fase 4A) — mesma precondição da DM (`enviar_mensagem`) pra abrir
+    uma Corporate Room."""
     return (
         db.query(ConexaoEmpresa)
         .filter(
@@ -356,7 +359,7 @@ def enviar_mensagem(
 ) -> MensagemRedeSocial:
     """Só é possível trocar mensagem entre empresas já conectadas — mesmo
     espírito do LinkedIn (Onda C)."""
-    if not _conexao_aceita_entre(db, tenant_id_remetente, tenant_id_destinatario):
+    if not conexao_aceita_entre(db, tenant_id_remetente, tenant_id_destinatario):
         raise RegraNegocioViolada("É preciso ter uma conexão aceita com este tenant antes de enviar mensagens.")
 
     mensagem = MensagemRedeSocial(

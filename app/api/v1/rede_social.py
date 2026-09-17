@@ -3,24 +3,30 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_tenant_id
 from app.schemas.rede_social import (
+    AbrirSalaRequestSchema,
     AtualizarPerfilRequestSchema,
+    CanalSalaSchema,
     ComentarioPostSchema,
     ConexaoEmpresaSchema,
     ContagemNaoLidasSchema,
+    CriarCanalRequestSchema,
     CriarComentarioRequestSchema,
     CriarIntentRequestSchema,
     CriarPostRequestSchema,
     DeclararRelacionamentoRequestSchema,
     EmpresaDiretorioSchema,
     EnviarMensagemRequestSchema,
+    EnviarMensagemSalaRequestSchema,
     IntentSchema,
     MensagemRedeSocialSchema,
+    MensagemSalaSchema,
     NotificacaoRedeSocialSchema,
     PerfilEmpresaSchema,
     PostRedeSocialSchema,
     ReacaoPostSchema,
     RelacionamentoEmpresarialSchema,
     ResponderConexaoRequestSchema,
+    SalaCorporativaSchema,
     SeguidorEmpresaSchema,
     SeguirRequestSchema,
     SolicitarConexaoRequestSchema,
@@ -31,6 +37,7 @@ from app.services import (
     post_rede_social_service,
     rede_social_service,
     relacionamento_empresarial_service,
+    sala_corporativa_service,
     seguidor_empresa_service,
 )
 
@@ -397,3 +404,64 @@ def marcar_intent_atendida(
     db: Session = Depends(get_db),
 ) -> IntentSchema:
     return intent_service.marcar_atendida(db, tenant_id, ator_id, intent_id)
+
+
+@router.post("/salas", response_model=SalaCorporativaSchema, status_code=201)
+def abrir_sala(
+    dados: AbrirSalaRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> SalaCorporativaSchema:
+    """Corporate Room (master prompt §52, Fase 4A)."""
+    return sala_corporativa_service.abrir_ou_obter_sala(db, tenant_id, ator_id, dados.tenant_id_alvo)
+
+
+@router.get("/salas", response_model=list[SalaCorporativaSchema])
+def listar_salas(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[SalaCorporativaSchema]:
+    return sala_corporativa_service.listar_salas(db, tenant_id)
+
+
+@router.get("/salas/{sala_id}/canais", response_model=list[CanalSalaSchema])
+def listar_canais_sala(
+    sala_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[CanalSalaSchema]:
+    return sala_corporativa_service.listar_canais(db, tenant_id, sala_id)
+
+
+@router.post("/salas/{sala_id}/canais", response_model=CanalSalaSchema, status_code=201)
+def criar_canal_sala(
+    sala_id: int,
+    dados: CriarCanalRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> CanalSalaSchema:
+    return sala_corporativa_service.criar_canal(db, tenant_id, ator_id, sala_id, dados.tipo, dados.nome)
+
+
+@router.get("/salas/canais/{canal_id}/mensagens", response_model=list[MensagemSalaSchema])
+def listar_mensagens_canal(
+    canal_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[MensagemSalaSchema]:
+    return sala_corporativa_service.listar_mensagens(db, tenant_id, canal_id)
+
+
+@router.post("/salas/canais/{canal_id}/mensagens", response_model=MensagemSalaSchema, status_code=201)
+def enviar_mensagem_canal(
+    canal_id: int,
+    dados: EnviarMensagemSalaRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> MensagemSalaSchema:
+    return sala_corporativa_service.enviar_mensagem_sala(
+        db, tenant_id, ator_id, canal_id, dados.texto, dados.documento_url
+    )

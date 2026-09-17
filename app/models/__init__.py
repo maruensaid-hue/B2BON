@@ -60,6 +60,9 @@ from app.models.regra_auto_aprovacao import RegraAutoAprovacao
 from app.models.registro_oportunidade import RegistroOportunidade
 from app.models.reuniao import Reuniao
 from app.models.rotulo_tipo_tenant import RotuloTipoTenant
+from app.models.sala_corporativa import SalaCorporativa
+from app.models.canal_sala import CanalSala
+from app.models.mensagem_sala import MensagemSala
 from app.models.solicitacao_desconto import SolicitacaoDesconto
 from app.models.tarefa_linkedin import TarefaLinkedin
 from app.models.template_whatsapp import TemplateWhatsApp
@@ -147,6 +150,9 @@ __all__ = [
     "NotificacaoRedeSocial",
     "Intent",
     "SinalOportunidade",
+    "SalaCorporativa",
+    "CanalSala",
+    "MensagemSala",
     "MensagemRedeSocial",
     "InteracaoTenant",
     "InteracaoConta",
