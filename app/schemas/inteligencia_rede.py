@@ -42,3 +42,12 @@ class SinalOportunidadeSchema(BaseModel):
 
 class ConversaoSinalSchema(BaseModel):
     conta_id: int
+
+
+class SaudeRelacionamentoSchema(BaseModel):
+    tenant_id_alvo: str
+    empresa_nome: str
+    dias_sem_interacao: int | None
+    tem_relacionamento_declarado: bool
+    classificacao: str
+    sugestoes: list[str]

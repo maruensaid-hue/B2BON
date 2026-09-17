@@ -1,14 +1,20 @@
 import re
+from datetime import UTC, datetime
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
+from app.models.canal_sala import CanalSala
 from app.models.conexao_empresa import ConexaoEmpresa
 from app.models.icp import ICP
 from app.models.intent import Intent
+from app.models.mensagem_rede_social import MensagemRedeSocial
+from app.models.mensagem_sala import MensagemSala
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
+from app.models.sala_corporativa import SalaCorporativa
 from app.models.sinal_oportunidade import SinalOportunidade
 from app.models.tenant import Tenant
 from app.services import auditoria_service, conta_service, llm_helpers
@@ -409,3 +415,96 @@ def converter_em_oportunidade(db: Session, tenant_id: str, ator_id: str | None, 
     )
     db.commit()
     return {"conta_id": conta.id}
+
+
+_LIMITE_DIAS_ESFRIANDO = 30
+_LIMITE_DIAS_NEUTRO = 14
+
+
+def _ultima_interacao_entre(db: Session, tenant_a: str, tenant_b: str) -> datetime | None:
+    ultima_dm = (
+        db.query(func.max(MensagemRedeSocial.criado_em))
+        .filter(
+            (
+                (MensagemRedeSocial.tenant_id_remetente == tenant_a)
+                & (MensagemRedeSocial.tenant_id_destinatario == tenant_b)
+            )
+            | (
+                (MensagemRedeSocial.tenant_id_remetente == tenant_b)
+                & (MensagemRedeSocial.tenant_id_destinatario == tenant_a)
+            )
+        )
+        .scalar()
+    )
+    tenant_sala_a, tenant_sala_b = sorted((tenant_a, tenant_b))
+    ultima_sala = (
+        db.query(func.max(MensagemSala.criado_em))
+        .join(CanalSala, CanalSala.id == MensagemSala.canal_id)
+        .join(SalaCorporativa, SalaCorporativa.id == CanalSala.sala_id)
+        .filter(SalaCorporativa.tenant_id_a == tenant_sala_a, SalaCorporativa.tenant_id_b == tenant_sala_b)
+        .scalar()
+    )
+    datas = [data for data in (ultima_dm, ultima_sala) if data is not None]
+    return max(datas) if datas else None
+
+
+def analisar_saude_relacionamento(db: Session, tenant_id: str, tenant_id_alvo: str) -> dict:
+    """Relationship Agent (master prompt §31, Fase 4B) — mesmo
+    raciocínio de "dias sem contato" já usado em
+    `motor_service.calcular_score_risco`, aplicado à relação entre DUAS
+    EMPRESAS (não tenant×Conta): combina a última interação real (DM ou
+    Sala Corporativa) com a existência de um `RelacionamentoEmpresarial`
+    declarado. Não infere "stakeholder importante não envolvido" (isso
+    exigiria um conceito de contato cross-tenant que não existe ainda —
+    fica pra Fase 5/Stakeholder Map)."""
+    ultima_interacao = _ultima_interacao_entre(db, tenant_id, tenant_id_alvo)
+    agora = datetime.now(UTC)
+    dias_sem_interacao = (agora - ultima_interacao.replace(tzinfo=UTC)).days if ultima_interacao is not None else None
+
+    tem_relacionamento = _relacionamento_entre(db, tenant_id, tenant_id_alvo) is not None
+
+    sugestoes: list[str] = []
+    if dias_sem_interacao is None:
+        classificacao = "sem_interacao"
+        sugestoes.append("Nenhuma mensagem trocada ainda — considere iniciar uma conversa ou abrir uma sala corporativa.")
+    elif dias_sem_interacao > _LIMITE_DIAS_ESFRIANDO:
+        classificacao = "esfriando"
+        sugestoes.append(f"Nenhuma mensagem trocada nos últimos {dias_sem_interacao} dias.")
+    elif dias_sem_interacao > _LIMITE_DIAS_NEUTRO:
+        classificacao = "neutro"
+        sugestoes.append(f"Última interação há {dias_sem_interacao} dias — pode ser hora de retomar contato.")
+    else:
+        classificacao = "aquecido"
+
+    if not tem_relacionamento:
+        sugestoes.append(
+            "Nenhum relacionamento comercial declarado ainda — considere declarar um (fornecedor, cliente, parceiro...)."
+        )
+
+    return {
+        "tenant_id_alvo": tenant_id_alvo,
+        "empresa_nome": _nome_empresa(db, tenant_id_alvo),
+        "dias_sem_interacao": dias_sem_interacao,
+        "tem_relacionamento_declarado": tem_relacionamento,
+        "classificacao": classificacao,
+        "sugestoes": sugestoes,
+    }
+
+
+def listar_saude_relacionamentos(db: Session, tenant_id: str) -> list[dict]:
+    conexoes = (
+        db.query(ConexaoEmpresa)
+        .filter(
+            ConexaoEmpresa.status == "aceita",
+            (ConexaoEmpresa.tenant_id_origem == tenant_id) | (ConexaoEmpresa.tenant_id_destino == tenant_id),
+        )
+        .all()
+    )
+    tenants_alvo = {
+        conexao.tenant_id_destino if conexao.tenant_id_origem == tenant_id else conexao.tenant_id_origem
+        for conexao in conexoes
+    }
+    resultados = [analisar_saude_relacionamento(db, tenant_id, tenant_id_alvo) for tenant_id_alvo in tenants_alvo]
+    ordem_classificacao = {"esfriando": 0, "sem_interacao": 1, "neutro": 2, "aquecido": 3}
+    resultados.sort(key=lambda resultado: ordem_classificacao.get(resultado["classificacao"], 99))
+    return resultados
