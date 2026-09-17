@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.mensagem import Mensagem
 from app.services import aprovacao_service
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
@@ -84,3 +85,96 @@ def test_suprimir_decisor_cancela_mensagens_pendentes(
     assert corpo["mensagens_canceladas"] == 1
     db_session.refresh(pendente)
     assert pendente.status == "cancelado"
+
+
+def test_envios_email_classifica_cada_mensagem_individualmente(
+    client, onboarding_completo, criar_conta_com_decisor, db_session
+):
+    """Raio-X 2026-09-17 — o cliente via só '2 entregas' (uma por
+    cadência) no KPI agregado; este endpoint mostra cada destinatário
+    individualmente com o status real."""
+    conta, decisor = criar_conta_com_decisor()
+
+    enviada = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, None, decisor.id, "email", None, "Oi", StubPlanLimitsProvider(),
+    )
+    enviada.status = "enviado"
+
+    aberta = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, None, decisor.id, "email", None, "Oi 2", StubPlanLimitsProvider(),
+    )
+    aberta.status = "enviado"
+    aberta.aberto_em = datetime.now(UTC)
+
+    com_erro = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, None, decisor.id, "email", None, "Oi 3", StubPlanLimitsProvider(),
+    )
+    com_erro.status = "enviado"
+    com_erro.bounce_em = datetime.now(UTC)
+    com_erro.motivo_bounce = "550 mailbox não existe"
+
+    pendente = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, None, decisor.id, "email", None, "Oi 4", StubPlanLimitsProvider(),
+    )
+    db_session.commit()
+
+    corpo = client.get("/api/v1/relatorio-entrega/envios").json()
+
+    assert corpo["total"] == 4
+    assert corpo["contagem_por_status"] == {"enviado": 1, "aberto": 1, "erro": 1, "pendente": 1}
+    item_erro = next(item for item in corpo["itens"] if item["status"] == "erro")
+    assert item_erro["detalhe"] == "550 mailbox não existe"
+    assert item_erro["decisor_id"] == decisor.id
+
+
+def test_envios_email_filtra_por_status(client, onboarding_completo, criar_conta_com_decisor, db_session):
+    conta, decisor = criar_conta_com_decisor()
+    com_erro = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, None, decisor.id, "email", None, "Oi", StubPlanLimitsProvider(),
+    )
+    com_erro.status = "enviado"
+    com_erro.bounce_em = datetime.now(UTC)
+    com_erro.motivo_bounce = "erro"
+    ok = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, None, decisor.id, "email", None, "Oi 2", StubPlanLimitsProvider(),
+    )
+    ok.status = "enviado"
+    db_session.commit()
+
+    corpo = client.get("/api/v1/relatorio-entrega/envios?status=erro").json()
+
+    assert corpo["total"] == 1
+    assert corpo["itens"][0]["status"] == "erro"
+    # `contagem_por_status` sempre reflete o total, independente do filtro.
+    assert corpo["contagem_por_status"] == {"erro": 1, "enviado": 1}
+
+
+def test_envios_email_de_campanha_so_conta_quando_canal_email_esta_ativo(
+    client, onboarding_completo, db_session
+):
+    campanha_so_whatsapp = Campanha(tenant_id=TENANT_ID, nome="Campanha WhatsApp", tipo="marketing", canais=["whatsapp"])
+    db_session.add(campanha_so_whatsapp)
+    db_session.flush()
+    db_session.add(
+        CampanhaDestinatario(
+            tenant_id=TENANT_ID, campanha_id=campanha_so_whatsapp.id, nome="Fulano",
+            email="fulano@teste.com", telefone="+5511999999999", status="enviado",
+        )
+    )
+
+    campanha_email = Campanha(tenant_id=TENANT_ID, nome="Campanha E-mail", tipo="marketing", canais=["email"])
+    db_session.add(campanha_email)
+    db_session.flush()
+    db_session.add(
+        CampanhaDestinatario(
+            tenant_id=TENANT_ID, campanha_id=campanha_email.id, nome="Ciclano", email="ciclano@teste.com", status="enviado",
+        )
+    )
+    db_session.commit()
+
+    corpo = client.get("/api/v1/relatorio-entrega/envios").json()
+
+    assert corpo["total"] == 1
+    assert corpo["itens"][0]["nome"] == "Ciclano"
+    assert corpo["itens"][0]["origem"] == "campanha"
+    assert corpo["itens"][0]["origem_nome"] == "Campanha E-mail"

@@ -36,3 +36,27 @@ class RelatorioEntregaSchema(BaseModel):
     taxa_abertura_email: float | None
     taxa_resposta_por_canal: dict[str, float]
     contatos_com_bounce: list[ContatoComBounceSchema]
+
+
+class EnvioEmailSchema(BaseModel):
+    origem: str  # "cadencia" | "campanha"
+    origem_nome: str
+    decisor_id: int | None
+    conta_id: int | None
+    nome: str
+    email: str | None
+    conta_nome: str | None
+    status: str  # erro | enviado | aberto | pendente | cancelado
+    detalhe: str | None
+    enviado_em: datetime | None
+    criado_em: datetime
+
+
+class ListaEnviosEmailSchema(BaseModel):
+    """Raio-X 2026-09-17 — visão granular por destinatário, distinta do
+    `saude_email` agregado (que só conta confirmação "delivered" já
+    recebida via webhook do SendGrid)."""
+
+    itens: list[EnvioEmailSchema]
+    total: int
+    contagem_por_status: dict[str, int]
