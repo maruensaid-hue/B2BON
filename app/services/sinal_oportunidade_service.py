@@ -9,8 +9,12 @@ from app.models.icp import ICP
 from app.models.intent import Intent
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
-from app.services import llm_helpers
-from app.services.errors import NaoEncontrado
+from app.models.sinal_oportunidade import SinalOportunidade
+from app.models.tenant import Tenant
+from app.services import auditoria_service, conta_service, llm_helpers
+from app.services.errors import NaoEncontrado, RegraNegocioViolada
+
+_STATUS_SINAL_IMUTAVEIS = {"convertido", "descartado"}
 
 _PALAVRAS_IGNORADAS = {
     "de", "da", "do", "das", "dos", "para", "com", "sem", "por", "que", "uma", "um",
@@ -227,3 +231,181 @@ def explicar_match_com_ia(db: Session, intent_id: int, tenant_id_candidato: str,
     )
     resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt, max_tokens=200))
     return resposta.content.strip()
+
+
+def _nome_empresa(db: Session, tenant_id: str) -> str:
+    perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
+    return perfil.nome_exibicao if perfil is not None else tenant_id
+
+
+def _confianca_por_score(score: float) -> str:
+    if score >= 0.6:
+        return "alta"
+    if score >= 0.3:
+        return "media"
+    return "baixa"
+
+
+def gerar_sinais(db: Session, tenant_id: str) -> list[dict]:
+    """Opportunity Agent (master prompt §28, §50, Fase 3D) — combina fit
+    ICP (3B) + matches de Intent (3C) + Business Graph declarado
+    (`RelacionamentoEmpresarial`, Fase 1D) num sinal por
+    (tenant_alvo, tipo). On-demand (sem cron novo, §84 fora de escopo):
+    idempotente — regenerar atualiza score/motivo de sinais "novo"/
+    "visto" existentes, nunca duplica, e nunca sobrescreve um sinal já
+    "convertido"/"descartado" (decisão humana anterior é respeitada)."""
+    dados_por_par: dict[tuple[str, str], dict] = {}
+
+    for icp in db.query(ICP).filter_by(tenant_id=tenant_id, ativo=True).all():
+        for fit in listar_fit_icp_rede(db, tenant_id, icp.id):
+            if fit["fit_score"] <= 0:
+                continue
+            chave = (fit["tenant_id_candidato"], "fit_icp")
+            candidato = {
+                "score": fit["fit_score"],
+                "motivo": f"Fit com o ICP \"{fit['matched_icp']}\": " + "; ".join(fit["reasons"]),
+                "evidencias": fit["reasons"],
+            }
+            if chave not in dados_por_par or candidato["score"] > dados_por_par[chave]["score"]:
+                dados_por_par[chave] = candidato
+
+    for intent in db.query(Intent).filter_by(tenant_id=tenant_id, status="aberta").all():
+        for match in sugerir_fornecedores_para_intent(db, tenant_id, intent.id):
+            chave = (match["tenant_id_candidato"], "match_intent")
+            motivos = match["match_reasons"] + match["signals"]
+            candidato = {
+                "score": match["match_score"],
+                "motivo": f"Pode atender a necessidade \"{intent.titulo}\": " + "; ".join(motivos),
+                "evidencias": motivos,
+            }
+            if chave not in dados_por_par or candidato["score"] > dados_por_par[chave]["score"]:
+                dados_por_par[chave] = candidato
+
+    relacionamentos = (
+        db.query(RelacionamentoEmpresarial)
+        .filter(
+            RelacionamentoEmpresarial.tenant_id_destino == tenant_id,
+            RelacionamentoEmpresarial.tipo.in_(["LOOKING_FOR", "INTERESTED_IN"]),
+        )
+        .all()
+    )
+    for relacionamento in relacionamentos:
+        chave = (relacionamento.tenant_id_origem, "relacionamento_declarado")
+        dados_por_par[chave] = {
+            "score": 0.5,
+            "motivo": (
+                f"{_nome_empresa(db, relacionamento.tenant_id_origem)} declarou \"{relacionamento.tipo}\" "
+                "em relação à sua empresa no Business Graph da rede."
+            ),
+            "evidencias": [relacionamento.tipo],
+        }
+
+    sinais: list[SinalOportunidade] = []
+    for (tenant_id_alvo, tipo_sinal), dados in dados_por_par.items():
+        sinal = (
+            db.query(SinalOportunidade)
+            .filter_by(tenant_id=tenant_id, tenant_id_alvo=tenant_id_alvo, tipo_sinal=tipo_sinal)
+            .one_or_none()
+        )
+        if sinal is None:
+            sinal = SinalOportunidade(
+                tenant_id=tenant_id, tenant_id_alvo=tenant_id_alvo, tipo_sinal=tipo_sinal, status="novo"
+            )
+            db.add(sinal)
+        if sinal.status not in _STATUS_SINAL_IMUTAVEIS:
+            sinal.score = dados["score"]
+            sinal.motivo = dados["motivo"]
+            sinal.evidencias = dados["evidencias"]
+            sinal.confianca = _confianca_por_score(dados["score"])
+        sinais.append(sinal)
+
+    db.commit()
+    return listar(db, tenant_id)
+
+
+def _serializar_sinal(db: Session, sinal: SinalOportunidade) -> dict:
+    return {
+        "id": sinal.id,
+        "tenant_id_alvo": sinal.tenant_id_alvo,
+        "empresa_nome": _nome_empresa(db, sinal.tenant_id_alvo),
+        "tipo_sinal": sinal.tipo_sinal,
+        "score": sinal.score,
+        "confianca": sinal.confianca,
+        "motivo": sinal.motivo,
+        "evidencias": sinal.evidencias,
+        "status": sinal.status,
+        "conta_id_gerada": sinal.conta_id_gerada,
+        "criado_em": sinal.criado_em,
+    }
+
+
+def listar(db: Session, tenant_id: str) -> list[dict]:
+    sinais = (
+        db.query(SinalOportunidade)
+        .filter_by(tenant_id=tenant_id)
+        .order_by(SinalOportunidade.score.desc(), SinalOportunidade.id.desc())
+        .all()
+    )
+    return [_serializar_sinal(db, sinal) for sinal in sinais]
+
+
+def _obter_sinal(db: Session, tenant_id: str, sinal_id: int) -> SinalOportunidade:
+    sinal = db.query(SinalOportunidade).filter_by(id=sinal_id, tenant_id=tenant_id).one_or_none()
+    if sinal is None:
+        raise NaoEncontrado(f"Sinal de oportunidade {sinal_id} não encontrado")
+    return sinal
+
+
+def marcar_visto(db: Session, tenant_id: str, sinal_id: int) -> dict:
+    sinal = _obter_sinal(db, tenant_id, sinal_id)
+    if sinal.status == "novo":
+        sinal.status = "visto"
+        db.commit()
+    return _serializar_sinal(db, sinal)
+
+
+def descartar(db: Session, tenant_id: str, ator_id: str | None, sinal_id: int) -> dict:
+    sinal = _obter_sinal(db, tenant_id, sinal_id)
+    if sinal.status == "convertido":
+        raise RegraNegocioViolada("Este sinal já foi convertido em uma conta do CRM.")
+    sinal.status = "descartado"
+    auditoria_service.registrar(db, tenant_id, "sinal_oportunidade_descartado", "sinal_oportunidade", sinal.id, ator_id, {})
+    db.commit()
+    return _serializar_sinal(db, sinal)
+
+
+def converter_em_oportunidade(db: Session, tenant_id: str, ator_id: str | None, sinal_id: int) -> dict:
+    """Signal → CRM (master prompt §51, Fase 3D), até onde os dados
+    permitem sem inventar um decisor de outro tenant (ver decisão de
+    escopo 5 do plano): cria/reaproveita a `Conta` a partir do perfil
+    público do tenant-alvo (mesmo padrão de `conta_service.criar_lead`,
+    `origem="rede_social_signal"`) e devolve o `conta_id` — o humano
+    escolhe/cadastra o decisor real e fecha o `Negocio` pelo fluxo
+    manual já existente no CRM."""
+    sinal = _obter_sinal(db, tenant_id, sinal_id)
+    if sinal.status == "convertido":
+        raise RegraNegocioViolada("Este sinal já foi convertido em uma conta do CRM.")
+
+    tenant_alvo = db.query(Tenant).filter_by(id=sinal.tenant_id_alvo).one_or_none()
+    perfil_alvo = db.query(PerfilEmpresa).filter_by(tenant_id=sinal.tenant_id_alvo).one_or_none()
+
+    conta = conta_service.criar_lead(
+        db,
+        tenant_id,
+        ator_id,
+        nome=perfil_alvo.nome_exibicao if perfil_alvo is not None else sinal.tenant_id_alvo,
+        cnpj=tenant_alvo.cnpj if tenant_alvo is not None else None,
+        dominio=perfil_alvo.site if perfil_alvo is not None else None,
+        segmento=perfil_alvo.setor if perfil_alvo is not None else None,
+        porte=perfil_alvo.porte if perfil_alvo is not None else None,
+        regiao=perfil_alvo.sede_uf if perfil_alvo is not None else None,
+        origem="rede_social_signal",
+    )
+
+    sinal.status = "convertido"
+    sinal.conta_id_gerada = conta.id
+    auditoria_service.registrar(
+        db, tenant_id, "sinal_oportunidade_convertido", "sinal_oportunidade", sinal.id, ator_id, {"conta_id": conta.id}
+    )
+    db.commit()
+    return {"conta_id": conta.id}

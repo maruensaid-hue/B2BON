@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Input";
 import { api, ApiError } from "@/lib/api";
@@ -41,6 +42,33 @@ const ROTULO_CONFIANCA: Record<string, { texto: string; tone: "green" | "amber" 
   baixa: { texto: "Confiança baixa", tone: "muted" },
 };
 
+interface SinalOportunidade {
+  id: number;
+  tenant_id_alvo: string;
+  empresa_nome: string;
+  tipo_sinal: "fit_icp" | "match_intent" | "relacionamento_declarado";
+  score: number;
+  confianca: "alta" | "media" | "baixa";
+  motivo: string;
+  evidencias: string[];
+  status: "novo" | "visto" | "descartado" | "convertido";
+  conta_id_gerada: number | null;
+  criado_em: string;
+}
+
+const ROTULO_TIPO_SINAL: Record<string, string> = {
+  fit_icp: "Fit de ICP",
+  match_intent: "Match de necessidade",
+  relacionamento_declarado: "Relacionamento declarado",
+};
+
+const ROTULO_STATUS_SINAL: Record<string, { texto: string; tone: "green" | "amber" | "muted" | "red" }> = {
+  novo: { texto: "Novo", tone: "green" },
+  visto: { texto: "Visto", tone: "muted" },
+  descartado: { texto: "Descartado", tone: "red" },
+  convertido: { texto: "Convertido em conta", tone: "amber" },
+};
+
 export function InteligenciaRede() {
   const [icps, setIcps] = useState<IcpResumo[]>([]);
   const [icpSelecionado, setIcpSelecionado] = useState<string>("");
@@ -53,6 +81,17 @@ export function InteligenciaRede() {
   const [carregandoMatches, setCarregandoMatches] = useState(false);
   const [explicandoId, setExplicandoId] = useState<string | null>(null);
   const [explicacoes, setExplicacoes] = useState<Record<string, string>>({});
+  const [sinais, setSinais] = useState<SinalOportunidade[]>([]);
+  const [gerandoSinais, setGerandoSinais] = useState(false);
+  const [convertendoId, setConvertendoId] = useState<number | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .get<SinalOportunidade[]>("/inteligencia-rede/sinais")
+      .then(setSinais)
+      .catch(() => setErro("Não foi possível carregar os sinais de oportunidade."));
+  }, []);
 
   useEffect(() => {
     api
@@ -114,6 +153,45 @@ export function InteligenciaRede() {
     }
   }
 
+  async function gerarSinais() {
+    if (gerandoSinais) return;
+    setGerandoSinais(true);
+    setErro(null);
+    try {
+      setSinais(await api.post<SinalOportunidade[]>("/inteligencia-rede/sinais/gerar"));
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível gerar os sinais de oportunidade.");
+    } finally {
+      setGerandoSinais(false);
+    }
+  }
+
+  async function descartarSinal(sinalId: number) {
+    try {
+      const atualizado = await api.post<SinalOportunidade>(`/inteligencia-rede/sinais/${sinalId}/descartar`);
+      setSinais((atual) => atual.map((sinal) => (sinal.id === sinalId ? atualizado : sinal)));
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível descartar este sinal.");
+    }
+  }
+
+  async function converterSinal(sinalId: number) {
+    if (convertendoId !== null) return;
+    setConvertendoId(sinalId);
+    setAviso(null);
+    try {
+      const resultado = await api.post<{ conta_id: number }>(`/inteligencia-rede/sinais/${sinalId}/converter`);
+      setSinais(await api.get<SinalOportunidade[]>("/inteligencia-rede/sinais"));
+      setAviso(
+        `Conta #${resultado.conta_id} criada no CRM — abra o CRM pra escolher/cadastrar o decisor e fechar o negócio.`,
+      );
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível converter este sinal em conta.");
+    } finally {
+      setConvertendoId(null);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -122,6 +200,7 @@ export function InteligenciaRede() {
       </div>
 
       {erro && <div className="rounded-lg border border-red/30 bg-red/10 p-3 text-[12px] text-red">{erro}</div>}
+      {aviso && <div className="rounded-lg border border-cyan/30 bg-cyan/10 p-3 text-[12px] text-cyan">{aviso}</div>}
 
       <Card>
         <SectionLabel>Fit por ICP na Rede</SectionLabel>
@@ -239,6 +318,54 @@ export function InteligenciaRede() {
             })}
           {!carregandoMatches && intentSelecionada && matches.length === 0 && (
             <div className="text-[12px] text-muted">Nenhuma empresa da rede tem critério ou sinal em comum ainda.</div>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <SectionLabel>Sinais de Oportunidade</SectionLabel>
+          <Button size="sm" onClick={gerarSinais} disabled={gerandoSinais}>
+            {gerandoSinais ? "Atualizando..." : "Atualizar sinais"}
+          </Button>
+        </div>
+        <p className="mb-3 text-[12px] text-muted">
+          Opportunity Agent: combina fit de ICP, matches de necessidades e relacionamentos declarados no Business
+          Graph em um sinal por empresa — gerado sob demanda, nunca automaticamente em segundo plano.
+        </p>
+        <div className="flex flex-col gap-2">
+          {sinais.map((sinal) => {
+            const status = ROTULO_STATUS_SINAL[sinal.status] ?? ROTULO_STATUS_SINAL.novo;
+            return (
+              <div key={sinal.id} className="rounded-lg border border-border p-3 text-[12px]">
+                <div className="mb-1 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-text">{sinal.empresa_nome}</span>
+                    <span className="text-muted">· {ROTULO_TIPO_SINAL[sinal.tipo_sinal] ?? sinal.tipo_sinal}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge tone={status.tone}>{status.texto}</Badge>
+                    <span className="font-semibold text-cyan">{Math.round(sinal.score * 100)}%</span>
+                  </div>
+                </div>
+                <div className="text-text">{sinal.motivo}</div>
+                {sinal.status !== "convertido" && sinal.status !== "descartado" && (
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" onClick={() => converterSinal(sinal.id)} disabled={convertendoId === sinal.id}>
+                      {convertendoId === sinal.id ? "Convertendo..." : "Criar oportunidade"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => descartarSinal(sinal.id)}>
+                      Descartar
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {sinais.length === 0 && (
+            <div className="text-[12px] text-muted">
+              Nenhum sinal gerado ainda — clique em "Atualizar sinais" para calcular.
+            </div>
           )}
         </div>
       </Card>

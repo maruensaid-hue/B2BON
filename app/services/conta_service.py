@@ -184,11 +184,16 @@ def criar_lead(
     segmento: str | None = None,
     porte: str | None = None,
     regiao: str | None = None,
+    origem: str = "lead",
 ) -> Conta:
     """Cadastro de cliente avulso ("lead") direto no CRM — indicação,
     evento, contato pessoal — que não se enquadra no recorte estático de
     nenhum ICP (segmento/porte/dor variam de cliente para cliente). Ao
-    contrário de `criar_manual`, não exige um ICP: `icp_id` fica nulo."""
+    contrário de `criar_manual`, não exige um ICP: `icp_id` fica nulo.
+    `origem` tem default `"lead"` (todo chamador hoje) — reaproveitado
+    por `sinal_oportunidade_service.converter_em_oportunidade` (Fase 3D)
+    com `origem="rede_social_signal"`, pra permitir no futuro medir
+    pipeline/receita originada da rede (master prompt §76)."""
     conta = Conta(
         tenant_id=tenant_id,
         icp_id=None,
@@ -199,7 +204,7 @@ def criar_lead(
         porte=porte,
         regiao=regiao,
         status="prospectada",
-        origem="lead",
+        origem=origem,
     )
     db.add(conta)
     db.flush()

@@ -70,6 +70,7 @@ from app.models.post_rede_social import PostRedeSocial
 from app.models.reacao_post import ReacaoPost
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
 from app.models.seguidor_empresa import SeguidorEmpresa
+from app.models.sinal_oportunidade import SinalOportunidade
 from app.models.turno_conversa import TurnoConversa
 from app.models.usuario import Usuario
 from app.models.verificacao_empresa import VerificacaoEmpresa
@@ -145,6 +146,7 @@ __all__ = [
     "ReacaoPost",
     "NotificacaoRedeSocial",
     "Intent",
+    "SinalOportunidade",
     "MensagemRedeSocial",
     "InteracaoTenant",
     "InteracaoConta",

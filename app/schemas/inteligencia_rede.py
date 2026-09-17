@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -22,3 +24,21 @@ class MatchIntentSchema(BaseModel):
 
 class ExplicacaoMatchSchema(BaseModel):
     explicacao: str
+
+
+class SinalOportunidadeSchema(BaseModel):
+    id: int
+    tenant_id_alvo: str
+    empresa_nome: str
+    tipo_sinal: str
+    score: float
+    confianca: str
+    motivo: str
+    evidencias: list[str]
+    status: str
+    conta_id_gerada: int | None
+    criado_em: datetime
+
+
+class ConversaoSinalSchema(BaseModel):
+    conta_id: int
