@@ -115,6 +115,24 @@ class SeguirRequestSchema(BaseModel):
     tenant_id_seguido: str
 
 
+class CriarPostRequestSchema(BaseModel):
+    texto: str
+    imagem_url: str | None = None
+    link_url: str | None = None
+
+
+class PostRedeSocialSchema(BaseModel):
+    id: int
+    tenant_id: str
+    empresa_nome: str
+    empresa_logo_url: str | None
+    autor_nome: str
+    texto: str
+    imagem_url: str | None
+    link_url: str | None
+    criado_em: datetime
+
+
 class SeguidorEmpresaSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

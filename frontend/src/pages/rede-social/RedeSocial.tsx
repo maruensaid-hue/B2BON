@@ -60,6 +60,18 @@ interface EmpresaDiretorio {
   seguindo: boolean;
 }
 
+interface PostRedeSocial {
+  id: number;
+  tenant_id: string;
+  empresa_nome: string;
+  empresa_logo_url: string | null;
+  autor_nome: string;
+  texto: string;
+  imagem_url: string | null;
+  link_url: string | null;
+  criado_em: string;
+}
+
 interface Conexao {
   id: number;
   tenant_id_origem: string;
@@ -90,6 +102,8 @@ export function RedeSocial() {
   const [empresas, setEmpresas] = useState<EmpresaDiretorio[]>([]);
   const [conexoesPendentes, setConexoesPendentes] = useState<Conexao[]>([]);
   const [conexoesAtivas, setConexoesAtivas] = useState<Conexao[]>([]);
+  const [posts, setPosts] = useState<PostRedeSocial[]>([]);
+  const [publicando, setPublicando] = useState(false);
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
   const [modalVerificacaoAberto, setModalVerificacaoAberto] = useState(false);
   const [modalConviteAberto, setModalConviteAberto] = useState(false);
@@ -125,17 +139,19 @@ export function RedeSocial() {
 
   async function carregarTudo() {
     try {
-      const [perfilResp, empresasResp, conexoesResp, conexoesAtivasResp, convitesResp] = await Promise.all([
+      const [perfilResp, empresasResp, conexoesResp, conexoesAtivasResp, postsResp, convitesResp] = await Promise.all([
         api.get<PerfilEmpresa>("/rede-social/perfil"),
         api.get<EmpresaDiretorio[]>(`/rede-social/empresas${paramsDiretorio()}`),
         api.get<Conexao[]>("/rede-social/conexoes?status=pendente"),
         api.get<Conexao[]>("/rede-social/conexoes"),
+        api.get<PostRedeSocial[]>("/rede-social/posts"),
         api.get<ConviteVitrine[]>("/convites/vitrine"),
       ]);
       setPerfil(perfilResp);
       setEmpresas(empresasResp);
       setConexoesPendentes(conexoesResp);
       setConexoesAtivas(conexoesAtivasResp);
+      setPosts(postsResp);
       setConvites(convitesResp);
     } catch {
       setErro("Não foi possível carregar a Rede Social.");
@@ -259,6 +275,39 @@ export function RedeSocial() {
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível desconectar desta empresa.");
+    }
+  }
+
+  async function publicarPost(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (publicando) return;
+    const form = event.currentTarget;
+    const dados = new FormData(form);
+    const texto = String(dados.get("texto") ?? "").trim();
+    if (!texto) return;
+    setPublicando(true);
+    setErro(null);
+    try {
+      await api.post("/rede-social/posts", {
+        texto,
+        imagem_url: String(dados.get("imagem_url") || "") || null,
+        link_url: String(dados.get("link_url") || "") || null,
+      });
+      form.reset();
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível publicar o post.");
+    } finally {
+      setPublicando(false);
+    }
+  }
+
+  async function excluirPost(postId: number) {
+    try {
+      await api.delete(`/rede-social/posts/${postId}`);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível excluir o post.");
     }
   }
 
@@ -431,6 +480,51 @@ export function RedeSocial() {
           </div>
         </Card>
       )}
+
+      <Card className="mb-4">
+        <SectionLabel>Feed da Rede</SectionLabel>
+        <form onSubmit={publicarPost} className="mb-3 flex flex-col gap-2">
+          <Textarea name="texto" required rows={2} placeholder="Compartilhe uma novidade com a rede..." />
+          <div className="flex gap-2">
+            <Input name="imagem_url" placeholder="URL de imagem (opcional)" className="flex-1" />
+            <Input name="link_url" placeholder="URL de link (opcional)" className="flex-1" />
+            <Button type="submit" size="sm" disabled={publicando}>
+              {publicando ? "Publicando..." : "Publicar"}
+            </Button>
+          </div>
+        </form>
+        <div className="flex flex-col gap-3">
+          {posts.map((post) => (
+            <div key={post.id} className="rounded-lg border border-border p-3 text-[12px]">
+              <div className="mb-1 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {post.empresa_logo_url && (
+                    <img src={post.empresa_logo_url} alt="" className="h-6 w-6 rounded object-cover" />
+                  )}
+                  <span className="font-semibold text-text">{post.empresa_nome}</span>
+                  <span className="text-muted">· {post.autor_nome}</span>
+                </div>
+                <div className="flex items-center gap-2 text-muted">
+                  <span>{new Date(post.criado_em).toLocaleString("pt-BR")}</span>
+                  {post.tenant_id === usuario?.tenant_id && (
+                    <Button size="sm" variant="ghost" onClick={() => excluirPost(post.id)}>
+                      Excluir
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="text-text">{post.texto}</div>
+              {post.imagem_url && <img src={post.imagem_url} alt="" className="mt-2 max-h-48 w-full rounded-lg object-cover" />}
+              {post.link_url && (
+                <a href={post.link_url} target="_blank" rel="noreferrer" className="mt-1 block text-cyan">
+                  {post.link_url}
+                </a>
+              )}
+            </div>
+          ))}
+          {posts.length === 0 && <div className="text-[12px] text-muted">Nenhum post publicado na rede ainda.</div>}
+        </div>
+      </Card>
 
       <Card>
         <SectionLabel>Diretório de empresas</SectionLabel>

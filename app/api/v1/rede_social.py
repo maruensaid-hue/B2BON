@@ -5,18 +5,25 @@ from app.api.deps import get_ator_id, get_db, get_tenant_id
 from app.schemas.rede_social import (
     AtualizarPerfilRequestSchema,
     ConexaoEmpresaSchema,
+    CriarPostRequestSchema,
     DeclararRelacionamentoRequestSchema,
     EmpresaDiretorioSchema,
     EnviarMensagemRequestSchema,
     MensagemRedeSocialSchema,
     PerfilEmpresaSchema,
+    PostRedeSocialSchema,
     RelacionamentoEmpresarialSchema,
     ResponderConexaoRequestSchema,
     SeguidorEmpresaSchema,
     SeguirRequestSchema,
     SolicitarConexaoRequestSchema,
 )
-from app.services import rede_social_service, relacionamento_empresarial_service, seguidor_empresa_service
+from app.services import (
+    post_rede_social_service,
+    rede_social_service,
+    relacionamento_empresarial_service,
+    seguidor_empresa_service,
+)
 
 router = APIRouter(prefix="/rede-social", tags=["rede-social"])
 
@@ -226,3 +233,32 @@ def remover_relacionamento(
     db: Session = Depends(get_db),
 ) -> None:
     relacionamento_empresarial_service.remover(db, tenant_id, ator_id, relacionamento_id)
+
+
+@router.post("/posts", response_model=PostRedeSocialSchema, status_code=201)
+def criar_post(
+    dados: CriarPostRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> PostRedeSocialSchema:
+    """Business Feed (master prompt §44-45, Fase 2B)."""
+    return post_rede_social_service.criar(db, tenant_id, ator_id, dados.texto, dados.imagem_url, dados.link_url)
+
+
+@router.get("/posts", response_model=list[PostRedeSocialSchema])
+def listar_feed(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[PostRedeSocialSchema]:
+    return post_rede_social_service.listar_feed(db)
+
+
+@router.delete("/posts/{post_id}", status_code=204)
+def excluir_post(
+    post_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    post_rede_social_service.excluir(db, tenant_id, ator_id, post_id)
