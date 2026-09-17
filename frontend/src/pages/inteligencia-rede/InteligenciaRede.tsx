@@ -20,6 +20,21 @@ interface FitIcpRede {
   confidence: "alta" | "media" | "baixa";
 }
 
+interface IntentResumo {
+  id: number;
+  titulo: string;
+  empresa_nome: string;
+}
+
+interface MatchIntent {
+  tenant_id_candidato: string;
+  empresa_nome: string;
+  match_score: number;
+  match_reasons: string[];
+  confidence: "alta" | "media" | "baixa";
+  signals: string[];
+}
+
 const ROTULO_CONFIANCA: Record<string, { texto: string; tone: "green" | "amber" | "muted" }> = {
   alta: { texto: "Confiança alta", tone: "green" },
   media: { texto: "Confiança média", tone: "amber" },
@@ -32,6 +47,12 @@ export function InteligenciaRede() {
   const [fits, setFits] = useState<FitIcpRede[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [intents, setIntents] = useState<IntentResumo[]>([]);
+  const [intentSelecionada, setIntentSelecionada] = useState<string>("");
+  const [matches, setMatches] = useState<MatchIntent[]>([]);
+  const [carregandoMatches, setCarregandoMatches] = useState(false);
+  const [explicandoId, setExplicandoId] = useState<string | null>(null);
+  const [explicacoes, setExplicacoes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     api
@@ -41,6 +62,13 @@ export function InteligenciaRede() {
         if (resposta.length > 0) setIcpSelecionado(String(resposta[0].id));
       })
       .catch(() => setErro("Não foi possível carregar os ICPs."));
+    api
+      .get<IntentResumo[]>("/rede-social/intents")
+      .then((resposta) => {
+        setIntents(resposta);
+        if (resposta.length > 0) setIntentSelecionada(String(resposta[0].id));
+      })
+      .catch(() => setErro("Não foi possível carregar as necessidades da rede."));
   }, []);
 
   useEffect(() => {
@@ -56,6 +84,35 @@ export function InteligenciaRede() {
       .catch((error) => setErro(error instanceof ApiError ? error.message : "Não foi possível calcular o fit."))
       .finally(() => setCarregando(false));
   }, [icpSelecionado]);
+
+  useEffect(() => {
+    if (!intentSelecionada) {
+      setMatches([]);
+      return;
+    }
+    setCarregandoMatches(true);
+    setErro(null);
+    api
+      .get<MatchIntent[]>(`/inteligencia-rede/intents/${intentSelecionada}/matches`)
+      .then(setMatches)
+      .catch((error) => setErro(error instanceof ApiError ? error.message : "Não foi possível calcular os matches."))
+      .finally(() => setCarregandoMatches(false));
+  }, [intentSelecionada]);
+
+  async function explicarComIA(tenantIdCandidato: string) {
+    if (explicandoId !== null) return;
+    setExplicandoId(tenantIdCandidato);
+    try {
+      const resposta = await api.post<{ explicacao: string }>(
+        `/inteligencia-rede/intents/${intentSelecionada}/matches/${tenantIdCandidato}/explicar-com-ia`,
+      );
+      setExplicacoes((atual) => ({ ...atual, [tenantIdCandidato]: resposta.explicacao }));
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível gerar a explicação com IA.");
+    } finally {
+      setExplicandoId(null);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -116,6 +173,72 @@ export function InteligenciaRede() {
             })}
           {!carregando && icpSelecionado && fits.length === 0 && (
             <div className="text-[12px] text-muted">Nenhuma outra empresa da rede ainda.</div>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <SectionLabel>Fornecedores sugeridos para uma Necessidade</SectionLabel>
+        <p className="mb-3 text-[12px] text-muted">
+          Compara uma necessidade declarada na rede contra o que cada empresa oferece (produtos, mercados,
+          tecnologias), somando pontos quando já existe conexão ou relacionamento comercial declarado entre as
+          empresas. Sempre com os motivos explicados.
+        </p>
+        {intents.length === 0 ? (
+          <div className="text-[12px] text-muted">
+            Publique ou aguarde uma necessidade na Rede Social antes de calcular fornecedores sugeridos.
+          </div>
+        ) : (
+          <div className="mb-3 w-[320px]">
+            <Select value={intentSelecionada} onChange={(event) => setIntentSelecionada(event.target.value)}>
+              {intents.map((intent) => (
+                <option key={intent.id} value={intent.id}>
+                  {intent.titulo} · {intent.empresa_nome}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+        <div className="flex flex-col gap-2">
+          {carregandoMatches && <div className="text-[12px] text-muted">Calculando...</div>}
+          {!carregandoMatches &&
+            matches.map((match) => {
+              const confianca = ROTULO_CONFIANCA[match.confidence] ?? ROTULO_CONFIANCA.baixa;
+              return (
+                <div key={match.tenant_id_candidato} className="rounded-lg border border-border p-3 text-[12px]">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-semibold text-text">{match.empresa_nome}</span>
+                    <div className="flex items-center gap-2">
+                      <Badge tone={confianca.tone}>{confianca.texto}</Badge>
+                      <span className="font-semibold text-cyan">{Math.round(match.match_score * 100)}% match</span>
+                    </div>
+                  </div>
+                  {(match.match_reasons.length > 0 || match.signals.length > 0) && (
+                    <ul className="list-disc pl-4 text-text">
+                      {[...match.match_reasons, ...match.signals].map((motivo) => (
+                        <li key={motivo}>{motivo}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {explicacoes[match.tenant_id_candidato] ? (
+                    <div className="mt-2 rounded-md bg-surf2 p-2 text-text">
+                      ✨ {explicacoes[match.tenant_id_candidato]}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => explicarComIA(match.tenant_id_candidato)}
+                      disabled={explicandoId === match.tenant_id_candidato}
+                      className="mt-2 text-cyan"
+                    >
+                      {explicandoId === match.tenant_id_candidato ? "Gerando..." : "✨ Explicar com IA"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          {!carregandoMatches && intentSelecionada && matches.length === 0 && (
+            <div className="text-[12px] text-muted">Nenhuma empresa da rede tem critério ou sinal em comum ainda.</div>
           )}
         </div>
       </Card>
