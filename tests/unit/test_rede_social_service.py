@@ -27,6 +27,31 @@ def test_atualizar_perfil(db_session):
     assert perfil.setor == "Consultoria B2B"
 
 
+def test_atualizar_perfil_campos_corporate_profile(db_session):
+    """Master prompt Fase 1 (§38) — campos de identidade/richness novos."""
+    rede_social_service.atualizar_perfil(
+        db_session, TENANT_A, None,
+        logo_url="https://acme.com/logo.png",
+        capa_url="https://acme.com/capa.png",
+        cnae_principal="6201500",
+        porte="MEDIO",
+        sede_cidade="São Paulo",
+        sede_uf="SP",
+        mercados=["Saúde", "Educação"],
+        produtos_servicos=["Consultoria de LGPD"],
+        tecnologias=["AWS", "Kubernetes"],
+        certificacoes=["ISO 27001"],
+        redes_sociais={"linkedin": "https://linkedin.com/company/acme"},
+    )
+
+    perfil = rede_social_service.obter_perfil(db_session, TENANT_A)
+    assert perfil.logo_url == "https://acme.com/logo.png"
+    assert perfil.porte == "MEDIO"
+    assert perfil.mercados == ["Saúde", "Educação"]
+    assert perfil.redes_sociais == {"linkedin": "https://linkedin.com/company/acme"}
+    assert perfil.status_verificacao == "nao_verificada"  # default até a 1B
+
+
 def test_solicitar_e_aceitar_conexao(db_session):
     conexao = rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B)
     assert conexao.status == "pendente"

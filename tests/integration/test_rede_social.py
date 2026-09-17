@@ -24,6 +24,22 @@ def test_atualizar_perfil_via_api(client):
     assert resposta.json()["nome_exibicao"] == "CyberFort"
 
 
+def test_atualizar_perfil_corporate_profile_via_api(client):
+    resposta = client.put(
+        "/api/v1/rede-social/perfil",
+        json={
+            "porte": "GRANDE", "sede_cidade": "Rio de Janeiro", "sede_uf": "RJ",
+            "mercados": ["Fintech"], "redes_sociais": {"linkedin": "https://linkedin.com/company/x"},
+        },
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["porte"] == "GRANDE"
+    assert corpo["mercados"] == ["Fintech"]
+    assert corpo["status_verificacao"] == "nao_verificada"
+
+
 def test_diretorio_solicitar_e_aceitar_conexao(client, criar_usuario_autenticado):
     headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
     client.put("/api/v1/rede-social/perfil", json={"nome_exibicao": "Empresa B"}, headers=headers_b)

@@ -11,6 +11,18 @@ class PerfilEmpresaSchema(BaseModel):
     descricao: str | None
     setor: str | None
     site: str | None
+    logo_url: str | None
+    capa_url: str | None
+    cnae_principal: str | None
+    porte: str | None
+    sede_cidade: str | None
+    sede_uf: str | None
+    mercados: list[str]
+    produtos_servicos: list[str]
+    tecnologias: list[str]
+    certificacoes: list[str]
+    redes_sociais: dict[str, str]
+    status_verificacao: str
     criado_em: datetime
     atualizado_em: datetime
 
@@ -20,6 +32,17 @@ class AtualizarPerfilRequestSchema(BaseModel):
     descricao: str | None = None
     setor: str | None = None
     site: str | None = None
+    logo_url: str | None = None
+    capa_url: str | None = None
+    cnae_principal: str | None = None
+    porte: str | None = None
+    sede_cidade: str | None = None
+    sede_uf: str | None = None
+    mercados: list[str] | None = None
+    produtos_servicos: list[str] | None = None
+    tecnologias: list[str] | None = None
+    certificacoes: list[str] | None = None
+    redes_sociais: dict[str, str] | None = None
 
 
 class OfertaResumoSchema(BaseModel):

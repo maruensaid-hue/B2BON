@@ -3,18 +3,42 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
+import { Input, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { ConversaModal } from "@/pages/rede-social/ConversaModal";
+import { PerfilEmpresaDetalheModal } from "@/pages/rede-social/PerfilEmpresaDetalheModal";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
-interface PerfilEmpresa {
+export interface PerfilEmpresa {
   tenant_id: string;
   nome_exibicao: string;
   descricao: string | null;
   setor: string | null;
   site: string | null;
+  logo_url: string | null;
+  capa_url: string | null;
+  cnae_principal: string | null;
+  porte: string | null;
+  sede_cidade: string | null;
+  sede_uf: string | null;
+  mercados: string[];
+  produtos_servicos: string[];
+  tecnologias: string[];
+  certificacoes: string[];
+  redes_sociais: Record<string, string>;
+  status_verificacao: string;
+}
+
+function listaParaTexto(valores: string[]): string {
+  return valores.join(", ");
+}
+
+function textoParaLista(texto: FormDataEntryValue | null): string[] {
+  return String(texto ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 interface OfertaResumo {
@@ -60,6 +84,7 @@ export function RedeSocial() {
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
   const [modalConviteAberto, setModalConviteAberto] = useState(false);
   const [conversaTenantId, setConversaTenantId] = useState<string | null>(null);
+  const [perfilDetalheTenantId, setPerfilDetalheTenantId] = useState<string | null>(null);
   const [convites, setConvites] = useState<ConviteVitrine[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -100,6 +125,17 @@ export function RedeSocial() {
         descricao: String(form.get("descricao") || "") || null,
         setor: String(form.get("setor") || "") || null,
         site: String(form.get("site") || "") || null,
+        logo_url: String(form.get("logo_url") || "") || null,
+        capa_url: String(form.get("capa_url") || "") || null,
+        cnae_principal: String(form.get("cnae_principal") || "") || null,
+        porte: String(form.get("porte") || "") || null,
+        sede_cidade: String(form.get("sede_cidade") || "") || null,
+        sede_uf: String(form.get("sede_uf") || "") || null,
+        mercados: textoParaLista(form.get("mercados")),
+        produtos_servicos: textoParaLista(form.get("produtos_servicos")),
+        tecnologias: textoParaLista(form.get("tecnologias")),
+        certificacoes: textoParaLista(form.get("certificacoes")),
+        redes_sociais: form.get("linkedin") ? { linkedin: String(form.get("linkedin")) } : {},
       });
       setModalPerfilAberto(false);
       await carregarTudo();
@@ -292,7 +328,13 @@ export function RedeSocial() {
           {empresas.map((empresa) => (
             <div key={empresa.perfil.tenant_id} className="rounded-xl border border-border bg-surf2 p-3.5">
               <div className="mb-1 flex items-center justify-between">
-                <div className="text-[13px] font-bold">{empresa.perfil.nome_exibicao}</div>
+                <button
+                  type="button"
+                  className="text-left text-[13px] font-bold hover:text-cyan"
+                  onClick={() => setPerfilDetalheTenantId(empresa.perfil.tenant_id)}
+                >
+                  {empresa.perfil.nome_exibicao}
+                </button>
                 <Badge tone={empresa.status_conexao === "aceita" ? "green" : "muted"}>
                   {empresa.status_conexao}
                 </Badge>
@@ -362,6 +404,56 @@ export function RedeSocial() {
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Descrição</div>
             <Input name="descricao" defaultValue={perfil?.descricao ?? ""} />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Logo (URL)</div>
+              <Input name="logo_url" defaultValue={perfil?.logo_url ?? ""} placeholder="https://..." />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Capa (URL)</div>
+              <Input name="capa_url" defaultValue={perfil?.capa_url ?? ""} placeholder="https://..." />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">CNAE principal</div>
+              <Input name="cnae_principal" defaultValue={perfil?.cnae_principal ?? ""} placeholder="6201500" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Porte</div>
+              <Input name="porte" defaultValue={perfil?.porte ?? ""} placeholder="PEQUENO/MEDIO/GRANDE" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">LinkedIn</div>
+              <Input name="linkedin" defaultValue={perfil?.redes_sociais?.linkedin ?? ""} placeholder="https://..." />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Cidade da sede</div>
+              <Input name="sede_cidade" defaultValue={perfil?.sede_cidade ?? ""} />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">UF da sede</div>
+              <Input name="sede_uf" defaultValue={perfil?.sede_uf ?? ""} placeholder="SP" />
+            </div>
+          </div>
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Mercados atendidos (separados por vírgula)</div>
+            <Input name="mercados" defaultValue={listaParaTexto(perfil?.mercados ?? [])} placeholder="Saúde, Educação" />
+          </div>
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Produtos/serviços (separados por vírgula)</div>
+            <Textarea name="produtos_servicos" rows={2} defaultValue={listaParaTexto(perfil?.produtos_servicos ?? [])} />
+          </div>
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Tecnologias (separadas por vírgula)</div>
+            <Input name="tecnologias" defaultValue={listaParaTexto(perfil?.tecnologias ?? [])} placeholder="AWS, Kubernetes" />
+          </div>
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Certificações (separadas por vírgula)</div>
+            <Input name="certificacoes" defaultValue={listaParaTexto(perfil?.certificacoes ?? [])} placeholder="ISO 27001" />
+          </div>
           <Button type="submit" className="w-full justify-center">
             Salvar
           </Button>
@@ -412,6 +504,13 @@ export function RedeSocial() {
             conversaTenantId
           }
           onClose={() => setConversaTenantId(null)}
+        />
+      )}
+
+      {perfilDetalheTenantId !== null && (
+        <PerfilEmpresaDetalheModal
+          perfil={empresas.find((empresa) => empresa.perfil.tenant_id === perfilDetalheTenantId)?.perfil ?? null}
+          onClose={() => setPerfilDetalheTenantId(null)}
         />
       )}
     </div>

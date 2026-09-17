@@ -48,6 +48,17 @@ def atualizar_perfil(
     descricao: str | None = None,
     setor: str | None = None,
     site: str | None = None,
+    logo_url: str | None = None,
+    capa_url: str | None = None,
+    cnae_principal: str | None = None,
+    porte: str | None = None,
+    sede_cidade: str | None = None,
+    sede_uf: str | None = None,
+    mercados: list[str] | None = None,
+    produtos_servicos: list[str] | None = None,
+    tecnologias: list[str] | None = None,
+    certificacoes: list[str] | None = None,
+    redes_sociais: dict[str, str] | None = None,
 ) -> PerfilEmpresa:
     perfil = garantir_perfil(db, tenant_id)
     if nome_exibicao is not None:
@@ -58,6 +69,28 @@ def atualizar_perfil(
         perfil.setor = setor
     if site is not None:
         perfil.site = site
+    if logo_url is not None:
+        perfil.logo_url = logo_url
+    if capa_url is not None:
+        perfil.capa_url = capa_url
+    if cnae_principal is not None:
+        perfil.cnae_principal = cnae_principal
+    if porte is not None:
+        perfil.porte = porte
+    if sede_cidade is not None:
+        perfil.sede_cidade = sede_cidade
+    if sede_uf is not None:
+        perfil.sede_uf = sede_uf
+    if mercados is not None:
+        perfil.mercados = mercados
+    if produtos_servicos is not None:
+        perfil.produtos_servicos = produtos_servicos
+    if tecnologias is not None:
+        perfil.tecnologias = tecnologias
+    if certificacoes is not None:
+        perfil.certificacoes = certificacoes
+    if redes_sociais is not None:
+        perfil.redes_sociais = redes_sociais
 
     auditoria_service.registrar(db, tenant_id, "perfil_empresa_atualizado", "perfil_empresa", perfil.id, ator_id, {})
     db.commit()

@@ -33,7 +33,24 @@ def atualizar_perfil(
     db: Session = Depends(get_db),
 ) -> PerfilEmpresaSchema:
     return rede_social_service.atualizar_perfil(
-        db, tenant_id, ator_id, dados.nome_exibicao, dados.descricao, dados.setor, dados.site
+        db,
+        tenant_id,
+        ator_id,
+        nome_exibicao=dados.nome_exibicao,
+        descricao=dados.descricao,
+        setor=dados.setor,
+        site=dados.site,
+        logo_url=dados.logo_url,
+        capa_url=dados.capa_url,
+        cnae_principal=dados.cnae_principal,
+        porte=dados.porte,
+        sede_cidade=dados.sede_cidade,
+        sede_uf=dados.sede_uf,
+        mercados=dados.mercados,
+        produtos_servicos=dados.produtos_servicos,
+        tecnologias=dados.tecnologias,
+        certificacoes=dados.certificacoes,
+        redes_sociais=dados.redes_sociais,
     )
 
 
