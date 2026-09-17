@@ -244,6 +244,67 @@ def test_poda_remove_socios_orfaos(db_session, monkeypatch: pytest.MonkeyPatch):
     assert "11222333" in restantes  # sócios do Alpha (ainda coberto) continuam
 
 
+def test_poda_nao_marca_como_coberto_cnae_uf_ainda_nao_baixado(db_session, monkeypatch: pytest.MonkeyPatch):
+    """Bug real: a poda diária calculava a união de CNAE/UF dos ICPs
+    ativos NO MOMENTO DA PODA e gravava isso direto como
+    `cobertos` — mesmo que aquele CNAE/UF nunca tivesse sido
+    efetivamente baixado (ex.: ICP criado depois da última carga real,
+    poda rodando antes do próximo ciclo de `atualizar_recorte_automatico`
+    pegar a diferença). O estado ficava permanentemente "coberto" pra um
+    recorte vazio, e `atualizar_recorte_automatico` nunca mais tentava
+    baixar de novo — `gerar_lista` do ICP novo voltava vazio pra
+    sempre, sem nenhum erro pra avisar."""
+    _criar_icp(db_session, "tenant-a", ativo=True, cnae_codigos=["6201500"], ufs=["SP"])
+    _mockar_download(monkeypatch)
+    cnpj_recorte_service.atualizar_recorte_automatico(db_session)  # 6201500/SP baixado de verdade
+
+    # ICP B criado DEPOIS da carga real acima — seu recorte (4711301/RJ)
+    # nunca foi baixado. A poda roda antes de qualquer nova carga pegar
+    # essa diferença (cron diário vs. a cada 30min, mas pode coincidir).
+    _criar_icp(db_session, "tenant-b", ativo=True, cnae_codigos=["4711301"], ufs=["RJ"])
+
+    resultado_poda = cnpj_recorte_service.podar_recorte_nao_utilizado(db_session)
+    assert resultado_poda["executado"] is True
+
+    estado = db_session.query(RecorteCnpjEstado).one()
+    assert "4711301" not in estado.cnae_codigos_cobertos  # nao pode fingir que ja baixou
+    assert "RJ" not in estado.ufs_cobertos
+
+    # Prova de ponta a ponta: o proximo ciclo automatico ainda precisa
+    # baixar o recorte da Beta.
+    tipos_baixados = []
+    monkeypatch.setattr(
+        cnpj_recorte_service,
+        "baixar_shards",
+        lambda mes, tipo, diretorio: tipos_baixados.append(tipo)
+        or [str(FIXTURES / {"Empresas": "empresas.csv", "Estabelecimentos": "estabelecimentos.csv", "Socios": "socios.csv"}[tipo])],
+    )
+
+    resultado = cnpj_recorte_service.atualizar_recorte_automatico(db_session)
+
+    assert resultado["executado"] is True
+    assert set(tipos_baixados) == {"Empresas", "Estabelecimentos", "Socios"}
+
+
+def test_poda_continua_encolhendo_estado_para_icp_desativado(db_session, monkeypatch: pytest.MonkeyPatch):
+    """A poda ainda precisa remover do estado de cobertura o que nao e
+    mais exigido por nenhum ICP ativo (comportamento original,
+    preservado pelo fix acima: interseccao, nao substituicao)."""
+    _criar_icp(db_session, "tenant-a", ativo=True, cnae_codigos=["6201500"], ufs=["SP"])
+    icp_b = _criar_icp(db_session, "tenant-b", ativo=True, cnae_codigos=["4711301"], ufs=["RJ"])
+    _mockar_download(monkeypatch)
+    cnpj_recorte_service.atualizar_recorte_automatico(db_session)  # cobre os dois de verdade
+
+    icp_b.ativo = False
+    db_session.commit()
+
+    cnpj_recorte_service.podar_recorte_nao_utilizado(db_session)
+
+    estado = db_session.query(RecorteCnpjEstado).one()
+    assert estado.cnae_codigos_cobertos == ["6201500"]
+    assert estado.ufs_cobertos == ["SP"]
+
+
 def test_poda_sem_icp_ativo_nao_apaga_nada_por_seguranca(db_session):
     resultado = cnpj_recorte_service.podar_recorte_nao_utilizado(db_session)
 

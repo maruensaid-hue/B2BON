@@ -188,9 +188,19 @@ def podar_recorte_nao_utilizado(db: Session) -> dict:
     # senão, quando um CNAE/UF podado voltar a ser necessário (ICP
     # reativado), o sistema acharia que "já está coberto" e nunca
     # rebaixaria os dados de volta.
+    #
+    # Interseção com o que já estava marcado como coberto (bug real: um
+    # `estado.cnae_codigos_cobertos = sorted(cnae_set)` direto aqui
+    # SUBSTITUÍA a cobertura pela união dos ICPs ativos NO MOMENTO DA
+    # PODA, sem checar se esse CNAE/UF tinha sido genuinamente baixado —
+    # um ICP criado depois da última carga real, mas antes do próximo
+    # `atualizar_recorte_automatico` (cron diário vs. a cada 30min, pode
+    # coincidir), ficava marcado como "coberto" pra um recorte vazio, e
+    # nunca mais disparava download nenhum: `gerar_lista` desse ICP
+    # voltava vazio pra sempre, sem erro nenhum pra avisar).
     estado = _obter_ou_criar_estado(db)
-    estado.cnae_codigos_cobertos = sorted(cnae_set)
-    estado.ufs_cobertos = sorted(uf_set)
+    estado.cnae_codigos_cobertos = sorted(set(estado.cnae_codigos_cobertos) & cnae_set)
+    estado.ufs_cobertos = sorted(set(estado.ufs_cobertos) & uf_set)
     db.commit()
 
     return {
