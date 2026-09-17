@@ -24,6 +24,7 @@ from app.api.v1.envios import router as envios_router
 from app.api.v1.faq import router as faq_router
 from app.api.v1.icp import router as icp_router
 from app.api.v1.indicacoes import router as indicacoes_router
+from app.api.v1.inteligencia_rede import router as inteligencia_rede_router
 from app.api.v1.integracoes import router as integracoes_router
 from app.api.v1.leads import router as leads_router
 from app.api.v1.linkedin import router as linkedin_router
@@ -112,6 +113,7 @@ router.include_router(parceiros_router)
 router.include_router(relatorios_router)
 router.include_router(crm_router, dependencies=_exige_licenca)
 router.include_router(rede_social_router)
+router.include_router(inteligencia_rede_router, dependencies=_exige_licenca)
 router.include_router(verificacao_empresa_router)
 router.include_router(motor_router, dependencies=_exige_licenca)
 # MAP de contas — visível a user/admin/super_admin dentro do próprio

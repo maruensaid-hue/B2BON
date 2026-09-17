@@ -45,6 +45,9 @@ const Prospeccao = lazy(() => import("@/pages/prospeccao/Prospeccao").then((m) =
 const RegrasAprendidas = lazy(() =>
   import("@/pages/regras-aprendidas/RegrasAprendidas").then((m) => ({ default: m.RegrasAprendidas })),
 );
+const InteligenciaRede = lazy(() =>
+  import("@/pages/inteligencia-rede/InteligenciaRede").then((m) => ({ default: m.InteligenciaRede })),
+);
 const RedeSocial = lazy(() => import("@/pages/rede-social/RedeSocial").then((m) => ({ default: m.RedeSocial })));
 const Reunioes = lazy(() => import("@/pages/reunioes/Reunioes").then((m) => ({ default: m.Reunioes })));
 const RegistroOportunidade = lazy(() =>
@@ -209,6 +212,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <RegrasAprendidas />
+              </Suspense>
+            }
+          />
+          <Route
+            path="inteligencia-rede"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <InteligenciaRede />
               </Suspense>
             }
           />
