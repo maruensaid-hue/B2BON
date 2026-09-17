@@ -37,7 +37,54 @@ interface RelatorioEntrega {
   contatos_com_bounce: ContatoComBounce[];
 }
 
+interface EnvioEmail {
+  origem: "cadencia" | "campanha";
+  origem_nome: string;
+  decisor_id: number | null;
+  conta_id: number | null;
+  nome: string;
+  email: string | null;
+  conta_nome: string | null;
+  status: "erro" | "enviado" | "aberto" | "pendente" | "cancelado";
+  detalhe: string | null;
+  enviado_em: string | null;
+  criado_em: string;
+}
+
+interface ListaEnviosEmail {
+  itens: EnvioEmail[];
+  total: number;
+  contagem_por_status: Record<string, number>;
+}
+
 const ROTULOS_CANAL: Record<string, string> = { email: "E-mail", whatsapp: "WhatsApp", linkedin: "LinkedIn" };
+
+const ABAS_STATUS: { valor: string; rotulo: string }[] = [
+  { valor: "todos", rotulo: "Todos" },
+  { valor: "erro", rotulo: "Erro" },
+  { valor: "enviado", rotulo: "Enviado" },
+  { valor: "aberto", rotulo: "Aberto" },
+  { valor: "pendente", rotulo: "Pendente" },
+  { valor: "cancelado", rotulo: "Cancelado" },
+];
+
+const TOM_STATUS: Record<string, "red" | "green" | "violet" | "amber" | "muted"> = {
+  erro: "red",
+  enviado: "green",
+  aberto: "violet",
+  pendente: "amber",
+  cancelado: "muted",
+};
+
+const ROTULO_STATUS: Record<string, string> = {
+  erro: "Erro",
+  enviado: "Enviado",
+  aberto: "Aberto",
+  pendente: "Pendente",
+  cancelado: "Cancelado",
+};
+
+const LIMITE_POR_PAGINA = 50;
 
 function paraPercentual(valor: number | null | undefined): string {
   if (valor === null || valor === undefined) return "—";
@@ -46,6 +93,10 @@ function paraPercentual(valor: number | null | undefined): string {
 
 export function RelatorioEntrega() {
   const [relatorio, setRelatorio] = useState<RelatorioEntrega | null>(null);
+  const [envios, setEnvios] = useState<ListaEnviosEmail | null>(null);
+  const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [pagina, setPagina] = useState(0);
+  const [carregandoEnvios, setCarregandoEnvios] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [reativando, setReativando] = useState(false);
@@ -60,9 +111,29 @@ export function RelatorioEntrega() {
     }
   }
 
+  async function carregarEnvios(status: string, offset: number) {
+    setCarregandoEnvios(true);
+    try {
+      const params = new URLSearchParams({
+        status,
+        limite: String(LIMITE_POR_PAGINA),
+        offset: String(offset * LIMITE_POR_PAGINA),
+      });
+      setEnvios(await api.get<ListaEnviosEmail>(`/relatorio-entrega/envios?${params.toString()}`));
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível carregar o detalhamento de envios.");
+    } finally {
+      setCarregandoEnvios(false);
+    }
+  }
+
   useEffect(() => {
     carregar();
   }, []);
+
+  useEffect(() => {
+    carregarEnvios(filtroStatus, pagina);
+  }, [filtroStatus, pagina]);
 
   async function reativarCanalEmail() {
     if (reativando) return;
@@ -79,7 +150,7 @@ export function RelatorioEntrega() {
     }
   }
 
-  async function suprimirContato(decisorId: number) {
+  async function suprimirContato(decisorId: number, contaId: number | null) {
     if (suprimindoDecisorId !== null) return;
     setSuprimindoDecisorId(decisorId);
     setErro(null);
@@ -87,10 +158,10 @@ export function RelatorioEntrega() {
       // A rota vive sob /contas/{conta_id}/..., mas `optout_service` só
       // precisa do decisor_id — qualquer conta_id no path funciona; usamos
       // a conta real só por clareza semântica da URL.
-      const contato = relatorio?.contatos_com_bounce.find((item) => item.decisor_id === decisorId);
-      await api.post(`/contas/${contato?.conta_id ?? 0}/decisores/${decisorId}/suprimir`);
+      await api.post(`/contas/${contaId ?? 0}/decisores/${decisorId}/suprimir`);
       setMensagem("Contato excluído — não vai mais receber mensagens.");
       await carregar();
+      await carregarEnvios(filtroStatus, pagina);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível excluir o contato.");
     } finally {
@@ -99,6 +170,7 @@ export function RelatorioEntrega() {
   }
 
   const saude = relatorio?.saude_email;
+  const totalPaginas = envios ? Math.max(1, Math.ceil(envios.total / LIMITE_POR_PAGINA)) : 1;
 
   return (
     <div className="p-5.5">
@@ -163,45 +235,102 @@ export function RelatorioEntrega() {
       </Card>
 
       <Card>
-        <SectionLabel>Contatos com e-mail rejeitado</SectionLabel>
-        {relatorio && relatorio.contatos_com_bounce.length === 0 && (
-          <div className="text-[12px] text-muted">Nenhum contato com bounce registrado.</div>
-        )}
-        <div className="flex flex-col gap-2">
-          {relatorio?.contatos_com_bounce.map((contato) => (
-            <div
-              key={`${contato.decisor_id ?? "avulso"}-${contato.bounce_em}`}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-2.5 text-[12px]"
-            >
-              <div>
-                <div className="font-semibold text-text">
-                  {contato.nome} {contato.conta_nome && <span className="text-muted">· {contato.conta_nome}</span>}
-                </div>
-                <div className="text-muted">
-                  {contato.email ?? "sem e-mail"} · {contato.motivo_bounce ?? "motivo não informado"} ·{" "}
-                  {new Date(contato.bounce_em).toLocaleString("pt-BR")}
-                </div>
-              </div>
-              <div className="flex flex-shrink-0 items-center gap-2">
-                {contato.conta_id !== null && (
-                  <Button size="sm" variant="ghost" onClick={() => setContaEmEdicaoId(contato.conta_id)}>
-                    Editar e-mail
-                  </Button>
-                )}
-                {contato.decisor_id !== null && (
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    disabled={suprimindoDecisorId === contato.decisor_id}
-                    onClick={() => suprimirContato(contato.decisor_id!)}
-                  >
-                    {suprimindoDecisorId === contato.decisor_id ? "Excluindo..." : "Excluir contato"}
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))}
+        <div className="mb-3 flex items-center justify-between">
+          <SectionLabel>Detalhamento de envios de e-mail — por destinatário</SectionLabel>
+          <span className="text-[11px] text-muted">{envios?.total ?? 0} destinatário(s) no filtro atual</span>
         </div>
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {ABAS_STATUS.map((aba) => {
+            // `envios.total` reflete só o filtro selecionado no momento —
+            // pra rotular a aba "Todos" com o total geral, soma-se
+            // `contagem_por_status`, que o backend sempre calcula sem filtro.
+            const totalGeral = envios
+              ? Object.values(envios.contagem_por_status).reduce((soma, valor) => soma + valor, 0)
+              : undefined;
+            const contagem = envios?.contagem_por_status[aba.valor];
+            const totalAba = aba.valor === "todos" ? totalGeral : contagem;
+            return (
+              <Button
+                key={aba.valor}
+                size="sm"
+                variant={filtroStatus === aba.valor ? "primary" : "ghost"}
+                onClick={() => {
+                  setFiltroStatus(aba.valor);
+                  setPagina(0);
+                }}
+              >
+                {aba.rotulo} {totalAba !== undefined && `(${totalAba})`}
+              </Button>
+            );
+          })}
+        </div>
+
+        {carregandoEnvios && <div className="text-[12px] text-muted">Carregando...</div>}
+        {!carregandoEnvios && envios && envios.itens.length === 0 && (
+          <div className="text-[12px] text-muted">Nenhum envio de e-mail nesse filtro.</div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          {!carregandoEnvios &&
+            envios?.itens.map((item, indice) => (
+              <div
+                key={`${item.decisor_id ?? "avulso"}-${item.origem}-${item.criado_em}-${indice}`}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-2.5 text-[12px]"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Badge tone={TOM_STATUS[item.status]}>{ROTULO_STATUS[item.status]}</Badge>
+                    <span className="font-semibold text-text">
+                      {item.nome} {item.conta_nome && <span className="text-muted">· {item.conta_nome}</span>}
+                    </span>
+                  </div>
+                  <div className="text-muted">
+                    {item.email ?? "sem e-mail"} · {item.origem_nome}
+                    {item.detalhe && <> · {item.detalhe}</>} ·{" "}
+                    {new Date(item.enviado_em ?? item.criado_em).toLocaleString("pt-BR")}
+                  </div>
+                </div>
+                {item.status === "erro" && (
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    {item.conta_id !== null && (
+                      <Button size="sm" variant="ghost" onClick={() => setContaEmEdicaoId(item.conta_id)}>
+                        Editar e-mail
+                      </Button>
+                    )}
+                    {item.decisor_id !== null && (
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={suprimindoDecisorId === item.decisor_id}
+                        onClick={() => suprimirContato(item.decisor_id!, item.conta_id)}
+                      >
+                        {suprimindoDecisorId === item.decisor_id ? "Excluindo..." : "Excluir contato"}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+        </div>
+
+        {envios && envios.total > LIMITE_POR_PAGINA && (
+          <div className="mt-3 flex items-center justify-between text-[11px] text-muted">
+            <Button size="sm" variant="ghost" disabled={pagina === 0} onClick={() => setPagina((p) => Math.max(0, p - 1))}>
+              ← Anterior
+            </Button>
+            <span>
+              Página {pagina + 1} de {totalPaginas}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={pagina + 1 >= totalPaginas}
+              onClick={() => setPagina((p) => p + 1)}
+            >
+              Próxima →
+            </Button>
+          </div>
+        )}
       </Card>
 
       {contaEmEdicaoId !== null && (
