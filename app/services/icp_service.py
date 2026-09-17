@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.conta import Conta
 from app.models.icp import ICP
 from app.models.oferta import Oferta
-from app.providers.account_data.receita_federal_downloader import normalizar_cnae, normalizar_uf
+from app.providers.account_data.receita_federal_downloader import normalizar_uf
 from app.schemas.icp import ICPCreateSchema
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado
@@ -50,7 +50,14 @@ def criar(db: Session, tenant_id: str, ator_id: str | None, dados: ICPCreateSche
         regiao=dados.regiao,
         dores=dados.dores,
         gatilhos=dados.gatilhos,
-        cnae_codigos=[normalizar_cnae(c) for c in dados.cnae_codigos],
+        # cnae_codigos fica como digitado (sem normalizar aqui): o Match
+        # Engine da Rede Social (`sinal_oportunidade_service.calcular_fit_icp`)
+        # compara contra `PerfilEmpresa.cnae_principal`, que é autodeclarado
+        # e não passa por `normalizar_cnae` — normalizar só na gravação
+        # quebraria esse match. Quem precisa do formato dígitos-puros da
+        # Receita Federal (`receita_federal.buscar_candidatos`,
+        # `cnpj_recorte_service`) já normaliza no ponto de uso.
+        cnae_codigos=dados.cnae_codigos,
         ufs=[normalizar_uf(uf) for uf in dados.ufs],
     )
     db.add(icp)
@@ -80,7 +87,7 @@ def nova_versao(db: Session, tenant_id: str, ator_id: str | None, icp_id: int, d
         regiao=dados.regiao,
         dores=dados.dores,
         gatilhos=dados.gatilhos,
-        cnae_codigos=[normalizar_cnae(c) for c in dados.cnae_codigos],
+        cnae_codigos=dados.cnae_codigos,
         ufs=[normalizar_uf(uf) for uf in dados.ufs],
     )
 
@@ -113,7 +120,7 @@ def clonar(db: Session, tenant_id: str, ator_id: str | None, icp_id: int) -> ICP
         regiao=origem.regiao,
         dores=list(origem.dores),
         gatilhos=list(origem.gatilhos),
-        cnae_codigos=[normalizar_cnae(c) for c in origem.cnae_codigos],
+        cnae_codigos=list(origem.cnae_codigos),
         ufs=[normalizar_uf(uf) for uf in origem.ufs],
     )
     db.add(clone)

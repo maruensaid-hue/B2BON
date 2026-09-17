@@ -36,6 +36,7 @@ from app.models.reuniao import Reuniao
 from app.models.tarefa_linkedin import TarefaLinkedin
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, DecisorCandidato, FiltroBusca
+from app.providers.account_data.receita_federal_downloader import normalizar_cnae
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
@@ -47,7 +48,12 @@ from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 def _score_aderencia(db: Session, tenant_id: str, icp: ICP, candidato: ContaCandidata) -> float:
     pontuacao = 0.0
-    if candidato.cnae_principal in icp.cnae_codigos:
+    # `candidato.cnae_principal` vem sempre em dígitos puros (Receita
+    # Federal, via `buscar_candidatos`) — `icp.cnae_codigos` fica como a
+    # pessoa digitou (ver `icp_service.criar`), então normaliza aqui pro
+    # mesmo formato antes de comparar, senão um ICP com CNAE pontuado
+    # nunca pontua o critério mesmo achando a conta certa.
+    if candidato.cnae_principal in {normalizar_cnae(c) for c in icp.cnae_codigos}:
         pontuacao += 0.5
     if candidato.uf.upper() in {uf.upper() for uf in icp.ufs}:
         pontuacao += 0.3
