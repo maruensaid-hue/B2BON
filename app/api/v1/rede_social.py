@@ -8,10 +8,12 @@ from app.schemas.rede_social import (
     ConexaoEmpresaSchema,
     ContagemNaoLidasSchema,
     CriarComentarioRequestSchema,
+    CriarIntentRequestSchema,
     CriarPostRequestSchema,
     DeclararRelacionamentoRequestSchema,
     EmpresaDiretorioSchema,
     EnviarMensagemRequestSchema,
+    IntentSchema,
     MensagemRedeSocialSchema,
     NotificacaoRedeSocialSchema,
     PerfilEmpresaSchema,
@@ -24,6 +26,7 @@ from app.schemas.rede_social import (
     SolicitarConexaoRequestSchema,
 )
 from app.services import (
+    intent_service,
     notificacao_rede_social_service,
     post_rede_social_service,
     rede_social_service,
@@ -333,3 +336,64 @@ def marcar_todas_notificacoes_lidas(
     db: Session = Depends(get_db),
 ) -> None:
     notificacao_rede_social_service.marcar_todas_lidas(db, tenant_id)
+
+
+@router.post("/intents", response_model=IntentSchema, status_code=201)
+def criar_intent(
+    dados: CriarIntentRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> IntentSchema:
+    """Business Intent (master prompt §46-47, Fase 3A)."""
+    return intent_service.criar(
+        db,
+        tenant_id,
+        ator_id,
+        dados.categoria,
+        dados.titulo,
+        dados.descricao,
+        dados.requisitos,
+        dados.faixa_orcamento,
+        dados.localizacao,
+        dados.prazo,
+        dados.perfil_fornecedor_desejado,
+        dados.visibilidade,
+    )
+
+
+@router.get("/intents", response_model=list[IntentSchema])
+def listar_intents(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[IntentSchema]:
+    return intent_service.listar(db, tenant_id)
+
+
+@router.get("/intents/{intent_id}", response_model=IntentSchema)
+def obter_intent(
+    intent_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> IntentSchema:
+    return intent_service.obter_visivel(db, tenant_id, intent_id)
+
+
+@router.post("/intents/{intent_id}/encerrar", response_model=IntentSchema)
+def encerrar_intent(
+    intent_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> IntentSchema:
+    return intent_service.encerrar(db, tenant_id, ator_id, intent_id)
+
+
+@router.post("/intents/{intent_id}/atender", response_model=IntentSchema)
+def marcar_intent_atendida(
+    intent_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> IntentSchema:
+    return intent_service.marcar_atendida(db, tenant_id, ator_id, intent_id)

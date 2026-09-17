@@ -92,6 +92,31 @@ interface Conexao {
   status: string;
 }
 
+interface Intent {
+  id: number;
+  tenant_id: string;
+  empresa_nome: string;
+  categoria: string;
+  titulo: string;
+  descricao: string;
+  requisitos: string[];
+  faixa_orcamento: string | null;
+  localizacao: string | null;
+  prazo: string | null;
+  perfil_fornecedor_desejado: string | null;
+  visibilidade: "publica" | "conexoes";
+  status: "aberta" | "atendida" | "expirada" | "cancelada";
+  criado_em: string;
+  expira_em: string | null;
+}
+
+const ROTULO_STATUS_INTENT: Record<string, { texto: string; tone: "green" | "amber" | "muted" | "red" }> = {
+  aberta: { texto: "Aberta", tone: "green" },
+  atendida: { texto: "Atendida", tone: "muted" },
+  expirada: { texto: "Expirada", tone: "amber" },
+  cancelada: { texto: "Cancelada", tone: "red" },
+};
+
 interface ConviteVitrine {
   id: number;
   codigo: string;
@@ -122,6 +147,8 @@ export function RedeSocial() {
   const [novoComentarioTexto, setNovoComentarioTexto] = useState<Record<number, string>>({});
   const [enviandoComentarioId, setEnviandoComentarioId] = useState<number | null>(null);
   const [reagindoId, setReagindoId] = useState<number | null>(null);
+  const [intents, setIntents] = useState<Intent[]>([]);
+  const [publicandoIntent, setPublicandoIntent] = useState(false);
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
   const [modalVerificacaoAberto, setModalVerificacaoAberto] = useState(false);
   const [modalConviteAberto, setModalConviteAberto] = useState(false);
@@ -157,20 +184,23 @@ export function RedeSocial() {
 
   async function carregarTudo() {
     try {
-      const [perfilResp, empresasResp, conexoesResp, conexoesAtivasResp, postsResp, convitesResp] = await Promise.all([
-        api.get<PerfilEmpresa>("/rede-social/perfil"),
-        api.get<EmpresaDiretorio[]>(`/rede-social/empresas${paramsDiretorio()}`),
-        api.get<Conexao[]>("/rede-social/conexoes?status=pendente"),
-        api.get<Conexao[]>("/rede-social/conexoes"),
-        api.get<PostRedeSocial[]>("/rede-social/posts"),
-        api.get<ConviteVitrine[]>("/convites/vitrine"),
-      ]);
+      const [perfilResp, empresasResp, conexoesResp, conexoesAtivasResp, postsResp, convitesResp, intentsResp] =
+        await Promise.all([
+          api.get<PerfilEmpresa>("/rede-social/perfil"),
+          api.get<EmpresaDiretorio[]>(`/rede-social/empresas${paramsDiretorio()}`),
+          api.get<Conexao[]>("/rede-social/conexoes?status=pendente"),
+          api.get<Conexao[]>("/rede-social/conexoes"),
+          api.get<PostRedeSocial[]>("/rede-social/posts"),
+          api.get<ConviteVitrine[]>("/convites/vitrine"),
+          api.get<Intent[]>("/rede-social/intents"),
+        ]);
       setPerfil(perfilResp);
       setEmpresas(empresasResp);
       setConexoesPendentes(conexoesResp);
       setConexoesAtivas(conexoesAtivasResp);
       setPosts(postsResp);
       setConvites(convitesResp);
+      setIntents(intentsResp);
     } catch {
       setErro("Não foi possível carregar a Rede Social.");
     }
@@ -374,6 +404,54 @@ export function RedeSocial() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível comentar neste post.");
     } finally {
       setEnviandoComentarioId(null);
+    }
+  }
+
+  async function publicarIntent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (publicandoIntent) return;
+    const form = event.currentTarget;
+    const dados = new FormData(form);
+    const titulo = String(dados.get("titulo") ?? "").trim();
+    const descricao = String(dados.get("descricao") ?? "").trim();
+    if (!titulo || !descricao) return;
+    setPublicandoIntent(true);
+    setErro(null);
+    try {
+      const intent = await api.post<Intent>("/rede-social/intents", {
+        categoria: String(dados.get("categoria") ?? "").trim() || "geral",
+        titulo,
+        descricao,
+        requisitos: textoParaLista(dados.get("requisitos")),
+        faixa_orcamento: String(dados.get("faixa_orcamento") || "") || null,
+        localizacao: String(dados.get("localizacao") || "") || null,
+        perfil_fornecedor_desejado: String(dados.get("perfil_fornecedor_desejado") || "") || null,
+        visibilidade: String(dados.get("visibilidade") || "publica"),
+      });
+      setIntents((atual) => [intent, ...atual]);
+      form.reset();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível publicar a necessidade.");
+    } finally {
+      setPublicandoIntent(false);
+    }
+  }
+
+  async function encerrarIntent(intentId: number) {
+    try {
+      const atualizada = await api.post<Intent>(`/rede-social/intents/${intentId}/encerrar`);
+      setIntents((atual) => atual.map((intent) => (intent.id === intentId ? atualizada : intent)));
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível encerrar esta necessidade.");
+    }
+  }
+
+  async function marcarIntentAtendida(intentId: number) {
+    try {
+      const atualizada = await api.post<Intent>(`/rede-social/intents/${intentId}/atender`);
+      setIntents((atual) => atual.map((intent) => (intent.id === intentId ? atualizada : intent)));
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível marcar esta necessidade como atendida.");
     }
   }
 
@@ -635,6 +713,78 @@ export function RedeSocial() {
             </div>
           ))}
           {posts.length === 0 && <div className="text-[12px] text-muted">Nenhum post publicado na rede ainda.</div>}
+        </div>
+      </Card>
+
+      <Card className="mb-4">
+        <SectionLabel>Necessidades da Rede</SectionLabel>
+        <form onSubmit={publicarIntent} className="mb-3 flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Input name="categoria" placeholder="Categoria (ex.: backup)" className="flex-1" />
+            <Input name="titulo" required placeholder="Título da necessidade" className="flex-1" />
+          </div>
+          <Textarea name="descricao" required rows={2} placeholder="Descreva o que sua empresa está procurando..." />
+          <div className="flex gap-2">
+            <Input name="requisitos" placeholder="Requisitos (separados por vírgula, opcional)" className="flex-1" />
+            <Input name="faixa_orcamento" placeholder="Faixa de orçamento (opcional)" className="flex-1" />
+            <Input name="localizacao" placeholder="Localização (opcional)" className="flex-1" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              name="perfil_fornecedor_desejado"
+              placeholder="Perfil de fornecedor desejado (opcional)"
+              className="flex-1"
+            />
+            <select
+              name="visibilidade"
+              defaultValue="publica"
+              className="rounded-lg border border-border bg-surf2 px-3 py-2 text-[12.5px] text-text outline-none"
+            >
+              <option value="publica">Visível a toda a rede</option>
+              <option value="conexoes">Só conexões aceitas</option>
+            </select>
+            <Button type="submit" size="sm" disabled={publicandoIntent}>
+              {publicandoIntent ? "Publicando..." : "Publicar necessidade"}
+            </Button>
+          </div>
+        </form>
+        <div className="flex flex-col gap-2">
+          {intents.map((intent) => {
+            const rotulo = ROTULO_STATUS_INTENT[intent.status] ?? ROTULO_STATUS_INTENT.aberta;
+            return (
+              <div key={intent.id} className="rounded-lg border border-border p-3 text-[12px]">
+                <div className="mb-1 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-text">{intent.titulo}</span>
+                    <Badge tone={rotulo.tone}>{rotulo.texto}</Badge>
+                    <span className="text-muted">· {intent.categoria}</span>
+                  </div>
+                  {intent.tenant_id === usuario?.tenant_id && intent.status === "aberta" && (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => marcarIntentAtendida(intent.id)}>
+                        Marcar atendida
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => encerrarIntent(intent.id)}>
+                        Encerrar
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="text-muted">{intent.empresa_nome}</div>
+                <div className="mt-1 text-text">{intent.descricao}</div>
+                {intent.requisitos.length > 0 && (
+                  <div className="mt-1 text-muted">Requisitos: {listaParaTexto(intent.requisitos)}</div>
+                )}
+                <div className="mt-1 flex gap-3 text-muted">
+                  {intent.faixa_orcamento && <span>💰 {intent.faixa_orcamento}</span>}
+                  {intent.localizacao && <span>📍 {intent.localizacao}</span>}
+                </div>
+              </div>
+            );
+          })}
+          {intents.length === 0 && (
+            <div className="text-[12px] text-muted">Nenhuma necessidade publicada na rede ainda.</div>
+          )}
         </div>
       </Card>
 

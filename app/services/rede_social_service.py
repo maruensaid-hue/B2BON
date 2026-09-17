@@ -115,7 +115,9 @@ def atualizar_perfil(
     return perfil
 
 
-def _status_conexao_com(db: Session, tenant_id_atual: str, tenant_id_outro: str) -> str:
+def status_conexao_com(db: Session, tenant_id_atual: str, tenant_id_outro: str) -> str:
+    """Não-privada: reaproveitada por `intent_service` (Fase 3A) pra
+    checar visibilidade `conexoes` sem duplicar a query."""
     conexao = (
         db.query(ConexaoEmpresa)
         .filter(
@@ -186,7 +188,7 @@ def listar_empresas(
         resultado.append(
             {
                 "perfil": perfil,
-                "status_conexao": _status_conexao_com(db, tenant_id_atual, perfil.tenant_id),
+                "status_conexao": status_conexao_com(db, tenant_id_atual, perfil.tenant_id),
                 "oferta_principal": {"nome": oferta.nome, "descricao": oferta.descricao} if oferta else None,
                 "seguindo": perfil.tenant_id in tenants_seguidos,
             }

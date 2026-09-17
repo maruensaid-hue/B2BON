@@ -30,6 +30,7 @@ from app.models.faq_item import FaqItem
 from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
 from app.models.icp import ICP
 from app.models.indicacao import Indicacao
+from app.models.intent import Intent
 from app.models.interacao_conta import InteracaoConta
 from app.models.interacao_tenant import InteracaoTenant
 from app.models.licenca import Licenca
@@ -143,6 +144,7 @@ __all__ = [
     "ComentarioPost",
     "ReacaoPost",
     "NotificacaoRedeSocial",
+    "Intent",
     "MensagemRedeSocial",
     "InteracaoTenant",
     "InteracaoConta",

@@ -169,6 +169,36 @@ class ContagemNaoLidasSchema(BaseModel):
     total: int
 
 
+class CriarIntentRequestSchema(BaseModel):
+    categoria: str
+    titulo: str
+    descricao: str
+    requisitos: list[str] = []
+    faixa_orcamento: str | None = None
+    localizacao: str | None = None
+    prazo: datetime | None = None
+    perfil_fornecedor_desejado: str | None = None
+    visibilidade: str = "publica"
+
+
+class IntentSchema(BaseModel):
+    id: int
+    tenant_id: str
+    empresa_nome: str
+    categoria: str
+    titulo: str
+    descricao: str
+    requisitos: list[str]
+    faixa_orcamento: str | None
+    localizacao: str | None
+    prazo: datetime | None
+    perfil_fornecedor_desejado: str | None
+    visibilidade: str
+    status: str
+    criado_em: datetime
+    expira_em: datetime | None
+
+
 class SeguidorEmpresaSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
