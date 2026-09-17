@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.conta import Conta
 from app.models.icp import ICP
 from app.models.oferta import Oferta
+from app.providers.account_data.receita_federal_downloader import normalizar_cnae, normalizar_uf
 from app.schemas.icp import ICPCreateSchema
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado
@@ -49,8 +50,8 @@ def criar(db: Session, tenant_id: str, ator_id: str | None, dados: ICPCreateSche
         regiao=dados.regiao,
         dores=dados.dores,
         gatilhos=dados.gatilhos,
-        cnae_codigos=dados.cnae_codigos,
-        ufs=dados.ufs,
+        cnae_codigos=[normalizar_cnae(c) for c in dados.cnae_codigos],
+        ufs=[normalizar_uf(uf) for uf in dados.ufs],
     )
     db.add(icp)
     db.flush()
@@ -79,8 +80,8 @@ def nova_versao(db: Session, tenant_id: str, ator_id: str | None, icp_id: int, d
         regiao=dados.regiao,
         dores=dados.dores,
         gatilhos=dados.gatilhos,
-        cnae_codigos=dados.cnae_codigos,
-        ufs=dados.ufs,
+        cnae_codigos=[normalizar_cnae(c) for c in dados.cnae_codigos],
+        ufs=[normalizar_uf(uf) for uf in dados.ufs],
     )
 
     db.query(ICP).filter_by(tenant_id=tenant_id, grupo_id=atual.grupo_id).update({"ativo": False})
@@ -112,8 +113,8 @@ def clonar(db: Session, tenant_id: str, ator_id: str | None, icp_id: int) -> ICP
         regiao=origem.regiao,
         dores=list(origem.dores),
         gatilhos=list(origem.gatilhos),
-        cnae_codigos=list(origem.cnae_codigos),
-        ufs=list(origem.ufs),
+        cnae_codigos=[normalizar_cnae(c) for c in origem.cnae_codigos],
+        ufs=[normalizar_uf(uf) for uf in origem.ufs],
     )
     db.add(clone)
     db.flush()

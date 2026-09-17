@@ -1,4 +1,5 @@
 import re
+import unicodedata
 import zipfile
 from pathlib import Path
 
@@ -28,6 +29,41 @@ def normalizar_cnae(codigo: str) -> str:
     linhas varridas na carga inicial, 0 no recorte — o ICP do usuário
     tinha o CNAE pontuado)."""
     return _NAO_DIGITO.sub("", codigo)
+
+
+_UFS_VALIDAS = {
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+    "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+    "SP", "SE", "TO",
+}
+
+_NOME_ESTADO_PARA_UF = {
+    "ACRE": "AC", "ALAGOAS": "AL", "AMAPA": "AP", "AMAZONAS": "AM", "BAHIA": "BA",
+    "CEARA": "CE", "DISTRITO FEDERAL": "DF", "ESPIRITO SANTO": "ES", "GOIAS": "GO",
+    "MARANHAO": "MA", "MATO GROSSO": "MT", "MATO GROSSO DO SUL": "MS",
+    "MINAS GERAIS": "MG", "PARA": "PA", "PARAIBA": "PB", "PARANA": "PR",
+    "PERNAMBUCO": "PE", "PIAUI": "PI", "RIO DE JANEIRO": "RJ",
+    "RIO GRANDE DO NORTE": "RN", "RIO GRANDE DO SUL": "RS", "RONDONIA": "RO",
+    "RORAIMA": "RR", "SANTA CATARINA": "SC", "SAO PAULO": "SP", "SERGIPE": "SE",
+    "TOCANTINS": "TO",
+}
+
+
+def normalizar_uf(uf: str) -> str:
+    """A RFB grava UF sempre como sigla de 2 letras (ex.: "SP") no arquivo
+    público, mas o campo de UFs do ICP no frontend é texto livre separado
+    por vírgula, sem exemplo nem validação — nada impede a pessoa de
+    digitar o nome completo do estado ("São Paulo") ou uma sigla em caixa
+    baixa. Sem normalizar pro mesmo formato da Receita Federal antes de
+    comparar, a busca nunca casa nada — mesma classe de bug do CNAE
+    pontuado acima, só que na UF: `gerar_lista` volta vazio sem erro
+    nenhum pra avisar. Permissivo (igual `normalizar_cnae`): um valor não
+    reconhecido passa adiante só em caixa alta/sem espaço, em vez de
+    travar o cadastro do ICP."""
+    texto = "".join(c for c in unicodedata.normalize("NFKD", uf.strip().upper()) if not unicodedata.combining(c))
+    if texto in _UFS_VALIDAS:
+        return texto
+    return _NOME_ESTADO_PARA_UF.get(texto, texto)
 
 
 class MesCompetenciaIndisponivel(RuntimeError):

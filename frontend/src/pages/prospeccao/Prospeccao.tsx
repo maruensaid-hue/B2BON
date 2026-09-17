@@ -972,13 +972,17 @@ export function Prospeccao() {
           </div>
           {(
             [
-              ["cnae_codigos", "CNAEs (separados por vírgula)"],
-              ["ufs", "UFs (separadas por vírgula)"],
+              ["cnae_codigos", "CNAEs (separados por vírgula)", "Ex: 6201501, 6209100"],
+              ["ufs", "UFs (separadas por vírgula, sigla de 2 letras)", "Ex: SP, RJ, MG"],
             ] as const
-          ).map(([campo, rotulo]) => (
+          ).map(([campo, rotulo, exemplo]) => (
             <div key={campo}>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">{rotulo}</div>
-              <Input name={campo} defaultValue={(icpEmEdicao?.[campo as keyof ICP] as string[])?.join(", ")} />
+              <Input
+                name={campo}
+                placeholder={exemplo}
+                defaultValue={(icpEmEdicao?.[campo as keyof ICP] as string[])?.join(", ")}
+              />
             </div>
           ))}
           {(
