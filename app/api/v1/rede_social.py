@@ -56,11 +56,17 @@ def atualizar_perfil(
 
 @router.get("/empresas", response_model=list[EmpresaDiretorioSchema])
 def listar_empresas(
+    setor: str | None = None,
+    porte: str | None = None,
+    mercado: str | None = None,
+    apenas_verificadas: bool = False,
+    busca: str | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> list[EmpresaDiretorioSchema]:
-    """Diretório/vitrine — descobrir empresas para conectar (Onda C)."""
-    return rede_social_service.listar_empresas(db, tenant_id)
+    """Diretório/vitrine — descobrir empresas para conectar (Onda C). Filtros
+    opcionais (master prompt §59 Company Search, Fase 1C)."""
+    return rede_social_service.listar_empresas(db, tenant_id, setor, porte, mercado, apenas_verificadas, busca)
 
 
 @router.post("/conexoes", response_model=ConexaoEmpresaSchema, status_code=201)

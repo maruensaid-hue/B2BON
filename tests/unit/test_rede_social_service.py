@@ -52,6 +52,36 @@ def test_atualizar_perfil_campos_corporate_profile(db_session):
     assert perfil.status_verificacao == "nao_verificada"  # default até a 1B
 
 
+def test_listar_empresas_filtra_por_setor_porte_mercado_e_busca(db_session):
+    """Master prompt Fase 1C (§59 Company Search)."""
+    rede_social_service.atualizar_perfil(
+        db_session, TENANT_B, None, nome_exibicao="Beta Saúde", setor="Saúde", porte="GRANDE",
+        mercados=["Hospitais"],
+    )
+    rede_social_service.atualizar_perfil(
+        db_session, "tenant-c", None, nome_exibicao="Gama Tech", setor="Tecnologia", porte="PEQUENO",
+        mercados=["Varejo"],
+    )
+
+    assert {e["perfil"].nome_exibicao for e in rede_social_service.listar_empresas(db_session, TENANT_A, setor="Saúde")} == {"Beta Saúde"}
+    assert {e["perfil"].nome_exibicao for e in rede_social_service.listar_empresas(db_session, TENANT_A, porte="PEQUENO")} == {"Gama Tech"}
+    assert {e["perfil"].nome_exibicao for e in rede_social_service.listar_empresas(db_session, TENANT_A, mercado="Hospitais")} == {"Beta Saúde"}
+    assert {e["perfil"].nome_exibicao for e in rede_social_service.listar_empresas(db_session, TENANT_A, busca="gama")} == {"Gama Tech"}
+    assert len(rede_social_service.listar_empresas(db_session, TENANT_A)) == 2
+
+
+def test_listar_empresas_apenas_verificadas(db_session):
+    rede_social_service.atualizar_perfil(db_session, TENANT_B, None, nome_exibicao="Beta")
+    perfil_b = rede_social_service.obter_perfil(db_session, TENANT_B)
+    perfil_b.status_verificacao = "verificada"
+    db_session.commit()
+    rede_social_service.atualizar_perfil(db_session, "tenant-c", None, nome_exibicao="Gama")
+
+    resultado = rede_social_service.listar_empresas(db_session, TENANT_A, apenas_verificadas=True)
+
+    assert {e["perfil"].nome_exibicao for e in resultado} == {"Beta"}
+
+
 def test_solicitar_e_aceitar_conexao(db_session):
     conexao = rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B)
     assert conexao.status == "pendente"

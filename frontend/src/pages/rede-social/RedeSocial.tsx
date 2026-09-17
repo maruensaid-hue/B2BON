@@ -96,12 +96,36 @@ export function RedeSocial() {
   const [convites, setConvites] = useState<ConviteVitrine[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [filtroSetor, setFiltroSetor] = useState("");
+  const [filtroPorte, setFiltroPorte] = useState("");
+  const [filtroMercado, setFiltroMercado] = useState("");
+  const [filtroApenasVerificadas, setFiltroApenasVerificadas] = useState(false);
+  const [filtroBusca, setFiltroBusca] = useState("");
+
+  function paramsDiretorio(): string {
+    const params = new URLSearchParams();
+    if (filtroSetor) params.set("setor", filtroSetor);
+    if (filtroPorte) params.set("porte", filtroPorte);
+    if (filtroMercado) params.set("mercado", filtroMercado);
+    if (filtroApenasVerificadas) params.set("apenas_verificadas", "true");
+    if (filtroBusca) params.set("busca", filtroBusca);
+    const texto = params.toString();
+    return texto ? `?${texto}` : "";
+  }
+
+  async function carregarEmpresas() {
+    try {
+      setEmpresas(await api.get<EmpresaDiretorio[]>(`/rede-social/empresas${paramsDiretorio()}`));
+    } catch {
+      setErro("Não foi possível carregar o diretório de empresas.");
+    }
+  }
 
   async function carregarTudo() {
     try {
       const [perfilResp, empresasResp, conexoesResp, convitesResp] = await Promise.all([
         api.get<PerfilEmpresa>("/rede-social/perfil"),
-        api.get<EmpresaDiretorio[]>("/rede-social/empresas"),
+        api.get<EmpresaDiretorio[]>(`/rede-social/empresas${paramsDiretorio()}`),
         api.get<Conexao[]>("/rede-social/conexoes?status=pendente"),
         api.get<ConviteVitrine[]>("/convites/vitrine"),
       ]);
@@ -117,6 +141,11 @@ export function RedeSocial() {
   useEffect(() => {
     carregarTudo();
   }, []);
+
+  useEffect(() => {
+    carregarEmpresas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroSetor, filtroPorte, filtroMercado, filtroApenasVerificadas, filtroBusca]);
 
   function conexaoRecebidaDe(tenantId: string): Conexao | undefined {
     return conexoesPendentes.find(
@@ -355,6 +384,32 @@ export function RedeSocial() {
 
       <Card>
         <SectionLabel>Diretório de empresas</SectionLabel>
+        <div className="mb-3 flex flex-wrap items-end gap-2.5">
+          <div className="min-w-[140px] flex-1">
+            <Input
+              placeholder="Buscar por nome ou descrição"
+              value={filtroBusca}
+              onChange={(event) => setFiltroBusca(event.target.value)}
+            />
+          </div>
+          <div className="w-[140px]">
+            <Input placeholder="Setor" value={filtroSetor} onChange={(event) => setFiltroSetor(event.target.value)} />
+          </div>
+          <div className="w-[140px]">
+            <Input placeholder="Porte" value={filtroPorte} onChange={(event) => setFiltroPorte(event.target.value)} />
+          </div>
+          <div className="w-[140px]">
+            <Input placeholder="Mercado" value={filtroMercado} onChange={(event) => setFiltroMercado(event.target.value)} />
+          </div>
+          <label className="flex items-center gap-1.5 pb-2 text-[11px] text-muted">
+            <input
+              type="checkbox"
+              checked={filtroApenasVerificadas}
+              onChange={(event) => setFiltroApenasVerificadas(event.target.checked)}
+            />
+            Só verificadas
+          </label>
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {empresas.map((empresa) => (
             <div key={empresa.perfil.tenant_id} className="rounded-xl border border-border bg-surf2 p-3.5">

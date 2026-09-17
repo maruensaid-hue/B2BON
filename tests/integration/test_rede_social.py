@@ -40,6 +40,21 @@ def test_atualizar_perfil_corporate_profile_via_api(client):
     assert corpo["status_verificacao"] == "nao_verificada"
 
 
+def test_diretorio_filtra_por_porte_via_api(client, criar_usuario_autenticado):
+    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+    client.put("/api/v1/rede-social/perfil", json={"nome_exibicao": "Empresa B", "porte": "GRANDE"}, headers=headers_b)
+
+    resposta = client.get("/api/v1/rede-social/empresas", params={"porte": "GRANDE"})
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert len(corpo) == 1
+    assert corpo[0]["perfil"]["nome_exibicao"] == "Empresa B"
+
+    sem_filtro = client.get("/api/v1/rede-social/empresas", params={"porte": "PEQUENO"}).json()
+    assert sem_filtro == []
+
+
 def test_diretorio_solicitar_e_aceitar_conexao(client, criar_usuario_autenticado):
     headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
     client.put("/api/v1/rede-social/perfil", json={"nome_exibicao": "Empresa B"}, headers=headers_b)

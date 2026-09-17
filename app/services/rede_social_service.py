@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.conexao_empresa import ConexaoEmpresa
@@ -122,12 +123,37 @@ def _status_conexao_com(db: Session, tenant_id_atual: str, tenant_id_outro: str)
     return "nenhuma"  # recusada volta a poder ser solicitada
 
 
-def listar_empresas(db: Session, tenant_id_atual: str) -> list[dict]:
+def listar_empresas(
+    db: Session,
+    tenant_id_atual: str,
+    setor: str | None = None,
+    porte: str | None = None,
+    mercado: str | None = None,
+    apenas_verificadas: bool = False,
+    busca: str | None = None,
+) -> list[dict]:
     """Diretório/vitrine da Rede Social B2B (Onda C) — todos os perfis
     exceto o do próprio tenant, com status de conexão e oferta principal
-    (reaproveitada do PREDATOR, E1-H2, sem duplicar dado)."""
+    (reaproveitada do PREDATOR, E1-H2, sem duplicar dado). Filtros (master
+    prompt §59 Company Search, Fase 1C) são todos opcionais e combináveis."""
     garantir_perfil(db, tenant_id_atual)
-    perfis = db.query(PerfilEmpresa).filter(PerfilEmpresa.tenant_id != tenant_id_atual).all()
+    query = db.query(PerfilEmpresa).filter(PerfilEmpresa.tenant_id != tenant_id_atual)
+    if setor:
+        query = query.filter(PerfilEmpresa.setor == setor)
+    if porte:
+        query = query.filter(PerfilEmpresa.porte == porte)
+    if apenas_verificadas:
+        query = query.filter(PerfilEmpresa.status_verificacao == "verificada")
+    if busca:
+        termo = f"%{busca.lower()}%"
+        query = query.filter(
+            func.lower(PerfilEmpresa.nome_exibicao).like(termo) | func.lower(PerfilEmpresa.descricao).like(termo)
+        )
+    perfis = query.all()
+    if mercado:
+        # JSON list — filtra em Python (portável entre SQLite e Postgres,
+        # sem depender de operador JSON específico do dialeto).
+        perfis = [perfil for perfil in perfis if mercado in perfil.mercados]
 
     resultado = []
     for perfil in perfis:
