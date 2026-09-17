@@ -111,19 +111,50 @@ um serviço novo, manual:
 
 ## Passo 4 — Frontend (Cloudflare Workers)
 
+O fluxo unificado atual do Cloudflare ("Create an app" → Workers) tem
+alguns detalhes que não são óbvios — confirmados na prática ao montar
+o `b2bon-staging` real:
+
 1. Cloudflare → **Workers & Pages** → **Create** → conecte o mesmo
-   repositório do GitHub, **branch `staging`**.
+   repositório do GitHub.
 2. Nome do projeto: `b2bon-staging` (evite reusar o nome do de
-   produção).
-3. Build command/output: mesmos do projeto de produção (`npm run
-   build`, diretório `frontend/dist` — confira o que está configurado
-   no projeto de produção pra replicar exatamente).
-4. Em **Settings → Build → Variables and secrets**, configure
-   `VITE_API_BASE_URL` = a URL do backend de staging (Passo 3) +
-   `/api/v1` (ex.: `https://b2bon-api-staging.onrender.com/api/v1`) —
-   **isso é gravado no bundle na hora do build**, então precisa estar
-   certo antes de deployar, não é algo pra trocar depois em runtime.
-5. Deploy.
+   produção, que é `b2bon`).
+3. **Caminho/Diretório raiz**: `frontend` — **não** deixe `/` (raiz do
+   repositório). O `package.json` e o `wrangler.toml` do frontend
+   vivem em `frontend/`, não na raiz; com `/` o `npm run build` falha
+   por não achar `package.json`.
+4. Build command / Deploy command: `npm run build` / `npx wrangler
+   deploy` (o wizard já sugere esses valores certos, só confirme).
+5. Variável de build (**não** "Runtime variables" — o painel separa
+   os dois; a de build fica em **Configurações → Build → Variáveis e
+   segredos**): `VITE_API_BASE_URL` = a URL do backend de staging
+   (Passo 3) + `/api/v1` (ex.:
+   `https://b2bon-api-staging.onrender.com/api/v1`) — **isso é
+   gravado no bundle na hora do build**, então precisa estar certo
+   antes de deployar, não é algo pra trocar depois em runtime.
+6. **Ramificação de produção**: o seletor de branch da tela de
+   criação nem sempre "pega" — depois de criar o projeto, confirme em
+   **Configurações → Build → Controle da ramificação → Ramificação de
+   produção** que está `staging`, não `master` (o padrão do GitHub).
+   Se builds antigos aparecerem marcados `master` no histórico de
+   implantações, é sinal de que esse campo ainda não tinha sido
+   corrigido quando eles rodaram.
+7. Ignore o aviso amarelo sobre permissões do token de API
+   relacionadas a `email_routing` — é sobre um recurso do Cloudflare
+   sem relação com hospedar o Worker, não bloqueia o deploy.
+8. **Pra disparar um novo build depois de mudar algo em
+   Configurações** (ex.: corrigir a branch): o botão "Nova
+   implantação" no topo da página abre um uploader de arquivo
+   estático manual (fluxo errado pra esse projeto, que é conectado ao
+   Git). O jeito certo é dar um push de verdade na branch `staging`
+   (mesmo um commit vazio, `git commit --allow-empty`) — isso dispara
+   o webhook do Cloudflare e builda a partir do Git de novo, já com a
+   branch/configuração corrigida.
+9. Depois do primeiro deploy, o Cloudflare pode sugerir automaticamente
+   um PR pra atualizar `frontend/wrangler.toml` (`name =
+   'b2bon-staging'`) — é só informativo, pra manter o arquivo
+   consistente com o nome do projeto; não bloqueia nada, pode revisar
+   com calma depois.
 
 ## Passo 5 (opcional, só se/quando precisar) — Cron automático no staging
 
@@ -152,9 +183,13 @@ produção atualizam sozinhos).
 |---|---|---|
 | Branch | `master` | `staging` |
 | Banco | Neon (branch de produção) | Neon (branch `staging`, cópia) |
-| Backend | `b2bon-api` (Render) | `b2bon-api-staging` (Render, novo) |
-| Frontend | Worker de produção | `b2bon-staging` (Worker novo) |
+| Backend | `b2bon-api` (Render) | `b2bon-api-staging` (Render) — `https://b2bon-api-staging.onrender.com` |
+| Frontend | Worker de produção | `b2bon-staging` (Worker) — `https://b2bon-staging.maruen-said.workers.dev` |
 | Credenciais de canal (WhatsApp/e-mail por tenant) | funcionam | copiadas mas **ilegíveis** (chave de criptografia diferente) |
 | E-mail/WhatsApp compartilhado da plataforma | configurado | **desativado** (sem `SENDGRID_API_KEY`) |
 | Cron automático | sim (GitHub Actions existente) | **não**, por padrão |
 | Deploy | automático em push no `master` | automático em push no `staging` |
+
+**Status (2026-09-17): ambiente staging totalmente operacional** —
+backend, banco e frontend no ar, CORS liberado, login testado e
+funcionando de ponta a ponta.
