@@ -1278,6 +1278,8 @@ def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LL
             ),
             system="Você recomenda estratégias de venda B2B, só com base nos dados fornecidos.",
         ),
+        entidade_tipo="conta",
+        entidade_id=conta.id,
     )
     return {"estrategia": resposta.content.strip()}
 

@@ -26,15 +26,27 @@ def gerar(llm: LLMProvider, request: LLMRequest) -> LLMResponse:
         ) from erro
 
 
-def gerar_e_registrar(db: Session, tenant_id: str, agente: str, llm: LLMProvider, request: LLMRequest) -> LLMResponse:
-    """Mesmo `gerar` acima, mas também registra tokens/latência em
-    `RegistroUsoIa` (master prompt §85 Cost Governance, Fase 7C) — só os
-    agentes da Fase 6 migram pra esta função (decisão de escopo da Fase
-    7; os ~15 call sites mais antigos de `gerar` continuam como estão).
-    Só grava quando a chamada teve sucesso (nunca inventa um registro
-    pra uma chamada que falhou) e falha ao PERSISTIR o registro nunca
-    derruba a resposta real da IA — é best-effort, puramente
-    observação."""
+def gerar_e_registrar(
+    db: Session,
+    tenant_id: str,
+    agente: str,
+    llm: LLMProvider,
+    request: LLMRequest,
+    *,
+    entidade_tipo: str | None = None,
+    entidade_id: int | None = None,
+) -> LLMResponse:
+    """Mesmo `gerar` acima, mas também registra tokens/latência/modelo em
+    `RegistroUsoIa` (master prompt §85 Cost Governance + §73 AI Audit,
+    Fases 7C/0.5-C) — só os agentes da Fase 6 migram pra esta função
+    (decisão de escopo; os ~15 call sites mais antigos de `gerar`
+    continuam como estão). `entidade_tipo`/`entidade_id` são opcionais
+    e só preenchidos quando a entidade gerada já existe no momento da
+    chamada — `None` aqui é dado real (ex.: teste interno do Corporate
+    AI Agent nunca persiste nada), não uma omissão. Só grava quando a
+    chamada teve sucesso (nunca inventa um registro pra uma chamada
+    que falhou) e falha ao PERSISTIR o registro nunca derruba a
+    resposta real da IA — é best-effort, puramente observação."""
     inicio = time.monotonic()
     resposta = gerar(llm, request)
     latencia_ms = int((time.monotonic() - inicio) * 1000)
@@ -47,6 +59,9 @@ def gerar_e_registrar(db: Session, tenant_id: str, agente: str, llm: LLMProvider
                 tokens_entrada=resposta.input_tokens,
                 tokens_saida=resposta.output_tokens,
                 latencia_ms=latencia_ms,
+                model=resposta.model,
+                entidade_tipo=entidade_tipo,
+                entidade_id=entidade_id,
             )
         )
         db.commit()

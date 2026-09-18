@@ -21,4 +21,13 @@ class RegistroUsoIa(Base):
     tokens_entrada: Mapped[int] = mapped_column(Integer)
     tokens_saida: Mapped[int] = mapped_column(Integer)
     latencia_ms: Mapped[int] = mapped_column(Integer)
+    # AI Audit — rastreabilidade real (master prompt §73, Fase 0.5-C):
+    # `model` já vinha em `LLMResponse` e era descartado; `entidade_*`
+    # liga o registro ao que foi gerado (negocio/conta/pergunta) QUANDO
+    # essa entidade já existe no momento da chamada — nulo é dado real
+    # também (ex.: teste interno do Corporate AI Agent nunca persiste
+    # nada, então não há entidade pra apontar).
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    entidade_tipo: Mapped[str | None] = mapped_column(String, nullable=True)
+    entidade_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

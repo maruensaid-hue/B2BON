@@ -21,6 +21,27 @@ def test_gerar_e_registrar_persiste_tokens_e_latencia(db_session):
     assert registros[0].tokens_entrada == 0
     assert registros[0].tokens_saida == 0
     assert registros[0].latencia_ms >= 0
+    assert registros[0].model == "fake-model"
+    assert registros[0].entidade_tipo is None
+    assert registros[0].entidade_id is None
+
+
+def test_gerar_e_registrar_persiste_entidade_quando_fornecida(db_session):
+    llm = FakeLLMProvider(["resposta qualquer"])
+
+    llm_helpers.gerar_e_registrar(
+        db_session,
+        TENANT_ID,
+        "meeting_agent",
+        llm,
+        LLMRequest(prompt="pergunta"),
+        entidade_tipo="negocio",
+        entidade_id=42,
+    )
+
+    registro = db_session.query(RegistroUsoIa).filter_by(tenant_id=TENANT_ID).one()
+    assert registro.entidade_tipo == "negocio"
+    assert registro.entidade_id == 42
 
 
 def test_gerar_e_registrar_isolamento_tenant(db_session):

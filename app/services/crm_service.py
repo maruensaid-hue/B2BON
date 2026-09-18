@@ -851,6 +851,8 @@ def gerar_meeting_brief(db: Session, tenant_id: str, ator_id: str | None, negoci
             ),
             system="Você prepara vendedores B2B para reuniões, só com base nos dados fornecidos.",
         ),
+        entidade_tipo="negocio",
+        entidade_id=negocio.id,
     )
 
     auditoria_service.registrar(
