@@ -1172,6 +1172,19 @@ def sugerir_papel_comite_compra(cargo: str | None) -> str:
     return "UNKNOWN"
 
 
+def contexto_decisores_texto(db: Session, tenant_id: str, conta_id: int) -> str:
+    """Context Engine mínimo (master prompt §18-19, Fase 0.5-A) — mesmo
+    bloco "decisores com papel" que `crm_service.gerar_meeting_brief` e
+    `sugerir_estrategia_venda` (abaixo) reimplementavam cada um do
+    zero."""
+    decisores = db.query(Decisor).filter_by(conta_id=conta_id, tenant_id=tenant_id).all()
+    return "\n".join(
+        f"- {decisor.nome} ({decisor.cargo or 'cargo desconhecido'}): papel no comitê de compra "
+        f"{decisor.papel_confirmado or f'sugerido como {sugerir_papel_comite_compra(decisor.cargo)} (não confirmado)'}"
+        for decisor in decisores
+    ) or "Nenhum decisor cadastrado ainda."
+
+
 def confirmar_papel_decisor(db: Session, tenant_id: str, ator_id: str | None, conta_id: int, decisor_id: int, papel: str) -> Decisor:
     if papel not in PAPEIS_COMITE_COMPRA:
         raise ValidacaoFalhou(f"Papel de comitê de compra inválido: {papel}")
@@ -1200,23 +1213,8 @@ def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LL
     oferta = db.query(Oferta).filter_by(tenant_id=tenant_id, icp_id=icp.id, ativo=True).first() if icp else None
     linha_oferta = f"Oferta compatível com o ICP: {oferta.nome} — {oferta.descricao}" if oferta is not None else "Nenhuma oferta ativa vinculada ao ICP desta conta."
 
-    decisores = db.query(Decisor).filter_by(conta_id=conta.id, tenant_id=tenant_id).all()
-    linhas_decisores = "\n".join(
-        f"- {decisor.nome} ({decisor.cargo or 'cargo desconhecido'}): papel no comitê de compra "
-        f"{decisor.papel_confirmado or f'sugerido como {sugerir_papel_comite_compra(decisor.cargo)} (não confirmado)'}"
-        for decisor in decisores
-    ) or "Nenhum decisor cadastrado ainda."
-
-    atividades = (
-        db.query(Atividade)
-        .filter_by(conta_id=conta.id, tenant_id=tenant_id)
-        .order_by(Atividade.criado_em.desc())
-        .limit(5)
-        .all()
-    )
-    linhas_atividades = "\n".join(
-        f"- {atividade.criado_em:%d/%m/%Y} ({atividade.tipo}): {atividade.descricao}" for atividade in atividades
-    ) or "Nenhuma atividade registrada ainda."
+    linhas_decisores = contexto_decisores_texto(db, tenant_id, conta.id)
+    linhas_atividades = atividade_service.contexto_recentes_texto(db, tenant_id, conta_id=conta.id)
 
     resposta = llm_helpers.gerar_e_registrar(
         db,

@@ -40,6 +40,24 @@ def registrar(
     return atividade
 
 
+def contexto_recentes_texto(
+    db: Session, tenant_id: str, *, conta_id: int | None = None, negocio_id: int | None = None, limite: int = 5
+) -> str:
+    """Context Engine mínimo (master prompt §18-19, Fase 0.5-A) — mesmo
+    bloco "últimas atividades" que `crm_service.gerar_meeting_brief` e
+    `conta_service.sugerir_estrategia_venda` reimplementavam cada um do
+    zero; parametrizado por `conta_id` OU `negocio_id`."""
+    query = db.query(Atividade).filter_by(tenant_id=tenant_id)
+    if negocio_id is not None:
+        query = query.filter_by(negocio_id=negocio_id)
+    if conta_id is not None:
+        query = query.filter_by(conta_id=conta_id)
+    atividades = query.order_by(Atividade.criado_em.desc()).limit(limite).all()
+    return "\n".join(
+        f"- {atividade.criado_em:%d/%m/%Y} ({atividade.tipo}): {atividade.descricao}" for atividade in atividades
+    ) or "Nenhuma atividade registrada ainda."
+
+
 def listar_por_conta(db: Session, tenant_id: str, conta_id: int) -> list[Atividade]:
     # Desempate por id: `criado_em` tem granularidade de segundo em alguns
     # bancos, então duas atividades da mesma leva (ex.: reuniao confirmada

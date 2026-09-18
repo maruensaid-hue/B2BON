@@ -42,3 +42,43 @@ def test_listar_por_conta_nao_traz_atividade_de_outra_conta(db_session):
     db_session.commit()
 
     assert atividade_service.listar_por_conta(db_session, TENANT_ID, conta2.id) == []
+
+
+def test_contexto_recentes_texto_sem_atividade_retorna_mensagem_padrao(db_session):
+    conta = _criar_conta(db_session)
+
+    texto = atividade_service.contexto_recentes_texto(db_session, TENANT_ID, conta_id=conta.id)
+
+    assert texto == "Nenhuma atividade registrada ainda."
+
+
+def test_contexto_recentes_texto_por_conta(db_session):
+    conta = _criar_conta(db_session)
+    atividade_service.registrar(db_session, TENANT_ID, conta_id=conta.id, tipo="nota", descricao="Ligação de descoberta")
+    db_session.commit()
+
+    texto = atividade_service.contexto_recentes_texto(db_session, TENANT_ID, conta_id=conta.id)
+
+    assert "Ligação de descoberta" in texto
+    assert "(nota)" in texto
+
+
+def test_contexto_recentes_texto_por_negocio_nao_traz_atividade_so_de_conta(db_session):
+    conta = _criar_conta(db_session)
+    atividade_service.registrar(db_session, TENANT_ID, conta_id=conta.id, tipo="nota", descricao="Só da conta, sem negócio")
+    db_session.commit()
+
+    texto = atividade_service.contexto_recentes_texto(db_session, TENANT_ID, negocio_id=9999)
+
+    assert texto == "Nenhuma atividade registrada ainda."
+
+
+def test_contexto_recentes_texto_respeita_limite(db_session):
+    conta = _criar_conta(db_session)
+    for i in range(7):
+        atividade_service.registrar(db_session, TENANT_ID, conta_id=conta.id, tipo="nota", descricao=f"Evento {i}")
+    db_session.commit()
+
+    texto = atividade_service.contexto_recentes_texto(db_session, TENANT_ID, conta_id=conta.id, limite=3)
+
+    assert texto.count("Evento") == 3

@@ -826,23 +826,8 @@ def gerar_meeting_brief(db: Session, tenant_id: str, ator_id: str | None, negoci
     if conta is None:
         raise NaoEncontrado(f"Conta {negocio.conta_id} não encontrada")
 
-    decisores = db.query(Decisor).filter_by(conta_id=conta.id, tenant_id=tenant_id).all()
-    linhas_decisores = "\n".join(
-        f"- {decisor.nome} ({decisor.cargo or 'cargo desconhecido'}): papel no comitê de compra "
-        f"{decisor.papel_confirmado or f'sugerido como {conta_service.sugerir_papel_comite_compra(decisor.cargo)} (não confirmado)'}"
-        for decisor in decisores
-    ) or "Nenhum decisor cadastrado ainda."
-
-    atividades = (
-        db.query(Atividade)
-        .filter_by(negocio_id=negocio.id, tenant_id=tenant_id)
-        .order_by(Atividade.criado_em.desc())
-        .limit(5)
-        .all()
-    )
-    linhas_atividades = "\n".join(
-        f"- {atividade.criado_em:%d/%m/%Y} ({atividade.tipo}): {atividade.descricao}" for atividade in atividades
-    ) or "Nenhuma atividade registrada ainda."
+    linhas_decisores = conta_service.contexto_decisores_texto(db, tenant_id, conta.id)
+    linhas_atividades = atividade_service.contexto_recentes_texto(db, tenant_id, negocio_id=negocio.id)
 
     oferta = db.query(Oferta).filter_by(id=negocio.oferta_id).one_or_none() if negocio.oferta_id else None
     linha_oferta = f"Oferta vinculada: {oferta.nome} — {oferta.descricao}" if oferta is not None else "Sem oferta vinculada."

@@ -67,3 +67,34 @@ def test_confirmar_papel_decisor_de_outro_tenant_levanta_erro(db_session):
         assert False, "deveria ter levantado NaoEncontrado"
     except NaoEncontrado:
         pass
+
+
+def test_contexto_decisores_texto_sem_decisor_retorna_mensagem_padrao(db_session):
+    """Fase 0.5-A, hardening: Context Engine mínimo — mesmo bloco que
+    `gerar_meeting_brief`/`sugerir_estrategia_venda` reimplementavam."""
+    conta = Conta(tenant_id=TENANT_A, nome="Conta Teste", status="priorizada")
+    db_session.add(conta)
+    db_session.commit()
+
+    texto = conta_service.contexto_decisores_texto(db_session, TENANT_A, conta.id)
+
+    assert texto == "Nenhum decisor cadastrado ainda."
+
+
+def test_contexto_decisores_texto_cita_papel_sugerido_quando_nao_confirmado(db_session):
+    conta, decisor = _criar_decisor(db_session, TENANT_A, cargo="Diretor Financeiro")
+
+    texto = conta_service.contexto_decisores_texto(db_session, TENANT_A, conta.id)
+
+    assert "ECONOMIC_BUYER" in texto
+    assert "não confirmado" in texto
+
+
+def test_contexto_decisores_texto_cita_papel_confirmado(db_session):
+    conta, decisor = _criar_decisor(db_session, TENANT_A, cargo="Diretor Financeiro")
+    conta_service.confirmar_papel_decisor(db_session, TENANT_A, None, conta.id, decisor.id, "DECISION_MAKER")
+
+    texto = conta_service.contexto_decisores_texto(db_session, TENANT_A, conta.id)
+
+    assert "DECISION_MAKER" in texto
+    assert "não confirmado" not in texto
