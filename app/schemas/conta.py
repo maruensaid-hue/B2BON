@@ -154,6 +154,10 @@ class GrafoArestaSchema(BaseModel):
     tipo: str
 
 
+class EstrategiaVendaSchema(BaseModel):
+    estrategia: str
+
+
 class GrafoContaResponseSchema(BaseModel):
     nos: list[GrafoNoSchema]
     arestas: list[GrafoArestaSchema]

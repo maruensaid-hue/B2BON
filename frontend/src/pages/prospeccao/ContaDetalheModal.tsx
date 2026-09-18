@@ -125,6 +125,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
   >({});
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState<string | null>(null);
+  const [estrategiaVenda, setEstrategiaVenda] = useState<string | null>(null);
 
   async function carregar() {
     try {
@@ -195,6 +196,13 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
     } finally {
       setCarregando(null);
     }
+  }
+
+  async function sugerirEstrategiaVenda() {
+    await executar("estrategia-venda", async () => {
+      const resultado = await api.post<{ estrategia: string }>(`/contas/${contaId}/estrategia-venda`);
+      setEstrategiaVenda(resultado.estrategia);
+    });
   }
 
   async function priorizar() {
@@ -473,7 +481,15 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
             <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={exportarPdf}>
               Exportar PDF
             </Button>
+            <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={sugerirEstrategiaVenda}>
+              {carregando === "estrategia-venda" ? "Gerando..." : "🧭 Sugerir estratégia"}
+            </Button>
           </div>
+          {estrategiaVenda && (
+            <div className="mb-4 rounded-md bg-surf2 p-2 text-[11px] whitespace-pre-line text-text">
+              {estrategiaVenda}
+            </div>
+          )}
           <div className="mb-4 text-[11px] text-muted">
             "Pesquisar empresa (site)" varre a home e páginas internas (sobre,
             investidores, notícias, vagas abertas, privacidade) do domínio

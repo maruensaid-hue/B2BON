@@ -32,6 +32,7 @@ from app.schemas.conta import (
     EnriquecerContaResponseSchema,
     EnriquecerEmLoteRequestSchema,
     EnriquecerEmLoteResponseSchema,
+    EstrategiaVendaSchema,
     FranquiaSchema,
     GerarListaRequestSchema,
     GerarListaResponseSchema,
@@ -267,6 +268,17 @@ def enriquecer_conta(
 ) -> EnriquecerContaResponseSchema:
     campos = conta_service.enriquecer(db, tenant_id, ator_id, conta_id, llm, site_fetcher, web_search, plan_limits)
     return EnriquecerContaResponseSchema(campos=campos)
+
+
+@router.post("/contas/{conta_id}/estrategia-venda", response_model=EstrategiaVendaSchema)
+def sugerir_estrategia_venda(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    llm: LLMProvider = Depends(get_llm_provider),
+    db: Session = Depends(get_db),
+) -> EstrategiaVendaSchema:
+    """Sales Strategy Agent (master prompt §29, Fase 6C)."""
+    return EstrategiaVendaSchema(**conta_service.sugerir_estrategia_venda(db, tenant_id, conta_id, llm))
 
 
 @router.post("/contas/{conta_id}/enriquecer-brasilapi", response_model=EnriquecerContaResponseSchema)

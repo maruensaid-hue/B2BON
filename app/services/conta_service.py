@@ -30,6 +30,7 @@ from app.models.interacao_conta import InteracaoConta
 from app.models.lista_prospeccao import ListaProspeccao
 from app.models.mensagem import Mensagem
 from app.models.negocio import Negocio
+from app.models.oferta import Oferta
 from app.models.pesquisa_nps import PesquisaNps
 from app.models.qualificacao import QualificacaoScore
 from app.models.reuniao import Reuniao
@@ -1185,6 +1186,55 @@ def confirmar_papel_decisor(db: Session, tenant_id: str, ator_id: str | None, co
     db.commit()
     db.refresh(decisor)
     return decisor
+
+
+def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LLMProvider) -> dict:
+    """Sales Strategy Agent (master prompt §29, Fase 6C) — junta Conta,
+    decisores com papel (Stakeholder Map, Fase 5B), ICP/Oferta ativa
+    correspondente e últimas atividades reais em UMA chamada de IA.
+    Nunca cria/altera nada — é uma recomendação de leitura (§97,
+    RECOMMEND, não EXECUTE)."""
+    conta = obter(db, tenant_id, conta_id)
+
+    icp = db.query(ICP).filter_by(id=conta.icp_id, tenant_id=tenant_id).one_or_none() if conta.icp_id else None
+    oferta = db.query(Oferta).filter_by(tenant_id=tenant_id, icp_id=icp.id, ativo=True).first() if icp else None
+    linha_oferta = f"Oferta compatível com o ICP: {oferta.nome} — {oferta.descricao}" if oferta is not None else "Nenhuma oferta ativa vinculada ao ICP desta conta."
+
+    decisores = db.query(Decisor).filter_by(conta_id=conta.id, tenant_id=tenant_id).all()
+    linhas_decisores = "\n".join(
+        f"- {decisor.nome} ({decisor.cargo or 'cargo desconhecido'}): papel no comitê de compra "
+        f"{decisor.papel_confirmado or f'sugerido como {sugerir_papel_comite_compra(decisor.cargo)} (não confirmado)'}"
+        for decisor in decisores
+    ) or "Nenhum decisor cadastrado ainda."
+
+    atividades = (
+        db.query(Atividade)
+        .filter_by(conta_id=conta.id, tenant_id=tenant_id)
+        .order_by(Atividade.criado_em.desc())
+        .limit(5)
+        .all()
+    )
+    linhas_atividades = "\n".join(
+        f"- {atividade.criado_em:%d/%m/%Y} ({atividade.tipo}): {atividade.descricao}" for atividade in atividades
+    ) or "Nenhuma atividade registrada ainda."
+
+    resposta = llm_helpers.gerar(
+        llm,
+        LLMRequest(
+            prompt=(
+                f"Conta: \"{conta.nome}\" ({conta.segmento or 'segmento desconhecido'}, porte "
+                f"{conta.porte or 'desconhecido'}, região {conta.regiao or 'desconhecida'}).\n"
+                f"{linha_oferta}\n\n"
+                f"Decisores mapeados:\n{linhas_decisores}\n\n"
+                f"Últimas atividades registradas:\n{linhas_atividades}\n\n"
+                "Com base SÓ nas informações acima (não invente nenhum dado além delas), recomende uma "
+                "estratégia de venda para esta conta cobrindo: persona inicial a abordar, abordagem sugerida, "
+                "proposta de valor, canal recomendado, tipo de cadência, conteúdo/CTA sugeridos e timing."
+            ),
+            system="Você recomenda estratégias de venda B2B, só com base nos dados fornecidos.",
+        ),
+    )
+    return {"estrategia": resposta.content.strip()}
 
 
 def enriquecer(
