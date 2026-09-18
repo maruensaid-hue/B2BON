@@ -49,3 +49,16 @@ class PerformanceIaSchema(BaseModel):
     taxa_edicao: float
     taxa_rejeicao: float
     taxa_resposta: float
+
+
+class PadroesObservadosSchema(BaseModel):
+    ticket_medio: float | None
+    amostra_ticket_medio: int
+    ciclo_medio_dias: float | None
+    amostra_ciclo_medio: int
+    motivo_perda_mais_comum: str | None
+    motivo_perda_mais_comum_contagem: int
+    amostra_motivo_perda: int
+    taxa_ganho_com_decision_maker: float | None
+    taxa_ganho_sem_decision_maker: float | None
+    amostra_decision_maker: int

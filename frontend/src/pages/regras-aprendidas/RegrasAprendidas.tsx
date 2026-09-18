@@ -52,6 +52,19 @@ interface PerformanceIa {
   taxa_resposta: number;
 }
 
+interface PadroesObservados {
+  ticket_medio: number | null;
+  amostra_ticket_medio: number;
+  ciclo_medio_dias: number | null;
+  amostra_ciclo_medio: number;
+  motivo_perda_mais_comum: string | null;
+  motivo_perda_mais_comum_contagem: number;
+  amostra_motivo_perda: number;
+  taxa_ganho_com_decision_maker: number | null;
+  taxa_ganho_sem_decision_maker: number | null;
+  amostra_decision_maker: number;
+}
+
 interface EscopoInicial {
   icp_id: number | null;
   oferta_id: number | null;
@@ -149,21 +162,24 @@ export function RegrasAprendidas() {
   const [confirmandoExcluirId, setConfirmandoExcluirId] = useState<number | null>(null);
   const [sugerindoId, setSugerindoId] = useState<number | null>(null);
   const [performanceIa, setPerformanceIa] = useState<PerformanceIa | null>(null);
+  const [padroesObservados, setPadroesObservados] = useState<PadroesObservados | null>(null);
 
   async function carregar() {
     try {
-      const [listaRegras, listaCorrecoes, listaIcps, listaOfertas, performance] = await Promise.all([
+      const [listaRegras, listaCorrecoes, listaIcps, listaOfertas, performance, padroes] = await Promise.all([
         api.get<RegraAprendida[]>("/regras-aprendidas"),
         api.get<CorrecaoRecente[]>("/regras-aprendidas/correcoes-recentes"),
         api.get<IcpResumo[]>("/icp"),
         api.get<OfertaResumo[]>("/ofertas"),
         api.get<PerformanceIa>("/regras-aprendidas/performance-ia"),
+        api.get<PadroesObservados>("/regras-aprendidas/padroes-observados"),
       ]);
       setRegras(listaRegras);
       setCorrecoes(listaCorrecoes);
       setIcps(listaIcps);
       setOfertas(listaOfertas);
       setPerformanceIa(performance);
+      setPadroesObservados(padroes);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível carregar as regras aprendidas.");
     }
@@ -437,6 +453,59 @@ export function RegrasAprendidas() {
               <div className="font-head text-[18px] font-extrabold text-cyan">
                 {Math.round(performanceIa.taxa_resposta * 100)}%
               </div>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <SectionLabel>Padrões da Empresa</SectionLabel>
+        <p className="mb-3 text-[12px] text-muted">
+          Correlações observadas no histórico real de negócios deste tenant — nunca uma garantia de resultado, só o
+          que os dados já mostraram até agora. Cada número vem com o tamanho da amostra ao lado.
+        </p>
+        {padroesObservados && (
+          <div className="grid grid-cols-2 gap-3 text-[12px] sm:grid-cols-4">
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Ticket médio (ganhos)</div>
+              <div className="font-head text-[18px] font-extrabold text-text">
+                {padroesObservados.ticket_medio !== null
+                  ? `R$ ${padroesObservados.ticket_medio.toFixed(0)}`
+                  : "Amostra insuficiente"}
+              </div>
+              <div className="text-muted">{padroesObservados.amostra_ticket_medio} negócios</div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Ciclo médio de venda</div>
+              <div className="font-head text-[18px] font-extrabold text-text">
+                {padroesObservados.ciclo_medio_dias !== null
+                  ? `${padroesObservados.ciclo_medio_dias.toFixed(0)} dias`
+                  : "Amostra insuficiente"}
+              </div>
+              <div className="text-muted">{padroesObservados.amostra_ciclo_medio} negócios</div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Motivo de perda mais comum</div>
+              <div className="font-head text-[14px] font-extrabold text-red">
+                {padroesObservados.motivo_perda_mais_comum ?? "Sem dados ainda"}
+              </div>
+              <div className="text-muted">
+                {padroesObservados.motivo_perda_mais_comum_contagem} de {padroesObservados.amostra_motivo_perda} perdidos
+              </div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Ganho com decision maker mapeado</div>
+              <div className="font-head text-[18px] font-extrabold text-green">
+                {padroesObservados.taxa_ganho_com_decision_maker !== null
+                  ? `${Math.round(padroesObservados.taxa_ganho_com_decision_maker * 100)}%`
+                  : "Amostra insuficiente"}
+                {padroesObservados.taxa_ganho_sem_decision_maker !== null && (
+                  <span className="ml-1 text-[12px] text-muted">
+                    vs {Math.round(padroesObservados.taxa_ganho_sem_decision_maker * 100)}% sem
+                  </span>
+                )}
+              </div>
+              <div className="text-muted">{padroesObservados.amostra_decision_maker} negócios fechados</div>
             </div>
           </div>
         )}

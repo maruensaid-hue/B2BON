@@ -43,7 +43,14 @@ from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.schemas.conta import ParticipanteEventoSchema
 from app.schemas.decisor import DecisorCreateSchema
-from app.services import atividade_service, auditoria_service, descarte_service, enriquecimento_limite_service, llm_helpers
+from app.services import (
+    atividade_service,
+    auditoria_service,
+    descarte_service,
+    enriquecimento_limite_service,
+    llm_helpers,
+    metricas_service,
+)
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 
@@ -1201,12 +1208,47 @@ def confirmar_papel_decisor(db: Session, tenant_id: str, ator_id: str | None, co
     return decisor
 
 
+def _secao_padroes_observados_texto(padroes: dict) -> str:
+    """Company Learning (master prompt §12, §15, Fase 0.5-B) — só entra
+    no prompt o que tem amostra suficiente; nunca declara causalidade,
+    só correlação com o tamanho da amostra explícito ao lado."""
+    linhas = []
+    if padroes["ticket_medio"] is not None:
+        linhas.append(
+            f"- Ticket médio de negócios ganhos: R$ {padroes['ticket_medio']:.2f} "
+            f"(amostra: {padroes['amostra_ticket_medio']} negócios)."
+        )
+    if padroes["ciclo_medio_dias"] is not None:
+        linhas.append(
+            f"- Ciclo médio de venda até o ganho: {padroes['ciclo_medio_dias']:.0f} dias "
+            f"(amostra: {padroes['amostra_ciclo_medio']} negócios)."
+        )
+    if padroes["motivo_perda_mais_comum"] is not None:
+        linhas.append(
+            f"- Motivo de perda mais comum: \"{padroes['motivo_perda_mais_comum']}\" "
+            f"({padroes['motivo_perda_mais_comum_contagem']} de {padroes['amostra_motivo_perda']} negócios perdidos)."
+        )
+    if padroes["taxa_ganho_com_decision_maker"] is not None and padroes["taxa_ganho_sem_decision_maker"] is not None:
+        linhas.append(
+            f"- Entre negócios fechados (amostra: {padroes['amostra_decision_maker']}), a taxa de ganho foi "
+            f"{padroes['taxa_ganho_com_decision_maker']:.0%} quando havia um decisor DECISION_MAKER confirmado, "
+            f"contra {padroes['taxa_ganho_sem_decision_maker']:.0%} sem — correlação observada, não garantia."
+        )
+    if not linhas:
+        return ""
+    return (
+        "\n\nPadrões observados neste tenant (correlação observada com base no histórico real, "
+        "NUNCA garantia de resultado):\n" + "\n".join(linhas)
+    )
+
+
 def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LLMProvider) -> dict:
     """Sales Strategy Agent (master prompt §29, Fase 6C) — junta Conta,
     decisores com papel (Stakeholder Map, Fase 5B), ICP/Oferta ativa
-    correspondente e últimas atividades reais em UMA chamada de IA.
-    Nunca cria/altera nada — é uma recomendação de leitura (§97,
-    RECOMMEND, não EXECUTE)."""
+    correspondente, últimas atividades reais e padrões observados do
+    tenant (Company Learning, Fase 0.5-B) em UMA chamada de IA. Nunca
+    cria/altera nada — é uma recomendação de leitura (§97, RECOMMEND,
+    não EXECUTE)."""
     conta = obter(db, tenant_id, conta_id)
 
     icp = db.query(ICP).filter_by(id=conta.icp_id, tenant_id=tenant_id).one_or_none() if conta.icp_id else None
@@ -1215,6 +1257,7 @@ def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LL
 
     linhas_decisores = contexto_decisores_texto(db, tenant_id, conta.id)
     linhas_atividades = atividade_service.contexto_recentes_texto(db, tenant_id, conta_id=conta.id)
+    secao_padroes = _secao_padroes_observados_texto(metricas_service.calcular_padroes_observados(db, tenant_id))
 
     resposta = llm_helpers.gerar_e_registrar(
         db,
@@ -1227,7 +1270,8 @@ def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LL
                 f"{conta.porte or 'desconhecido'}, região {conta.regiao or 'desconhecida'}).\n"
                 f"{linha_oferta}\n\n"
                 f"Decisores mapeados:\n{linhas_decisores}\n\n"
-                f"Últimas atividades registradas:\n{linhas_atividades}\n\n"
+                f"Últimas atividades registradas:\n{linhas_atividades}"
+                f"{secao_padroes}\n\n"
                 "Com base SÓ nas informações acima (não invente nenhum dado além delas), recomende uma "
                 "estratégia de venda para esta conta cobrindo: persona inicial a abordar, abordagem sugerida, "
                 "proposta de valor, canal recomendado, tipo de cadência, conteúdo/CTA sugeridos e timing."

@@ -5,12 +5,13 @@ from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id
 from app.llm.base import LLMProvider
 from app.schemas.regra_aprendida import (
     CorrecaoRecenteSchema,
+    PadroesObservadosSchema,
     PerformanceIaSchema,
     RegraAprendidaCreateSchema,
     RegraAprendidaSchema,
     SugestaoRegraSchema,
 )
-from app.services import regra_aprendida_service
+from app.services import metricas_service, regra_aprendida_service
 
 router = APIRouter(prefix="/regras-aprendidas", tags=["regras-aprendidas"])
 
@@ -33,6 +34,15 @@ def calcular_performance_ia(
 ) -> PerformanceIaSchema:
     """AI Performance metrics (master prompt §77, Fase 6D)."""
     return PerformanceIaSchema(**regra_aprendida_service.calcular_performance_ia(db, tenant_id))
+
+
+@router.get("/padroes-observados", response_model=PadroesObservadosSchema)
+def calcular_padroes_observados(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> PadroesObservadosSchema:
+    """Company Learning (master prompt §12, §15, Fase 0.5-B)."""
+    return PadroesObservadosSchema(**metricas_service.calcular_padroes_observados(db, tenant_id))
 
 
 @router.post("/correcoes-recentes/{log_id}/sugerir-regra", response_model=SugestaoRegraSchema)
