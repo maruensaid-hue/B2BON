@@ -37,3 +37,15 @@ class CorrecaoRecenteSchema(BaseModel):
 
 class SugestaoRegraSchema(BaseModel):
     regra_sugerida: str
+
+
+class PerformanceIaSchema(BaseModel):
+    total_propostas: int
+    mensagens_editadas: int
+    aprovacoes_rejeitadas: int
+    mensagens_enviadas: int
+    respostas_detectadas: int
+    taxa_aceitacao: float
+    taxa_edicao: float
+    taxa_rejeicao: float
+    taxa_resposta: float

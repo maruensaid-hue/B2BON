@@ -5,6 +5,7 @@ from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id
 from app.llm.base import LLMProvider
 from app.schemas.regra_aprendida import (
     CorrecaoRecenteSchema,
+    PerformanceIaSchema,
     RegraAprendidaCreateSchema,
     RegraAprendidaSchema,
     SugestaoRegraSchema,
@@ -23,6 +24,15 @@ def listar_correcoes_recentes(
     2026-09-17) — o humano decide, ao ver o padrão, se cria uma
     `RegraAprendida` durável a partir daquele caso."""
     return regra_aprendida_service.listar_correcoes_recentes(db, tenant_id)
+
+
+@router.get("/performance-ia", response_model=PerformanceIaSchema)
+def calcular_performance_ia(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> PerformanceIaSchema:
+    """AI Performance metrics (master prompt §77, Fase 6D)."""
+    return PerformanceIaSchema(**regra_aprendida_service.calcular_performance_ia(db, tenant_id))
 
 
 @router.post("/correcoes-recentes/{log_id}/sugerir-regra", response_model=SugestaoRegraSchema)

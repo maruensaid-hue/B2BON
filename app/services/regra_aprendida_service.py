@@ -169,6 +169,44 @@ def listar_correcoes_recentes(db: Session, tenant_id: str) -> list[dict]:
     return resultado
 
 
+def calcular_performance_ia(db: Session, tenant_id: str) -> dict:
+    """AI Performance metrics (master prompt §77, Fase 6D) — só o que já
+    é medível de verdade a partir do `AuditLog` que os pontos de
+    aprovação/edição/envio/resposta já gravam, sem inventar nenhum
+    sinal novo. `AI_to_meeting_rate`/`recommendation_conversion` ficam
+    de fora — não existe hoje nenhuma ligação rastreável entre uma
+    mensagem e uma reunião resultante."""
+
+    def _contar(evento_tipo: str, distinto: bool = False) -> int:
+        coluna = AuditLog.entidade_id if distinto else AuditLog.id
+        query = db.query(coluna).filter_by(tenant_id=tenant_id, evento_tipo=evento_tipo)
+        if distinto:
+            query = query.distinct()
+        return query.count()
+
+    def _taxa(numerador: int, denominador: int) -> float:
+        return round(numerador / denominador, 4) if denominador else 0.0
+
+    total_propostas = _contar("mensagem_proposta")
+    mensagens_editadas = _contar("mensagem_editada", distinto=True)
+    aprovacoes_rejeitadas = _contar("aprovacao_rejeitada")
+    mensagens_enviadas = _contar("mensagem_enviada")
+    respostas_detectadas = _contar("resposta_detectada")
+    aceitas_sem_edicao = max(total_propostas - mensagens_editadas, 0)
+
+    return {
+        "total_propostas": total_propostas,
+        "mensagens_editadas": mensagens_editadas,
+        "aprovacoes_rejeitadas": aprovacoes_rejeitadas,
+        "mensagens_enviadas": mensagens_enviadas,
+        "respostas_detectadas": respostas_detectadas,
+        "taxa_aceitacao": _taxa(aceitas_sem_edicao, total_propostas),
+        "taxa_edicao": _taxa(mensagens_editadas, total_propostas),
+        "taxa_rejeicao": _taxa(aprovacoes_rejeitadas, total_propostas),
+        "taxa_resposta": _taxa(respostas_detectadas, mensagens_enviadas),
+    }
+
+
 def sugerir_regra_com_ia(db: Session, tenant_id: str, correcao_log_id: int, llm: LLMProvider) -> str:
     """Peça 3 do loop de aprendizado (raio-X 2026-09-17) — primeira
     chamada de IA nova do loop, deliberadamente pequena: sugere só o

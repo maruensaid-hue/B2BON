@@ -40,6 +40,18 @@ interface CorrecaoRecente {
   criado_em: string;
 }
 
+interface PerformanceIa {
+  total_propostas: number;
+  mensagens_editadas: number;
+  aprovacoes_rejeitadas: number;
+  mensagens_enviadas: number;
+  respostas_detectadas: number;
+  taxa_aceitacao: number;
+  taxa_edicao: number;
+  taxa_rejeicao: number;
+  taxa_resposta: number;
+}
+
 interface EscopoInicial {
   icp_id: number | null;
   oferta_id: number | null;
@@ -136,19 +148,22 @@ export function RegrasAprendidas() {
   const [processandoId, setProcessandoId] = useState<number | null>(null);
   const [confirmandoExcluirId, setConfirmandoExcluirId] = useState<number | null>(null);
   const [sugerindoId, setSugerindoId] = useState<number | null>(null);
+  const [performanceIa, setPerformanceIa] = useState<PerformanceIa | null>(null);
 
   async function carregar() {
     try {
-      const [listaRegras, listaCorrecoes, listaIcps, listaOfertas] = await Promise.all([
+      const [listaRegras, listaCorrecoes, listaIcps, listaOfertas, performance] = await Promise.all([
         api.get<RegraAprendida[]>("/regras-aprendidas"),
         api.get<CorrecaoRecente[]>("/regras-aprendidas/correcoes-recentes"),
         api.get<IcpResumo[]>("/icp"),
         api.get<OfertaResumo[]>("/ofertas"),
+        api.get<PerformanceIa>("/regras-aprendidas/performance-ia"),
       ]);
       setRegras(listaRegras);
       setCorrecoes(listaCorrecoes);
       setIcps(listaIcps);
       setOfertas(listaOfertas);
+      setPerformanceIa(performance);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível carregar as regras aprendidas.");
     }
@@ -377,6 +392,54 @@ export function RegrasAprendidas() {
             <div className="text-[12px] text-muted">Nenhuma edição ou rejeição registrada ainda.</div>
           )}
         </div>
+      </Card>
+
+      <Card>
+        <SectionLabel>Performance da IA</SectionLabel>
+        <p className="mb-3 text-[12px] text-muted">
+          Quanto do que a IA propõe é aceito sem edição, editado, rejeitado ou gera resposta do lead — a partir do
+          histórico real de aprovações já registrado.
+        </p>
+        {performanceIa && (
+          <div className="grid grid-cols-2 gap-3 text-[12px] sm:grid-cols-4">
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Mensagens propostas</div>
+              <div className="font-head text-[18px] font-extrabold text-text">{performanceIa.total_propostas}</div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Taxa de aceitação</div>
+              <div className="font-head text-[18px] font-extrabold text-green">
+                {Math.round(performanceIa.taxa_aceitacao * 100)}%
+              </div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Taxa de edição</div>
+              <div className="font-head text-[18px] font-extrabold text-amber">
+                {Math.round(performanceIa.taxa_edicao * 100)}%
+              </div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Taxa de rejeição</div>
+              <div className="font-head text-[18px] font-extrabold text-red">
+                {Math.round(performanceIa.taxa_rejeicao * 100)}%
+              </div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Mensagens enviadas</div>
+              <div className="font-head text-[18px] font-extrabold text-text">{performanceIa.mensagens_enviadas}</div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Respostas do lead</div>
+              <div className="font-head text-[18px] font-extrabold text-text">{performanceIa.respostas_detectadas}</div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Taxa de resposta</div>
+              <div className="font-head text-[18px] font-extrabold text-cyan">
+                {Math.round(performanceIa.taxa_resposta * 100)}%
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Modal
