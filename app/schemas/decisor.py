@@ -18,6 +18,8 @@ class DecisorSchema(BaseModel):
     neo4j_node_id: str | None
     origem: str | None = None
     linkedin_conectado: bool = False
+    papel_confirmado: str | None = None
+    papel_sugerido: str | None = None
     criado_em: datetime
 
 
@@ -28,6 +30,10 @@ class DecisorCreateSchema(BaseModel):
     linkedin_url: str | None = None
     email: str | None = None
     telefone: str | None = None
+
+
+class ConfirmarPapelDecisorRequestSchema(BaseModel):
+    papel: str
 
 
 class AtualizarDecisorRequestSchema(BaseModel):

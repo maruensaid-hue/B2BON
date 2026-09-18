@@ -39,7 +39,12 @@ from app.schemas.conta import (
     LimiteEnriquecimentoResponseSchema,
 )
 from app.schemas.crm import AtividadeSchema
-from app.schemas.decisor import AtualizarDecisorRequestSchema, DecisorCreateSchema, DecisorSchema
+from app.schemas.decisor import (
+    AtualizarDecisorRequestSchema,
+    ConfirmarPapelDecisorRequestSchema,
+    DecisorCreateSchema,
+    DecisorSchema,
+)
 from app.services import (
     atividade_service,
     conta_service,
@@ -66,6 +71,9 @@ def _serializar_decisores_com_linkedin(
             if usuario_id is not None
             else False
         )
+        # Stakeholder Map (master prompt §27, §56, Fase 5B) — sugestão
+        # sempre recalculada a partir do cargo atual, nunca persistida.
+        dados["papel_sugerido"] = conta_service.sugerir_papel_comite_compra(decisor.cargo)
         resultado.append(DecisorSchema(**dados))
     return resultado
 
@@ -214,6 +222,21 @@ def atualizar_decisor(
         db, tenant_id, ator_id, conta_id, decisor_id, dados.nome, dados.cargo, dados.email, dados.telefone,
         dados.linkedin_url, dados.conta_id,
     )
+
+
+@router.post("/contas/{conta_id}/decisores/{decisor_id}/papel", response_model=DecisorSchema)
+def confirmar_papel_decisor(
+    conta_id: int,
+    decisor_id: int,
+    dados: ConfirmarPapelDecisorRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> DecisorSchema:
+    """Stakeholder Map (master prompt §27, §56, Fase 5B) — confirmação
+    humana de um papel no comitê de compra."""
+    decisor = conta_service.confirmar_papel_decisor(db, tenant_id, ator_id, conta_id, decisor_id, dados.papel)
+    return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, [decisor])[0]
 
 
 @router.post("/contas/{conta_id}/decisores/{decisor_id}/suprimir")

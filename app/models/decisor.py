@@ -27,4 +27,13 @@ class Decisor(Base):
     ultima_interacao_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Opt-out permanente (E9-H2): setado, bloqueia envio em qualquer canal/cadência.
     suprimido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Stakeholder Map (master prompt §27, §56, Fase 5B) — papel no comitê
+    # de compra (DECISION_MAKER/ECONOMIC_BUYER/CHAMPION/INFLUENCER/
+    # TECHNICAL_EVALUATOR/PROCUREMENT/LEGAL/BLOCKER/UNKNOWN), só setado
+    # quando um humano confirma explicitamente. A SUGESTÃO da IA
+    # (`conta_service.sugerir_papel_comite_compra`) nunca é persistida —
+    # é recalculada a cada leitura a partir do `cargo` atual, pra nunca
+    # ficar desatualizada (§27: "inferências devem ser identificadas
+    # como sugestões da IA", nunca um fato confirmado por conta própria).
+    papel_confirmado: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

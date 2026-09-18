@@ -43,7 +43,7 @@ from app.providers.web_search.base import WebSearchProvider
 from app.schemas.conta import ParticipanteEventoSchema
 from app.schemas.decisor import DecisorCreateSchema
 from app.services import atividade_service, auditoria_service, descarte_service, enriquecimento_limite_service, llm_helpers
-from app.services.errors import NaoEncontrado, RegraNegocioViolada
+from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 
 def _score_aderencia(db: Session, tenant_id: str, icp: ICP, candidato: ContaCandidata) -> float:
@@ -1134,6 +1134,53 @@ def atualizar_decisor(
 
     auditoria_service.registrar(
         db, tenant_id, "decisor_atualizado", "decisor", decisor.id, ator_id, {}, conta_id=conta_destino_id
+    )
+    db.commit()
+    db.refresh(decisor)
+    return decisor
+
+
+# Stakeholder Map (master prompt §27, §56, Fase 5B).
+PAPEIS_COMITE_COMPRA = {
+    "DECISION_MAKER", "ECONOMIC_BUYER", "CHAMPION", "INFLUENCER", "TECHNICAL_EVALUATOR",
+    "PROCUREMENT", "LEGAL", "BLOCKER", "UNKNOWN",
+}
+
+_PALAVRAS_CHAVE_PAPEL: list[tuple[tuple[str, ...], str]] = [
+    (("presidente", "ceo", "diretor", "diretora", "vp", "vice-presidente", "sócio", "socio"), "ECONOMIC_BUYER"),
+    (("compras", "procurement", "suprimentos"), "PROCUREMENT"),
+    (("jurídico", "juridico", "legal", "advogado", "advogada"), "LEGAL"),
+    (("ti", "tecnologia", "engenharia", "desenvolvimento", "infraestrutura", "cto"), "TECHNICAL_EVALUATOR"),
+]
+
+
+def sugerir_papel_comite_compra(cargo: str | None) -> str:
+    """Stakeholder Agent (master prompt §27) — heurística determinística
+    de palavras-chave sobre o `cargo` (texto real já cadastrado), sem
+    chamada de IA: mais barato e explicável que um agente de verdade
+    pra este sinal. Sempre uma SUGESTÃO (nunca persistida) — só um
+    humano pode "confirmar" um papel de verdade."""
+    if not cargo:
+        return "UNKNOWN"
+    # Palavras curtas como "ti"/"vp" exigem limite de palavra — substring
+    # solto bate em "marke[ti]ng"/"g[esti]lda que não tem relação alguma.
+    palavras_do_cargo = set(re.findall(r"[\wáàâãéêíóôõúüç-]+", cargo.lower()))
+    for palavras_chave, papel in _PALAVRAS_CHAVE_PAPEL:
+        if palavras_do_cargo & set(palavras_chave):
+            return papel
+    return "UNKNOWN"
+
+
+def confirmar_papel_decisor(db: Session, tenant_id: str, ator_id: str | None, conta_id: int, decisor_id: int, papel: str) -> Decisor:
+    if papel not in PAPEIS_COMITE_COMPRA:
+        raise ValidacaoFalhou(f"Papel de comitê de compra inválido: {papel}")
+    decisor = db.query(Decisor).filter_by(id=decisor_id, conta_id=conta_id, tenant_id=tenant_id).one_or_none()
+    if decisor is None:
+        raise NaoEncontrado(f"Decisor {decisor_id} não encontrado nesta conta")
+
+    decisor.papel_confirmado = papel
+    auditoria_service.registrar(
+        db, tenant_id, "papel_comite_compra_confirmado", "decisor", decisor.id, ator_id, {"papel": papel}, conta_id=conta_id
     )
     db.commit()
     db.refresh(decisor)

@@ -42,6 +42,8 @@ interface Decisor {
   telefone: string | null;
   origem: string | null;
   linkedin_conectado: boolean;
+  papel_confirmado: string | null;
+  papel_sugerido: string | null;
 }
 
 const ROTULOS_ORIGEM: Record<string, string> = {
@@ -49,6 +51,19 @@ const ROTULOS_ORIGEM: Record<string, string> = {
   enriquecimento_contatos: "Enriquecimento",
   manual: "Manual",
   evento: "Evento",
+};
+
+// Stakeholder Map (master prompt §27, §56, Fase 5B).
+const ROTULOS_PAPEL_COMITE_COMPRA: Record<string, string> = {
+  DECISION_MAKER: "Decisor final",
+  ECONOMIC_BUYER: "Comprador econômico",
+  CHAMPION: "Patrocinador interno",
+  INFLUENCER: "Influenciador",
+  TECHNICAL_EVALUATOR: "Avaliador técnico",
+  PROCUREMENT: "Compras",
+  LEGAL: "Jurídico",
+  BLOCKER: "Bloqueador",
+  UNKNOWN: "Desconhecido",
 };
 
 interface UsuarioResumo {
@@ -234,6 +249,13 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
         conta_id: novaContaId && novaContaId !== contaId ? novaContaId : null,
       });
       setDecisorEmEdicaoId(null);
+      await carregar();
+    });
+  }
+
+  async function confirmarPapelDecisor(decisorId: number, papel: string) {
+    await executar(`confirmar-papel-${decisorId}`, async () => {
+      await api.post(`/contas/${contaId}/decisores/${decisorId}/papel`, { papel });
       await carregar();
     });
   }
@@ -544,6 +566,27 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                           {decisor.email && <span className="text-muted"> · {decisor.email}</span>}
                           {decisor.telefone && <span className="text-muted"> · {decisor.telefone}</span>}
                           {decisor.canal_provavel && <span className="text-muted"> · canal: {decisor.canal_provavel}</span>}
+                          <div className="mt-1 flex items-center gap-1.5">
+                            {decisor.papel_confirmado ? (
+                              <Badge tone="cyan">
+                                {ROTULOS_PAPEL_COMITE_COMPRA[decisor.papel_confirmado] ?? decisor.papel_confirmado}
+                              </Badge>
+                            ) : decisor.papel_sugerido && decisor.papel_sugerido !== "UNKNOWN" ? (
+                              <>
+                                <Badge tone="muted">
+                                  Sugestão: {ROTULOS_PAPEL_COMITE_COMPRA[decisor.papel_sugerido] ?? decisor.papel_sugerido}
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={carregando !== null}
+                                  onClick={() => confirmarPapelDecisor(decisor.id, decisor.papel_sugerido as string)}
+                                >
+                                  {carregando === `confirmar-papel-${decisor.id}` ? "Confirmando..." : "Confirmar"}
+                                </Button>
+                              </>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="flex items-center gap-1.5">
                           {decisor.origem && ROTULOS_ORIGEM[decisor.origem] && (
