@@ -26,10 +26,12 @@ from app.schemas.rede_social import (
     ReacaoPostSchema,
     RelacionamentoEmpresarialSchema,
     ResponderConexaoRequestSchema,
+    SalaCompraSchema,
     SalaCorporativaSchema,
     SeguidorEmpresaSchema,
     SeguirRequestSchema,
     SolicitarConexaoRequestSchema,
+    VincularNegocioRequestSchema,
 )
 from app.services import (
     intent_service,
@@ -37,6 +39,7 @@ from app.services import (
     post_rede_social_service,
     rede_social_service,
     relacionamento_empresarial_service,
+    sala_compra_service,
     sala_corporativa_service,
     seguidor_empresa_service,
 )
@@ -442,7 +445,7 @@ def criar_canal_sala(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> CanalSalaSchema:
-    return sala_corporativa_service.criar_canal(db, tenant_id, ator_id, sala_id, dados.tipo, dados.nome)
+    return sala_corporativa_service.criar_canal(db, tenant_id, ator_id, sala_id, dados.tipo, dados.nome, dados.escopo)
 
 
 @router.get("/salas/canais/{canal_id}/mensagens", response_model=list[MensagemSalaSchema])
@@ -465,3 +468,26 @@ def enviar_mensagem_canal(
     return sala_corporativa_service.enviar_mensagem_sala(
         db, tenant_id, ator_id, canal_id, dados.texto, dados.documento_url
     )
+
+
+@router.post("/salas/{sala_id}/negocio", response_model=SalaCompraSchema, status_code=201)
+def vincular_negocio_sala(
+    sala_id: int,
+    dados: VincularNegocioRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> SalaCompraSchema:
+    """Buying Room (master prompt §55, Fase 5A)."""
+    return sala_compra_service.vincular_negocio(
+        db, tenant_id, ator_id, sala_id, dados.negocio_id, dados.visivel_para_comprador
+    )
+
+
+@router.get("/salas/{sala_id}/negocio", response_model=SalaCompraSchema | None)
+def obter_negocio_sala(
+    sala_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> SalaCompraSchema | None:
+    return sala_compra_service.obter_para_sala(db, tenant_id, sala_id)

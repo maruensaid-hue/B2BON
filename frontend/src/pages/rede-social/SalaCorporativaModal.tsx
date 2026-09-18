@@ -10,7 +10,23 @@ interface Canal {
   sala_id: number;
   tipo: string;
   nome: string | null;
+  escopo: "compartilhado" | "interno";
   criado_em: string;
+}
+
+interface SalaCompra {
+  sala_corporativa_id: number;
+  negocio_id: number;
+  negocio_nome: string | null;
+  estagio_nome: string | null;
+  estagio_tipo: string | null;
+  visivel_para_comprador: boolean;
+  e_vendedor: boolean;
+}
+
+interface NegocioResumo {
+  id: number;
+  nome: string;
 }
 
 interface MensagemSala {
@@ -53,6 +69,12 @@ export function SalaCorporativaModal({ salaId, nomeExibicao, onClose }: Props) {
   const [criandoCanal, setCriandoCanal] = useState(false);
   const [novoCanalTipo, setNovoCanalTipo] = useState("COMMERCIAL");
   const [novoCanalNome, setNovoCanalNome] = useState("");
+  const [novoCanalInterno, setNovoCanalInterno] = useState(false);
+  const [negocioVinculado, setNegocioVinculado] = useState<SalaCompra | null>(null);
+  const [vinculandoNegocio, setVinculandoNegocio] = useState(false);
+  const [meusNegocios, setMeusNegocios] = useState<NegocioResumo[]>([]);
+  const [negocioSelecionadoId, setNegocioSelecionadoId] = useState("");
+  const [visivelParaComprador, setVisivelParaComprador] = useState(false);
 
   async function carregarCanais() {
     try {
@@ -61,6 +83,44 @@ export function SalaCorporativaModal({ salaId, nomeExibicao, onClose }: Props) {
       if (canalAtivoId === null && resposta.length > 0) setCanalAtivoId(resposta[0].id);
     } catch {
       setErro("Não foi possível carregar os canais.");
+    }
+  }
+
+  async function carregarNegocioVinculado() {
+    try {
+      setNegocioVinculado(await api.get<SalaCompra | null>(`/rede-social/salas/${salaId}/negocio`));
+    } catch {
+      // silencioso — ausência de vínculo não é erro
+    }
+  }
+
+  useEffect(() => {
+    carregarNegocioVinculado();
+  }, [salaId]);
+
+  async function abrirVinculoNegocio() {
+    setVinculandoNegocio((atual) => !atual);
+    if (meusNegocios.length === 0) {
+      try {
+        setMeusNegocios(await api.get<NegocioResumo[]>("/crm/negocios"));
+      } catch {
+        setErro("Não foi possível carregar seus negócios.");
+      }
+    }
+  }
+
+  async function vincularNegocio(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!negocioSelecionadoId) return;
+    try {
+      const vinculo = await api.post<SalaCompra>(`/rede-social/salas/${salaId}/negocio`, {
+        negocio_id: Number(negocioSelecionadoId),
+        visivel_para_comprador: visivelParaComprador,
+      });
+      setNegocioVinculado(vinculo);
+      setVinculandoNegocio(false);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível vincular o negócio.");
     }
   }
 
@@ -111,11 +171,13 @@ export function SalaCorporativaModal({ salaId, nomeExibicao, onClose }: Props) {
       const canal = await api.post<Canal>(`/rede-social/salas/${salaId}/canais`, {
         tipo: novoCanalTipo,
         nome: novoCanalTipo === "CUSTOM" ? novoCanalNome.trim() || null : null,
+        escopo: novoCanalInterno ? "interno" : "compartilhado",
       });
       setCanais((atual) => [...atual, canal]);
       setCanalAtivoId(canal.id);
       setCriandoCanal(false);
       setNovoCanalNome("");
+      setNovoCanalInterno(false);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível criar o canal.");
     }
@@ -135,6 +197,53 @@ export function SalaCorporativaModal({ salaId, nomeExibicao, onClose }: Props) {
           </button>
         </div>
 
+        <div className="border-b border-border px-3 py-2 text-[11px]">
+          {negocioVinculado ? (
+            <div className="flex items-center justify-between">
+              <span className="text-text">
+                💼 <strong>{negocioVinculado.negocio_nome}</strong>
+                {negocioVinculado.estagio_nome && <span className="text-muted"> · {negocioVinculado.estagio_nome}</span>}
+              </span>
+              {negocioVinculado.e_vendedor && (
+                <span className="text-muted">
+                  {negocioVinculado.visivel_para_comprador ? "Visível pro comprador" : "Só você vê o estágio"}
+                </span>
+              )}
+            </div>
+          ) : (
+            <button onClick={abrirVinculoNegocio} className="text-cyan">
+              + Vincular negócio (Buying Room)
+            </button>
+          )}
+          {vinculandoNegocio && (
+            <form onSubmit={vincularNegocio} className="mt-2 flex items-center gap-2">
+              <select
+                value={negocioSelecionadoId}
+                onChange={(event) => setNegocioSelecionadoId(event.target.value)}
+                className="flex-1 rounded-lg border border-border bg-surf2 px-2 py-1.5 text-text outline-none"
+              >
+                <option value="">Selecione um negócio...</option>
+                {meusNegocios.map((negocio) => (
+                  <option key={negocio.id} value={negocio.id}>
+                    {negocio.nome}
+                  </option>
+                ))}
+              </select>
+              <label className="flex items-center gap-1 text-muted">
+                <input
+                  type="checkbox"
+                  checked={visivelParaComprador}
+                  onChange={(event) => setVisivelParaComprador(event.target.checked)}
+                />
+                Visível pro comprador
+              </label>
+              <Button type="submit" size="sm">
+                Vincular
+              </Button>
+            </form>
+          )}
+        </div>
+
         <div className="flex items-center gap-1.5 border-b border-border px-3 py-2 overflow-x-auto">
           {canais.map((canal) => (
             <button
@@ -144,6 +253,7 @@ export function SalaCorporativaModal({ salaId, nomeExibicao, onClose }: Props) {
                 canalAtivoId === canal.id ? "bg-cyan text-white" : "bg-surf2 text-muted"
               }`}
             >
+              {canal.escopo === "interno" && "🔒 "}
               {canal.tipo === "CUSTOM" && canal.nome ? canal.nome : ROTULO_TIPO_CANAL[canal.tipo] ?? canal.tipo}
             </button>
           ))}
@@ -176,6 +286,14 @@ export function SalaCorporativaModal({ salaId, nomeExibicao, onClose }: Props) {
                 className="flex-1"
               />
             )}
+            <label className="flex items-center gap-1 text-[11px] text-muted">
+              <input
+                type="checkbox"
+                checked={novoCanalInterno}
+                onChange={(event) => setNovoCanalInterno(event.target.checked)}
+              />
+              🔒 Interno (só sua empresa vê)
+            </label>
             <Button type="submit" size="sm">
               Criar
             </Button>

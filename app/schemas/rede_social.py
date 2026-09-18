@@ -222,6 +222,7 @@ class SalaCorporativaSchema(BaseModel):
 class CriarCanalRequestSchema(BaseModel):
     tipo: str
     nome: str | None = None
+    escopo: str = "compartilhado"
 
 
 class CanalSalaSchema(BaseModel):
@@ -229,6 +230,7 @@ class CanalSalaSchema(BaseModel):
     sala_id: int
     tipo: str
     nome: str | None
+    escopo: str
     criado_em: datetime
 
 
@@ -245,3 +247,18 @@ class MensagemSalaSchema(BaseModel):
     texto: str
     documento_url: str | None
     criado_em: datetime
+
+
+class VincularNegocioRequestSchema(BaseModel):
+    negocio_id: int
+    visivel_para_comprador: bool = False
+
+
+class SalaCompraSchema(BaseModel):
+    sala_corporativa_id: int
+    negocio_id: int
+    negocio_nome: str | None
+    estagio_nome: str | None
+    estagio_tipo: str | None
+    visivel_para_comprador: bool
+    e_vendedor: bool

@@ -61,6 +61,7 @@ from app.models.registro_oportunidade import RegistroOportunidade
 from app.models.reuniao import Reuniao
 from app.models.rotulo_tipo_tenant import RotuloTipoTenant
 from app.models.sala_corporativa import SalaCorporativa
+from app.models.sala_compra import SalaCompra
 from app.models.canal_sala import CanalSala
 from app.models.mensagem_sala import MensagemSala
 from app.models.solicitacao_desconto import SolicitacaoDesconto
@@ -151,6 +152,7 @@ __all__ = [
     "Intent",
     "SinalOportunidade",
     "SalaCorporativa",
+    "SalaCompra",
     "CanalSala",
     "MensagemSala",
     "MensagemRedeSocial",

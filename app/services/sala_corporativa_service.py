@@ -11,6 +11,7 @@ from app.services.rede_social_service import conexao_aceita_entre
 _TIPOS_CANAL_VALIDOS = {
     "GENERAL", "COMMERCIAL", "TECHNICAL", "LEGAL", "PROCUREMENT", "FINANCIAL", "SUPPORT", "CUSTOM",
 }
+_ESCOPOS_CANAL_VALIDOS = {"compartilhado", "interno"}
 
 
 def _nome_empresa(db: Session, tenant_id: str) -> str:
@@ -27,7 +28,9 @@ def _exigir_participante(sala: SalaCorporativa, tenant_id: str) -> None:
         raise NaoAutorizado("Sua empresa não participa desta sala corporativa.")
 
 
-def _obter_sala(db: Session, tenant_id: str, sala_id: int) -> SalaCorporativa:
+def obter_sala(db: Session, tenant_id: str, sala_id: int) -> SalaCorporativa:
+    """Não-privada: reaproveitada por `sala_compra_service` (Fase 5A),
+    mesmo tratamento de `conexao_aceita_entre`/`status_conexao_com`."""
     sala = db.query(SalaCorporativa).filter_by(id=sala_id).one_or_none()
     if sala is None:
         raise NaoEncontrado(f"Sala corporativa {sala_id} não encontrada")
@@ -84,24 +87,39 @@ def _serializar_canal(canal: CanalSala) -> dict:
         "sala_id": canal.sala_id,
         "tipo": canal.tipo,
         "nome": canal.nome,
+        "escopo": canal.escopo,
         "criado_em": canal.criado_em,
     }
 
 
+def _visivel_para(canal: CanalSala, tenant_id: str) -> bool:
+    """INTERNAL/SHARED (master prompt §54, Fase 5A) — um canal `interno`
+    só é visível pra quem o criou; `compartilhado` é visível pros dois
+    lados (comportamento de sempre)."""
+    return canal.escopo != "interno" or canal.criado_por == tenant_id
+
+
 def listar_canais(db: Session, tenant_id: str, sala_id: int) -> list[dict]:
-    _obter_sala(db, tenant_id, sala_id)
+    obter_sala(db, tenant_id, sala_id)
     canais = db.query(CanalSala).filter_by(sala_id=sala_id).order_by(CanalSala.criado_em).all()
-    return [_serializar_canal(canal) for canal in canais]
+    return [_serializar_canal(canal) for canal in canais if _visivel_para(canal, tenant_id)]
 
 
-def criar_canal(db: Session, tenant_id: str, ator_id: str | None, sala_id: int, tipo: str, nome: str | None) -> dict:
-    _obter_sala(db, tenant_id, sala_id)
+def criar_canal(
+    db: Session, tenant_id: str, ator_id: str | None, sala_id: int, tipo: str, nome: str | None,
+    escopo: str = "compartilhado",
+) -> dict:
+    obter_sala(db, tenant_id, sala_id)
     if tipo not in _TIPOS_CANAL_VALIDOS:
         raise RegraNegocioViolada(f"Tipo de canal inválido: {tipo}")
     if tipo == "CUSTOM" and not nome:
         raise RegraNegocioViolada("Um canal CUSTOM precisa de um nome.")
+    if escopo not in _ESCOPOS_CANAL_VALIDOS:
+        raise RegraNegocioViolada(f"Escopo de canal inválido: {escopo}")
 
-    canal = CanalSala(sala_id=sala_id, tipo=tipo, nome=nome if tipo == "CUSTOM" else None, criado_por=tenant_id)
+    canal = CanalSala(
+        sala_id=sala_id, tipo=tipo, nome=nome if tipo == "CUSTOM" else None, criado_por=tenant_id, escopo=escopo
+    )
     db.add(canal)
     db.flush()
     auditoria_service.registrar(db, tenant_id, "canal_sala_criado", "canal_sala", canal.id, ator_id, {"tipo": tipo})
@@ -114,7 +132,9 @@ def _obter_canal(db: Session, tenant_id: str, canal_id: int) -> tuple[CanalSala,
     canal = db.query(CanalSala).filter_by(id=canal_id).one_or_none()
     if canal is None:
         raise NaoEncontrado(f"Canal {canal_id} não encontrado")
-    sala = _obter_sala(db, tenant_id, canal.sala_id)
+    sala = obter_sala(db, tenant_id, canal.sala_id)
+    if not _visivel_para(canal, tenant_id):
+        raise NaoEncontrado(f"Canal {canal_id} não encontrado")
     return canal, sala
 
 
