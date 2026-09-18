@@ -41,6 +41,11 @@ limitador_auth = LimitadorEmMemoria()
 # login/registro, são naturezas de abuso bem diferentes.
 limitador_parceiros = LimitadorEmMemoria()
 
+# Bucket separado pras rotas que chamam LLM (Fase 7A, hardening) — cada
+# chamada custa dinheiro de verdade; sem isto, nada limitava quantas
+# vezes um tenant (autenticado, não anônimo) podia disparar IA.
+limitador_ia = LimitadorEmMemoria()
+
 
 def limitar_por_ip(max_tentativas: int = 5, janela_segundos: int = 300):
     """Dependency factory — protege rotas públicas de autenticação contra

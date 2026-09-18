@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy.orm import Session
 
 from app.models.material_oferta import MaterialOferta
@@ -14,6 +16,29 @@ TIPOS_MATERIAL_PERMITIDOS = {
 # Blob vai direto no Postgres/SQLite (raio-X de produção) — teto evita que
 # um upload gigante esgote banco/memória (nenhum limite existia antes).
 TAMANHO_MAXIMO_MATERIAL_BYTES = 15 * 1024 * 1024
+
+# Magic bytes reais (Fase 7A, hardening) — o content-type do upload é
+# declarado pelo cliente, então validá-lo sozinho não prova nada; PDF
+# sempre começa com "%PDF-", e todo formato OOXML (DOCX incluso) é um
+# ZIP, que sempre começa com essa assinatura.
+_ASSINATURA_PDF = b"%PDF-"
+_ASSINATURA_ZIP_OOXML = b"PK\x03\x04"
+
+
+def _tipo_real_bate_com_declarado(tipo_mime: str, conteudo: bytes) -> bool:
+    if tipo_mime == "application/pdf":
+        return conteudo.startswith(_ASSINATURA_PDF)
+    if tipo_mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        return conteudo.startswith(_ASSINATURA_ZIP_OOXML)
+    return False
+
+
+def _sanitizar_nome_arquivo(nome_arquivo: str) -> str:
+    """Remove aspas/quebra de linha/separador de path — sem isto, um nome
+    de arquivo malicioso corrompe a estrutura do header
+    `Content-Disposition` no download (Fase 7A, hardening)."""
+    nome_limpo = re.sub(r'[\r\n"/\\]', "_", nome_arquivo).strip()
+    return nome_limpo or "arquivo"
 
 
 def listar(db: Session, tenant_id: str) -> list[Oferta]:
@@ -121,11 +146,13 @@ def salvar_material(
     if len(conteudo) > TAMANHO_MAXIMO_MATERIAL_BYTES:
         limite_mb = TAMANHO_MAXIMO_MATERIAL_BYTES // (1024 * 1024)
         raise ValidacaoFalhou(f"Arquivo maior que o limite de {limite_mb}MB.")
+    if not _tipo_real_bate_com_declarado(tipo_mime, conteudo):
+        raise ValidacaoFalhou("O conteúdo do arquivo não corresponde ao tipo declarado (PDF ou DOCX).")
 
     material = MaterialOferta(
         tenant_id=tenant_id,
         oferta_id=oferta_id,
-        nome_arquivo=nome_arquivo,
+        nome_arquivo=_sanitizar_nome_arquivo(nome_arquivo),
         tipo_mime=tipo_mime,
         conteudo=conteudo,
         tamanho_bytes=len(conteudo),

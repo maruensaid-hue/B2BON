@@ -13,6 +13,7 @@ from app.api.deps import (
     get_site_fetcher,
     get_tenant_id,
     get_web_search_provider,
+    limitar_ia_por_tenant,
 )
 from app.graph.client import Neo4jClient
 from app.integrations.brasilapi_client import BrasilApiClient
@@ -255,7 +256,11 @@ def suprimir_decisor(
     return optout_service.processar(db, tenant_id, decisor_id, origem="manual")
 
 
-@router.post("/contas/{conta_id}/enriquecer", response_model=EnriquecerContaResponseSchema)
+@router.post(
+    "/contas/{conta_id}/enriquecer",
+    response_model=EnriquecerContaResponseSchema,
+    dependencies=[Depends(limitar_ia_por_tenant())],
+)
 def enriquecer_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -270,7 +275,11 @@ def enriquecer_conta(
     return EnriquecerContaResponseSchema(campos=campos)
 
 
-@router.post("/contas/{conta_id}/estrategia-venda", response_model=EstrategiaVendaSchema)
+@router.post(
+    "/contas/{conta_id}/estrategia-venda",
+    response_model=EstrategiaVendaSchema,
+    dependencies=[Depends(limitar_ia_por_tenant())],
+)
 def sugerir_estrategia_venda(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),

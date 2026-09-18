@@ -104,7 +104,7 @@ def test_upload_material_docx_aceito(client, criar_oferta):
         files={
             "arquivo": (
                 "catalogo.docx",
-                b"conteudo docx de teste",
+                b"PK\x03\x04conteudo docx de teste",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
         },

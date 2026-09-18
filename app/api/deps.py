@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.graph.client import Neo4jClient
 from app.core.config import settings
-from app.core.rate_limit import limitador_parceiros
+from app.core.rate_limit import limitador_ia, limitador_parceiros
 from app.integrations.brasilapi_client import BrasilApiClient, consultar_cnpj_brasilapi
 from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.claude_provider import ClaudeProvider
@@ -397,5 +397,18 @@ def limitar_por_chave_api(max_tentativas: int = 100, janela_segundos: int = 60):
 
     def _dependencia(chave: ChaveApiParceiro = Depends(get_chave_api_atual)) -> None:
         limitador_parceiros.checar(f"chave-api:{chave.id}", max_tentativas, janela_segundos)
+
+    return _dependencia
+
+
+def limitar_ia_por_tenant(max_tentativas: int = 20, janela_segundos: int = 300):
+    """Protege rotas que chamam LLM contra custo/abuso sem teto (Fase 7A,
+    hardening) — chave do limite é `tenant_id`, não IP: são rotas
+    autenticadas, e o risco real é um tenant específico disparando IA
+    demais, não um IP anônimo. Bucket próprio (`limitador_ia`), mesmo
+    padrão de `limitar_por_chave_api`."""
+
+    def _dependencia(tenant_id: str = Depends(get_tenant_id)) -> None:
+        limitador_ia.checar(f"ia:{tenant_id}", max_tentativas, janela_segundos)
 
     return _dependencia

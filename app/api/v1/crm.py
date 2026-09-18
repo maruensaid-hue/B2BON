@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
 from app.llm.base import LLMProvider
 from app.models.conta import Conta
 from app.models.decisor import Decisor
@@ -157,7 +157,11 @@ def atualizar_negocio(
     return _serializar_negocios(db, tenant_id, [negocio])[0]
 
 
-@router.post("/negocios/{negocio_id}/meeting-brief", response_model=MeetingBriefSchema)
+@router.post(
+    "/negocios/{negocio_id}/meeting-brief",
+    response_model=MeetingBriefSchema,
+    dependencies=[Depends(limitar_ia_por_tenant())],
+)
 def gerar_meeting_brief(
     negocio_id: int,
     tenant_id: str = Depends(get_tenant_id),

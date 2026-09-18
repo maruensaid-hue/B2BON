@@ -27,7 +27,7 @@ from app.api.deps import (
     get_whatsapp_provider,
 )
 from app.api.v1.webhooks import _whatsapp_provider_do_webhook_email, _whatsapp_provider_do_webhook_whatsapp
-from app.core.rate_limit import limitador_auth
+from app.core.rate_limit import limitador_auth, limitador_ia
 from app.db.base import Base
 from app.main import app
 from app.models.conta import Conta
@@ -200,6 +200,7 @@ def client(
     fake_payment: StubPaymentProvider,
 ) -> Generator[TestClient, None, None]:
     limitador_auth.resetar()  # a suíte inteira roda no mesmo processo — sem isto, um teste vaza rate-limit pro próximo
+    limitador_ia.resetar()
 
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
 from app.llm.base import LLMProvider
 from app.schemas.agente_corporativo import (
     AprovarPerguntaRequestSchema,
@@ -49,7 +49,7 @@ def definir_modo(
     return ModoAgenteSchema(modo=configuracao.modo)
 
 
-@router.post("/testar", response_model=TestarAgenteResponseSchema)
+@router.post("/testar", response_model=TestarAgenteResponseSchema, dependencies=[Depends(limitar_ia_por_tenant())])
 def testar_agente(
     dados: TestarAgenteRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
@@ -61,7 +61,9 @@ def testar_agente(
     )
 
 
-@router.post("/perguntar", response_model=PerguntaAgenteSchema, status_code=201)
+@router.post(
+    "/perguntar", response_model=PerguntaAgenteSchema, status_code=201, dependencies=[Depends(limitar_ia_por_tenant())]
+)
 def perguntar(
     dados: PerguntarAgenteRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
