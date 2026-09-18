@@ -1218,7 +1218,10 @@ def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LL
         f"- {atividade.criado_em:%d/%m/%Y} ({atividade.tipo}): {atividade.descricao}" for atividade in atividades
     ) or "Nenhuma atividade registrada ainda."
 
-    resposta = llm_helpers.gerar(
+    resposta = llm_helpers.gerar_e_registrar(
+        db,
+        tenant_id,
+        "sales_strategy_agent",
         llm,
         LLMRequest(
             prompt=(

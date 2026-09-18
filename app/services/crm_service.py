@@ -847,7 +847,10 @@ def gerar_meeting_brief(db: Session, tenant_id: str, ator_id: str | None, negoci
     oferta = db.query(Oferta).filter_by(id=negocio.oferta_id).one_or_none() if negocio.oferta_id else None
     linha_oferta = f"Oferta vinculada: {oferta.nome} — {oferta.descricao}" if oferta is not None else "Sem oferta vinculada."
 
-    resposta = llm_helpers.gerar(
+    resposta = llm_helpers.gerar_e_registrar(
+        db,
+        tenant_id,
+        "meeting_agent",
         llm,
         LLMRequest(
             prompt=(

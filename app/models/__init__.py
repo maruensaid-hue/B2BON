@@ -48,6 +48,7 @@ from app.models.pausa_canal import PausaCanal
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.pergunta_agente_corporativo import PerguntaAgenteCorporativo
 from app.models.pesquisa_nps import PesquisaNps
+from app.models.registro_uso_ia import RegistroUsoIa
 from app.models.plano import Plano
 from app.models.proposta_negocio import PropostaNegocio
 from app.models.template_proposta import ItemTemplateProposta, TemplateProposta
@@ -168,4 +169,5 @@ __all__ = [
     "SolicitacaoDesconto",
     "ConfiguracaoAgenteCorporativo",
     "PerguntaAgenteCorporativo",
+    "RegistroUsoIa",
 ]

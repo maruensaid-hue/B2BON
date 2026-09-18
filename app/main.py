@@ -4,6 +4,7 @@ import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text as sa_text
 
 import app.models  # noqa: F401 — registra as tabelas em Base.metadata
 from app.api.v1.router import router as api_v1_router
@@ -134,5 +135,14 @@ async def handle_erro_inesperado(request: Request, exc: Exception) -> JSONRespon
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> JSONResponse:
+    """Fase 7C, hardening — antes respondia "ok" sempre, mesmo com o
+    banco fora do ar; agora faz um `SELECT 1` real (engine próprio,
+    fora do pool das requisições normais) antes de responder."""
+    try:
+        with engine.connect() as conexao:
+            conexao.execute(sa_text("SELECT 1"))
+    except Exception:
+        logger.exception("Health check falhou ao conectar no banco.")
+        return JSONResponse(status_code=503, content={"status": "erro", "database": "erro"})
+    return JSONResponse(status_code=200, content={"status": "ok", "database": "ok"})

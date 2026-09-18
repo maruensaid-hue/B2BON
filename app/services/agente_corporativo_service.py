@@ -102,16 +102,19 @@ def testar_internamente(db: Session, tenant_id: str, pergunta: str, llm: LLMProv
         raise RegraNegocioViolada("Ative o agente corporativo (modo interno ou assistido) antes de testá-lo.")
 
     evidencias = _buscar_conhecimento(db, tenant_id, pergunta)
-    resposta = _gerar_resposta(pergunta, evidencias, llm)
+    resposta = _gerar_resposta(db, tenant_id, pergunta, evidencias, llm)
     return {"resposta": resposta, "evidencias": evidencias}
 
 
-def _gerar_resposta(pergunta: str, evidencias: list[dict], llm: LLMProvider) -> str:
+def _gerar_resposta(db: Session, tenant_id: str, pergunta: str, evidencias: list[dict], llm: LLMProvider) -> str:
     if not evidencias:
         return _RESPOSTA_SEM_EVIDENCIA
 
     trechos = "\n".join(f"- {evidencia['trecho']}" for evidencia in evidencias)
-    resposta = llm_helpers.gerar(
+    resposta = llm_helpers.gerar_e_registrar(
+        db,
+        tenant_id,
+        "corporate_ai_agent",
         llm,
         LLMRequest(
             prompt=(
@@ -143,7 +146,7 @@ def perguntar(
         raise RegraNegocioViolada("É preciso ter uma conexão aceita com esta empresa para perguntar ao seu agente.")
 
     evidencias = _buscar_conhecimento(db, tenant_id_alvo, pergunta)
-    resposta_rascunho = _gerar_resposta(pergunta, evidencias, llm)
+    resposta_rascunho = _gerar_resposta(db, tenant_id_alvo, pergunta, evidencias, llm)
 
     registro = PerguntaAgenteCorporativo(
         tenant_id_alvo=tenant_id_alvo,
