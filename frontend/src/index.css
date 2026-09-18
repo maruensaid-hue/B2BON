@@ -74,3 +74,17 @@ h3,
   background: var(--color-border);
   border-radius: 3px;
 }
+
+/* Fase 7D, hardening de acessibilidade — respeita a preferência do
+   sistema por menos movimento, sem precisar tocar cada transição/
+   animação individual do projeto. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
