@@ -27,8 +27,17 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column('cadencia', sa.Column('icp_id', sa.Integer(), sa.ForeignKey('icp.id'), nullable=True))
-    op.add_column('cadencia', sa.Column('oferta_id', sa.Integer(), sa.ForeignKey('oferta.id'), nullable=True))
+    # `batch_alter_table` (Fase 7B, hardening) — coluna nova com FK
+    # inline exige ALTER de constraint, que o SQLite só suporta via
+    # batch mode; no Postgres (produção, já aplicada) continua sendo o
+    # mesmo ALTER de sempre.
+    with op.batch_alter_table('cadencia') as batch_op:
+        batch_op.add_column(
+            sa.Column('icp_id', sa.Integer(), sa.ForeignKey('icp.id', name='fk_cadencia_icp_id'), nullable=True)
+        )
+        batch_op.add_column(
+            sa.Column('oferta_id', sa.Integer(), sa.ForeignKey('oferta.id', name='fk_cadencia_oferta_id'), nullable=True)
+        )
 
     # Backfill best-esforço: cadências já existentes ficam travadas no
     # ICP/Oferta ativos HOJE (mesmo comportamento implícito que já valia
@@ -61,5 +70,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_column('cadencia', 'oferta_id')
-    op.drop_column('cadencia', 'icp_id')
+    with op.batch_alter_table('cadencia') as batch_op:
+        batch_op.drop_column('oferta_id')
+        batch_op.drop_column('icp_id')

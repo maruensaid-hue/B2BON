@@ -312,13 +312,16 @@ def gerar_sinais(db: Session, tenant_id: str) -> list[dict]:
             "evidencias": [relacionamento.tipo],
         }
 
+    # Lote (Fase 7B, hardening) — antes buscava um `SinalOportunidade`
+    # existente por par dentro do loop de get-or-create.
+    sinais_existentes = {
+        (sinal_existente.tenant_id_alvo, sinal_existente.tipo_sinal): sinal_existente
+        for sinal_existente in db.query(SinalOportunidade).filter_by(tenant_id=tenant_id).all()
+    }
+
     sinais: list[SinalOportunidade] = []
     for (tenant_id_alvo, tipo_sinal), dados in dados_por_par.items():
-        sinal = (
-            db.query(SinalOportunidade)
-            .filter_by(tenant_id=tenant_id, tenant_id_alvo=tenant_id_alvo, tipo_sinal=tipo_sinal)
-            .one_or_none()
-        )
+        sinal = sinais_existentes.get((tenant_id_alvo, tipo_sinal))
         if sinal is None:
             sinal = SinalOportunidade(
                 tenant_id=tenant_id, tenant_id_alvo=tenant_id_alvo, tipo_sinal=tipo_sinal, status="novo"

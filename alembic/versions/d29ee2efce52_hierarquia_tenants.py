@@ -23,14 +23,19 @@ def upgrade() -> None:
     op.add_column('tenant', sa.Column('tipo', sa.String(), nullable=False, server_default='cliente'))
     op.add_column('tenant', sa.Column('tenant_pai_id', sa.String(), nullable=True))
     op.add_column('tenant', sa.Column('modo_cobranca', sa.String(), nullable=False, server_default='direta'))
-    op.create_foreign_key(
-        'fk_tenant_tenant_pai_id_tenant', 'tenant', 'tenant', ['tenant_pai_id'], ['id']
-    )
+    # `batch_alter_table` (Fase 7B, hardening) — SQLite não suporta ALTER
+    # de constraint direto; no Postgres (produção, já aplicada) continua
+    # o mesmo ALTER de sempre.
+    with op.batch_alter_table('tenant') as batch_op:
+        batch_op.create_foreign_key(
+            'fk_tenant_tenant_pai_id_tenant', 'tenant', ['tenant_pai_id'], ['id']
+        )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_constraint('fk_tenant_tenant_pai_id_tenant', 'tenant', type_='foreignkey')
+    with op.batch_alter_table('tenant') as batch_op:
+        batch_op.drop_constraint('fk_tenant_tenant_pai_id_tenant', type_='foreignkey')
     op.drop_column('tenant', 'modo_cobranca')
     op.drop_column('tenant', 'tenant_pai_id')
     op.drop_column('tenant', 'tipo')

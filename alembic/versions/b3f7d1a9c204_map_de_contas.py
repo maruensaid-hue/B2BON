@@ -21,9 +21,13 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.add_column('conta', sa.Column('vendedor_usuario_id', sa.Integer(), nullable=True))
-    op.create_foreign_key(
-        'fk_conta_vendedor_usuario_id', 'conta', 'usuario', ['vendedor_usuario_id'], ['id']
-    )
+    # `batch_alter_table` (Fase 7B, hardening) — SQLite não suporta ALTER
+    # de constraint direto; no Postgres (produção, já aplicada) continua
+    # o mesmo ALTER de sempre.
+    with op.batch_alter_table('conta') as batch_op:
+        batch_op.create_foreign_key(
+            'fk_conta_vendedor_usuario_id', 'usuario', ['vendedor_usuario_id'], ['id']
+        )
 
     op.create_table(
         'interacao_conta',
@@ -44,5 +48,6 @@ def downgrade() -> None:
     op.drop_index('ix_interacao_conta_conta_id', table_name='interacao_conta')
     op.drop_index('ix_interacao_conta_tenant_id', table_name='interacao_conta')
     op.drop_table('interacao_conta')
-    op.drop_constraint('fk_conta_vendedor_usuario_id', 'conta', type_='foreignkey')
+    with op.batch_alter_table('conta') as batch_op:
+        batch_op.drop_constraint('fk_conta_vendedor_usuario_id', type_='foreignkey')
     op.drop_column('conta', 'vendedor_usuario_id')

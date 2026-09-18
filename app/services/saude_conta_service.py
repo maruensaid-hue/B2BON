@@ -176,11 +176,19 @@ def ranking_saude_contas(
     tenant_id_selecionado: str | None = None,
 ) -> list[dict]:
     contas = _contas_visiveis(db, usuario, vendedor_usuario_id, tenant_id_selecionado)
+    # Lote (Fase 7B, hardening) — antes buscava um `Usuario` por conta
+    # dentro do loop; `tenant_nomes` já memoizava do jeito certo duas
+    # linhas abaixo, só o vendedor tinha ficado de fora.
+    ids_vendedores = {conta.vendedor_usuario_id for conta in contas if conta.vendedor_usuario_id is not None}
+    vendedores_por_id = {
+        usuario_vendedor.id: usuario_vendedor
+        for usuario_vendedor in db.query(Usuario).filter(Usuario.id.in_(ids_vendedores)).all()
+    } if ids_vendedores else {}
     tenant_nomes: dict[str, str] = {}
     resultado = []
     for conta in contas:
         risco = calcular_score_risco_da_conta(db, conta)
-        vendedor = db.query(Usuario).filter_by(id=conta.vendedor_usuario_id).one_or_none() if conta.vendedor_usuario_id else None
+        vendedor = vendedores_por_id.get(conta.vendedor_usuario_id) if conta.vendedor_usuario_id else None
         soma_pipeline_aberto = _valor_pipeline_aberto(db, conta.tenant_id, conta.id)
         if conta.tenant_id not in tenant_nomes:
             tenant = db.query(Tenant).filter_by(id=conta.tenant_id).one_or_none()

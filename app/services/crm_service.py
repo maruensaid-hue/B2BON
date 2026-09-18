@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -704,16 +704,34 @@ def dashboard_funil(db: Session, tenant_id: str, data_inicio: date | None = None
 def dashboard_atividade(db: Session, tenant_id: str, data_inicio: date | None = None, data_fim: date | None = None) -> dict:
     """Atividade por vendedor e por equipe (Onda B)."""
     inicio, fim = _periodo_padrao(data_inicio, data_fim)
-    atividades = db.query(Atividade).filter_by(tenant_id=tenant_id).all()
-    atividades_periodo = [a for a in atividades if _no_periodo(a.criado_em, inicio, fim) and a.usuario_id is not None]
+    # Filtro de período NA QUERY (Fase 7B, hardening) — antes carregava
+    # TODA a `Atividade` do tenant pra filtrar em Python; um tenant
+    # antigo com histórico grande pagava esse custo em toda consulta.
+    inicio_dt = datetime.combine(inicio, time.min)
+    fim_dt = datetime.combine(fim + timedelta(days=1), time.min)
+    atividades_periodo = (
+        db.query(Atividade)
+        .filter(
+            Atividade.tenant_id == tenant_id,
+            Atividade.usuario_id.isnot(None),
+            Atividade.criado_em >= inicio_dt,
+            Atividade.criado_em < fim_dt,
+        )
+        .all()
+    )
 
     contagem: dict[int, int] = {}
     for atividade in atividades_periodo:
         contagem[atividade.usuario_id] = contagem.get(atividade.usuario_id, 0) + 1
 
+    # Lote (Fase 7B, hardening) — antes buscava um `Usuario` por
+    # vendedor dentro do loop.
+    usuarios_por_id = {
+        usuario.id: usuario for usuario in db.query(Usuario).filter(Usuario.id.in_(contagem.keys())).all()
+    } if contagem else {}
     por_vendedor = []
     for usuario_id, quantidade in contagem.items():
-        usuario = db.query(Usuario).filter_by(id=usuario_id).one_or_none()
+        usuario = usuarios_por_id.get(usuario_id)
         por_vendedor.append(
             {"usuario_id": usuario_id, "nome": usuario.nome if usuario else "Desconhecido", "quantidade": quantidade}
         )

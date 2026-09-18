@@ -34,13 +34,18 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_lista_prospeccao_tenant_id'), 'lista_prospeccao', ['tenant_id'])
     op.add_column('conta', sa.Column('lista_prospeccao_id', sa.Integer(), nullable=True))
-    op.create_foreign_key(
-        'fk_conta_lista_prospeccao_id', 'conta', 'lista_prospeccao', ['lista_prospeccao_id'], ['id']
-    )
+    # `batch_alter_table` (Fase 7B, hardening) — SQLite não suporta ALTER
+    # de constraint direto; no Postgres (produção, já aplicada) continua
+    # o mesmo ALTER de sempre.
+    with op.batch_alter_table('conta') as batch_op:
+        batch_op.create_foreign_key(
+            'fk_conta_lista_prospeccao_id', 'lista_prospeccao', ['lista_prospeccao_id'], ['id']
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint('fk_conta_lista_prospeccao_id', 'conta', type_='foreignkey')
+    with op.batch_alter_table('conta') as batch_op:
+        batch_op.drop_constraint('fk_conta_lista_prospeccao_id', type_='foreignkey')
     op.drop_column('conta', 'lista_prospeccao_id')
     op.drop_index(op.f('ix_lista_prospeccao_tenant_id'), table_name='lista_prospeccao')
     op.drop_table('lista_prospeccao')

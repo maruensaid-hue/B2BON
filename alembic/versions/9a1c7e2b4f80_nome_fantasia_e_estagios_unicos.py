@@ -52,12 +52,20 @@ def upgrade() -> None:
         """
     ))
 
-    op.create_unique_constraint(
-        'uq_estagio_funil_tenant_ordem', 'estagio_funil', ['tenant_id', 'ordem']
-    )
+    # `batch_alter_table` (Fase 7B, hardening): SQLite não suporta ALTER
+    # de constraint direto (só via a estratégia de recriar a tabela);
+    # `batch_alter_table` já faz isso sozinho quando o dialeto exige, e
+    # no Postgres (produção, onde esta migração já foi aplicada) continua
+    # sendo o mesmo ALTER direto de sempre — comportamento idêntico lá,
+    # só corrige o caminho num banco SQLite criado do zero.
+    with op.batch_alter_table('estagio_funil') as batch_op:
+        batch_op.create_unique_constraint(
+            'uq_estagio_funil_tenant_ordem', ['tenant_id', 'ordem']
+        )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_constraint('uq_estagio_funil_tenant_ordem', 'estagio_funil', type_='unique')
+    with op.batch_alter_table('estagio_funil') as batch_op:
+        batch_op.drop_constraint('uq_estagio_funil_tenant_ordem', type_='unique')
     op.drop_column('conta', 'nome_fantasia')

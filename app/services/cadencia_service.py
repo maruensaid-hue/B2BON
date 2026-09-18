@@ -532,12 +532,24 @@ def gerar_para_lote(
     toques_bloqueados_restricao = 0
     toques_falha_ia = 0
 
+    # Lote (Fase 7B, hardening) — antes buscava `Conta`/primeiro
+    # `Decisor` um a um dentro do loop; aqui o custo é ofuscado pela
+    # chamada de IA por toque ao lado, mas o lote é trivial e sem risco.
+    contas_por_id = {
+        conta.id: conta for conta in db.query(Conta).filter(Conta.id.in_(conta_ids), Conta.tenant_id == tenant_id).all()
+    }
+    primeiro_decisor_por_conta: dict[int, Decisor] = {}
+    for decisor_candidato in (
+        db.query(Decisor).filter(Decisor.conta_id.in_(conta_ids)).order_by(Decisor.conta_id, Decisor.id).all()
+    ):
+        primeiro_decisor_por_conta.setdefault(decisor_candidato.conta_id, decisor_candidato)
+
     for conta_id in conta_ids:
-        conta = db.query(Conta).filter_by(id=conta_id, tenant_id=tenant_id).one_or_none()
+        conta = contas_por_id.get(conta_id)
         if conta is None:
             raise NaoEncontrado(f"Conta {conta_id} não encontrada")
 
-        decisor = db.query(Decisor).filter_by(conta_id=conta.id).order_by(Decisor.id).first()
+        decisor = primeiro_decisor_por_conta.get(conta.id)
         if decisor is None:
             contas_sem_decisor.append(conta_id)
             continue
