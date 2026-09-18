@@ -51,3 +51,13 @@ class SaudeRelacionamentoSchema(BaseModel):
     tem_relacionamento_declarado: bool
     classificacao: str
     sugestoes: list[str]
+
+
+class RiscoPipelineSchema(BaseModel):
+    negocio_id: int
+    negocio_nome: str
+    conta_id: int
+    conta_nome: str | None
+    dias_sem_atividade: int
+    tem_decision_maker: bool
+    riscos: list[str]

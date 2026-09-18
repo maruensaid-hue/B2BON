@@ -85,6 +85,16 @@ const ROTULO_CLASSIFICACAO_SAUDE: Record<string, { texto: string; tone: "green" 
   sem_interacao: { texto: "Sem interação ainda", tone: "muted" },
 };
 
+interface RiscoPipeline {
+  negocio_id: number;
+  negocio_nome: string;
+  conta_id: number;
+  conta_nome: string | null;
+  dias_sem_atividade: number;
+  tem_decision_maker: boolean;
+  riscos: string[];
+}
+
 export function InteligenciaRede() {
   const [icps, setIcps] = useState<IcpResumo[]>([]);
   const [icpSelecionado, setIcpSelecionado] = useState<string>("");
@@ -102,6 +112,7 @@ export function InteligenciaRede() {
   const [convertendoId, setConvertendoId] = useState<number | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [saudeRelacionamentos, setSaudeRelacionamentos] = useState<SaudeRelacionamento[]>([]);
+  const [riscosPipeline, setRiscosPipeline] = useState<RiscoPipeline[]>([]);
 
   useEffect(() => {
     api
@@ -112,6 +123,10 @@ export function InteligenciaRede() {
       .get<SaudeRelacionamento[]>("/inteligencia-rede/saude-relacionamentos")
       .then(setSaudeRelacionamentos)
       .catch(() => setErro("Não foi possível carregar a saúde dos relacionamentos."));
+    api
+      .get<RiscoPipeline[]>("/inteligencia-rede/riscos-pipeline")
+      .then(setRiscosPipeline)
+      .catch(() => setErro("Não foi possível carregar os riscos de pipeline."));
   }, []);
 
   useEffect(() => {
@@ -423,6 +438,35 @@ export function InteligenciaRede() {
           })}
           {saudeRelacionamentos.length === 0 && (
             <div className="text-[12px] text-muted">Nenhuma conexão aceita na rede ainda.</div>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <SectionLabel>Riscos de Pipeline</SectionLabel>
+        <p className="mb-3 text-[12px] text-muted">
+          Pipeline Agent: negócios em aberto sem atividade recente, sem decisor com papel de decisão confirmado, ou
+          sem próximo passo definido para a conta.
+        </p>
+        <div className="flex flex-col gap-2">
+          {riscosPipeline.map((risco) => (
+            <div key={risco.negocio_id} className="rounded-lg border border-border p-3 text-[12px]">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="font-semibold text-text">{risco.negocio_nome}</span>
+                <div className="flex items-center gap-2">
+                  {risco.conta_nome && <span className="text-muted">{risco.conta_nome}</span>}
+                  <Badge tone="red">{risco.dias_sem_atividade}d sem atividade</Badge>
+                </div>
+              </div>
+              <ul className="list-disc pl-4 text-text">
+                {risco.riscos.map((motivo) => (
+                  <li key={motivo}>{motivo}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          {riscosPipeline.length === 0 && (
+            <div className="text-[12px] text-muted">Nenhum negócio em aberto com risco identificado.</div>
           )}
         </div>
       </Card>

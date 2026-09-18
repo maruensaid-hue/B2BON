@@ -6,12 +6,17 @@ from sqlalchemy.orm import Session
 
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
+from app.models.atividade import Atividade
 from app.models.canal_sala import CanalSala
 from app.models.conexao_empresa import ConexaoEmpresa
+from app.models.conta import Conta
+from app.models.decisor import Decisor
+from app.models.estagio_funil import EstagioFunil
 from app.models.icp import ICP
 from app.models.intent import Intent
 from app.models.mensagem_rede_social import MensagemRedeSocial
 from app.models.mensagem_sala import MensagemSala
+from app.models.negocio import Negocio
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
 from app.models.sala_corporativa import SalaCorporativa
@@ -446,6 +451,70 @@ def _ultima_interacao_entre(db: Session, tenant_a: str, tenant_b: str) -> dateti
     )
     datas = [data for data in (ultima_dm, ultima_sala) if data is not None]
     return max(datas) if datas else None
+
+
+_LIMITE_DIAS_PIPELINE_PARADO = 14
+
+
+def analisar_pipeline(db: Session, tenant_id: str, negocio: Negocio) -> dict:
+    """Pipeline Agent (master prompt §33, Fase 5C) — só sinais reais, sem
+    NLP: dias sem atividade registrada (`Atividade`, mesmo raciocínio de
+    "dias sem contato" de `motor_service.calcular_score_risco`), ausência
+    de decision maker confirmado na Conta (Stakeholder Map, Fase 5B) e o
+    campo estruturado `Conta.proximo_passo` que já existe (dado real
+    declarado pelo vendedor, não inferência — nunca inventa "próximo
+    passo" por texto livre)."""
+    agora = datetime.now(UTC)
+
+    ultima_atividade_em = (
+        db.query(func.max(Atividade.criado_em)).filter(Atividade.negocio_id == negocio.id).scalar()
+    )
+    referencia = ultima_atividade_em or negocio.criado_em
+    dias_sem_atividade = (agora - referencia.replace(tzinfo=UTC)).days
+
+    tem_decision_maker = (
+        db.query(Decisor)
+        .filter(Decisor.tenant_id == tenant_id, Decisor.conta_id == negocio.conta_id, Decisor.papel_confirmado == "DECISION_MAKER")
+        .first()
+        is not None
+    )
+
+    conta = db.query(Conta).filter_by(id=negocio.conta_id, tenant_id=tenant_id).one_or_none()
+
+    riscos: list[str] = []
+    if dias_sem_atividade > _LIMITE_DIAS_PIPELINE_PARADO:
+        motivo = "sem nenhuma atividade registrada ainda" if ultima_atividade_em is None else f"há {dias_sem_atividade} dias sem atividade registrada"
+        riscos.append(f"Negócio parado — {motivo}.")
+    if not tem_decision_maker:
+        riscos.append("Nenhum decisor com papel DECISION_MAKER confirmado nesta conta.")
+    if conta is not None:
+        if not conta.proximo_passo:
+            riscos.append("Sem próximo passo definido para esta conta.")
+        elif conta.proximo_passo_em and conta.proximo_passo_em.replace(tzinfo=UTC) < agora:
+            riscos.append(f"Próximo passo atrasado: \"{conta.proximo_passo}\" estava previsto para {conta.proximo_passo_em:%d/%m/%Y}.")
+
+    return {
+        "negocio_id": negocio.id,
+        "negocio_nome": negocio.nome,
+        "conta_id": negocio.conta_id,
+        "conta_nome": conta.nome if conta is not None else None,
+        "dias_sem_atividade": dias_sem_atividade,
+        "tem_decision_maker": tem_decision_maker,
+        "riscos": riscos,
+    }
+
+
+def listar_riscos_pipeline(db: Session, tenant_id: str) -> list[dict]:
+    negocios_abertos = (
+        db.query(Negocio)
+        .join(EstagioFunil, EstagioFunil.id == Negocio.estagio_id)
+        .filter(Negocio.tenant_id == tenant_id, EstagioFunil.tipo == "aberto")
+        .all()
+    )
+    resultados = [analisar_pipeline(db, tenant_id, negocio) for negocio in negocios_abertos]
+    resultados = [resultado for resultado in resultados if resultado["riscos"]]
+    resultados.sort(key=lambda resultado: len(resultado["riscos"]), reverse=True)
+    return resultados
 
 
 def analisar_saude_relacionamento(db: Session, tenant_id: str, tenant_id_alvo: str) -> dict:

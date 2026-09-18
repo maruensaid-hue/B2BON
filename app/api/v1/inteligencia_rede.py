@@ -8,6 +8,7 @@ from app.schemas.inteligencia_rede import (
     ExplicacaoMatchSchema,
     FitIcpRedeSchema,
     MatchIntentSchema,
+    RiscoPipelineSchema,
     SaudeRelacionamentoSchema,
     SinalOportunidadeSchema,
 )
@@ -107,3 +108,12 @@ def listar_saude_relacionamentos(
 ) -> list[SaudeRelacionamentoSchema]:
     """Relationship Agent (master prompt §31, Fase 4B)."""
     return sinal_oportunidade_service.listar_saude_relacionamentos(db, tenant_id)
+
+
+@router.get("/riscos-pipeline", response_model=list[RiscoPipelineSchema])
+def listar_riscos_pipeline(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[RiscoPipelineSchema]:
+    """Pipeline Agent (master prompt §33, Fase 5C)."""
+    return sinal_oportunidade_service.listar_riscos_pipeline(db, tenant_id)
