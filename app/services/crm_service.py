@@ -5,6 +5,8 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.llm.base import LLMProvider
+from app.llm.schemas import LLMRequest
 from app.models.atividade import Atividade
 from app.models.conta import Conta
 from app.models.custo_aquisicao import CustoAquisicao
@@ -14,7 +16,15 @@ from app.models.negocio import Negocio
 from app.models.oferta import Oferta
 from app.models.usuario import Usuario
 from app.schemas.crm import LinhaImportacaoNegocioSchema
-from app.services import atividade_service, auditoria_service, metricas_service, panel_service, saude_conta_service
+from app.services import (
+    atividade_service,
+    auditoria_service,
+    conta_service,
+    llm_helpers,
+    metricas_service,
+    panel_service,
+    saude_conta_service,
+)
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 # Padrão recomendado, não decisão comercial fechada — configurável depois
@@ -785,3 +795,60 @@ def dashboard_flywheel(db: Session, tenant_id: str) -> dict:
         "indicadores_atrito": panel_service.indicadores_atrito(db, tenant_id, None, None),
         "funil": dashboard_funil(db, tenant_id),
     }
+
+
+def gerar_meeting_brief(db: Session, tenant_id: str, ator_id: str | None, negocio_id: int, llm: LLMProvider) -> dict:
+    """Meeting Agent (master prompt §32, Fase 6B) — junta negócio, conta,
+    decisores com papel (Stakeholder Map, Fase 5B) e as últimas
+    atividades reais em UMA chamada de IA; nunca altera o CRM (é
+    preparação, distinto do `resumo_ia` que `Reuniao` já grava DEPOIS da
+    reunião via transcrição)."""
+    negocio = obter_negocio(db, tenant_id, negocio_id)
+    conta = db.query(Conta).filter_by(id=negocio.conta_id, tenant_id=tenant_id).one_or_none()
+    if conta is None:
+        raise NaoEncontrado(f"Conta {negocio.conta_id} não encontrada")
+
+    decisores = db.query(Decisor).filter_by(conta_id=conta.id, tenant_id=tenant_id).all()
+    linhas_decisores = "\n".join(
+        f"- {decisor.nome} ({decisor.cargo or 'cargo desconhecido'}): papel no comitê de compra "
+        f"{decisor.papel_confirmado or f'sugerido como {conta_service.sugerir_papel_comite_compra(decisor.cargo)} (não confirmado)'}"
+        for decisor in decisores
+    ) or "Nenhum decisor cadastrado ainda."
+
+    atividades = (
+        db.query(Atividade)
+        .filter_by(negocio_id=negocio.id, tenant_id=tenant_id)
+        .order_by(Atividade.criado_em.desc())
+        .limit(5)
+        .all()
+    )
+    linhas_atividades = "\n".join(
+        f"- {atividade.criado_em:%d/%m/%Y} ({atividade.tipo}): {atividade.descricao}" for atividade in atividades
+    ) or "Nenhuma atividade registrada ainda."
+
+    oferta = db.query(Oferta).filter_by(id=negocio.oferta_id).one_or_none() if negocio.oferta_id else None
+    linha_oferta = f"Oferta vinculada: {oferta.nome} — {oferta.descricao}" if oferta is not None else "Sem oferta vinculada."
+
+    resposta = llm_helpers.gerar(
+        llm,
+        LLMRequest(
+            prompt=(
+                f"Negócio: \"{negocio.nome}\" (R$ {negocio.valor:.2f}), conta \"{conta.nome}\" "
+                f"({conta.segmento or 'segmento desconhecido'}, porte {conta.porte or 'desconhecido'}).\n"
+                f"{linha_oferta}\n\n"
+                f"Decisores mapeados:\n{linhas_decisores}\n\n"
+                f"Últimas atividades registradas:\n{linhas_atividades}\n\n"
+                "Com base SÓ nas informações acima (não invente nenhum dado além delas), escreva um briefing "
+                "curto para o vendedor se preparar para a próxima reunião com esta conta, cobrindo: objetivos da "
+                "reunião, perguntas a fazer, riscos a observar, resumo dos stakeholders envolvidos e próximos "
+                "passos recomendados."
+            ),
+            system="Você prepara vendedores B2B para reuniões, só com base nos dados fornecidos.",
+        ),
+    )
+
+    auditoria_service.registrar(
+        db, tenant_id, "meeting_brief_gerado", "negocio", negocio.id, ator_id, {}, conta_id=conta.id
+    )
+    db.commit()
+    return {"brief": resposta.content.strip()}

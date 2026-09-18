@@ -109,6 +109,10 @@ class MoverEstagioRequestSchema(BaseModel):
     motivo_perda: str | None = None
 
 
+class MeetingBriefSchema(BaseModel):
+    brief: str
+
+
 class AtividadeSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

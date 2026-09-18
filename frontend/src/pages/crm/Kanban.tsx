@@ -107,6 +107,8 @@ export function Kanban() {
   const [salvandoMotivoPerda, setSalvandoMotivoPerda] = useState(false);
   const [decisoresDaContaSelecionada, setDecisoresDaContaSelecionada] = useState<DecisorResumo[]>([]);
   const [decisoresDaContaEmEdicao, setDecisoresDaContaEmEdicao] = useState<DecisorResumo[]>([]);
+  const [meetingBrief, setMeetingBrief] = useState<string | null>(null);
+  const [gerandoBrief, setGerandoBrief] = useState(false);
   const [atividadesDoNegocio, setAtividadesDoNegocio] = useState<Atividade[]>([]);
   const [propostasDoNegocio, setPropostasDoNegocio] = useState<PropostaNegocio[]>([]);
   const [enviandoProposta, setEnviandoProposta] = useState(false);
@@ -222,6 +224,7 @@ export function Kanban() {
 
   useEffect(() => {
     setNomeNovaProposta("");
+    setMeetingBrief(null);
     if (!negocioEmEdicao) {
       setDecisoresDaContaEmEdicao([]);
       setAtividadesDoNegocio([]);
@@ -238,6 +241,20 @@ export function Kanban() {
       setAtividadesDoNegocio(await api.get<Atividade[]>(`/crm/negocios/${negocioId}/atividades`));
     } catch {
       setAtividadesDoNegocio([]);
+    }
+  }
+
+  async function gerarMeetingBrief() {
+    if (!negocioEmEdicao || gerandoBrief) return;
+    setGerandoBrief(true);
+    setErro(null);
+    try {
+      const resultado = await api.post<{ brief: string }>(`/crm/negocios/${negocioEmEdicao.id}/meeting-brief`);
+      setMeetingBrief(resultado.brief);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível preparar o briefing da reunião.");
+    } finally {
+      setGerandoBrief(false);
     }
   }
 
@@ -796,6 +813,22 @@ export function Kanban() {
               {salvandoEdicao ? "Salvando..." : "Salvar alterações"}
             </Button>
           </form>
+
+          <div>
+            <button
+              type="button"
+              onClick={gerarMeetingBrief}
+              disabled={gerandoBrief}
+              className="text-[11px] text-cyan"
+            >
+              {gerandoBrief ? "Preparando..." : "🧠 Preparar reunião"}
+            </button>
+            {meetingBrief && (
+              <div className="mt-2 rounded-md bg-surf2 p-2 text-[11px] whitespace-pre-line text-text">
+                {meetingBrief}
+              </div>
+            )}
+          </div>
 
           <ListaAtividades atividades={atividadesDoNegocio} aoRegistrar={registrarAtividadeDoNegocio} />
 

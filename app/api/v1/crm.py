@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_tenant_id
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id
+from app.llm.base import LLMProvider
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.negocio import Negocio
@@ -24,6 +25,7 @@ from app.schemas.crm import (
     EstagioFunilSchema,
     ImportarNegociosRequestSchema,
     ImportarNegociosResponseSchema,
+    MeetingBriefSchema,
     MoverEstagioRequestSchema,
     NegocioSchema,
     PropostaNegocioSchema,
@@ -153,6 +155,18 @@ def atualizar_negocio(
         db, tenant_id, ator_id, negocio_id, dados.nome, dados.valor, dados.probabilidade, dados.decisor_id, dados.oferta_id
     )
     return _serializar_negocios(db, tenant_id, [negocio])[0]
+
+
+@router.post("/negocios/{negocio_id}/meeting-brief", response_model=MeetingBriefSchema)
+def gerar_meeting_brief(
+    negocio_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    llm: LLMProvider = Depends(get_llm_provider),
+    db: Session = Depends(get_db),
+) -> MeetingBriefSchema:
+    """Meeting Agent (master prompt §32, Fase 6B)."""
+    return MeetingBriefSchema(**crm_service.gerar_meeting_brief(db, tenant_id, ator_id, negocio_id, llm))
 
 
 @router.delete("/negocios/{negocio_id}", status_code=204)
