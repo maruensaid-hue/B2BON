@@ -105,6 +105,7 @@ def criar_negocio(
         dados.probabilidade,
         dados.vendedor_usuario_id,
         dados.estagio_id,
+        dados.oferta_id,
     )
     return _serializar_negocios(db, tenant_id, [negocio])[0]
 
@@ -149,7 +150,7 @@ def atualizar_negocio(
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
     negocio = crm_service.atualizar_negocio(
-        db, tenant_id, ator_id, negocio_id, dados.nome, dados.valor, dados.probabilidade, dados.decisor_id
+        db, tenant_id, ator_id, negocio_id, dados.nome, dados.valor, dados.probabilidade, dados.decisor_id, dados.oferta_id
     )
     return _serializar_negocios(db, tenant_id, [negocio])[0]
 

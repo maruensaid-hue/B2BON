@@ -25,6 +25,12 @@ class Negocio(Base):
     # exigido pela camada de serviço no cadastro manual (crm_service).
     decisor_id: Mapped[int | None] = mapped_column(ForeignKey("decisor.id"), nullable=True)
     estagio_id: Mapped[int] = mapped_column(ForeignKey("estagio_funil.id"))
+    # Qual Oferta este negócio representa — opcional (nulo pra negócios
+    # antigos/os que o PREDATOR já cria sozinho, mesmo raciocínio de
+    # decisor_id). Sem isso o Revenue Agent (master prompt §34, Fase 5D)
+    # não teria como saber se uma Conta com negócio ganho ainda não
+    # comprou uma Oferta ativa (cross-sell/upsell real, não inventado).
+    oferta_id: Mapped[int | None] = mapped_column(ForeignKey("oferta.id"), nullable=True)
     nome: Mapped[str] = mapped_column(String)
     valor: Mapped[float] = mapped_column(Float, default=0.0)
     probabilidade: Mapped[int] = mapped_column(Integer, default=50)

@@ -95,6 +95,25 @@ interface RiscoPipeline {
   riscos: string[];
 }
 
+interface AtribuicaoReceita {
+  contas_geradas_pela_rede: number;
+  negocios_em_aberto_valor: number;
+  negocios_ganhos_valor: number;
+  sinais_gerados: number;
+  sinais_convertidos: number;
+  taxa_conversao_sinais: number;
+}
+
+interface SugestaoExpansao {
+  conta_id: number;
+  conta_nome: string;
+  oferta_id: number;
+  oferta_nome: string;
+  motivo: string;
+}
+
+const FORMATADOR_MOEDA = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
 export function InteligenciaRede() {
   const [icps, setIcps] = useState<IcpResumo[]>([]);
   const [icpSelecionado, setIcpSelecionado] = useState<string>("");
@@ -113,6 +132,8 @@ export function InteligenciaRede() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [saudeRelacionamentos, setSaudeRelacionamentos] = useState<SaudeRelacionamento[]>([]);
   const [riscosPipeline, setRiscosPipeline] = useState<RiscoPipeline[]>([]);
+  const [atribuicaoReceita, setAtribuicaoReceita] = useState<AtribuicaoReceita | null>(null);
+  const [sugestoesExpansao, setSugestoesExpansao] = useState<SugestaoExpansao[]>([]);
 
   useEffect(() => {
     api
@@ -127,6 +148,14 @@ export function InteligenciaRede() {
       .get<RiscoPipeline[]>("/inteligencia-rede/riscos-pipeline")
       .then(setRiscosPipeline)
       .catch(() => setErro("Não foi possível carregar os riscos de pipeline."));
+    api
+      .get<AtribuicaoReceita>("/inteligencia-rede/atribuicao-receita")
+      .then(setAtribuicaoReceita)
+      .catch(() => setErro("Não foi possível carregar a atribuição de receita."));
+    api
+      .get<SugestaoExpansao[]>("/inteligencia-rede/sugestoes-expansao")
+      .then(setSugestoesExpansao)
+      .catch(() => setErro("Não foi possível carregar as sugestões de expansão."));
   }, []);
 
   useEffect(() => {
@@ -467,6 +496,77 @@ export function InteligenciaRede() {
           ))}
           {riscosPipeline.length === 0 && (
             <div className="text-[12px] text-muted">Nenhum negócio em aberto com risco identificado.</div>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <SectionLabel>Atribuição de Receita da Rede</SectionLabel>
+        <p className="mb-3 text-[12px] text-muted">
+          Revenue Agent: quanto do seu pipeline nasceu de um sinal de oportunidade convertido em conta, e qual a taxa
+          de conversão real dos sinais gerados.
+        </p>
+        {atribuicaoReceita && (
+          <div className="grid grid-cols-2 gap-3 text-[12px] sm:grid-cols-3">
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Contas geradas pela rede</div>
+              <div className="font-head text-[18px] font-extrabold text-text">
+                {atribuicaoReceita.contas_geradas_pela_rede}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Em aberto</div>
+              <div className="font-head text-[18px] font-extrabold text-text">
+                {FORMATADOR_MOEDA.format(atribuicaoReceita.negocios_em_aberto_valor)}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Ganho</div>
+              <div className="font-head text-[18px] font-extrabold text-green">
+                {FORMATADOR_MOEDA.format(atribuicaoReceita.negocios_ganhos_valor)}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Sinais gerados</div>
+              <div className="font-head text-[18px] font-extrabold text-text">{atribuicaoReceita.sinais_gerados}</div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Sinais convertidos</div>
+              <div className="font-head text-[18px] font-extrabold text-text">
+                {atribuicaoReceita.sinais_convertidos}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-muted">Taxa de conversão</div>
+              <div className="font-head text-[18px] font-extrabold text-cyan">
+                {Math.round(atribuicaoReceita.taxa_conversao_sinais * 100)}%
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <SectionLabel>Sugestões de Expansão</SectionLabel>
+        <p className="mb-3 text-[12px] text-muted">
+          Revenue Agent: contas com pelo menos um negócio ganho que ainda não têm nenhum negócio vinculado a uma
+          oferta ativa — cross-sell/upsell real, a partir da oferta de cada negócio.
+        </p>
+        <div className="flex flex-col gap-2">
+          {sugestoesExpansao.map((sugestao) => (
+            <div
+              key={`${sugestao.conta_id}-${sugestao.oferta_id}`}
+              className="flex items-center justify-between rounded-lg border border-border p-3 text-[12px]"
+            >
+              <div>
+                <span className="font-semibold text-text">{sugestao.conta_nome}</span>
+                <span className="text-muted"> · {sugestao.motivo}</span>
+              </div>
+              <Badge tone="amber">{sugestao.oferta_nome}</Badge>
+            </div>
+          ))}
+          {sugestoesExpansao.length === 0 && (
+            <div className="text-[12px] text-muted">Nenhuma sugestão de expansão identificada.</div>
           )}
         </div>
       </Card>

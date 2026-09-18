@@ -61,3 +61,20 @@ class RiscoPipelineSchema(BaseModel):
     dias_sem_atividade: int
     tem_decision_maker: bool
     riscos: list[str]
+
+
+class AtribuicaoReceitaSchema(BaseModel):
+    contas_geradas_pela_rede: int
+    negocios_em_aberto_valor: float
+    negocios_ganhos_valor: float
+    sinais_gerados: int
+    sinais_convertidos: int
+    taxa_conversao_sinais: float
+
+
+class SugestaoExpansaoSchema(BaseModel):
+    conta_id: int
+    conta_nome: str
+    oferta_id: int
+    oferta_nome: str
+    motivo: str

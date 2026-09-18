@@ -17,6 +17,7 @@ from app.models.intent import Intent
 from app.models.mensagem_rede_social import MensagemRedeSocial
 from app.models.mensagem_sala import MensagemSala
 from app.models.negocio import Negocio
+from app.models.oferta import Oferta
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
 from app.models.sala_corporativa import SalaCorporativa
@@ -515,6 +516,82 @@ def listar_riscos_pipeline(db: Session, tenant_id: str) -> list[dict]:
     resultados = [resultado for resultado in resultados if resultado["riscos"]]
     resultados.sort(key=lambda resultado: len(resultado["riscos"]), reverse=True)
     return resultados
+
+
+def calcular_atribuicao_receita(db: Session, tenant_id: str) -> dict:
+    """Revenue Agent — Attribution (master prompt §34, §76, Fase 5D). Já é
+    100% computável sem nenhuma inferência: toda `Conta` nascida de um
+    sinal da rede tem `origem="rede_social_signal"` (Fase 3D,
+    `converter_em_oportunidade`) — basta somar o valor dos negócios dessas
+    contas, por estágio, e cruzar com a taxa de conversão real de
+    `SinalOportunidade`."""
+    contas_geradas_ids = [
+        conta.id for conta in db.query(Conta.id).filter_by(tenant_id=tenant_id, origem="rede_social_signal").all()
+    ]
+
+    valor_aberto = 0.0
+    valor_ganho = 0.0
+    if contas_geradas_ids:
+        linhas = (
+            db.query(Negocio.valor, EstagioFunil.tipo)
+            .join(EstagioFunil, EstagioFunil.id == Negocio.estagio_id)
+            .filter(Negocio.tenant_id == tenant_id, Negocio.conta_id.in_(contas_geradas_ids))
+            .all()
+        )
+        valor_aberto = sum(valor for valor, tipo in linhas if tipo == "aberto")
+        valor_ganho = sum(valor for valor, tipo in linhas if tipo == "ganho")
+
+    sinais_gerados = db.query(SinalOportunidade).filter_by(tenant_id=tenant_id).count()
+    sinais_convertidos = db.query(SinalOportunidade).filter_by(tenant_id=tenant_id, status="convertido").count()
+
+    return {
+        "contas_geradas_pela_rede": len(contas_geradas_ids),
+        "negocios_em_aberto_valor": valor_aberto,
+        "negocios_ganhos_valor": valor_ganho,
+        "sinais_gerados": sinais_gerados,
+        "sinais_convertidos": sinais_convertidos,
+        "taxa_conversao_sinais": (sinais_convertidos / sinais_gerados) if sinais_gerados else 0.0,
+    }
+
+
+def sugerir_expansao(db: Session, tenant_id: str) -> list[dict]:
+    """Revenue Agent — cross-sell/upsell (master prompt §34, Fase 5D):
+    Conta com pelo menos um negócio "ganho" + Oferta ativa que essa Conta
+    nunca teve em nenhum negócio (aberto, ganho ou perdido) — sinal real
+    a partir de `Negocio.oferta_id`, nunca inferido por texto."""
+    contas_com_negocio_ganho = (
+        db.query(Conta)
+        .join(Negocio, Negocio.conta_id == Conta.id)
+        .join(EstagioFunil, EstagioFunil.id == Negocio.estagio_id)
+        .filter(Conta.tenant_id == tenant_id, EstagioFunil.tipo == "ganho")
+        .distinct()
+        .all()
+    )
+    ofertas_ativas = db.query(Oferta).filter_by(tenant_id=tenant_id, ativo=True).all()
+    if not ofertas_ativas:
+        return []
+
+    sugestoes: list[dict] = []
+    for conta in contas_com_negocio_ganho:
+        ofertas_ja_vinculadas = {
+            oferta_id
+            for (oferta_id,) in db.query(Negocio.oferta_id)
+            .filter(Negocio.conta_id == conta.id, Negocio.oferta_id.isnot(None))
+            .all()
+        }
+        for oferta in ofertas_ativas:
+            if oferta.id in ofertas_ja_vinculadas:
+                continue
+            sugestoes.append(
+                {
+                    "conta_id": conta.id,
+                    "conta_nome": conta.nome_fantasia or conta.nome,
+                    "oferta_id": oferta.id,
+                    "oferta_nome": oferta.nome,
+                    "motivo": f"Conta com negócio ganho, ainda sem nenhum negócio vinculado à oferta \"{oferta.nome}\".",
+                }
+            )
+    return sugestoes
 
 
 def analisar_saude_relacionamento(db: Session, tenant_id: str, tenant_id_alvo: str) -> dict:

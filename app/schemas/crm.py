@@ -30,6 +30,7 @@ class NegocioSchema(BaseModel):
     decisor_nome: str | None = None
     vendedor_usuario_id: int | None
     estagio_id: int
+    oferta_id: int | None = None
     nome: str
     valor: float
     probabilidade: int
@@ -92,6 +93,7 @@ class CriarNegocioRequestSchema(BaseModel):
     probabilidade: int = 50
     vendedor_usuario_id: int | None = None
     estagio_id: int | None = None
+    oferta_id: int | None = None
 
 
 class AtualizarNegocioRequestSchema(BaseModel):
@@ -99,6 +101,7 @@ class AtualizarNegocioRequestSchema(BaseModel):
     valor: float = 0.0
     probabilidade: int = 50
     decisor_id: int | None = None
+    oferta_id: int | None = None
 
 
 class MoverEstagioRequestSchema(BaseModel):

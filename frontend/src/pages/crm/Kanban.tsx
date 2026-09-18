@@ -35,12 +35,18 @@ interface Negocio {
   decisor_id: number | null;
   decisor_nome: string | null;
   estagio_id: number;
+  oferta_id: number | null;
   nome: string;
   valor: number;
   probabilidade: number;
 }
 
 interface DecisorResumo {
+  id: number;
+  nome: string;
+}
+
+interface OfertaResumo {
   id: number;
   nome: string;
 }
@@ -86,6 +92,7 @@ export function Kanban() {
   const [semIcp, setSemIcp] = useState(false);
   const [icpSelecionadoId, setIcpSelecionadoId] = useState<number | null>(null);
   const [todasAsContas, setTodasAsContas] = useState<Conta[]>([]);
+  const [ofertas, setOfertas] = useState<OfertaResumo[]>([]);
   const [buscaContaExistente, setBuscaContaExistente] = useState("");
   const [contaExistenteSelecionadaId, setContaExistenteSelecionadaId] = useState<number | null>(null);
   const [sugestoesContaAbertas, setSugestoesContaAbertas] = useState(false);
@@ -157,6 +164,10 @@ export function Kanban() {
       .get<Conta[]>("/contas")
       .then(setTodasAsContas)
       .catch(() => setErro("Não foi possível carregar as contas existentes."));
+    api
+      .get<OfertaResumo[]>("/ofertas")
+      .then(setOfertas)
+      .catch(() => undefined);
   }, []);
 
   // Abre o negócio direto quando se chega aqui via `?negocio_id=` (ex.: a
@@ -391,7 +402,14 @@ export function Kanban() {
         decisorId = decisorCriado.id;
       }
 
-      await api.post("/crm/negocios", { conta_id: contaId, decisor_id: decisorId, nome: nomeNegocio, valor });
+      const ofertaId = Number(form.get("oferta_id") || 0) || null;
+      await api.post("/crm/negocios", {
+        conta_id: contaId,
+        decisor_id: decisorId,
+        nome: nomeNegocio,
+        valor,
+        oferta_id: ofertaId,
+      });
       setModalAberto(false);
       setContaOrigem("existente");
       setSemIcp(false);
@@ -429,6 +447,7 @@ export function Kanban() {
         valor: Number(form.get("valor") || 0),
         probabilidade: Number(form.get("probabilidade") || 50),
         decisor_id: decisorId,
+        oferta_id: Number(form.get("oferta_id") || 0) || null,
       });
       setNegocioEmEdicao(null);
       await carregar();
@@ -694,6 +713,19 @@ export function Kanban() {
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Valor (R$)</div>
             <Input name="valor" type="number" step="0.01" placeholder="0,00" />
           </div>
+          {ofertas.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Oferta (opcional)</div>
+              <Select name="oferta_id" defaultValue="">
+                <option value="">Nenhuma</option>
+                {ofertas.map((oferta) => (
+                  <option key={oferta.id} value={oferta.id}>
+                    {oferta.nome}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <Button type="submit" disabled={salvandoNegocio} className="mt-1 w-full justify-center">
             {salvandoNegocio ? "Criando..." : "Criar negócio"}
           </Button>
@@ -747,6 +779,19 @@ export function Kanban() {
                 ))}
               </Select>
             </div>
+            {ofertas.length > 0 && (
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Oferta (opcional)</div>
+                <Select name="oferta_id" defaultValue={negocioEmEdicao.oferta_id ?? ""}>
+                  <option value="">Nenhuma</option>
+                  {ofertas.map((oferta) => (
+                    <option key={oferta.id} value={oferta.id}>
+                      {oferta.nome}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
             <Button type="submit" disabled={salvandoEdicao} className="w-full justify-center">
               {salvandoEdicao ? "Salvando..." : "Salvar alterações"}
             </Button>

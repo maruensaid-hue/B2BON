@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id
 from app.llm.base import LLMProvider
 from app.schemas.inteligencia_rede import (
+    AtribuicaoReceitaSchema,
     ConversaoSinalSchema,
     ExplicacaoMatchSchema,
     FitIcpRedeSchema,
@@ -11,6 +12,7 @@ from app.schemas.inteligencia_rede import (
     RiscoPipelineSchema,
     SaudeRelacionamentoSchema,
     SinalOportunidadeSchema,
+    SugestaoExpansaoSchema,
 )
 from app.services import intent_service, sinal_oportunidade_service
 
@@ -117,3 +119,21 @@ def listar_riscos_pipeline(
 ) -> list[RiscoPipelineSchema]:
     """Pipeline Agent (master prompt §33, Fase 5C)."""
     return sinal_oportunidade_service.listar_riscos_pipeline(db, tenant_id)
+
+
+@router.get("/atribuicao-receita", response_model=AtribuicaoReceitaSchema)
+def calcular_atribuicao_receita(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> AtribuicaoReceitaSchema:
+    """Revenue Agent — Attribution (master prompt §34, §76, Fase 5D)."""
+    return sinal_oportunidade_service.calcular_atribuicao_receita(db, tenant_id)
+
+
+@router.get("/sugestoes-expansao", response_model=list[SugestaoExpansaoSchema])
+def sugerir_expansao(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[SugestaoExpansaoSchema]:
+    """Revenue Agent — cross-sell/upsell (master prompt §34, Fase 5D)."""
+    return sinal_oportunidade_service.sugerir_expansao(db, tenant_id)
