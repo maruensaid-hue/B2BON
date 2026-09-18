@@ -1076,6 +1076,9 @@ export function RedeSocial() {
       {perfilDetalheTenantId !== null && (
         <PerfilEmpresaDetalheModal
           perfil={empresas.find((empresa) => empresa.perfil.tenant_id === perfilDetalheTenantId)?.perfil ?? null}
+          statusConexao={
+            empresas.find((empresa) => empresa.perfil.tenant_id === perfilDetalheTenantId)?.status_conexao ?? null
+          }
           onClose={() => setPerfilDetalheTenantId(null)}
         />
       )}

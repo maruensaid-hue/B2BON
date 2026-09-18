@@ -9,6 +9,7 @@ from app.models.conexao_empresa import ConexaoEmpresa
 from app.models.conexao_linkedin import ConexaoLinkedin
 from app.models.conta import Conta
 from app.models.conta_franquia_consumo import ContaFranquiaConsumo
+from app.models.configuracao_agente_corporativo import ConfiguracaoAgenteCorporativo
 from app.models.configuracao_canal import ConfiguracaoCanal
 from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.custo_aquisicao import CustoAquisicao
@@ -45,6 +46,7 @@ from app.models.oferta import Oferta
 from app.models.pagamento_licenca import PagamentoLicenca
 from app.models.pausa_canal import PausaCanal
 from app.models.perfil_empresa import PerfilEmpresa
+from app.models.pergunta_agente_corporativo import PerguntaAgenteCorporativo
 from app.models.pesquisa_nps import PesquisaNps
 from app.models.plano import Plano
 from app.models.proposta_negocio import PropostaNegocio
@@ -164,4 +166,6 @@ __all__ = [
     "FilaEnriquecimentoConta",
     "RegistroOportunidade",
     "SolicitacaoDesconto",
+    "ConfiguracaoAgenteCorporativo",
+    "PerguntaAgenteCorporativo",
 ]

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import exigir_licenca_ativa
 from app.api.v1.admin_tenants import router as admin_tenants_router
+from app.api.v1.agente_corporativo import router as agente_corporativo_router
 from app.api.v1.aprovacoes import router as aprovacoes_router
 from app.api.v1.auditoria import router as auditoria_router
 from app.api.v1.auth import router as auth_router
@@ -114,6 +115,7 @@ router.include_router(relatorios_router)
 router.include_router(crm_router, dependencies=_exige_licenca)
 router.include_router(rede_social_router)
 router.include_router(inteligencia_rede_router, dependencies=_exige_licenca)
+router.include_router(agente_corporativo_router, dependencies=_exige_licenca)
 router.include_router(verificacao_empresa_router)
 router.include_router(motor_router, dependencies=_exige_licenca)
 # MAP de contas — visível a user/admin/super_admin dentro do próprio

@@ -245,7 +245,7 @@ def explicar_match_com_ia(db: Session, intent_id: int, tenant_id_candidato: str,
     return resposta.content.strip()
 
 
-def _nome_empresa(db: Session, tenant_id: str) -> str:
+def nome_empresa(db: Session, tenant_id: str) -> str:
     perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
     return perfil.nome_exibicao if perfil is not None else tenant_id
 
@@ -306,7 +306,7 @@ def gerar_sinais(db: Session, tenant_id: str) -> list[dict]:
         dados_por_par[chave] = {
             "score": 0.5,
             "motivo": (
-                f"{_nome_empresa(db, relacionamento.tenant_id_origem)} declarou \"{relacionamento.tipo}\" "
+                f"{nome_empresa(db, relacionamento.tenant_id_origem)} declarou \"{relacionamento.tipo}\" "
                 "em relação à sua empresa no Business Graph da rede."
             ),
             "evidencias": [relacionamento.tipo],
@@ -339,7 +339,7 @@ def _serializar_sinal(db: Session, sinal: SinalOportunidade) -> dict:
     return {
         "id": sinal.id,
         "tenant_id_alvo": sinal.tenant_id_alvo,
-        "empresa_nome": _nome_empresa(db, sinal.tenant_id_alvo),
+        "empresa_nome": nome_empresa(db, sinal.tenant_id_alvo),
         "tipo_sinal": sinal.tipo_sinal,
         "score": sinal.score,
         "confianca": sinal.confianca,
@@ -629,7 +629,7 @@ def analisar_saude_relacionamento(db: Session, tenant_id: str, tenant_id_alvo: s
 
     return {
         "tenant_id_alvo": tenant_id_alvo,
-        "empresa_nome": _nome_empresa(db, tenant_id_alvo),
+        "empresa_nome": nome_empresa(db, tenant_id_alvo),
         "dias_sem_interacao": dias_sem_interacao,
         "tem_relacionamento_declarado": tem_relacionamento,
         "classificacao": classificacao,

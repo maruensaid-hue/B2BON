@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Input";
+import { Input, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import type { PerfilEmpresa } from "@/pages/rede-social/RedeSocial";
 import { api, ApiError } from "@/lib/api";
@@ -59,15 +59,20 @@ function ListaChips({ titulo, itens }: { titulo: string; itens: string[] }) {
 
 export function PerfilEmpresaDetalheModal({
   perfil,
+  statusConexao,
   onClose,
 }: {
   perfil: PerfilEmpresa | null;
+  statusConexao?: string | null;
   onClose: () => void;
 }) {
   const [relacionamentos, setRelacionamentos] = useState<RelacionamentoEmpresarial[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [declarando, setDeclarando] = useState(false);
   const [confirmandoId, setConfirmandoId] = useState<number | null>(null);
+  const [perguntaAgente, setPerguntaAgente] = useState("");
+  const [enviandoPergunta, setEnviandoPergunta] = useState(false);
+  const [avisoAgente, setAvisoAgente] = useState<string | null>(null);
 
   async function carregarRelacionamentos(tenantId: string) {
     try {
@@ -114,6 +119,27 @@ export function PerfilEmpresaDetalheModal({
       setErro(error instanceof ApiError ? error.message : "Não foi possível confirmar o relacionamento.");
     } finally {
       setConfirmandoId(null);
+    }
+  }
+
+  async function perguntarAoAgente(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (enviandoPergunta || !perguntaAgente.trim()) return;
+    setEnviandoPergunta(true);
+    setAvisoAgente(null);
+    try {
+      await api.post("/agente-corporativo/perguntar", {
+        tenant_id_alvo: perfil!.tenant_id,
+        pergunta: perguntaAgente.trim(),
+      });
+      setPerguntaAgente("");
+      setAvisoAgente("Pergunta enviada — você verá a resposta em \"Agente Corporativo → Minhas perguntas\" depois que a empresa aprovar.");
+    } catch (error) {
+      setAvisoAgente(
+        error instanceof ApiError ? error.message : "Não foi possível enviar a pergunta ao agente corporativo.",
+      );
+    } finally {
+      setEnviandoPergunta(false);
     }
   }
 
@@ -212,6 +238,24 @@ export function PerfilEmpresaDetalheModal({
             </Button>
           </form>
         </div>
+
+        {statusConexao === "aceita" && (
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Agente Corporativo</div>
+            {avisoAgente && <div className="mb-2 text-[11px] text-cyan">{avisoAgente}</div>}
+            <form onSubmit={perguntarAoAgente} className="flex gap-2">
+              <Input
+                value={perguntaAgente}
+                onChange={(event) => setPerguntaAgente(event.target.value)}
+                placeholder="Pergunte algo a esta empresa (ex: vocês têm solução de X?)"
+                className="flex-1"
+              />
+              <Button type="submit" size="sm" disabled={enviandoPergunta}>
+                {enviandoPergunta ? "Enviando..." : "Perguntar ao Agente"}
+              </Button>
+            </form>
+          </div>
+        )}
       </div>
     </Modal>
   );
