@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_tenant_id
@@ -12,7 +12,6 @@ from app.schemas.rede_social import (
     CriarCanalRequestSchema,
     CriarComentarioRequestSchema,
     CriarIntentRequestSchema,
-    CriarPostRequestSchema,
     DeclararRelacionamentoRequestSchema,
     EmpresaDiretorioSchema,
     EnviarMensagemRequestSchema,
@@ -255,14 +254,28 @@ def remover_relacionamento(
 
 
 @router.post("/posts", response_model=PostRedeSocialSchema, status_code=201)
-def criar_post(
-    dados: CriarPostRequestSchema,
+async def criar_post(
+    texto: str = Form(...),
+    link_url: str | None = Form(None),
+    arquivo: UploadFile | None = File(None),
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> PostRedeSocialSchema:
-    """Business Feed (master prompt §44-45, Fase 2B)."""
-    return post_rede_social_service.criar(db, tenant_id, ator_id, dados.texto, dados.imagem_url, dados.link_url)
+    """Business Feed (master prompt §44-45, Fase 2B) — anexo real de
+    foto/vídeo (2026-09-20) via multipart, em vez de URL colada."""
+    midia_conteudo = await arquivo.read() if arquivo is not None else None
+    midia_tipo_mime = arquivo.content_type if arquivo is not None else None
+    return post_rede_social_service.criar(
+        db,
+        tenant_id,
+        ator_id,
+        texto,
+        None,
+        link_url,
+        midia_conteudo=midia_conteudo,
+        midia_tipo_mime=midia_tipo_mime,
+    )
 
 
 @router.get("/posts", response_model=list[PostRedeSocialSchema])
@@ -271,6 +284,20 @@ def listar_feed(
     db: Session = Depends(get_db),
 ) -> list[PostRedeSocialSchema]:
     return post_rede_social_service.listar_feed(db, tenant_id_atual=tenant_id)
+
+
+@router.get("/posts/{post_id}/midia")
+def baixar_midia_post(
+    post_id: int,
+    db: Session = Depends(get_db),
+) -> Response:
+    """Serve a foto/vídeo anexado (blob comprimido por `midia_service`)
+    — sem exigência de tenant específico, mesmo padrão de acesso de
+    `listar_comentarios` abaixo: o post já é visível pra toda a rede
+    via `listar_feed`, então a mídia dele não é mais restrita que o
+    post em si."""
+    post = post_rede_social_service.obter_midia(db, post_id)
+    return Response(content=post.midia_conteudo, media_type=post.midia_tipo_mime)
 
 
 @router.delete("/posts/{post_id}", status_code=204)

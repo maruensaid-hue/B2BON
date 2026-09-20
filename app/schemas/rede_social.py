@@ -115,12 +115,6 @@ class SeguirRequestSchema(BaseModel):
     tenant_id_seguido: str
 
 
-class CriarPostRequestSchema(BaseModel):
-    texto: str
-    imagem_url: str | None = None
-    link_url: str | None = None
-
-
 class PostRedeSocialSchema(BaseModel):
     id: int
     tenant_id: str
@@ -130,6 +124,8 @@ class PostRedeSocialSchema(BaseModel):
     texto: str
     imagem_url: str | None
     link_url: str | None
+    midia_url: str | None
+    midia_tipo: str | None
     criado_em: datetime
     total_comentarios: int
     total_reacoes: int

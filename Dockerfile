@@ -4,8 +4,11 @@ WORKDIR /app
 
 # Dependências de sistema mínimas (compilação de pacotes Python nativos,
 # ex. bcrypt) — psycopg[binary] já traz wheel pronta, não precisa disso.
+# ffmpeg (traz ffprobe junto): compressão de vídeo anexado a post da
+# Rede Social (midia_service.comprimir_video), roda como subprocesso.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./

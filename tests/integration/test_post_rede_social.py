@@ -1,22 +1,72 @@
+import io
+
+from PIL import Image
+
 TENANT_B = "tenant-outro"
 
 
+def _imagem_jpeg_bytes() -> bytes:
+    imagem = Image.new("RGB", (400, 300), color=(10, 20, 30))
+    saida = io.BytesIO()
+    imagem.save(saida, format="JPEG")
+    return saida.getvalue()
+
+
 def test_criar_e_listar_post_via_api(client):
-    resposta = client.post("/api/v1/rede-social/posts", json={"texto": "Olá, rede!"})
+    # `texto`/`link_url` viraram Form fields (não mais JSON) desde que o
+    # endpoint aceita anexo real de foto/vídeo via multipart.
+    resposta = client.post("/api/v1/rede-social/posts", data={"texto": "Olá, rede!"})
 
     assert resposta.status_code == 201
     corpo = resposta.json()
     assert corpo["texto"] == "Olá, rede!"
+    assert corpo["midia_url"] is None
 
     feed = client.get("/api/v1/rede-social/posts").json()
     assert len(feed) == 1
     assert feed[0]["texto"] == "Olá, rede!"
 
 
+def test_criar_post_com_foto_anexada_via_api(client):
+    resposta = client.post(
+        "/api/v1/rede-social/posts",
+        data={"texto": "Post com foto"},
+        files={"arquivo": ("foto.jpg", _imagem_jpeg_bytes(), "image/jpeg")},
+    )
+
+    assert resposta.status_code == 201
+    corpo = resposta.json()
+    assert corpo["midia_tipo"] == "imagem"
+    assert corpo["midia_url"] == f"/rede-social/posts/{corpo['id']}/midia"
+
+    midia = client.get(f"/api/v1/rede-social/posts/{corpo['id']}/midia")
+    assert midia.status_code == 200
+    assert midia.headers["content-type"] == "image/jpeg"
+    assert len(midia.content) > 0
+
+
+def test_criar_post_com_arquivo_tipo_nao_suportado_retorna_erro(client):
+    resposta = client.post(
+        "/api/v1/rede-social/posts",
+        data={"texto": "Post com PDF"},
+        files={"arquivo": ("doc.pdf", b"%PDF-1.4 conteudo", "application/pdf")},
+    )
+
+    assert resposta.status_code == 422
+
+
+def test_baixar_midia_de_post_sem_anexo_retorna_404(client):
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Sem mídia"}).json()
+
+    resposta = client.get(f"/api/v1/rede-social/posts/{post['id']}/midia")
+
+    assert resposta.status_code == 404
+
+
 def test_feed_mostra_posts_de_outros_tenants(client, criar_usuario_autenticado):
     headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
-    client.post("/api/v1/rede-social/posts", json={"texto": "Post da empresa B"}, headers=headers_b)
-    client.post("/api/v1/rede-social/posts", json={"texto": "Post da empresa A"})
+    client.post("/api/v1/rede-social/posts", data={"texto": "Post da empresa B"}, headers=headers_b)
+    client.post("/api/v1/rede-social/posts", data={"texto": "Post da empresa A"})
 
     feed = client.get("/api/v1/rede-social/posts").json()
 
@@ -25,7 +75,7 @@ def test_feed_mostra_posts_de_outros_tenants(client, criar_usuario_autenticado):
 
 def test_excluir_post_de_outro_tenant_retorna_403(client, criar_usuario_autenticado):
     headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
-    post = client.post("/api/v1/rede-social/posts", json={"texto": "Meu post"}).json()
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Meu post"}).json()
 
     resposta = client.delete(f"/api/v1/rede-social/posts/{post['id']}", headers=headers_b)
 
@@ -33,7 +83,7 @@ def test_excluir_post_de_outro_tenant_retorna_403(client, criar_usuario_autentic
 
 
 def test_excluir_post_proprio_via_api(client):
-    post = client.post("/api/v1/rede-social/posts", json={"texto": "Apagar"}).json()
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Apagar"}).json()
 
     resposta = client.delete(f"/api/v1/rede-social/posts/{post['id']}")
 
@@ -43,7 +93,7 @@ def test_excluir_post_proprio_via_api(client):
 
 def test_comentar_e_listar_comentarios_via_api(client, criar_usuario_autenticado):
     headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
-    post = client.post("/api/v1/rede-social/posts", json={"texto": "Post com comentário"}).json()
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Post com comentário"}).json()
 
     resposta = client.post(
         f"/api/v1/rede-social/posts/{post['id']}/comentarios", json={"texto": "Muito bom!"}, headers=headers_b
@@ -58,7 +108,7 @@ def test_comentar_e_listar_comentarios_via_api(client, criar_usuario_autenticado
 
 
 def test_reagir_toggle_via_api(client):
-    post = client.post("/api/v1/rede-social/posts", json={"texto": "Post com reação"}).json()
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Post com reação"}).json()
 
     resposta_1 = client.post(f"/api/v1/rede-social/posts/{post['id']}/reagir")
     assert resposta_1.json() == {"reagiu": True, "total": 1}
@@ -69,7 +119,7 @@ def test_reagir_toggle_via_api(client):
 
 def test_feed_traz_contagens_e_eu_reagi_via_api(client, criar_usuario_autenticado):
     headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
-    post = client.post("/api/v1/rede-social/posts", json={"texto": "Post"}).json()
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Post"}).json()
     client.post(f"/api/v1/rede-social/posts/{post['id']}/comentarios", json={"texto": "Oi"}, headers=headers_b)
     client.post(f"/api/v1/rede-social/posts/{post['id']}/reagir", headers=headers_b)
 

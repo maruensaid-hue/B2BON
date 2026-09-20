@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ConversaModal } from "@/pages/rede-social/ConversaModal";
 import { SalaCorporativaModal } from "@/pages/rede-social/SalaCorporativaModal";
 import { PerfilEmpresaDetalheModal } from "@/pages/rede-social/PerfilEmpresaDetalheModal";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, getBlob, postFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export interface PerfilEmpresa {
@@ -70,6 +70,8 @@ interface PostRedeSocial {
   texto: string;
   imagem_url: string | null;
   link_url: string | null;
+  midia_url: string | null;
+  midia_tipo: "imagem" | "video" | null;
   criado_em: string;
   total_comentarios: number;
   total_reacoes: number;
@@ -143,6 +145,7 @@ export function RedeSocial() {
   const [conexoesAtivas, setConexoesAtivas] = useState<Conexao[]>([]);
   const [posts, setPosts] = useState<PostRedeSocial[]>([]);
   const [publicando, setPublicando] = useState(false);
+  const [midiaUrls, setMidiaUrls] = useState<Record<number, string>>({});
   const [comentariosAbertos, setComentariosAbertos] = useState<Record<number, boolean>>({});
   const [comentariosPorPost, setComentariosPorPost] = useState<Record<number, ComentarioPost[]>>({});
   const [novoComentarioTexto, setNovoComentarioTexto] = useState<Record<number, string>>({});
@@ -216,6 +219,38 @@ export function RedeSocial() {
     carregarEmpresas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroSetor, filtroPorte, filtroMercado, filtroApenasVerificadas, filtroBusca]);
+
+  // A mídia do post exige o header de autenticação (mesmo padrão do
+  // resto da API) — um <img>/<video src=...> comum não manda esse
+  // header, então busca o blob via fetch autenticado (getBlob) e
+  // troca por uma object URL local, uma vez por post.
+  useEffect(() => {
+    let cancelado = false;
+    const paraBuscar = posts.filter((post) => post.midia_url && !midiaUrls[post.id]);
+    if (paraBuscar.length === 0) return;
+    (async () => {
+      for (const post of paraBuscar) {
+        try {
+          const blob = await getBlob(post.midia_url!);
+          if (cancelado) return;
+          setMidiaUrls((atual) => ({ ...atual, [post.id]: URL.createObjectURL(blob) }));
+        } catch {
+          // Falha ao buscar uma mídia não deve travar o resto do feed.
+        }
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(midiaUrls).forEach((url) => URL.revokeObjectURL(url));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function conexaoRecebidaDe(tenantId: string): Conexao | undefined {
     return conexoesPendentes.find(
@@ -344,13 +379,14 @@ export function RedeSocial() {
     const dados = new FormData(form);
     const texto = String(dados.get("texto") ?? "").trim();
     if (!texto) return;
+    const arquivo = dados.get("arquivo");
+    const linkUrl = String(dados.get("link_url") || "").trim();
     setPublicando(true);
     setErro(null);
     try {
-      await api.post("/rede-social/posts", {
+      await postFile("/rede-social/posts", arquivo instanceof File && arquivo.size > 0 ? arquivo : null, {
         texto,
-        imagem_url: String(dados.get("imagem_url") || "") || null,
-        link_url: String(dados.get("link_url") || "") || null,
+        ...(linkUrl ? { link_url: linkUrl } : {}),
       });
       form.reset();
       await carregarTudo();
@@ -640,8 +676,13 @@ export function RedeSocial() {
         <SectionLabel>Feed da Rede</SectionLabel>
         <form onSubmit={publicarPost} className="mb-3 flex flex-col gap-2">
           <Textarea name="texto" required rows={2} placeholder="Compartilhe uma novidade com a rede..." />
-          <div className="flex gap-2">
-            <Input name="imagem_url" placeholder="URL de imagem (opcional)" className="flex-1" />
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="file"
+              name="arquivo"
+              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+              className="flex-1 text-[12px] text-muted"
+            />
             <Input name="link_url" placeholder="URL de link (opcional)" className="flex-1" />
             <Button type="submit" size="sm" disabled={publicando}>
               {publicando ? "Publicando..." : "Publicar"}
@@ -669,7 +710,15 @@ export function RedeSocial() {
                 </div>
               </div>
               <div className="text-text">{post.texto}</div>
-              {post.imagem_url && <img src={post.imagem_url} alt="" className="mt-2 max-h-48 w-full rounded-lg object-cover" />}
+              {post.midia_tipo === "imagem" && midiaUrls[post.id] && (
+                <img src={midiaUrls[post.id]} alt="" className="mt-2 max-h-64 w-full rounded-lg object-cover" />
+              )}
+              {post.midia_tipo === "video" && midiaUrls[post.id] && (
+                <video src={midiaUrls[post.id]} controls className="mt-2 max-h-64 w-full rounded-lg" />
+              )}
+              {!post.midia_tipo && post.imagem_url && (
+                <img src={post.imagem_url} alt="" className="mt-2 max-h-48 w-full rounded-lg object-cover" />
+              )}
               {post.link_url && (
                 <a href={post.link_url} target="_blank" rel="noreferrer" className="mt-1 block text-cyan">
                   {post.link_url}

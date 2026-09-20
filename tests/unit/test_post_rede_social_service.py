@@ -1,9 +1,21 @@
+import io
+
+import pytest
+from PIL import Image
+
 from app.models.usuario import Usuario
 from app.services import post_rede_social_service
-from app.services.errors import NaoAutorizado, NaoEncontrado
+from app.services.errors import NaoAutorizado, NaoEncontrado, ValidacaoFalhou
 
 TENANT_A = "tenant-teste"
 TENANT_B = "tenant-outro"
+
+
+def _imagem_jpeg_bytes() -> bytes:
+    imagem = Image.new("RGB", (400, 300), color=(10, 20, 30))
+    saida = io.BytesIO()
+    imagem.save(saida, format="JPEG")
+    return saida.getvalue()
 
 
 def _criar_usuario(db_session, tenant_id: str, **overrides) -> Usuario:
@@ -167,3 +179,59 @@ def test_listar_feed_traz_contagens_e_eu_reagi(db_session):
     assert feed_visto_por_b[0]["total_reacoes"] == 1
     assert feed_visto_por_b[0]["eu_reagi"] is True
     assert feed_visto_por_a[0]["eu_reagi"] is False
+
+
+def test_criar_post_com_foto_anexada_comprime_e_serializa_midia(db_session):
+    autor = _criar_usuario(db_session, TENANT_A)
+
+    post = post_rede_social_service.criar(
+        db_session,
+        TENANT_A,
+        str(autor.id),
+        "Post com foto",
+        None,
+        None,
+        midia_conteudo=_imagem_jpeg_bytes(),
+        midia_tipo_mime="image/jpeg",
+    )
+
+    assert post["midia_url"] == f"/rede-social/posts/{post['id']}/midia"
+    assert post["midia_tipo"] == "imagem"
+
+    midia = post_rede_social_service.obter_midia(db_session, post["id"])
+    assert midia.midia_tipo_mime == "image/jpeg"
+    assert midia.midia_conteudo is not None
+    assert midia.midia_tamanho_bytes == len(midia.midia_conteudo)
+
+
+def test_criar_post_sem_midia_nao_preenche_midia_url(db_session):
+    autor = _criar_usuario(db_session, TENANT_A)
+
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor.id), "Sem mídia", None, None)
+
+    assert post["midia_url"] is None
+    assert post["midia_tipo"] is None
+
+
+def test_criar_post_com_tipo_de_midia_nao_suportado_levanta_validacao_falhou(db_session):
+    autor = _criar_usuario(db_session, TENANT_A)
+
+    with pytest.raises(ValidacaoFalhou):
+        post_rede_social_service.criar(
+            db_session,
+            TENANT_A,
+            str(autor.id),
+            "Post com anexo inválido",
+            None,
+            None,
+            midia_conteudo=b"conteudo qualquer",
+            midia_tipo_mime="application/pdf",
+        )
+
+
+def test_obter_midia_levanta_nao_encontrado_quando_post_nao_tem_midia(db_session):
+    autor = _criar_usuario(db_session, TENANT_A)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor.id), "Sem mídia", None, None)
+
+    with pytest.raises(NaoEncontrado):
+        post_rede_social_service.obter_midia(db_session, post["id"])

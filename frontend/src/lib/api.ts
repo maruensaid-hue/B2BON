@@ -110,13 +110,20 @@ export async function getBlob(path: string): Promise<Blob> {
   return response.blob();
 }
 
-/** Upload de arquivo binário (ex.: PDF/DOCX de proposta) via multipart —
- * não passa por `request()` porque não pode forçar Content-Type: application/json
- * (o browser precisa definir o boundary do multipart sozinho). */
-export async function postFile<T>(path: string, file: File, camposExtras?: Record<string, string>): Promise<T> {
+/** Upload de arquivo binário (ex.: PDF/DOCX de proposta, foto/vídeo de
+ * post) via multipart — não passa por `request()` porque não pode
+ * forçar Content-Type: application/json (o browser precisa definir o
+ * boundary do multipart sozinho). `file` é opcional (post de texto
+ * puro, sem anexo, ainda usa multipart pra manter um único caminho de
+ * envio no formulário). */
+export async function postFile<T>(
+  path: string,
+  file: File | null,
+  camposExtras?: Record<string, string>,
+): Promise<T> {
   const token = getToken();
   const formData = new FormData();
-  formData.append("arquivo", file);
+  if (file) formData.append("arquivo", file);
   for (const [chave, valor] of Object.entries(camposExtras ?? {})) {
     formData.append(chave, valor);
   }

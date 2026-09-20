@@ -6,22 +6,45 @@ from app.models.perfil_empresa import PerfilEmpresa
 from app.models.post_rede_social import PostRedeSocial
 from app.models.reacao_post import ReacaoPost
 from app.models.usuario import Usuario
-from app.services import auditoria_service, notificacao_rede_social_service
-from app.services.errors import NaoAutorizado, NaoEncontrado
+from app.services import auditoria_service, midia_service, notificacao_rede_social_service
+from app.services.errors import NaoAutorizado, NaoEncontrado, ValidacaoFalhou
 
 _LIMITE_FEED_PADRAO = 50
 _LIMITE_COMENTARIOS_PADRAO = 200
 
 
 def criar(
-    db: Session, tenant_id: str, ator_id: str | None, texto: str, imagem_url: str | None, link_url: str | None
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    texto: str,
+    imagem_url: str | None,
+    link_url: str | None,
+    *,
+    midia_conteudo: bytes | None = None,
+    midia_tipo_mime: str | None = None,
 ) -> dict:
+    midia_conteudo_final: bytes | None = None
+    midia_tipo_mime_final: str | None = None
+    if midia_conteudo is not None:
+        if midia_tipo_mime in midia_service.TIPOS_IMAGEM_PERMITIDOS:
+            midia_conteudo_final = midia_service.comprimir_imagem(midia_conteudo)
+            midia_tipo_mime_final = "image/jpeg"
+        elif midia_tipo_mime in midia_service.TIPOS_VIDEO_PERMITIDOS:
+            midia_conteudo_final = midia_service.comprimir_video(midia_conteudo)
+            midia_tipo_mime_final = "video/mp4"
+        else:
+            raise ValidacaoFalhou(f"Tipo de arquivo não suportado: {midia_tipo_mime}. Envie uma foto ou um vídeo.")
+
     post = PostRedeSocial(
         tenant_id=tenant_id,
         usuario_autor_id=int(ator_id) if ator_id else None,
         texto=texto,
         imagem_url=imagem_url,
         link_url=link_url,
+        midia_conteudo=midia_conteudo_final,
+        midia_tipo_mime=midia_tipo_mime_final,
+        midia_tamanho_bytes=len(midia_conteudo_final) if midia_conteudo_final is not None else None,
     )
     db.add(post)
     db.flush()
@@ -30,6 +53,13 @@ def criar(
     db.commit()
     db.refresh(post)
     return _serializar(db, post, tenant_id_atual=tenant_id)
+
+
+def obter_midia(db: Session, post_id: int) -> PostRedeSocial:
+    post = _obter(db, post_id)
+    if post.midia_conteudo is None:
+        raise NaoEncontrado(f"Post {post_id} não tem mídia anexada")
+    return post
 
 
 def _obter(db: Session, post_id: int) -> PostRedeSocial:
@@ -74,6 +104,12 @@ def _serializar(db: Session, post: PostRedeSocial, tenant_id_atual: str | None) 
         "texto": post.texto,
         "imagem_url": post.imagem_url,
         "link_url": post.link_url,
+        "midia_url": f"/rede-social/posts/{post.id}/midia" if post.midia_conteudo is not None else None,
+        "midia_tipo": (
+            ("video" if (post.midia_tipo_mime or "").startswith("video/") else "imagem")
+            if post.midia_conteudo is not None
+            else None
+        ),
         "criado_em": post.criado_em,
         "total_comentarios": total_comentarios,
         "total_reacoes": total_reacoes,
