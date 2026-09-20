@@ -175,34 +175,60 @@ def calcular_performance_ia(db: Session, tenant_id: str) -> dict:
     aprovação/edição/envio/resposta já gravam, sem inventar nenhum
     sinal novo. `AI_to_meeting_rate`/`recommendation_conversion` ficam
     de fora — não existe hoje nenhuma ligação rastreável entre uma
-    mensagem e uma reunião resultante."""
+    mensagem e uma reunião resultante.
 
-    def _contar(evento_tipo: str, distinto: bool = False) -> int:
-        coluna = AuditLog.entidade_id if distinto else AuditLog.id
-        query = db.query(coluna).filter_by(tenant_id=tenant_id, evento_tipo=evento_tipo)
-        if distinto:
-            query = query.distinct()
-        return query.count()
+    Bug real corrigido 2026-09-20: "aceita sem edição" era calculado só
+    como `total - editadas`, sem nunca descontar as rejeitadas — uma
+    mensagem rejeitada sem ter sido editada antes contava como
+    "aceita" ao mesmo tempo que contava como "rejeitada", fazendo as
+    três taxas somarem mais que 100% (achado pelo usuário: 100% de
+    aceitação + 3% de rejeição na mesma tela). `aprovacao_rejeitada`
+    grava `entidade_id` da `Aprovacao`, não da `Mensagem` — resolve via
+    `Aprovacao.mensagem_id` pra comparar no mesmo espaço de IDs de
+    `mensagem_proposta`/`mensagem_editada`. Quando a mesma mensagem foi
+    editada E depois rejeitada (permitido — `rejeitar` não bloqueia uma
+    `Aprovacao` já editada), o desfecho final (rejeitada) prevalece
+    sobre a edição, pra cada mensagem proposta cair em exatamente uma
+    das três categorias."""
+
+    def _ids_distintos(evento_tipo: str) -> set[int]:
+        linhas = (
+            db.query(AuditLog.entidade_id)
+            .filter_by(tenant_id=tenant_id, evento_tipo=evento_tipo)
+            .distinct()
+            .all()
+        )
+        return {id_ for (id_,) in linhas}
 
     def _taxa(numerador: int, denominador: int) -> float:
         return round(numerador / denominador, 4) if denominador else 0.0
 
-    total_propostas = _contar("mensagem_proposta")
-    mensagens_editadas = _contar("mensagem_editada", distinto=True)
-    aprovacoes_rejeitadas = _contar("aprovacao_rejeitada")
-    mensagens_enviadas = _contar("mensagem_enviada")
-    respostas_detectadas = _contar("resposta_detectada")
-    aceitas_sem_edicao = max(total_propostas - mensagens_editadas, 0)
+    mensagens_propostas_ids = _ids_distintos("mensagem_proposta")
+    mensagens_editadas_ids = _ids_distintos("mensagem_editada")
+    aprovacoes_rejeitadas_ids = _ids_distintos("aprovacao_rejeitada")
+
+    mensagens_rejeitadas_ids: set[int] = set()
+    if aprovacoes_rejeitadas_ids:
+        linhas = db.query(Aprovacao.mensagem_id).filter(Aprovacao.id.in_(aprovacoes_rejeitadas_ids)).distinct().all()
+        mensagens_rejeitadas_ids = {mid for (mid,) in linhas}
+
+    total_propostas = len(mensagens_propostas_ids)
+    rejeitadas = len(mensagens_rejeitadas_ids)
+    editadas_nao_rejeitadas = len(mensagens_editadas_ids - mensagens_rejeitadas_ids)
+    aceitas_sem_edicao = max(total_propostas - editadas_nao_rejeitadas - rejeitadas, 0)
+
+    mensagens_enviadas = len(_ids_distintos("mensagem_enviada"))
+    respostas_detectadas = len(_ids_distintos("resposta_detectada"))
 
     return {
         "total_propostas": total_propostas,
-        "mensagens_editadas": mensagens_editadas,
-        "aprovacoes_rejeitadas": aprovacoes_rejeitadas,
+        "mensagens_editadas": len(mensagens_editadas_ids),
+        "aprovacoes_rejeitadas": rejeitadas,
         "mensagens_enviadas": mensagens_enviadas,
         "respostas_detectadas": respostas_detectadas,
         "taxa_aceitacao": _taxa(aceitas_sem_edicao, total_propostas),
-        "taxa_edicao": _taxa(mensagens_editadas, total_propostas),
-        "taxa_rejeicao": _taxa(aprovacoes_rejeitadas, total_propostas),
+        "taxa_edicao": _taxa(editadas_nao_rejeitadas, total_propostas),
+        "taxa_rejeicao": _taxa(rejeitadas, total_propostas),
         "taxa_resposta": _taxa(respostas_detectadas, mensagens_enviadas),
     }
 
