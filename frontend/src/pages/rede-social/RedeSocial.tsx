@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ConversaModal } from "@/pages/rede-social/ConversaModal";
 import { SalaCorporativaModal } from "@/pages/rede-social/SalaCorporativaModal";
 import { PerfilEmpresaDetalheModal } from "@/pages/rede-social/PerfilEmpresaDetalheModal";
-import { api, ApiError, getBlob, postFile } from "@/lib/api";
+import { api, ApiError, getBlob, postFiles } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export interface PerfilEmpresa {
@@ -61,6 +61,12 @@ interface EmpresaDiretorio {
   seguindo: boolean;
 }
 
+interface MidiaPost {
+  id: number;
+  url: string;
+  tipo: "imagem" | "video";
+}
+
 interface PostRedeSocial {
   id: number;
   tenant_id: string;
@@ -70,8 +76,7 @@ interface PostRedeSocial {
   texto: string;
   imagem_url: string | null;
   link_url: string | null;
-  midia_url: string | null;
-  midia_tipo: "imagem" | "video" | null;
+  midias: MidiaPost[];
   criado_em: string;
   total_comentarios: number;
   total_reacoes: number;
@@ -146,6 +151,7 @@ export function RedeSocial() {
   const [posts, setPosts] = useState<PostRedeSocial[]>([]);
   const [publicando, setPublicando] = useState(false);
   const [midiaUrls, setMidiaUrls] = useState<Record<number, string>>({});
+  const [carrosselIndice, setCarrosselIndice] = useState<Record<number, number>>({});
   const [comentariosAbertos, setComentariosAbertos] = useState<Record<number, boolean>>({});
   const [comentariosPorPost, setComentariosPorPost] = useState<Record<number, ComentarioPost[]>>({});
   const [novoComentarioTexto, setNovoComentarioTexto] = useState<Record<number, string>>({});
@@ -207,7 +213,7 @@ export function RedeSocial() {
       setConvites(convitesResp);
       setIntents(intentsResp);
     } catch {
-      setErro("Não foi possível carregar a Rede Social.");
+      setErro("Não foi possível carregar o Shoal.");
     }
   }
 
@@ -223,17 +229,19 @@ export function RedeSocial() {
   // A mídia do post exige o header de autenticação (mesmo padrão do
   // resto da API) — um <img>/<video src=...> comum não manda esse
   // header, então busca o blob via fetch autenticado (getBlob) e
-  // troca por uma object URL local, uma vez por post.
+  // troca por uma object URL local, uma vez por item de mídia (um
+  // post pode ter várias, carrossel).
   useEffect(() => {
     let cancelado = false;
-    const paraBuscar = posts.filter((post) => post.midia_url && !midiaUrls[post.id]);
+    const todasMidias = posts.flatMap((post) => post.midias);
+    const paraBuscar = todasMidias.filter((midia) => !midiaUrls[midia.id]);
     if (paraBuscar.length === 0) return;
     (async () => {
-      for (const post of paraBuscar) {
+      for (const midia of paraBuscar) {
         try {
-          const blob = await getBlob(post.midia_url!);
+          const blob = await getBlob(midia.url);
           if (cancelado) return;
-          setMidiaUrls((atual) => ({ ...atual, [post.id]: URL.createObjectURL(blob) }));
+          setMidiaUrls((atual) => ({ ...atual, [midia.id]: URL.createObjectURL(blob) }));
         } catch {
           // Falha ao buscar uma mídia não deve travar o resto do feed.
         }
@@ -379,12 +387,12 @@ export function RedeSocial() {
     const dados = new FormData(form);
     const texto = String(dados.get("texto") ?? "").trim();
     if (!texto) return;
-    const arquivo = dados.get("arquivo");
+    const arquivos = dados.getAll("arquivos").filter((item): item is File => item instanceof File && item.size > 0);
     const linkUrl = String(dados.get("link_url") || "").trim();
     setPublicando(true);
     setErro(null);
     try {
-      await postFile("/rede-social/posts", arquivo instanceof File && arquivo.size > 0 ? arquivo : null, {
+      await postFiles("/rede-social/posts", arquivos, {
         texto,
         ...(linkUrl ? { link_url: linkUrl } : {}),
       });
@@ -404,6 +412,13 @@ export function RedeSocial() {
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível excluir o post.");
     }
+  }
+
+  function moverCarrossel(postId: number, total: number, delta: number) {
+    setCarrosselIndice((atual) => {
+      const indiceAtual = atual[postId] ?? 0;
+      return { ...atual, [postId]: (indiceAtual + delta + total) % total };
+    });
   }
 
   async function reagirPost(postId: number) {
@@ -561,7 +576,7 @@ export function RedeSocial() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Rede Social</div>
+          <div className="font-head text-xl font-bold">Shoal</div>
           <div className="mt-0.5 text-[11px] text-muted">Perfil, diretório e mensageria B2B ON</div>
         </div>
       </div>
@@ -603,7 +618,7 @@ export function RedeSocial() {
           </Button>
         </div>
         <div className="mb-2 text-[11px] text-muted">
-          Convide uma empresa parceira para entrar na Rede Social — ela cria um acesso próprio, sem virar cliente
+          Convide uma empresa parceira para entrar no Shoal — ela cria um acesso próprio, sem virar cliente
           do CRM/MAP/PREDATOR até fazer upgrade de plano.
         </div>
         <div className="flex flex-col gap-1.5">
@@ -679,9 +694,11 @@ export function RedeSocial() {
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="file"
-              name="arquivo"
+              name="arquivos"
+              multiple
               accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
               className="flex-1 text-[12px] text-muted"
+              title="Uma foto/vídeo, ou várias fotos pra criar um carrossel"
             />
             <Input name="link_url" placeholder="URL de link (opcional)" className="flex-1" />
             <Button type="submit" size="sm" disabled={publicando}>
@@ -710,13 +727,52 @@ export function RedeSocial() {
                 </div>
               </div>
               <div className="text-text">{post.texto}</div>
-              {post.midia_tipo === "imagem" && midiaUrls[post.id] && (
-                <img src={midiaUrls[post.id]} alt="" className="mt-2 max-h-64 w-full rounded-lg object-cover" />
+              {post.midias.length > 0 && (
+                <div className="relative mt-2">
+                  {post.midias.map((midia, indice) => {
+                    if ((carrosselIndice[post.id] ?? 0) !== indice || !midiaUrls[midia.id]) return null;
+                    return midia.tipo === "video" ? (
+                      <video
+                        key={midia.id}
+                        src={midiaUrls[midia.id]}
+                        controls
+                        className="max-h-64 w-full rounded-lg"
+                      />
+                    ) : (
+                      <img
+                        key={midia.id}
+                        src={midiaUrls[midia.id]}
+                        alt=""
+                        className="max-h-64 w-full rounded-lg object-cover"
+                      />
+                    );
+                  })}
+                  {post.midias.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => moverCarrossel(post.id, post.midias.length, -1)}
+                        className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-2 py-1 text-white"
+                        aria-label="Foto anterior"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moverCarrossel(post.id, post.midias.length, 1)}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-2 py-1 text-white"
+                        aria-label="Próxima foto"
+                      >
+                        ›
+                      </button>
+                      <div className="mt-1 text-center text-[11px] text-muted">
+                        {(carrosselIndice[post.id] ?? 0) + 1} / {post.midias.length}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
-              {post.midia_tipo === "video" && midiaUrls[post.id] && (
-                <video src={midiaUrls[post.id]} controls className="mt-2 max-h-64 w-full rounded-lg" />
-              )}
-              {!post.midia_tipo && post.imagem_url && (
+              {post.midias.length === 0 && post.imagem_url && (
                 <img src={post.imagem_url} alt="" className="mt-2 max-h-48 w-full rounded-lg object-cover" />
               )}
               {post.link_url && (

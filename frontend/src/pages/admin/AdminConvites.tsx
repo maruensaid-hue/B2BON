@@ -100,7 +100,7 @@ export function AdminConvites() {
           <div className="font-head text-xl font-bold">Admin — Convidar colega para o seu tenant</div>
           <div className="mt-0.5 text-[11px] text-muted">
             Traz uma nova pessoa pra dentro da <strong>CyberFort</strong> (seu próprio tenant), com o papel que você
-            escolher. Não confundir com "Convidar empresa" (Rede Social) — aquele cadastra um cliente novo, com
+            escolher. Não confundir com "Convidar empresa" (Shoal) — aquele cadastra um cliente novo, com
             plano e cobrança próprios.
           </div>
         </div>

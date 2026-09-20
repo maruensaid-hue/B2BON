@@ -20,7 +20,7 @@ def test_criar_e_listar_post_via_api(client):
     assert resposta.status_code == 201
     corpo = resposta.json()
     assert corpo["texto"] == "Olá, rede!"
-    assert corpo["midia_url"] is None
+    assert corpo["midias"] == []
 
     feed = client.get("/api/v1/rede-social/posts").json()
     assert len(feed) == 1
@@ -31,25 +31,53 @@ def test_criar_post_com_foto_anexada_via_api(client):
     resposta = client.post(
         "/api/v1/rede-social/posts",
         data={"texto": "Post com foto"},
-        files={"arquivo": ("foto.jpg", _imagem_jpeg_bytes(), "image/jpeg")},
+        files=[("arquivos", ("foto.jpg", _imagem_jpeg_bytes(), "image/jpeg"))],
     )
 
     assert resposta.status_code == 201
     corpo = resposta.json()
-    assert corpo["midia_tipo"] == "imagem"
-    assert corpo["midia_url"] == f"/rede-social/posts/{corpo['id']}/midia"
+    assert len(corpo["midias"]) == 1
+    assert corpo["midias"][0]["tipo"] == "imagem"
+    midia_id = corpo["midias"][0]["id"]
+    assert corpo["midias"][0]["url"] == f"/rede-social/posts/{corpo['id']}/midia/{midia_id}"
 
-    midia = client.get(f"/api/v1/rede-social/posts/{corpo['id']}/midia")
+    midia = client.get(f"/api/v1/rede-social/posts/{corpo['id']}/midia/{midia_id}")
     assert midia.status_code == 200
     assert midia.headers["content-type"] == "image/jpeg"
     assert len(midia.content) > 0
+
+
+def test_criar_post_com_carrossel_de_fotos_via_api(client):
+    arquivos = [
+        ("arquivos", ("foto1.jpg", _imagem_jpeg_bytes(), "image/jpeg")),
+        ("arquivos", ("foto2.jpg", _imagem_jpeg_bytes(), "image/jpeg")),
+        ("arquivos", ("foto3.jpg", _imagem_jpeg_bytes(), "image/jpeg")),
+    ]
+
+    resposta = client.post("/api/v1/rede-social/posts", data={"texto": "Carrossel"}, files=arquivos)
+
+    assert resposta.status_code == 201
+    corpo = resposta.json()
+    assert len(corpo["midias"]) == 3
+    assert all(midia["tipo"] == "imagem" for midia in corpo["midias"])
+
+
+def test_criar_post_com_video_e_foto_juntos_retorna_erro(client):
+    arquivos = [
+        ("arquivos", ("foto.jpg", _imagem_jpeg_bytes(), "image/jpeg")),
+        ("arquivos", ("video.mp4", b"video falso", "video/mp4")),
+    ]
+
+    resposta = client.post("/api/v1/rede-social/posts", data={"texto": "Inválido"}, files=arquivos)
+
+    assert resposta.status_code == 422
 
 
 def test_criar_post_com_arquivo_tipo_nao_suportado_retorna_erro(client):
     resposta = client.post(
         "/api/v1/rede-social/posts",
         data={"texto": "Post com PDF"},
-        files={"arquivo": ("doc.pdf", b"%PDF-1.4 conteudo", "application/pdf")},
+        files=[("arquivos", ("doc.pdf", b"%PDF-1.4 conteudo", "application/pdf"))],
     )
 
     assert resposta.status_code == 422
@@ -58,7 +86,7 @@ def test_criar_post_com_arquivo_tipo_nao_suportado_retorna_erro(client):
 def test_baixar_midia_de_post_sem_anexo_retorna_404(client):
     post = client.post("/api/v1/rede-social/posts", data={"texto": "Sem mídia"}).json()
 
-    resposta = client.get(f"/api/v1/rede-social/posts/{post['id']}/midia")
+    resposta = client.get(f"/api/v1/rede-social/posts/{post['id']}/midia/1")
 
     assert resposta.status_code == 404
 

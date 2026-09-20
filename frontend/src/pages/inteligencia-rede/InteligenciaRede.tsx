@@ -270,7 +270,7 @@ export function InteligenciaRede() {
       <Card>
         <SectionLabel>Fit por ICP na Rede</SectionLabel>
         <p className="mb-3 text-[12px] text-muted">
-          Compara seu ICP contra o perfil público de todas as outras empresas da Rede Social — quanto mais critérios
+          Compara seu ICP contra o perfil público de todas as outras empresas do Shoal — quanto mais critérios
           baterem (CNAE, UF, porte), maior o fit. Sempre com os motivos explicados, nunca um score isolado.
         </p>
         {icps.length === 0 ? (
@@ -330,7 +330,7 @@ export function InteligenciaRede() {
         </p>
         {intents.length === 0 ? (
           <div className="text-[12px] text-muted">
-            Publique ou aguarde uma necessidade na Rede Social antes de calcular fornecedores sugeridos.
+            Publique ou aguarde uma necessidade no Shoal antes de calcular fornecedores sugeridos.
           </div>
         ) : (
           <div className="mb-3 w-[320px]">

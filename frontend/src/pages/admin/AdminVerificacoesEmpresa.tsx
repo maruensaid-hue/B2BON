@@ -61,7 +61,7 @@ export function AdminVerificacoesEmpresa() {
       <div className="mb-5">
         <div className="font-head text-xl font-bold">Verificações de Empresa</div>
         <div className="mt-0.5 text-[11px] text-muted">
-          Company Claim/Trust Layer da Rede Social — sinais automáticos orientam, a decisão final é sempre manual.
+          Company Claim/Trust Layer do Shoal — sinais automáticos orientam, a decisão final é sempre manual.
         </div>
       </div>
 

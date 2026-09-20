@@ -257,15 +257,15 @@ def remover_relacionamento(
 async def criar_post(
     texto: str = Form(...),
     link_url: str | None = Form(None),
-    arquivo: UploadFile | None = File(None),
+    arquivos: list[UploadFile] = File([]),
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> PostRedeSocialSchema:
     """Business Feed (master prompt §44-45, Fase 2B) — anexo real de
-    foto/vídeo (2026-09-20) via multipart, em vez de URL colada."""
-    midia_conteudo = await arquivo.read() if arquivo is not None else None
-    midia_tipo_mime = arquivo.content_type if arquivo is not None else None
+    foto/vídeo via multipart, em vez de URL colada; várias fotos formam
+    um carrossel (2026-09-20), vídeo sempre sozinho."""
+    midias = [(await arquivo.read(), arquivo.content_type or "") for arquivo in arquivos]
     return post_rede_social_service.criar(
         db,
         tenant_id,
@@ -273,8 +273,7 @@ async def criar_post(
         texto,
         None,
         link_url,
-        midia_conteudo=midia_conteudo,
-        midia_tipo_mime=midia_tipo_mime,
+        midias=midias,
     )
 
 
@@ -286,18 +285,19 @@ def listar_feed(
     return post_rede_social_service.listar_feed(db, tenant_id_atual=tenant_id)
 
 
-@router.get("/posts/{post_id}/midia")
+@router.get("/posts/{post_id}/midia/{midia_id}")
 def baixar_midia_post(
     post_id: int,
+    midia_id: int,
     db: Session = Depends(get_db),
 ) -> Response:
-    """Serve a foto/vídeo anexado (blob comprimido por `midia_service`)
-    — sem exigência de tenant específico, mesmo padrão de acesso de
-    `listar_comentarios` abaixo: o post já é visível pra toda a rede
-    via `listar_feed`, então a mídia dele não é mais restrita que o
-    post em si."""
-    post = post_rede_social_service.obter_midia(db, post_id)
-    return Response(content=post.midia_conteudo, media_type=post.midia_tipo_mime)
+    """Serve uma foto/vídeo do carrossel (blob comprimido por
+    `midia_service`) — sem exigência de tenant específico, mesmo
+    padrão de acesso de `listar_comentarios` abaixo: o post já é
+    visível pra toda a rede via `listar_feed`, então a mídia dele não
+    é mais restrita que o post em si."""
+    midia = post_rede_social_service.obter_midia(db, post_id, midia_id)
+    return Response(content=midia.conteudo, media_type=midia.tipo_mime)
 
 
 @router.delete("/posts/{post_id}", status_code=204)

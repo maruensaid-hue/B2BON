@@ -52,7 +52,7 @@ envio — aprovar, editar ou rejeitar cada uma. Tem filtro de status (Pendentes/
   - Configuração: oferta e tom de comunicação (usados pela IA para escrever as mensagens), conexões do \
 LinkedIn, WhatsApp Business (número próprio via Meta, obrigatório para disparar WhatsApp), E-mail (SMTP \
 próprio, obrigatório para disparar e-mail de cadência/campanha), e modelo de proposta comercial.
-- Rede Social: perfil da empresa, convites para outras empresas entrarem na Rede Social B2B ON.
+- Shoal: perfil da empresa, convites para outras empresas entrarem no Shoal B2B ON.
 - Leads: Empresas e Contatos cadastrados diretamente, fora do fluxo de ICP.
 - Admin (visível para quem gerencia hierarquia de tenants/super_admin): Tenants (criar/gerenciar \
 tenants abaixo na hierarquia), Licenças, Relatórios, Convites (inclusive convite gratuito/cortesia), \

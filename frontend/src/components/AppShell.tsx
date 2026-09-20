@@ -64,7 +64,7 @@ const LEADS_NAV_ITEMS: NavItem[] = [
 
 // Sempre visível — é o único módulo que uma conta sem licença ativa
 // (entrou via convite-vitrine, Onda H) tem acesso.
-const NAV_ITEM_REDE_SOCIAL: NavItem = { path: "/rede-social", label: "Rede Social", icon: "◎", end: false };
+const NAV_ITEM_REDE_SOCIAL: NavItem = { path: "/rede-social", label: "Shoal", icon: "◎", end: false };
 
 // RO (Registro de Oportunidade) — deal registration: qualquer papel
 // registra/vê as próprias oportunidades; "Aprovar Descontos" é só de

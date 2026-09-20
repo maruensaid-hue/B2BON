@@ -2,6 +2,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.comentario_post import ComentarioPost
+from app.models.midia_post import MidiaPost
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.post_rede_social import PostRedeSocial
 from app.models.reacao_post import ReacaoPost
@@ -12,6 +13,11 @@ from app.services.errors import NaoAutorizado, NaoEncontrado, ValidacaoFalhou
 _LIMITE_FEED_PADRAO = 50
 _LIMITE_COMENTARIOS_PADRAO = 200
 
+# Carrossel só de fotos (decisão de escopo) — vídeo é sempre sozinho.
+# 10 é o mesmo teto usado pelo Instagram, sem evidência de precisar de
+# mais que isso aqui.
+_LIMITE_MIDIAS_POR_POST = 10
+
 
 def criar(
     db: Session,
@@ -21,20 +27,23 @@ def criar(
     imagem_url: str | None,
     link_url: str | None,
     *,
-    midia_conteudo: bytes | None = None,
-    midia_tipo_mime: str | None = None,
+    midias: list[tuple[bytes, str]] | None = None,
 ) -> dict:
-    midia_conteudo_final: bytes | None = None
-    midia_tipo_mime_final: str | None = None
-    if midia_conteudo is not None:
-        if midia_tipo_mime in midia_service.TIPOS_IMAGEM_PERMITIDOS:
-            midia_conteudo_final = midia_service.comprimir_imagem(midia_conteudo)
-            midia_tipo_mime_final = "image/jpeg"
-        elif midia_tipo_mime in midia_service.TIPOS_VIDEO_PERMITIDOS:
-            midia_conteudo_final = midia_service.comprimir_video(midia_conteudo)
-            midia_tipo_mime_final = "video/mp4"
+    midias = midias or []
+    if len(midias) > _LIMITE_MIDIAS_POR_POST:
+        raise ValidacaoFalhou(f"Máximo de {_LIMITE_MIDIAS_POR_POST} fotos por post.")
+
+    midias_comprimidas: list[tuple[bytes, str]] = []
+    for conteudo, tipo_mime in midias:
+        if tipo_mime in midia_service.TIPOS_IMAGEM_PERMITIDOS:
+            midias_comprimidas.append((midia_service.comprimir_imagem(conteudo), "image/jpeg"))
+        elif tipo_mime in midia_service.TIPOS_VIDEO_PERMITIDOS:
+            midias_comprimidas.append((midia_service.comprimir_video(conteudo), "video/mp4"))
         else:
-            raise ValidacaoFalhou(f"Tipo de arquivo não suportado: {midia_tipo_mime}. Envie uma foto ou um vídeo.")
+            raise ValidacaoFalhou(f"Tipo de arquivo não suportado: {tipo_mime}. Envie uma foto ou um vídeo.")
+
+    if len(midias_comprimidas) > 1 and any(tipo.startswith("video/") for _, tipo in midias_comprimidas):
+        raise ValidacaoFalhou("Carrossel só aceita fotos — vídeo precisa ser enviado sozinho.")
 
     post = PostRedeSocial(
         tenant_id=tenant_id,
@@ -42,12 +51,20 @@ def criar(
         texto=texto,
         imagem_url=imagem_url,
         link_url=link_url,
-        midia_conteudo=midia_conteudo_final,
-        midia_tipo_mime=midia_tipo_mime_final,
-        midia_tamanho_bytes=len(midia_conteudo_final) if midia_conteudo_final is not None else None,
     )
     db.add(post)
     db.flush()
+
+    for ordem, (conteudo, tipo_mime) in enumerate(midias_comprimidas):
+        db.add(
+            MidiaPost(
+                post_id=post.id,
+                ordem=ordem,
+                conteudo=conteudo,
+                tipo_mime=tipo_mime,
+                tamanho_bytes=len(conteudo),
+            )
+        )
 
     auditoria_service.registrar(db, tenant_id, "post_rede_social_criado", "post_rede_social", post.id, ator_id, {})
     db.commit()
@@ -55,11 +72,12 @@ def criar(
     return _serializar(db, post, tenant_id_atual=tenant_id)
 
 
-def obter_midia(db: Session, post_id: int) -> PostRedeSocial:
-    post = _obter(db, post_id)
-    if post.midia_conteudo is None:
-        raise NaoEncontrado(f"Post {post_id} não tem mídia anexada")
-    return post
+def obter_midia(db: Session, post_id: int, midia_id: int) -> MidiaPost:
+    _obter(db, post_id)
+    midia = db.query(MidiaPost).filter_by(id=midia_id, post_id=post_id).one_or_none()
+    if midia is None:
+        raise NaoEncontrado(f"Mídia {midia_id} não encontrada no post {post_id}")
+    return midia
 
 
 def _obter(db: Session, post_id: int) -> PostRedeSocial:
@@ -82,6 +100,7 @@ def excluir(db: Session, tenant_id: str, ator_id: str | None, post_id: int) -> N
     # antigo já excluído que por coincidência tinha o mesmo id.
     db.query(ComentarioPost).filter_by(post_id=post.id).delete()
     db.query(ReacaoPost).filter_by(post_id=post.id).delete()
+    db.query(MidiaPost).filter_by(post_id=post.id).delete()
     db.delete(post)
     db.commit()
 
@@ -95,6 +114,7 @@ def _serializar(db: Session, post: PostRedeSocial, tenant_id_atual: str | None) 
         tenant_id_atual is not None
         and db.query(ReacaoPost).filter_by(post_id=post.id, tenant_id=tenant_id_atual).one_or_none() is not None
     )
+    midias = db.query(MidiaPost).filter_by(post_id=post.id).order_by(MidiaPost.ordem.asc()).all()
     return {
         "id": post.id,
         "tenant_id": post.tenant_id,
@@ -104,12 +124,14 @@ def _serializar(db: Session, post: PostRedeSocial, tenant_id_atual: str | None) 
         "texto": post.texto,
         "imagem_url": post.imagem_url,
         "link_url": post.link_url,
-        "midia_url": f"/rede-social/posts/{post.id}/midia" if post.midia_conteudo is not None else None,
-        "midia_tipo": (
-            ("video" if (post.midia_tipo_mime or "").startswith("video/") else "imagem")
-            if post.midia_conteudo is not None
-            else None
-        ),
+        "midias": [
+            {
+                "id": midia.id,
+                "url": f"/rede-social/posts/{post.id}/midia/{midia.id}",
+                "tipo": "video" if midia.tipo_mime.startswith("video/") else "imagem",
+            }
+            for midia in midias
+        ],
         "criado_em": post.criado_em,
         "total_comentarios": total_comentarios,
         "total_reacoes": total_reacoes,

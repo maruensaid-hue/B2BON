@@ -37,8 +37,8 @@ const PASSOS_TOUR: PassoTour[] = [
   },
   {
     tourId: "rede-social",
-    titulo: "Rede Social",
-    descricao: "Seu perfil de empresa e convites para outras empresas entrarem na Rede Social B2B ON.",
+    titulo: "Shoal",
+    descricao: "Seu perfil de empresa e convites para outras empresas entrarem no Shoal B2B ON.",
   },
   {
     tourId: "leads",
