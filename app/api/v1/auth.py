@@ -32,12 +32,15 @@ from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.schemas.auth import (
     AtualizarWhatsappPessoalRequestSchema,
+    EsqueciSenhaRequestSchema,
     LicencaStatusResponseSchema,
     LoginGoogleRequestSchema,
     LoginRequestSchema,
     RecursosPlanoSchema,
+    RedefinirSenhaRequestSchema,
     RegistrarRequestSchema,
     RegistrarVitrineRequestSchema,
+    RespostaMensagemSchema,
     TokenResponseSchema,
     UsuarioSchema,
 )
@@ -181,6 +184,26 @@ def registrar_vitrine(
         dados.cnpj,
     )
     return _resposta_token(usuario, db, checkout_url, primeiro_login=True, email_provider=email)
+
+
+@router.post("/esqueci-senha", response_model=RespostaMensagemSchema, dependencies=[Depends(limitar_por_ip())])
+def esqueci_senha(
+    dados: EsqueciSenhaRequestSchema,
+    db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
+) -> RespostaMensagemSchema:
+    """Sempre responde a mesma mensagem genérica, exista o e-mail ou não
+    — nunca revela se uma conta existe (evita enumeração)."""
+    auth_service.solicitar_redefinicao_senha(db, dados.email, email)
+    return RespostaMensagemSchema(
+        mensagem="Se este e-mail estiver cadastrado, você vai receber um link para redefinir sua senha."
+    )
+
+
+@router.post("/redefinir-senha", response_model=RespostaMensagemSchema, dependencies=[Depends(limitar_por_ip())])
+def redefinir_senha(dados: RedefinirSenhaRequestSchema, db: Session = Depends(get_db)) -> RespostaMensagemSchema:
+    auth_service.redefinir_senha(db, dados.token, dados.nova_senha)
+    return RespostaMensagemSchema(mensagem="Senha redefinida com sucesso. Você já pode entrar com a senha nova.")
 
 
 @router.get("/eu", response_model=UsuarioSchema)

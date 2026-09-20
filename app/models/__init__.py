@@ -76,6 +76,7 @@ from app.models.comentario_post import ComentarioPost
 from app.models.midia_post import MidiaPost
 from app.models.post_rede_social import PostRedeSocial
 from app.models.reacao_post import ReacaoPost
+from app.models.redefinicao_senha import RedefinicaoSenha
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
 from app.models.seguidor_empresa import SeguidorEmpresa
 from app.models.sinal_oportunidade import SinalOportunidade
@@ -153,6 +154,7 @@ __all__ = [
     "MidiaPost",
     "ComentarioPost",
     "ReacaoPost",
+    "RedefinicaoSenha",
     "NotificacaoRedeSocial",
     "Intent",
     "SinalOportunidade",

@@ -2,13 +2,16 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from app.core.config import settings
 from app.models.convite_cadastro import ConviteCadastro
 from app.models.licenca import Licenca
 from app.models.plano import Plano
+from app.models.redefinicao_senha import RedefinicaoSenha
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.services import auth_service
-from app.services.errors import NaoAutenticado, RegraNegocioViolada, ValidacaoFalhou
+from app.services.errors import NaoAutenticado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
+from tests.fakes import FakeEmailProvider
 
 TENANT_ID = "tenant-teste"
 
@@ -273,3 +276,171 @@ def test_licenca_suspensa_nao_bloqueia_convite(db_session):
     convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
 
     assert convite.status == "disponivel"
+
+
+def test_solicitar_redefinicao_senha_cria_token_e_envia_email(db_session):
+    _criar_usuario(db_session, email="esqueci@teste.com.br")
+    fake_email = FakeEmailProvider()
+
+    auth_service.solicitar_redefinicao_senha(db_session, "esqueci@teste.com.br", fake_email)
+
+    redefinicao = db_session.query(RedefinicaoSenha).one()
+    assert redefinicao.status == "disponivel"
+    assert len(fake_email.envios) == 1
+    assert redefinicao.token in fake_email.envios[0]["corpo"]
+    assert fake_email.envios[0]["destinatario"] == "esqueci@teste.com.br"
+
+
+def test_solicitar_redefinicao_senha_email_inexistente_nao_envia_nem_falha(db_session):
+    """Nunca revela se o e-mail existe (evita enumeração de contas) —
+    chamar com um e-mail que não existe não levanta erro nenhum."""
+    fake_email = FakeEmailProvider()
+
+    auth_service.solicitar_redefinicao_senha(db_session, "ninguem@teste.com.br", fake_email)
+
+    assert fake_email.envios == []
+    assert db_session.query(RedefinicaoSenha).count() == 0
+
+
+def test_solicitar_redefinicao_senha_usuario_so_google_nao_envia(db_session):
+    """Sem `senha_hash` (login só por Google) não há senha pra redefinir."""
+    _criar_usuario(db_session, email="so-google@teste.com.br", senha_hash=None, google_sub="google-sub-123")
+    fake_email = FakeEmailProvider()
+
+    auth_service.solicitar_redefinicao_senha(db_session, "so-google@teste.com.br", fake_email)
+
+    assert fake_email.envios == []
+
+
+def test_solicitar_redefinicao_senha_pedido_novo_invalida_token_anterior(db_session):
+    _criar_usuario(db_session, email="dois-pedidos@teste.com.br")
+    fake_email = FakeEmailProvider()
+
+    auth_service.solicitar_redefinicao_senha(db_session, "dois-pedidos@teste.com.br", fake_email)
+    primeiro_token = db_session.query(RedefinicaoSenha).filter_by(status="disponivel").one().token
+
+    auth_service.solicitar_redefinicao_senha(db_session, "dois-pedidos@teste.com.br", fake_email)
+
+    primeiro = db_session.query(RedefinicaoSenha).filter_by(token=primeiro_token).one()
+    assert primeiro.status == "expirado"
+    assert db_session.query(RedefinicaoSenha).filter_by(status="disponivel").count() == 1
+
+
+def test_redefinir_senha_com_token_valido_troca_a_senha(db_session):
+    usuario = _criar_usuario(db_session, email="trocar@teste.com.br")
+    senha_hash_antiga = usuario.senha_hash
+    auth_service.solicitar_redefinicao_senha(db_session, "trocar@teste.com.br", FakeEmailProvider())
+    token = db_session.query(RedefinicaoSenha).one().token
+
+    auth_service.redefinir_senha(db_session, token, "senha-nova-123")
+
+    db_session.refresh(usuario)
+    assert usuario.senha_hash != senha_hash_antiga
+    assert auth_service.verificar_senha("senha-nova-123", usuario.senha_hash)
+    redefinicao = db_session.query(RedefinicaoSenha).filter_by(token=token).one()
+    assert redefinicao.status == "usado"
+
+
+def test_redefinir_senha_token_ja_usado_falha(db_session):
+    _criar_usuario(db_session, email="reuso@teste.com.br")
+    auth_service.solicitar_redefinicao_senha(db_session, "reuso@teste.com.br", FakeEmailProvider())
+    token = db_session.query(RedefinicaoSenha).one().token
+    auth_service.redefinir_senha(db_session, token, "senha-nova-123")
+
+    with pytest.raises(RegraNegocioViolada):
+        auth_service.redefinir_senha(db_session, token, "outra-senha-456")
+
+
+def test_redefinir_senha_token_expirado_falha(db_session):
+    usuario = _criar_usuario(db_session, email="expirado@teste.com.br")
+    redefinicao = RedefinicaoSenha(
+        usuario_id=usuario.id, token="token-expirado", validade_em=datetime.now(UTC) - timedelta(hours=1)
+    )
+    db_session.add(redefinicao)
+    db_session.commit()
+
+    with pytest.raises(RegraNegocioViolada):
+        auth_service.redefinir_senha(db_session, "token-expirado", "senha-nova-123")
+
+
+def test_redefinir_senha_token_inexistente_falha(db_session):
+    with pytest.raises(NaoEncontrado):
+        auth_service.redefinir_senha(db_session, "token-que-nunca-existiu", "senha-nova-123")
+
+
+def test_autenticar_google_sem_client_id_configurado_falha(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "google_oauth_client_id", "")
+
+    with pytest.raises(NaoAutenticado):
+        auth_service.autenticar_google(db_session, "qualquer-id-token")
+
+
+def test_autenticar_google_token_invalido_falha(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "google_oauth_client_id", "client-id-teste")
+
+    def _verificar_falha(*args, **kwargs):
+        raise ValueError("assinatura inválida")
+
+    monkeypatch.setattr(auth_service.google_id_token, "verify_oauth2_token", _verificar_falha)
+
+    with pytest.raises(NaoAutenticado):
+        auth_service.autenticar_google(db_session, "token-forjado")
+
+
+def test_autenticar_google_email_nao_cadastrado_falha(db_session, monkeypatch):
+    """Sem auto-cadastro via Google (Onda A) — só entra quem já foi
+    convidado por e-mail antes."""
+    monkeypatch.setattr(settings, "google_oauth_client_id", "client-id-teste")
+    monkeypatch.setattr(
+        auth_service.google_id_token,
+        "verify_oauth2_token",
+        lambda *a, **k: {"email": "novo@teste.com.br", "sub": "google-sub-1"},
+    )
+
+    with pytest.raises(NaoAutenticado):
+        auth_service.autenticar_google(db_session, "token-valido")
+
+
+def test_autenticar_google_primeiro_login_vincula_google_sub(db_session, monkeypatch):
+    usuario = _criar_usuario(db_session, email="ja-cadastrado@teste.com.br")
+    assert usuario.google_sub is None
+    monkeypatch.setattr(settings, "google_oauth_client_id", "client-id-teste")
+    monkeypatch.setattr(
+        auth_service.google_id_token,
+        "verify_oauth2_token",
+        lambda *a, **k: {"email": "ja-cadastrado@teste.com.br", "sub": "google-sub-novo"},
+    )
+
+    usuario_logado, primeiro_login = auth_service.autenticar_google(db_session, "token-valido")
+
+    assert usuario_logado.id == usuario.id
+    assert usuario_logado.google_sub == "google-sub-novo"
+    assert primeiro_login is True
+
+
+def test_autenticar_google_sub_diferente_do_cadastrado_falha(db_session, monkeypatch):
+    """Uma conta Google já vinculada não pode ser trocada por outra
+    silenciosamente."""
+    _criar_usuario(db_session, email="conta-google@teste.com.br", google_sub="google-sub-original")
+    monkeypatch.setattr(settings, "google_oauth_client_id", "client-id-teste")
+    monkeypatch.setattr(
+        auth_service.google_id_token,
+        "verify_oauth2_token",
+        lambda *a, **k: {"email": "conta-google@teste.com.br", "sub": "google-sub-outro"},
+    )
+
+    with pytest.raises(NaoAutenticado):
+        auth_service.autenticar_google(db_session, "token-valido")
+
+
+def test_autenticar_google_usuario_inativo_falha(db_session, monkeypatch):
+    _criar_usuario(db_session, email="inativo-google@teste.com.br", ativo=False)
+    monkeypatch.setattr(settings, "google_oauth_client_id", "client-id-teste")
+    monkeypatch.setattr(
+        auth_service.google_id_token,
+        "verify_oauth2_token",
+        lambda *a, **k: {"email": "inativo-google@teste.com.br", "sub": "google-sub-x"},
+    )
+
+    with pytest.raises(NaoAutenticado):
+        auth_service.autenticar_google(db_session, "token-valido")

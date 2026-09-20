@@ -99,3 +99,16 @@ class LicencaStatusResponseSchema(BaseModel):
 
 class AtualizarWhatsappPessoalRequestSchema(BaseModel):
     whatsapp_pessoal: str | None = None
+
+
+class EsqueciSenhaRequestSchema(BaseModel):
+    email: EmailStr
+
+
+class RedefinirSenhaRequestSchema(BaseModel):
+    token: str
+    nova_senha: str = Field(min_length=8, max_length=72)
+
+
+class RespostaMensagemSchema(BaseModel):
+    mensagem: str

@@ -1,3 +1,4 @@
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -11,11 +12,16 @@ from app.core.config import settings
 from app.models.convite_cadastro import ConviteCadastro
 from app.models.licenca import Licenca
 from app.models.plano import Plano
+from app.models.redefinicao_senha import RedefinicaoSenha
 from app.models.usuario import Usuario
+from app.providers.channels.email.base import EmailProvider
 from app.services import auditoria_service
 from app.services.errors import NaoAutenticado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
+logger = logging.getLogger(__name__)
+
 PAPEIS_VALIDOS = {"super_admin", "admin", "user"}
+_VALIDADE_REDEFINICAO_SENHA_HORAS = 1
 
 
 def hash_senha(senha: str) -> str:
@@ -103,6 +109,90 @@ def autenticar_google(db: Session, id_token_str: str) -> tuple[Usuario, bool]:
     db.commit()
     db.refresh(usuario)
     return usuario, primeiro_login
+
+
+def _gerar_token_redefinicao_senha() -> str:
+    # Bem mais entropia que `_gerar_codigo_convite` (token_hex(8), 16
+    # chars) — um código de convite um humano específico recebe e
+    # digita; este token sozinho autoriza trocar a senha de alguém, o
+    # mesmo padrão de entropia já usado pra chave de API de parceiro
+    # (app/api/v1/integracoes.py).
+    return secrets.token_urlsafe(32)
+
+
+def solicitar_redefinicao_senha(db: Session, email: str, email_provider: EmailProvider | None) -> None:
+    """"Esqueci minha senha" — nunca revela se o e-mail existe (mesma
+    resposta de sucesso pra quem chama, exista o cadastro ou não, pra
+    não virar uma forma de enumerar contas). Só cria token/manda
+    e-mail quando existe um usuário ativo com login por senha própria
+    (Google-only não tem `senha_hash` — nada pra redefinir)."""
+    usuario = db.query(Usuario).filter_by(email=email).one_or_none()
+    if usuario is None or not usuario.ativo or usuario.senha_hash is None:
+        return
+
+    # Invalida qualquer link ainda "disponivel" de um pedido anterior —
+    # sem isso, um e-mail antigo continuaria válido depois de um pedido
+    # novo (múltiplos links vivos pra mesma conta ao mesmo tempo).
+    db.query(RedefinicaoSenha).filter_by(usuario_id=usuario.id, status="disponivel").update({"status": "expirado"})
+
+    redefinicao = RedefinicaoSenha(
+        usuario_id=usuario.id,
+        token=_gerar_token_redefinicao_senha(),
+        validade_em=datetime.now(UTC) + timedelta(hours=_VALIDADE_REDEFINICAO_SENHA_HORAS),
+    )
+    db.add(redefinicao)
+    db.flush()
+
+    auditoria_service.registrar(
+        db, usuario.tenant_id, "redefinicao_senha_solicitada", "usuario", usuario.id, None, {}
+    )
+    db.commit()
+
+    if email_provider is None:
+        return
+    link = f"{settings.url_base_frontend}/redefinir-senha/{redefinicao.token}"
+    corpo = (
+        f"Olá, {usuario.nome}!\n\n"
+        f"Recebemos um pedido para redefinir a senha da sua conta na B2B ON. Para criar uma senha "
+        f"nova, acesse o link abaixo:\n\n{link}\n\n"
+        f"Este link expira em {_VALIDADE_REDEFINICAO_SENHA_HORAS} hora e só pode ser usado uma vez.\n\n"
+        f"Se você não pediu essa redefinição, pode ignorar este e-mail com segurança — sua senha "
+        f"continua a mesma."
+    )
+    try:
+        email_provider.enviar(
+            usuario.email, "Redefinição de senha — B2B ON", corpo, "B2B ON",
+            settings.sendgrid_remetente_email, usuario.tenant_id,
+        )
+    except Exception:
+        logger.warning("Falha ao enviar e-mail de redefinição de senha pro usuário %s", usuario.id, exc_info=True)
+
+
+def redefinir_senha(db: Session, token: str, nova_senha: str) -> None:
+    redefinicao = db.query(RedefinicaoSenha).filter_by(token=token).one_or_none()
+    if redefinicao is None:
+        raise NaoEncontrado("Link de redefinição de senha não encontrado.")
+    if redefinicao.status == "usado":
+        raise RegraNegocioViolada("Este link de redefinição já foi usado.")
+    if redefinicao.status == "expirado":
+        raise RegraNegocioViolada("Este link de redefinição expirou. Solicite um novo.")
+
+    validade = redefinicao.validade_em
+    if validade.tzinfo is None:
+        validade = validade.replace(tzinfo=UTC)
+    if validade < datetime.now(UTC):
+        redefinicao.status = "expirado"
+        db.commit()
+        raise RegraNegocioViolada("Este link de redefinição expirou. Solicite um novo.")
+
+    usuario = db.query(Usuario).filter_by(id=redefinicao.usuario_id).one_or_none()
+    if usuario is None or not usuario.ativo:
+        raise NaoEncontrado("Usuário não encontrado ou inativo.")
+
+    usuario.senha_hash = hash_senha(nova_senha)
+    redefinicao.status = "usado"
+    auditoria_service.registrar(db, usuario.tenant_id, "senha_redefinida", "usuario", usuario.id, None, {})
+    db.commit()
 
 
 def _gerar_codigo_convite() -> str:

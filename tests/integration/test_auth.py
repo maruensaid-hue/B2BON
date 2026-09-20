@@ -653,6 +653,100 @@ def test_login_reflete_tem_conta_atribuida(client, db_session):
     assert resposta_com_conta.json()["usuario"]["tem_conta_atribuida"] is True
 
 
+def test_esqueci_senha_com_email_cadastrado_envia_link(client, db_session, fake_email):
+    _criar_usuario_senha(db_session, "esqueci-api@teste.com.br", "senha-antiga")
+
+    resposta = client.post("/api/v1/auth/esqueci-senha", json={"email": "esqueci-api@teste.com.br"})
+
+    assert resposta.status_code == 200
+    assert len(fake_email.envios) == 1
+    assert "/redefinir-senha/" in fake_email.envios[0]["corpo"]
+
+
+def test_esqueci_senha_com_email_inexistente_retorna_mesma_mensagem(client, fake_email):
+    """Nunca revela se o e-mail existe — mesma resposta 200 e mesma
+    mensagem genérica, exista o cadastro ou não."""
+    resposta = client.post("/api/v1/auth/esqueci-senha", json={"email": "nunca-existiu@teste.com.br"})
+
+    assert resposta.status_code == 200
+    assert fake_email.envios == []
+
+
+def test_fluxo_completo_redefinir_senha_via_api(client, db_session, fake_email):
+    _criar_usuario_senha(db_session, "fluxo-completo@teste.com.br", "senha-antiga")
+
+    client.post("/api/v1/auth/esqueci-senha", json={"email": "fluxo-completo@teste.com.br"})
+    corpo_email = fake_email.envios[0]["corpo"]
+    token = corpo_email.split("/redefinir-senha/")[1].split("\n")[0].strip()
+
+    resposta_redefinir = client.post(
+        "/api/v1/auth/redefinir-senha", json={"token": token, "nova_senha": "senha-totalmente-nova"}
+    )
+    assert resposta_redefinir.status_code == 200
+
+    login_senha_antiga = client.post(
+        "/api/v1/auth/login", json={"email": "fluxo-completo@teste.com.br", "senha": "senha-antiga"}
+    )
+    assert login_senha_antiga.status_code == 401
+
+    login_senha_nova = client.post(
+        "/api/v1/auth/login", json={"email": "fluxo-completo@teste.com.br", "senha": "senha-totalmente-nova"}
+    )
+    assert login_senha_nova.status_code == 200
+
+
+def test_redefinir_senha_com_token_invalido_retorna_404(client):
+    resposta = client.post(
+        "/api/v1/auth/redefinir-senha", json={"token": "token-invalido", "nova_senha": "senha-nova-123"}
+    )
+
+    assert resposta.status_code == 404
+
+
+def test_redefinir_senha_com_senha_curta_retorna_422(client, db_session, fake_email):
+    _criar_usuario_senha(db_session, "senha-curta@teste.com.br", "senha-antiga")
+    client.post("/api/v1/auth/esqueci-senha", json={"email": "senha-curta@teste.com.br"})
+    token = fake_email.envios[0]["corpo"].split("/redefinir-senha/")[1].split("\n")[0].strip()
+
+    resposta = client.post("/api/v1/auth/redefinir-senha", json={"token": token, "nova_senha": "curta"})
+
+    assert resposta.status_code == 422
+
+
+def test_esqueci_senha_bloqueia_apos_muitas_tentativas(client):
+    for _ in range(5):
+        resposta = client.post("/api/v1/auth/esqueci-senha", json={"email": "qualquer@teste.com.br"})
+        assert resposta.status_code == 200
+
+    bloqueado = client.post("/api/v1/auth/esqueci-senha", json={"email": "qualquer@teste.com.br"})
+
+    assert bloqueado.status_code == 429
+
+
+def test_login_google_via_api(client, db_session, monkeypatch):
+    from app.core.config import settings
+    from app.services import auth_service
+
+    _criar_usuario_senha(db_session, "google-api@teste.com.br", "senha-qualquer")
+    monkeypatch.setattr(settings, "google_oauth_client_id", "client-id-teste")
+    monkeypatch.setattr(
+        auth_service.google_id_token,
+        "verify_oauth2_token",
+        lambda *a, **k: {"email": "google-api@teste.com.br", "sub": "google-sub-api"},
+    )
+
+    resposta = client.post("/api/v1/auth/google", json={"id_token": "token-simulado"})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["usuario"]["email"] == "google-api@teste.com.br"
+
+
+def test_login_google_sem_client_id_configurado_retorna_401(client):
+    resposta = client.post("/api/v1/auth/google", json={"id_token": "qualquer"})
+
+    assert resposta.status_code == 401
+
+
 def test_atualizar_whatsapp_pessoal(client):
     """"Meu Perfil" (raio-X 2026-09-15) — o vendedor cadastra o próprio
     número de WhatsApp, usado no botão de redirecionamento dos templates."""

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -7,8 +7,26 @@ import { Input } from "@/components/ui/Input";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
+// Google Identity Services (GSI) — SDK carregado sob demanda (só quando
+// há um Client ID configurado, ver useEffect abaixo). Tipagem mínima só
+// do que este arquivo usa, sem instalar @types/google.accounts inteiro.
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: { client_id: string; callback: (resposta: { credential: string }) => void }) => void;
+          renderButton: (pai: HTMLElement, opcoes: Record<string, unknown>) => void;
+        };
+      };
+    };
+  }
+}
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID as string | undefined;
+
 export function Login() {
-  const { entrar } = useAuth();
+  const { entrar, entrarComGoogle } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -16,6 +34,56 @@ export function Login() {
   const [carregando, setCarregando] = useState(false);
   const [mostrarCadastro, setMostrarCadastro] = useState(false);
   const [codigoConvite, setCodigoConvite] = useState("");
+  const botaoGoogleRef = useRef<HTMLDivElement>(null);
+
+  // Sem Client ID configurado, mantém o botão desabilitado de sempre
+  // (mesmo aviso, sem apontar mais pra "Onda F2" — interno demais pra
+  // quem vê a tela). Com Client ID, carrega o SDK do Google e troca
+  // pelo botão de verdade — o próprio Google renderiza o botão dentro
+  // de um iframe (não dá pra restilizar), então o fallback continua
+  // sendo o visual "ghost" já usado no resto da tela.
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    let cancelado = false;
+
+    async function handleCredentialResponse(resposta: { credential: string }) {
+      setErro(null);
+      setCarregando(true);
+      try {
+        await entrarComGoogle(resposta.credential);
+        navigate("/", { replace: true });
+      } catch (error) {
+        setErro(error instanceof ApiError ? error.message : "Não foi possível entrar com o Google.");
+      } finally {
+        setCarregando(false);
+      }
+    }
+
+    function inicializar() {
+      if (cancelado || !window.google || !botaoGoogleRef.current) return;
+      window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID!, callback: handleCredentialResponse });
+      window.google.accounts.id.renderButton(botaoGoogleRef.current, {
+        theme: "outline",
+        size: "large",
+        width: 320,
+        text: "continue_with",
+      });
+    }
+
+    if (window.google) {
+      inicializar();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = inicializar;
+    document.head.appendChild(script);
+    return () => {
+      cancelado = true;
+    };
+  }, [entrarComGoogle, navigate]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -74,7 +142,12 @@ export function Login() {
             />
           </div>
           <div>
-            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Senha</div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <div className="text-[10px] tracking-wide text-muted uppercase">Senha</div>
+              <Link to="/esqueci-senha" className="text-[10px] text-cyan hover:underline">
+                Esqueci minha senha
+              </Link>
+            </div>
             <Input
               type="password"
               required
@@ -97,13 +170,17 @@ export function Login() {
           <div className="h-px flex-1 bg-border" />
         </div>
 
-        <Button
-          variant="ghost"
-          className="mt-4 w-full justify-center"
-          onClick={() => setErro("Login com Google ainda depende de configurar o Client ID OAuth (Onda F2).")}
-        >
-          Entrar com Google
-        </Button>
+        {GOOGLE_CLIENT_ID ? (
+          <div ref={botaoGoogleRef} className="mt-4 flex w-full justify-center" />
+        ) : (
+          <Button
+            variant="ghost"
+            className="mt-4 w-full justify-center"
+            onClick={() => setErro("Login com Google ainda não está configurado nesta plataforma.")}
+          >
+            Entrar com Google
+          </Button>
+        )}
 
         <div className="mt-4 text-center text-[11px] text-muted">
           Ainda não tem conta?{" "}
