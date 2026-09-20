@@ -25,9 +25,10 @@ def gerar_convite(
     dados: GerarConviteRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> ConviteCadastroSchema:
-    return auth_service.gerar_convite(db, tenant_id, ator_id, dados.papel_concedido, dados.validade_horas)
+    return auth_service.gerar_convite(db, tenant_id, ator_id, usuario.papel, dados.papel_concedido, dados.validade_horas)
 
 
 @router.get("", response_model=list[ConviteCadastroSchema])

@@ -55,12 +55,21 @@ arquitetura desejada. Serve de base para `AI_CURRENT_ARCHITECTURE.md`,
 1. **CRM** — `Conta`, `Decisor`, `Negocio`, `EstagioFunil`, `Atividade`,
    `PropostaNegocio`, `CustoAquisicao`. Rotas: `app/api/v1/crm.py`,
    `contas.py`, `decisores.py`.
-2. **Rede Social** — B2B entre tenants (não entre usuários finais):
-   `PerfilEmpresa` (cartão de visita, 1:1 com Tenant), `ConexaoEmpresa`
-   (pedido/aceite entre dois tenants), `MensagemRedeSocial` (chat 1:1
-   entre tenants, exige conexão aceita). Sem feed/posts — só diretório +
-   conexão + mensagem direta. Único módulo liberado sem licença ativa
-   (funil de entrada via `ConviteVitrine`). Rotas: `rede_social.py`.
+2. **Shoal** (ex-"Rede Social", renomeado 2026-09-20) — B2B entre tenants
+   (não entre usuários finais). Cresceu bem além do diretório+DM
+   original (atualização 2026-09-20 — ver `MANUAL_DO_USUARIO.md` seção
+   3 pro detalhamento funcional completo): `PerfilEmpresa` (cartão de
+   visita, com verificação — `VerificacaoEmpresa`), `ConexaoEmpresa`
+   (pedido/aceite, bloqueio, desconexão), `SeguidorEmpresa` (seguir
+   unidirecional, sem aceite), `MensagemRedeSocial` (DM 1:1),
+   `SalaCorporativa`/`CanalSala`/`MensagemSala` (mensageria mais
+   estruturada, com canais), `PostRedeSocial`/`MidiaPost`/
+   `ComentarioPost`/`ReacaoPost` (feed com carrossel de foto/vídeo, 9
+   reações, repost), `Intent` (Necessidades da Rede),
+   `RelacionamentoEmpresarial` (grafo tipado tenant-a-tenant),
+   `NotificacaoRedeSocial`. Único módulo liberado sem licença ativa
+   (funil de entrada via `ConviteVitrine`). Rotas: `rede_social.py`,
+   `verificacao_empresa.py`.
 3. **MAP** — motor de risco de churn dos tenants-clientes:
    `InteracaoConta`/`InteracaoTenant` (sinais manuais), `AlertaDetrator`
    (NPS), script de resgate gerado por IA (texto para humano copiar,
@@ -71,7 +80,16 @@ arquitetura desejada. Serve de base para `AI_CURRENT_ARCHITECTURE.md`,
    `ToqueCadencia`/`Mensagem` multicanal (e-mail/WhatsApp/LinkedIn) com
    fila de aprovação humana (`Aprovacao`), `Campanha` (disparo em massa,
    sem IA), reuniões + NPS + qualificação conversacional S.H.A.R.K.
-   (`ConversaQualificacao`/`TurnoConversa`/`QualificacaoScore`).
+   (`ConversaQualificacao`/`TurnoConversa`/`QualificacaoScore`). Ganhou,
+   em fases posteriores (ver `MANUAL_DO_USUARIO.md` seções 5.9-5.12),
+   Relatório de Entrega (bounce/abertura/resposta), `RegraAprendida`
+   (loop de aprendizado — regra escrita por humano entra sozinha no
+   próximo prompt de cadência), `SinalOportunidade` (fit de ICP/match
+   de Intent/risco de pipeline/atribuição de receita, cruzando com o
+   Shoal) e `ConfiguracaoAgenteCorporativo`/`PerguntaAgenteCorporativo`
+   (Agente Corporativo — IA responde, sob aprovação humana, perguntas
+   de outras empresas do Shoal sobre a sua). Rotas: `regras_
+   aprendidas.py`, `inteligencia_rede.py`, `agente_corporativo.py`.
 
 Módulos administrativos/transversais que não são "um módulo do
 usuário" mas atravessam todos os outros: billing (`Plano`/`Licenca`/

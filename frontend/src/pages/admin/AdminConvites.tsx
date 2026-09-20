@@ -32,6 +32,7 @@ export function AdminConvites() {
   const [erro, setErro] = useState<string | null>(null);
 
   const isSuperAdmin = usuario?.papel === "super_admin";
+  const podeGerenciarConvites = usuario?.papel === "admin" || isSuperAdmin;
 
   async function carregar() {
     try {
@@ -42,8 +43,8 @@ export function AdminConvites() {
   }
 
   useEffect(() => {
-    if (isSuperAdmin) carregar();
-  }, [isSuperAdmin]);
+    if (podeGerenciarConvites) carregar();
+  }, [podeGerenciarConvites]);
 
   async function gerarConvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,7 +92,7 @@ export function AdminConvites() {
     }
   }
 
-  if (!isSuperAdmin) return <AcessoRestrito />;
+  if (!podeGerenciarConvites) return <AcessoRestrito />;
 
   return (
     <div className="p-5.5">
@@ -99,7 +100,7 @@ export function AdminConvites() {
         <div>
           <div className="font-head text-xl font-bold">Admin — Convidar colega para o seu tenant</div>
           <div className="mt-0.5 text-[11px] text-muted">
-            Traz uma nova pessoa pra dentro da <strong>CyberFort</strong> (seu próprio tenant), com o papel que você
+            Traz uma nova pessoa pra dentro da sua empresa (seu próprio tenant), com o papel que você
             escolher. Não confundir com "Convidar empresa" (Shoal) — aquele cadastra um cliente novo, com
             plano e cobrança próprios.
           </div>
@@ -178,7 +179,7 @@ export function AdminConvites() {
             <Select name="papel_concedido" required defaultValue="user">
               <option value="user">Usuário</option>
               <option value="admin">Admin</option>
-              <option value="super_admin">Super Admin</option>
+              {isSuperAdmin && <option value="super_admin">Super Admin</option>}
             </Select>
           </div>
           <div>

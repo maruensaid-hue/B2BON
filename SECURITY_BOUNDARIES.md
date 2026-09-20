@@ -46,6 +46,20 @@ gaps reais (não hipotéticos) encontrados na auditoria.
   pode editar só o negócio Y", é sempre papel + tenant + (às vezes)
   "é o vendedor responsável por esta conta" (checado ad-hoc em cada
   serviço, não uma política central).
+- **Gap encontrado e corrigido (2026-09-20): escalonamento de
+  privilégio via convite.** `POST /convites` (`exigir_papel("super_admin",
+  "admin")`, `app/api/v1/convites.py`) autoriza QUEM CHAMA a rota, mas
+  não limitava o `papel_concedido` do convite gerado — um `admin`
+  comum de qualquer tenant conseguia gerar um convite com
+  `papel_concedido="super_admin"` e criar (ou virar) um usuário com
+  papel global de verdade, já que `super_admin` não tem escopo de
+  tenant (bypassa `exigir_gestor_do_tenant`/`permitir_gestao_
+  hierarquica` por completo). Corrigido em `auth_service.gerar_convite`:
+  só quem já é `super_admin` pode conceder o papel `super_admin` — o
+  padrão "rota autoriza quem chama, mas não valida o que ele está
+  PEDINDO pro sistema fazer" é o tipo de gap que vale conferir de novo
+  em qualquer rota nova que aceite um `papel`/permissão como parâmetro
+  do corpo da requisição.
 
 ## 3. Segredos e criptografia
 

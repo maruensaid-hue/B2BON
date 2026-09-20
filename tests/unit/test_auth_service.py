@@ -10,7 +10,7 @@ from app.models.redefinicao_senha import RedefinicaoSenha
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.services import auth_service
-from app.services.errors import NaoAutenticado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
+from app.services.errors import NaoAutenticado, NaoAutorizado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 from tests.fakes import FakeEmailProvider
 
 TENANT_ID = "tenant-teste"
@@ -112,7 +112,7 @@ def test_autenticar_senha_primeiro_login_true_so_na_primeira_vez(db_session):
 
 def test_fluxo_de_convite_gerar_usar_e_bloquear_reuso(db_session):
     """Onda A: convite pode ser usado uma única vez."""
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
     assert convite.status == "disponivel"
 
     usuario = auth_service.registrar_com_convite(
@@ -131,7 +131,7 @@ def test_fluxo_de_convite_gerar_usar_e_bloquear_reuso(db_session):
 def test_registro_sem_aceitar_termos_e_bloqueado(db_session):
     """Pedido do usuário: cadastro self-service (convite) precisa exigir o
     aceite da Política de Privacidade/Termos, com o momento gravado."""
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     with pytest.raises(ValidacaoFalhou):
         auth_service.registrar_com_convite(
@@ -140,7 +140,7 @@ def test_registro_sem_aceitar_termos_e_bloqueado(db_session):
 
 
 def test_convite_revogado_bloqueia_registro(db_session):
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
     auth_service.revogar_convite(db_session, TENANT_ID, None, convite.codigo)
 
     with pytest.raises(RegraNegocioViolada):
@@ -152,7 +152,7 @@ def test_convite_revogado_bloqueia_registro(db_session):
 def test_reativar_convite_revogado_volta_a_disponivel(db_session):
     """Pedido do usuário: revogar por engano ou mudar de ideia não pode
     obrigar a gerar um convite novo pra mesma pessoa."""
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
     auth_service.revogar_convite(db_session, TENANT_ID, None, convite.codigo)
 
     reativado = auth_service.reativar_convite(db_session, TENANT_ID, None, convite.codigo)
@@ -165,14 +165,14 @@ def test_reativar_convite_revogado_volta_a_disponivel(db_session):
 
 
 def test_reativar_convite_disponivel_falha(db_session):
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     with pytest.raises(RegraNegocioViolada):
         auth_service.reativar_convite(db_session, TENANT_ID, None, convite.codigo)
 
 
 def test_excluir_convite_revogado(db_session):
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
     auth_service.revogar_convite(db_session, TENANT_ID, None, convite.codigo)
 
     auth_service.excluir_convite(db_session, TENANT_ID, None, convite.codigo)
@@ -182,7 +182,7 @@ def test_excluir_convite_revogado(db_session):
 
 def test_excluir_convite_disponivel_falha(db_session):
     """Nunca apagar um convite que alguém ainda possa usar."""
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     with pytest.raises(RegraNegocioViolada):
         auth_service.excluir_convite(db_session, TENANT_ID, None, convite.codigo)
@@ -206,7 +206,7 @@ def test_convite_expirado_bloqueia_registro(db_session):
 
 def test_registro_com_email_ja_cadastrado_falha(db_session):
     _criar_usuario(db_session, email="existente@teste.com.br")
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     with pytest.raises(RegraNegocioViolada):
         auth_service.registrar_com_convite(
@@ -219,23 +219,38 @@ def test_gerar_convite_bloqueia_quando_limite_de_usuarios_atingido(db_session):
     _criar_usuario(db_session, email="unico@teste.com.br")
 
     with pytest.raises(RegraNegocioViolada):
-        auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+        auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
 
 def test_gerar_convite_permite_quando_abaixo_do_limite(db_session):
     _criar_licenca(db_session, TENANT_ID, max_usuarios=2)
     _criar_usuario(db_session, email="primeiro@teste.com.br")
 
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     assert convite.status == "disponivel"
+
+
+def test_gerar_convite_admin_comum_nao_pode_conceder_super_admin(db_session):
+    """`exigir_papel("super_admin", "admin")` na rota só garante que quem
+    chama é admin+ — sem esta trava, um admin comum podia gerar um
+    convite com papel_concedido="super_admin" e se auto-elevar (super_admin
+    é papel global, sem escopo de tenant)."""
+    with pytest.raises(NaoAutorizado):
+        auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "super_admin", validade_horas=24)
+
+
+def test_gerar_convite_super_admin_pode_conceder_super_admin(db_session):
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "super_admin", "super_admin", validade_horas=24)
+
+    assert convite.papel_concedido == "super_admin"
 
 
 def test_usuario_inativo_nao_conta_para_o_limite(db_session):
     _criar_licenca(db_session, TENANT_ID, max_usuarios=1)
     _criar_usuario(db_session, email="inativo@teste.com.br", ativo=False)
 
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     assert convite.status == "disponivel"
 
@@ -245,7 +260,7 @@ def test_aceitar_convite_bloqueia_quando_limite_e_atingido_apos_convite_gerado(d
     foi gerado — o bloqueio precisa valer também no aceite, não só na
     geração."""
     _criar_licenca(db_session, TENANT_ID, max_usuarios=2)
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
     _criar_usuario(db_session, email="primeiro@teste.com.br")
     _criar_usuario(db_session, email="segundo@teste.com.br", papel="admin")
 
@@ -258,7 +273,7 @@ def test_aceitar_convite_bloqueia_quando_limite_e_atingido_apos_convite_gerado(d
 def test_tenant_sem_licenca_ativa_nao_bloqueia_convite(db_session):
     """Tenant de convite-vitrine (Onda H) nasce sem `Licenca` de propósito
     — o limite de usuários por plano não se aplica a ele aqui."""
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     usuario = auth_service.registrar_com_convite(
         db_session, convite.codigo, "Sem Licença", "sem-licenca@teste.com.br", "senha123", aceite_termos=True
@@ -273,7 +288,7 @@ def test_licenca_suspensa_nao_bloqueia_convite(db_session):
     _criar_licenca(db_session, TENANT_ID, max_usuarios=1, status="suspensa")
     _criar_usuario(db_session, email="unico@teste.com.br")
 
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     assert convite.status == "disponivel"
 

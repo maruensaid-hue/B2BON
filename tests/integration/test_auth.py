@@ -96,7 +96,7 @@ def test_eu_retorna_usuario_autenticado(client):
 
 def test_registrar_via_convite_gera_token_valido(client, db_session):
     """E11-ish do núcleo (Onda A): registro por convite retorna token utilizável."""
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     resposta = client.post(
         "/api/v1/auth/registrar",
@@ -118,7 +118,7 @@ def test_registrar_via_convite_gera_token_valido(client, db_session):
 
 
 def test_registrar_sem_aceitar_termos_via_api_falha(client, db_session):
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     resposta = client.post(
         "/api/v1/auth/registrar",
@@ -135,7 +135,7 @@ def test_registrar_sem_aceitar_termos_via_api_falha(client, db_session):
 
 
 def test_registrar_grava_data_do_aceite_dos_termos(client, db_session):
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     resposta = client.post(
         "/api/v1/auth/registrar",
@@ -194,7 +194,7 @@ def test_gerar_convite_vitrine_com_email_envia_convite(client, fake_email):
 
 
 def test_convite_usado_duas_vezes_falha(client, db_session):
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
     client.post(
         "/api/v1/auth/registrar",
         json={
@@ -273,11 +273,30 @@ def test_convite_exige_papel_admin_ou_super_admin(client, criar_usuario_autentic
     assert resposta.status_code == 403
 
 
+def test_admin_comum_nao_pode_gerar_convite_de_super_admin_via_api(client, criar_usuario_autenticado):
+    """Admin comum já pode gerar convite (rota abaixo) — mas nunca com
+    papel_concedido="super_admin" (papel global, sem escopo de tenant),
+    senão vira auto-elevação de privilégio."""
+    headers_admin = criar_usuario_autenticado(TENANT_ID, papel="admin", email="admin-convite@teste.com.br")
+
+    resposta = client.post("/api/v1/convites", json={"papel_concedido": "super_admin"}, headers=headers_admin)
+
+    assert resposta.status_code == 403
+
+
+def test_admin_comum_pode_gerar_convite_de_colega_via_api(client, criar_usuario_autenticado):
+    headers_admin = criar_usuario_autenticado(TENANT_ID, papel="admin", email="admin-convite2@teste.com.br")
+
+    resposta = client.post("/api/v1/convites", json={"papel_concedido": "user"}, headers=headers_admin)
+
+    assert resposta.status_code == 201
+
+
 def test_registrar_via_convite_normal_retorna_licenca_ativa(client, db_session):
     """A fixture `client` já representa um tenant pagante (Onda H) —
     prova que o token de resposta reflete isso, ao contrário do fluxo de
     convite-vitrine (testado abaixo)."""
-    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "user", validade_horas=24)
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     resposta = client.post(
         "/api/v1/auth/registrar",

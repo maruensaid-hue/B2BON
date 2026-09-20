@@ -10,7 +10,7 @@ já em funcionamento.
 
 1. [Conceitos gerais](#1-conceitos-gerais)
 2. [CRM](#2-crm)
-3. [Rede Social](#3-rede-social)
+3. [Shoal](#3-shoal)
 4. [MAP — Motor de Alta Performance](#4-map--motor-de-alta-performance)
 5. [PREDATOR](#5-predator)
 6. [Leads (clientes avulsos, sem ICP)](#6-leads-clientes-avulsos-sem-icp)
@@ -26,18 +26,19 @@ já em funcionamento.
 Cada empresa que usa a B2B ON é um **tenant** — um espaço isolado de
 dados (contas, negócios, mensagens, etc.). Um usuário sempre pertence a
 exatamente um tenant e só enxerga os dados dele. A exceção deliberada é
-a **Rede Social**, onde tenants diferentes interagem entre si (perfis,
-conexões, mensagens) de forma controlada.
+o **Shoal**, onde tenants diferentes interagem entre si (perfis,
+conexões, mensagens, posts) de forma controlada.
 
 ### Papéis de usuário
 
 Cada usuário tem um papel (`papel`), que define o que ele pode fazer:
 
 - **`user`** — uso normal do dia a dia: CRM, Prospecção, Cadências,
-  Aprovações, Reuniões, Rede Social — e o **MAP**, mas só das contas em
+  Aprovações, Reuniões, Shoal — e o **MAP**, mas só das contas em
   que é o vendedor responsável (sua própria carteira).
 - **`admin`** — tudo que `user` faz, mais gerar/revogar convites de
-  cadastro para novos usuários do próprio tenant. No MAP, é o gestor:
+  colega para novos usuários do próprio tenant (**Admin → Convites**,
+  seção [7](#7-administração)). No MAP, é o gestor:
   vê a carteira de todos os vendedores do tenant, com filtro por
   vendedor, e é quem atribui qual vendedor é responsável por cada conta.
   Se o tenant é `distribuidor`/`revendedor` (seção
@@ -63,20 +64,25 @@ cadastros avulsos (ver seção [6](#6-leads-clientes-avulsos-sem-icp)).
 
 ### Entrando na plataforma
 
-Existem dois jeitos de uma conta de usuário nascer:
+Existem dois jeitos de uma conta de usuário nascer — não confundir os
+dois:
 
-- **Convite normal** (`admin`/`super_admin` gera em Rede Social ou via
-  API `/convites`): cria um usuário dentro de um tenant que **já é
-  cliente pagante** — acesso completo aos módulos que a licença cobre.
-- **Convite-vitrine** (qualquer usuário gera na tela **Rede Social**):
-  cria um **tenant novo e independente**, sem licença nenhuma — a
-  empresa convidada entra só para participar da Rede Social, sem virar
-  cliente. Veja a seção [8](#8-modelos-de-licença) para o que isso
-  restringe na prática.
+- **Convite de colega** (`admin`/`super_admin` gera em **Admin →
+  Convites**, seção [7](#7-administração)): traz uma pessoa nova pra
+  dentro do **seu próprio tenant** — já cliente pagante, acesso
+  completo aos módulos que a licença cobre. Qualquer `admin` já pode
+  gerar, com o papel `user` ou `admin`; só um `super_admin` pode gerar
+  um convite que concede o papel `super_admin`.
+- **Convidar empresa** (qualquer usuário gera na tela **Shoal**, seção
+  [3](#3-shoal)): cria um **tenant novo e independente**, sem licença
+  nenhuma — a empresa convidada entra só para participar do Shoal, sem
+  virar cliente (a menos que seja um convite "gratuito", que já entrega
+  o plano Teste — restrito a `admin`/`super_admin`). Veja a seção
+  [8](#8-modelos-de-licença) para o que isso restringe na prática.
 
 ### O que cada tela mostra depende da licença
 
-Quem não tem licença ativa só vê a **Rede Social** no menu — é o único
+Quem não tem licença ativa só vê o **Shoal** no menu — é o único
 módulo liberado por padrão. Todo o resto (CRM, Prospecção, Cadências,
 Aprovações, Reuniões, MAP, Configuração) exige licença ativa; a API
 recusa o acesso com uma mensagem clara se isso não for atendido.
@@ -88,11 +94,16 @@ recusa o acesso com uma mensagem clara se isso não for atendido.
 Funil de vendas do próprio tenant — negociações com as contas que a
 Prospecção (PREDATOR) gerou ou que entraram por outro canal.
 
-- **Pipeline (Kanban)**: colunas = estágios do funil (ex.: Qualificação,
+- **Pipeline (Kanban)**: colunas = estágios do funil (ex.: Descoberta,
   Proposta, Negociação, Ganho, Perdido), cada uma com o total de
   negócios e valor. Arrastar/mover um negócio para outra coluna
   atualiza o estágio; um negócio pode ser criado direto informando a
   conta, nome do negócio e valor.
+- **Editar Funil** (restrito a Admin/Super Admin): cria filas
+  customizadas além das 5 padrão (nome + tipo aberto/ganho/perdido),
+  renomeia qualquer fila existente, exclui uma fila (recusa se ela
+  tiver negócios dentro, ou se for a última do tipo "aberto") e
+  reordena as filas com as setas ▲▼.
 - **Dashboard**: dois blocos alimentados pelo CRM —
   - **Funil de vendas**: quantidade de negócios por estágio (gráfico de
     barras) e taxa de conversão do período.
@@ -126,30 +137,80 @@ Prospecção (PREDATOR) gerou ou que entraram por outro canal.
 
 ---
 
-## 3. Rede Social
+## 3. Shoal
 
-Rede de relacionamento **entre tenants** da B2B ON — parceiros,
-fornecedores, clientes de módulos diferentes se conectando e trocando
-mensagens. É o único módulo acessível sem licença ativa.
+Rede social B2B **entre tenants** da B2B ON — parceiros, fornecedores,
+clientes de módulos diferentes se conectando, publicando e trocando
+mensagens. É o único módulo acessível sem licença ativa (o nome é uma
+tradução livre de "cardume": empresas nadando juntas, em rede).
 
-- **Meu perfil**: nome de exibição, setor, site e descrição — como sua
-  empresa aparece para as outras.
-- **Diretório de empresas**: lista as demais empresas da rede, com a
-  oferta principal de cada uma (se cadastrada em Configuração) e o
-  status da conexão (nenhuma / pendente enviada / pendente recebida /
-  aceita).
-- **Conectar**: enviar um pedido de conexão a outra empresa; ela recebe
-  em "Conexões pendentes" e pode aceitar ou recusar. Só depois de
-  aceita é possível trocar mensagens.
+### 3.1 Perfil e verificação
+
+- **Meu perfil**: logo, capa, setor, porte, sede (cidade/UF), mercados,
+  produtos/serviços, tecnologias, certificações e redes sociais — como
+  sua empresa aparece para as outras.
+- **Selo de verificação**: solicite com um e-mail corporativo (se o
+  domínio bater com o site cadastrado, isso já ajuda na análise) — um
+  `super_admin` da B2B ON revisa manualmente e aprova ou recusa em
+  **Admin → Verificações** (seção [7](#7-administração)).
+
+### 3.2 Diretório, conexões e mensagens
+
+- **Diretório de empresas**: busca por nome/descrição, com filtros de
+  setor, porte, mercado e "só verificadas".
+- **Conectar**: pedido de conexão com aceite mútuo — só depois de
+  aceita é possível trocar mensagens ou abrir uma Sala Corporativa.
+  **Seguir** não exige aceite (unidirecional, útil só pra acompanhar
+  posts de uma empresa sem virar conexão). **Bloquear**/**Desconectar**
+  encerram a interação quando necessário.
 - **Mensagens**: conversa 1:1 entre duas empresas conectadas.
-- **Convidar empresa** (convite-vitrine): qualquer usuário do tenant
-  pode gerar um link de convite (com validade em horas) para uma
-  empresa de fora entrar na Rede Social. Copie o link e envie por fora
-  da plataforma (e-mail, WhatsApp); ao abrir, a pessoa preenche razão
-  social, CNPJ (opcional), nome, e-mail e senha, e um tenant novo é
-  criado na hora — sem precisar de nenhuma aprovação manual do seu
-  lado. O convite pode ser revogado enquanto estiver "disponível"
-  (ainda não usado).
+- **Salas Corporativas**: espaço mais estruturado que a DM, com canais
+  (Geral, e outros como Comercial/Técnico/Jurídico/Financeiro, ou um
+  canal customizado) — útil quando a conversa entre duas empresas
+  cresce além de uma DM simples. Um canal marcado como "interno" só
+  aparece pra quem o criou, nunca pro outro lado.
+
+### 3.3 Feed da Rede
+
+- **Publicar um post**: legenda obrigatória, com foto(s) — uma ou
+  várias, formando um **carrossel** navegável — ou um vídeo, e um link
+  opcional. O botão **"Inserir Foto/Vídeo"** abre o seletor de arquivo.
+- **Comentar**: comentário no post inteiro (não por foto do carrossel).
+- **Reagir**: 9 emojis — curtir, chorar de rir, uau, triste, força
+  (mãos unidas), interessante, oração, genial (lâmpada) e um "like"
+  simples. Cada empresa tem só uma reação ativa por post (escolher
+  outra troca a anterior, não soma).
+- **Compartilhar**: republica o post no seu próprio feed, com um card
+  mostrando o post original e quem publicou — igual a um "repost".
+
+### 3.4 Necessidades da Rede
+
+Publique o que sua empresa está procurando — categoria, título,
+descrição, requisitos e faixa de orçamento — visível pra rede toda ou
+só pras suas conexões (visibilidade escolhida ao publicar). Encerre ou
+marque como "atendida" quando resolver. No lado do **PREDATOR**
+(**Sinais de Oportunidade**, seção [5.11](#511-sinais-de-oportunidade)),
+outras empresas com fit real pro que você publicou podem aparecer como
+sugestão de match, com o motivo explicado.
+
+### 3.5 Convidar empresa
+
+Qualquer usuário do tenant pode gerar um link de convite (com validade
+em horas, e um e-mail de destinatário opcional — preenchendo, o
+convite já sai por e-mail automaticamente) para uma empresa de fora
+entrar no Shoal. Copie o link e envie por fora da plataforma se
+preferir; ao abrir, a pessoa preenche razão social, CNPJ (opcional),
+nome, e-mail e senha, e um tenant novo é criado na hora — sem precisar
+de nenhuma aprovação manual do seu lado. O convite pode ser revogado
+enquanto estiver "disponível" (ainda não usado).
+
+A opção **"Convite gratuito"** (pula pagamento, cria a conta já no
+plano Teste sem prazo de expiração) é restrita a `admin`/`super_admin`
+— pensada só pra demonstração, não pra cliente pagante de verdade. Não
+confundir com o **convite de colega** (seção [7](#7-administração)):
+este aqui cadastra uma **empresa nova**, com tenant e licença próprios;
+aquele traz uma pessoa pro **seu próprio** tenant.
+
 - **Indicações**: quando uma empresa indicada por dentro da rede vira
   cliente, isso é registrado automaticamente — não há tela dedicada, é
   refletido nos indicadores administrativos.
@@ -483,6 +544,64 @@ Essa proteção só vale pra quem usa o e-mail compartilhado da B2B ON
 E-mail (SMTP) não passam por esse rastreio de bounce, já que o
 provedor deles não avisa a B2B ON quando um e-mail quica.
 
+### 5.10 Regras Aprendidas
+
+Fecha o loop entre "a IA errou/o vendedor corrigiu" e "a próxima
+geração já nasce melhor":
+
+- **Correções recentes**: lista as últimas mensagens editadas ou
+  rejeitadas na Fila de Aprovação, com o antes/depois (edição) ou o
+  motivo (rejeição). **"✨ Sugerir com IA"** pede à IA um texto de regra
+  a partir daquela correção específica — a sugestão só entra no campo
+  de texto, quem decide se cria a regra (e pode editar o texto antes)
+  é sempre a pessoa.
+- **Cadastrar regra**: texto livre (ex.: "nunca usar a palavra
+  'sinergia'"), com escopo opcional por ICP/Oferta/canal — nulo em
+  qualquer campo significa "vale pra todos". Toda regra ativa entra
+  automaticamente no prompt da próxima geração de mensagem de cadência
+  que bater no escopo.
+- **Padrões da Empresa**: ticket médio, ciclo médio de venda e motivo
+  de perda mais comum, calculados a partir dos seus próprios negócios
+  ganhos/perdidos — sempre mostrado junto do tamanho da amostra (nunca
+  como fato isolado; com poucos negócios, o padrão nem aparece).
+
+### 5.11 Sinais de Oportunidade
+
+Cruza o Shoal (rede social) com o CRM/ICP pra apontar oportunidades
+reais, sempre com o motivo explicado — nunca um número opaco:
+
+- **Fit de ICP**: quais empresas do Shoal batem com um ICP seu
+  (segmento/UF/porte), com os critérios que bateram e os dados que
+  faltam pra ter mais confiança.
+- **Matches de Necessidade**: quando outra empresa publica uma
+  Necessidade da Rede (seção [3.4](#34-necessidades-da-rede)) que o seu
+  perfil/oferta pode atender, ou quando uma Necessidade sua encontra um
+  fornecedor em potencial.
+- **Riscos de pipeline**: negócios abertos parados há muitos dias, ou
+  sem nenhum decisor com papel de comprador confirmado.
+- **Atribuição de receita**: quanto do pipeline/receita ganha veio de
+  um sinal originado na rede — e sugestões de expansão (uma Conta com
+  negócio ganho que ainda não comprou uma Oferta ativa sua).
+
+### 5.12 Agente Corporativo
+
+Um assistente de IA que responde, **sempre sob revisão humana**,
+perguntas que **outras empresas do Shoal** fazem sobre a sua — baseado
+só na sua Oferta ativa, Perfil da Empresa e FAQ cadastrados (nunca
+inventa além disso; sem essas informações cadastradas, a pergunta cai
+numa resposta padrão de "sem informação suficiente").
+
+- **Modo**: desligado (padrão) / interno (só você testa, nada é
+  exposto à rede) / assistido (outra empresa pode perguntar; toda
+  resposta fica pendente até você aprovar, editar ou recusar).
+- **Testar seu agente**: simula uma pergunta e mostra o rascunho de
+  resposta + as evidências usadas, sem persistir nada.
+- **Perguntas recebidas**: fila de perguntas de outras empresas
+  aguardando revisão — aprovar (com edição opcional) ou recusar com
+  motivo.
+- **Minhas perguntas**: o que você perguntou ao agente de outras
+  empresas conectadas, e as respostas recebidas.
+
 ---
 
 ## 6. Leads (clientes avulsos, sem ICP)
@@ -520,7 +639,10 @@ Global** (seção [1](#1-conceitos-gerais)).
 Gestão dos tenants assinantes da B2B ON. **Tenants**/**Licenças**/
 **Relatórios** são visíveis pra `super_admin` **e** pra `admin` de um
 tenant `distribuidor`/`revendedor` (escopados à própria subárvore);
-**Convites** e **Planos** são exclusivos de `super_admin`.
+**Convites** é visível pra **qualquer** `admin`/`super_admin` (é
+escopado ao próprio tenant, sem depender de hierarquia); **Planos** e
+**Verificações** são exclusivos de `super_admin` (operação global,
+cross-tenant).
 
 ### Hierarquia de tenants (Distribuidor → Revendedor → Cliente)
 
@@ -542,7 +664,7 @@ usa nomenclatura própria (ex.: "Master"/"Vendedor"/"Cliente").
 - **Licenças**: para cada tenant visível, o plano atual, status
   (`ativa`/`suspensa`/`expirada`) e data de expiração — editável aqui.
   Suspender ou expirar uma licença bloqueia imediatamente o acesso do
-  tenant a tudo além da Rede Social (sujeito à carência descrita na
+  tenant a tudo além do Shoal (sujeito à carência descrita na
   seção [8](#8-modelos-de-licença)).
 - **Relatórios** (visão do distribuidor/revendedor sobre a própria
   subárvore): dashboard com tenants ativos por nível, novas ativações,
@@ -562,9 +684,18 @@ usa nomenclatura própria (ex.: "Master"/"Vendedor"/"Cliente").
   de enriquecimento semanal, os recursos exclusivos por plano e as
   retenções (ver seção [8](#8-modelos-de-licença)) — não depende mais
   de alteração direta no banco de dados.
-- **Convites** (exclusivo de `super_admin`): convites de cadastro
-  (usuário novo dentro de um tenant já cliente) e convites-vitrine
-  (tenant novo, sem licença) gerados pelo próprio tenant.
+- **Convites** (qualquer `admin`/`super_admin`): convida um colega pro
+  **seu próprio tenant**, com o papel `user` ou `admin` — só um
+  `super_admin` pode gerar um convite que concede o papel `super_admin`
+  (trava de segurança: sem ela, qualquer admin comum poderia se
+  auto-elevar a um papel global). Não confundir com "Convidar empresa"
+  no Shoal (seção [3.5](#35-convidar-empresa)), que cadastra uma
+  empresa nova com tenant/licença próprios.
+- **Verificações** (exclusivo de `super_admin`): fila de pedidos de
+  selo de verificação de perfil do Shoal (seção
+  [3.1](#31-perfil-e-verificação)) — aprova ou recusa, com os sinais
+  automáticos (domínio do e-mail confere com o site, CNPJ encontrado na
+  Receita Federal) visíveis pra ajudar na decisão.
 
 ---
 
@@ -576,7 +707,7 @@ Cada tenant tem no máximo **uma licença** (`Licenca`), vinculada a um
 **plano** (`Plano`) e com um status: `ativa`, `suspensa` ou `expirada`.
 Só licença com status `ativa` libera os módulos pagos (CRM, MAP,
 PREDATOR). **Um tenant sem nenhuma linha de licença** — caso do
-convite-vitrine — fica automaticamente restrito à Rede Social; não
+convite-vitrine — fica automaticamente restrito ao Shoal; não
 existe uma "flag" separada para isso, é a ausência da licença que gera
 a restrição.
 
@@ -681,7 +812,7 @@ prática, um quinto "plano" de custo zero e acesso mínimo:
 
 | | POC | Vitrine (sem licença) |
 |---|---|---|
-| Rede Social | ✓ | ✓ |
+| Shoal | ✓ | ✓ |
 | CRM / MAP / PREDATOR | ✓ (franquia 50/mês) | ✗ |
 | Custo | R$ 0 | R$ 0 |
 | Como se torna cliente pago | — | Admin da B2B ON atribui um plano ao tenant em **Administração → Licenças** |

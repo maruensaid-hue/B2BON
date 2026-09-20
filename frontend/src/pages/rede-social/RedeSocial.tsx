@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -182,8 +182,10 @@ export function RedeSocial() {
   const [empresas, setEmpresas] = useState<EmpresaDiretorio[]>([]);
   const [conexoesPendentes, setConexoesPendentes] = useState<Conexao[]>([]);
   const [conexoesAtivas, setConexoesAtivas] = useState<Conexao[]>([]);
+  const idArquivosPost = useId();
   const [posts, setPosts] = useState<PostRedeSocial[]>([]);
   const [publicando, setPublicando] = useState(false);
+  const [arquivosDoPost, setArquivosDoPost] = useState<File[]>([]);
   const [midiaUrls, setMidiaUrls] = useState<Record<number, string>>({});
   const [carrosselIndice, setCarrosselIndice] = useState<Record<number, number>>({});
   const [comentariosAbertos, setComentariosAbertos] = useState<Record<number, boolean>>({});
@@ -425,16 +427,16 @@ export function RedeSocial() {
     const dados = new FormData(form);
     const texto = String(dados.get("texto") ?? "").trim();
     if (!texto) return;
-    const arquivos = dados.getAll("arquivos").filter((item): item is File => item instanceof File && item.size > 0);
     const linkUrl = String(dados.get("link_url") || "").trim();
     setPublicando(true);
     setErro(null);
     try {
-      await postFiles("/rede-social/posts", arquivos, {
+      await postFiles("/rede-social/posts", arquivosDoPost, {
         texto,
         ...(linkUrl ? { link_url: linkUrl } : {}),
       });
       form.reset();
+      setArquivosDoPost([]);
       await carregarTudo();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível publicar o post.");
@@ -943,13 +945,25 @@ export function RedeSocial() {
           <Textarea name="texto" required rows={2} placeholder="Compartilhe uma novidade com a rede..." />
           <div className="flex flex-wrap items-center gap-2">
             <input
+              id={idArquivosPost}
               type="file"
-              name="arquivos"
               multiple
               accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
-              className="flex-1 text-[12px] text-muted"
+              className="hidden"
               title="Uma foto/vídeo, ou várias fotos pra criar um carrossel"
+              onChange={(event) => setArquivosDoPost(Array.from(event.target.files ?? []))}
             />
+            <label
+              htmlFor={idArquivosPost}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-transparent px-3 py-1.5 text-[11px] font-bold tracking-wide text-muted transition-colors hover:text-text"
+            >
+              Inserir Foto/Vídeo
+            </label>
+            {arquivosDoPost.length > 0 && (
+              <span className="text-[11px] text-muted">
+                {arquivosDoPost.length === 1 ? arquivosDoPost[0].name : `${arquivosDoPost.length} arquivos selecionados`}
+              </span>
+            )}
             <Input name="link_url" placeholder="URL de link (opcional)" className="flex-1" />
             <Button type="submit" size="sm" disabled={publicando}>
               {publicando ? "Publicando..." : "Publicar"}

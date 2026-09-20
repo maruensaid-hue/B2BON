@@ -75,15 +75,22 @@ const RO_NAV_ITEM: NavItem = { path: "/ro", label: "Minhas Oportunidades", icon:
 const RO_NAV_ITEM_APROVACOES: NavItem = { path: "/ro/aprovacoes", label: "Aprovar Descontos", icon: "💰" };
 
 // Tenants/Licenças: super_admin OU admin de um tenant distribuidor/
-// revendedor gerenciando a própria subárvore (raio-X: hierarquia). Convites/
-// Planos continuam exclusivos de super_admin — fora do escopo desta fase.
+// revendedor gerenciando a própria subárvore (raio-X: hierarquia). Planos/
+// Verificações continuam exclusivos de super_admin (operação global, cross-
+// tenant). "Convites" (convidar colega pro PRÓPRIO tenant) é escopado por
+// tenant, sem nada de hierarquia — qualquer admin já pode gerar via API
+// (`exigir_papel("super_admin", "admin")`); o nav ficava restrito a
+// super_admin por engano, o que deixava um admin comum (ex.: dono de um
+// tenant que só usa a Shoal, sem PREDATOR) sem como convidar um colega —
+// corrigido junto com a trava de não poder conceder papel "super_admin"
+// (`auth_service.gerar_convite`, achado ao abrir este nav pra admin comum).
 const ADMIN_NAV_ITEMS_HIERARQUIA: NavItem[] = [
   { path: "/admin/tenants", label: "Tenants", icon: "🏢" },
   { path: "/admin/licencas", label: "Licenças", icon: "📋" },
   { path: "/admin/relatorios", label: "Relatórios", icon: "📊" },
 ];
+const ADMIN_NAV_ITEM_CONVITES: NavItem = { path: "/admin/convites", label: "Convites", icon: "🔑" };
 const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
-  { path: "/admin/convites", label: "Convites", icon: "🔑" },
   { path: "/admin/planos", label: "Planos", icon: "💳" },
   { path: "/admin/verificacoes-empresa", label: "Verificações", icon: "🛡️" },
 ];
@@ -101,6 +108,7 @@ function NavButton({ path, label, icon, end }: NavItem) {
     <NavLink
       to={path}
       end={end}
+      data-tour-id={`nav:${path}`}
       className={({ isActive }) => cn(CLASSE_ITEM_BASE, isActive ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO)}
     >
       <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
@@ -112,8 +120,24 @@ function NavButton({ path, label, icon, end }: NavItem) {
 /** Menu com submenus revelados por seta — mesmo peso visual dos itens de
  * topo (não mais um rótulo pequeno em uppercase). `path` é opcional: se
  * informado, o cabeçalho também navega (ex.: CRM); se omitido, o
- * cabeçalho só expande/recolhe (ex.: PREDATOR, que não é uma página). */
-function NavGroup({ label, icon, path, itens }: { label: string; icon: string; path?: string; itens: NavItem[] }) {
+ * cabeçalho só expande/recolhe (ex.: PREDATOR, que não é uma página).
+ * `tourToggleId`: marca o botão de expandir com `data-tour-toggle`, pra
+ * o Tour Guiado (`TourGuiado.tsx`) conseguir abrir o grupo sozinho antes
+ * de destacar um item de dentro dele (ex.: "visita detalhada" ao
+ * PREDATOR — cada sub-módulo vira um passo do tour). */
+function NavGroup({
+  label,
+  icon,
+  path,
+  itens,
+  tourToggleId,
+}: {
+  label: string;
+  icon: string;
+  path?: string;
+  itens: NavItem[];
+  tourToggleId?: string;
+}) {
   const location = useLocation();
   const algumFilhoAtivo = itens.some(
     (item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
@@ -157,6 +181,7 @@ function NavGroup({ label, icon, path, itens }: { label: string; icon: string; p
       ) : (
         <button
           type="button"
+          data-tour-toggle={tourToggleId}
           onClick={() => setAberto((atual) => !atual)}
           className={cn(CLASSE_ITEM_BASE, "w-full", algumFilhoAtivo ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO)}
         >
@@ -405,6 +430,7 @@ export function AppShell() {
   }
 
   const isSuperAdmin = usuario?.papel === "super_admin";
+  const isAdmin = usuario?.papel === "admin";
   const ehGestorHierarquico = usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo);
   const ehAdminDistribuidor = usuario?.papel === "admin" && usuario.tenant_tipo === "distribuidor";
   const navItems = temLicencaAtiva
@@ -515,7 +541,7 @@ export function AppShell() {
 
           {temLicencaAtiva && (
             <div data-tour-id="predator">
-              <NavGroup label="Predator" icon="🐾" itens={PREDATOR_NAV_ITEMS} />
+              <NavGroup label="Predator" icon="🐾" itens={PREDATOR_NAV_ITEMS} tourToggleId="predator" />
             </div>
           )}
 
@@ -540,13 +566,13 @@ export function AppShell() {
             </div>
           )}
 
-          {(isSuperAdmin || ehGestorHierarquico) && (
+          {(isSuperAdmin || ehGestorHierarquico || isAdmin) && (
             <div data-tour-id="admin">
               <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">Admin</div>
-              {ADMIN_NAV_ITEMS_HIERARQUIA.map((item) => (
-                <NavButton key={item.path} {...item} />
-              ))}
+              {(isSuperAdmin || ehGestorHierarquico) &&
+                ADMIN_NAV_ITEMS_HIERARQUIA.map((item) => <NavButton key={item.path} {...item} />)}
               {ehAdminDistribuidor && <NavButton {...ADMIN_NAV_ITEM_INTEGRACOES} />}
+              <NavButton {...ADMIN_NAV_ITEM_CONVITES} />
               {isSuperAdmin && ADMIN_NAV_ITEMS_SUPER_ADMIN.map((item) => <NavButton key={item.path} {...item} />)}
             </div>
           )}

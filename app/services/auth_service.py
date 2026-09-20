@@ -16,7 +16,7 @@ from app.models.redefinicao_senha import RedefinicaoSenha
 from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
 from app.services import auditoria_service
-from app.services.errors import NaoAutenticado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
+from app.services.errors import NaoAutenticado, NaoAutorizado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 logger = logging.getLogger(__name__)
 
@@ -225,10 +225,19 @@ def _verificar_limite_de_usuarios(db: Session, tenant_id: str) -> None:
 
 
 def gerar_convite(
-    db: Session, tenant_id: str, ator_id: str | None, papel_concedido: str, validade_horas: int | None
+    db: Session, tenant_id: str, ator_id: str | None, papel_ator: str, papel_concedido: str, validade_horas: int | None
 ) -> ConviteCadastro:
     if papel_concedido not in PAPEIS_VALIDOS:
         raise ValidacaoFalhou(f"Papel inválido: {papel_concedido}")
+    # "Editar Funil" mesma disciplina: `exigir_papel("super_admin", "admin")`
+    # na rota só garante que quem CHAMA é admin+, não limita o que ele pode
+    # CONCEDER — sem esta trava, qualquer admin comum podia gerar um convite
+    # com papel_concedido="super_admin" pra si mesmo/um cúmplice e virar
+    # super_admin de verdade (papel global, sem escopo de tenant — ver
+    # `exigir_gestor_do_tenant`/`permitir_gestao_hierarquica`). Achado ao
+    # abrir "Convidar colega" pra admins comuns (2026-09-20).
+    if papel_concedido == "super_admin" and papel_ator != "super_admin":
+        raise NaoAutorizado("Só super_admin pode gerar um convite com papel super_admin.")
     _verificar_limite_de_usuarios(db, tenant_id)
 
     validade_em = datetime.now(UTC) + timedelta(hours=validade_horas) if validade_horas else None
