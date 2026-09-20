@@ -326,12 +326,12 @@ def definir_custo_aquisicao(
 
 @router.get("/dashboard/funil", response_model=DashboardFunilSchema)
 def dashboard_funil(
-    data_inicio: date | None = None,
-    data_fim: date | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> DashboardFunilSchema:
-    return DashboardFunilSchema(**crm_service.dashboard_funil(db, tenant_id, data_inicio, data_fim))
+    """Estado atual do funil de vendas — sem filtro de período (o funil
+    é uma foto do pipeline agora, não um recorte por data de criação)."""
+    return DashboardFunilSchema(**crm_service.dashboard_funil(db, tenant_id))
 
 
 @router.get("/dashboard/atividade", response_model=DashboardAtividadeSchema)

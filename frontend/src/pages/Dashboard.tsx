@@ -22,8 +22,6 @@ interface EstagioFunilResumo {
 }
 
 interface DashboardFunil {
-  periodo_inicio: string;
-  periodo_fim: string;
   estagios: EstagioFunilResumo[];
   taxa_conversao: number | null;
 }

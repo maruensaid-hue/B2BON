@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -251,6 +251,30 @@ def test_dashboard_funil_calcula_taxa_de_conversao(db_session):
     ganho_resumo = next(e for e in resultado["estagios"] if e["tipo"] == "ganho")
     assert ganho_resumo["quantidade"] == 1
     assert ganho_resumo["valor_total"] == 100.0
+
+
+def test_dashboard_funil_inclui_negocio_criado_ha_mais_de_30_dias(db_session):
+    """Bug real relatado pelo usuário: o funil filtrava `Negocio.
+    criado_em` pelos últimos 30 dias (herdado de `_periodo_padrao`,
+    pensado pra métricas de atividade EM um período) — qualquer
+    negócio aberto há mais tempo sumia do gráfico mesmo continuando
+    visível no Kanban (`listar_negocios` nunca filtrou por data). O
+    funil precisa ser o retrato do pipeline agora, não um recorte por
+    data de criação."""
+    conta = _criar_conta(db_session)
+    decisor = _criar_decisor(db_session, conta)
+    negocio_antigo = crm_service.criar_negocio(
+        db_session, TENANT_ID, None, conta.id, decisor.id, "Negócio antigo", valor=500.0
+    )
+    negocio_antigo.criado_em = datetime.now(UTC) - timedelta(days=90)
+    db_session.commit()
+
+    resultado = crm_service.dashboard_funil(db_session, TENANT_ID)
+
+    total_quantidade = sum(e["quantidade"] for e in resultado["estagios"])
+    total_valor = sum(e["valor_total"] for e in resultado["estagios"])
+    assert total_quantidade == 1
+    assert total_valor == 500.0
 
 
 def test_dashboard_atividade_agrupa_por_usuario(db_session):

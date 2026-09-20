@@ -172,8 +172,6 @@ class EstagioFunilResumoSchema(BaseModel):
 
 
 class DashboardFunilSchema(BaseModel):
-    periodo_inicio: str
-    periodo_fim: str
     estagios: list[EstagioFunilResumoSchema]
     taxa_conversao: float | None
 

@@ -662,22 +662,22 @@ def _periodo_padrao(data_inicio: date | None, data_fim: date | None) -> tuple[da
     return inicio, fim
 
 
-def _no_periodo(momento: datetime | None, inicio: date, fim: date) -> bool:
-    if momento is None:
-        return False
-    return inicio <= momento.date() <= fim
-
-
-def dashboard_funil(db: Session, tenant_id: str, data_inicio: date | None = None, data_fim: date | None = None) -> dict:
-    """Contagem/valor por estágio e taxa de conversão do período (Onda B)."""
-    inicio, fim = _periodo_padrao(data_inicio, data_fim)
+def dashboard_funil(db: Session, tenant_id: str) -> dict:
+    """Contagem/valor por estágio e taxa de conversão — retrato do funil
+    AGORA, sem filtro de período (bug real relatado pelo usuário:
+    filtrava `Negocio.criado_em` pelos últimos 30 dias, então qualquer
+    negócio aberto há mais tempo sumia do gráfico mesmo aparecendo
+    normalmente no Kanban, que nunca filtrou por data —
+    `listar_negocios` lista o tenant inteiro). Diferente de
+    `dashboard_atividade` (atividade EM um período genuinamente faz
+    sentido ser filtrada por data) — um funil de vendas é o estado
+    atual do pipeline, não um recorte de quando cada negócio nasceu."""
     estagios = garantir_estagios_padrao(db, tenant_id)
     negocios = db.query(Negocio).filter_by(tenant_id=tenant_id).all()
-    negocios_periodo = [n for n in negocios if _no_periodo(n.criado_em, inicio, fim)]
 
     resumo = []
     for estagio in estagios:
-        do_estagio = [n for n in negocios_periodo if n.estagio_id == estagio.id]
+        do_estagio = [n for n in negocios if n.estagio_id == estagio.id]
         resumo.append(
             {
                 "estagio_id": estagio.id,
@@ -689,13 +689,11 @@ def dashboard_funil(db: Session, tenant_id: str, data_inicio: date | None = None
         )
 
     ids_ganho = {e.id for e in estagios if e.tipo == "ganho"}
-    total = len(negocios_periodo)
-    ganhos = sum(1 for n in negocios_periodo if n.estagio_id in ids_ganho)
+    total = len(negocios)
+    ganhos = sum(1 for n in negocios if n.estagio_id in ids_ganho)
     taxa_conversao = ganhos / total if total else None
 
     return {
-        "periodo_inicio": inicio.isoformat(),
-        "periodo_fim": fim.isoformat(),
         "estagios": resumo,
         "taxa_conversao": taxa_conversao,
     }
