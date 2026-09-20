@@ -139,10 +139,26 @@ def test_reagir_toggle_via_api(client):
     post = client.post("/api/v1/rede-social/posts", data={"texto": "Post com reação"}).json()
 
     resposta_1 = client.post(f"/api/v1/rede-social/posts/{post['id']}/reagir")
-    assert resposta_1.json() == {"reagiu": True, "total": 1}
+    assert resposta_1.json() == {"minha_reacao": "curtir", "total": 1, "reacoes_por_tipo": {"curtir": 1}}
 
     resposta_2 = client.post(f"/api/v1/rede-social/posts/{post['id']}/reagir")
-    assert resposta_2.json() == {"reagiu": False, "total": 0}
+    assert resposta_2.json() == {"minha_reacao": None, "total": 0, "reacoes_por_tipo": {}}
+
+
+def test_reagir_com_emoji_especifico_via_api(client):
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Post"}).json()
+
+    resposta = client.post(f"/api/v1/rede-social/posts/{post['id']}/reagir", json={"tipo": "genial"})
+
+    assert resposta.json() == {"minha_reacao": "genial", "total": 1, "reacoes_por_tipo": {"genial": 1}}
+
+
+def test_reagir_tipo_invalido_via_api_retorna_erro(client):
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Post"}).json()
+
+    resposta = client.post(f"/api/v1/rede-social/posts/{post['id']}/reagir", json={"tipo": "furioso"})
+
+    assert resposta.status_code == 422
 
 
 def test_feed_traz_contagens_e_eu_reagi_via_api(client, criar_usuario_autenticado):
@@ -156,5 +172,32 @@ def test_feed_traz_contagens_e_eu_reagi_via_api(client, criar_usuario_autenticad
 
     assert feed_b[0]["total_comentarios"] == 1
     assert feed_b[0]["total_reacoes"] == 1
-    assert feed_b[0]["eu_reagi"] is True
-    assert feed_a[0]["eu_reagi"] is False
+    assert feed_b[0]["minha_reacao"] == "curtir"
+    assert feed_a[0]["minha_reacao"] is None
+
+
+def test_compartilhar_post_via_api(client, criar_usuario_autenticado):
+    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Post original"}).json()
+
+    resposta = client.post(f"/api/v1/rede-social/posts/{post['id']}/compartilhar", headers=headers_b)
+
+    assert resposta.status_code == 201
+    corpo = resposta.json()
+    assert corpo["tenant_id"] == TENANT_B
+    assert corpo["post_original"]["id"] == post["id"]
+
+    feed = client.get("/api/v1/rede-social/posts").json()
+    assert len(feed) == 2
+    original_no_feed = next(item for item in feed if item["id"] == post["id"])
+    assert original_no_feed["total_compartilhamentos"] == 1
+
+
+def test_compartilhar_o_mesmo_post_duas_vezes_retorna_erro(client, criar_usuario_autenticado):
+    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Post original"}).json()
+    client.post(f"/api/v1/rede-social/posts/{post['id']}/compartilhar", headers=headers_b)
+
+    resposta = client.post(f"/api/v1/rede-social/posts/{post['id']}/compartilhar", headers=headers_b)
+
+    assert resposta.status_code == 422

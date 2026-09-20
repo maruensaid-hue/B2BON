@@ -18,6 +18,14 @@ _LIMITE_COMENTARIOS_PADRAO = 200
 # mais que isso aqui.
 _LIMITE_MIDIAS_POR_POST = 10
 
+# "Curtir" é a reação rápida (clique único); as outras 8 são o picker
+# expandido (pedido explícito do usuário, mistura Facebook + LinkedIn).
+# Exclusivas entre si — reagir com um tipo novo troca o anterior, não
+# soma (mesmo espírito de toggle já usado antes desta entrega).
+TIPOS_REACAO_VALIDOS = {
+    "curtir", "coracao", "risada", "espanto", "triste", "apoio", "interessante", "oracao", "genial",
+}
+
 
 def criar(
     db: Session,
@@ -93,6 +101,18 @@ def excluir(db: Session, tenant_id: str, ator_id: str | None, post_id: int) -> N
         raise NaoAutorizado("Só a própria empresa autora pode excluir este post.")
 
     auditoria_service.registrar(db, tenant_id, "post_rede_social_excluido", "post_rede_social", post.id, ator_id, {})
+
+    # Reposts deste post (se ele for um original compartilhado por
+    # outros tenants) somem junto — sem isso ficariam apontando pra um
+    # post_original que não existe mais.
+    repost_ids = [linha[0] for linha in db.query(PostRedeSocial.id).filter_by(post_original_id=post.id).all()]
+    for repost_id in repost_ids:
+        db.query(ComentarioPost).filter_by(post_id=repost_id).delete()
+        db.query(ReacaoPost).filter_by(post_id=repost_id).delete()
+        db.query(MidiaPost).filter_by(post_id=repost_id).delete()
+    if repost_ids:
+        db.query(PostRedeSocial).filter(PostRedeSocial.id.in_(repost_ids)).delete(synchronize_session=False)
+
     # Sem isso, comentário/reação ficam órfãos (post_id apontando pra um
     # post que não existe mais) — achado real testando E2E: o `id`
     # (INTEGER PRIMARY KEY sem AUTOINCREMENT) pode ser reciclado pelo
@@ -105,16 +125,32 @@ def excluir(db: Session, tenant_id: str, ator_id: str | None, post_id: int) -> N
     db.commit()
 
 
-def _serializar(db: Session, post: PostRedeSocial, tenant_id_atual: str | None) -> dict:
+def _contagem_reacoes_por_tipo(db: Session, post_id: int) -> dict[str, int]:
+    linhas = db.query(ReacaoPost.tipo, func.count(ReacaoPost.id)).filter_by(post_id=post_id).group_by(ReacaoPost.tipo).all()
+    return {tipo: total for tipo, total in linhas}
+
+
+def _serializar(db: Session, post: PostRedeSocial, tenant_id_atual: str | None, *, incluir_original: bool = True) -> dict:
     perfil = db.query(PerfilEmpresa).filter_by(tenant_id=post.tenant_id).one_or_none()
     autor = db.query(Usuario).filter_by(id=post.usuario_autor_id).one_or_none()
     total_comentarios = db.query(func.count(ComentarioPost.id)).filter_by(post_id=post.id).scalar() or 0
-    total_reacoes = db.query(func.count(ReacaoPost.id)).filter_by(post_id=post.id).scalar() or 0
-    eu_reagi = (
-        tenant_id_atual is not None
-        and db.query(ReacaoPost).filter_by(post_id=post.id, tenant_id=tenant_id_atual).one_or_none() is not None
-    )
+    reacoes_por_tipo = _contagem_reacoes_por_tipo(db, post.id)
+    minha_reacao = None
+    if tenant_id_atual is not None:
+        reacao = db.query(ReacaoPost).filter_by(post_id=post.id, tenant_id=tenant_id_atual).one_or_none()
+        minha_reacao = reacao.tipo if reacao is not None else None
+    total_compartilhamentos = db.query(func.count(PostRedeSocial.id)).filter_by(post_original_id=post.id).scalar() or 0
     midias = db.query(MidiaPost).filter_by(post_id=post.id).order_by(MidiaPost.ordem.asc()).all()
+
+    # `incluir_original=False` na recursão evita encadear além de 1
+    # nível — `compartilhar` já garante que `post_original_id` nunca
+    # aponta pra outro repost, isso é só uma trava extra defensiva.
+    post_original = None
+    if incluir_original and post.post_original_id is not None:
+        original = db.query(PostRedeSocial).filter_by(id=post.post_original_id).one_or_none()
+        if original is not None:
+            post_original = _serializar(db, original, tenant_id_atual, incluir_original=False)
+
     return {
         "id": post.id,
         "tenant_id": post.tenant_id,
@@ -134,8 +170,11 @@ def _serializar(db: Session, post: PostRedeSocial, tenant_id_atual: str | None) 
         ],
         "criado_em": post.criado_em,
         "total_comentarios": total_comentarios,
-        "total_reacoes": total_reacoes,
-        "eu_reagi": eu_reagi,
+        "total_reacoes": sum(reacoes_por_tipo.values()),
+        "reacoes_por_tipo": reacoes_por_tipo,
+        "minha_reacao": minha_reacao,
+        "total_compartilhamentos": total_compartilhamentos,
+        "post_original": post_original,
     }
 
 
@@ -197,17 +236,23 @@ def listar_comentarios(db: Session, post_id: int, limite: int = _LIMITE_COMENTAR
     return [_serializar_comentario(db, comentario) for comentario in comentarios]
 
 
-def reagir(db: Session, tenant_id: str, ator_id: str, post_id: int) -> dict:
-    """Toggle de reação (master prompt §45) — tipo único ("curtir"),
-    1 reação por tenant por post: cria se não existe, remove se já existe."""
+def reagir(db: Session, tenant_id: str, ator_id: str, post_id: int, tipo: str = "curtir") -> dict:
+    """Reação exclusiva por tenant/post (master prompt §45, estendido
+    2026-09-20 pra 9 tipos — curtir + 8 emojis, ver
+    `TIPOS_REACAO_VALIDOS`): clicar de novo no mesmo tipo remove a
+    reação; clicar num tipo diferente troca (nunca soma duas reações
+    do mesmo tenant no mesmo post)."""
+    if tipo not in TIPOS_REACAO_VALIDOS:
+        raise ValidacaoFalhou(f"Tipo de reação inválido: {tipo}.")
+
     post = _obter(db, post_id)
     reacao = db.query(ReacaoPost).filter_by(post_id=post_id, tenant_id=tenant_id).one_or_none()
     if reacao is None:
-        reacao = ReacaoPost(post_id=post_id, tenant_id=tenant_id, usuario_id=int(ator_id))
+        reacao = ReacaoPost(post_id=post_id, tenant_id=tenant_id, usuario_id=int(ator_id), tipo=tipo)
         db.add(reacao)
         db.flush()
         auditoria_service.registrar(
-            db, tenant_id, "post_rede_social_reagido", "reacao_post", reacao.id, ator_id, {"post_id": post_id}
+            db, tenant_id, "post_rede_social_reagido", "reacao_post", reacao.id, ator_id, {"post_id": post_id, "tipo": tipo}
         )
         if post.tenant_id != tenant_id:
             perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
@@ -215,15 +260,74 @@ def reagir(db: Session, tenant_id: str, ator_id: str, post_id: int) -> dict:
             notificacao_rede_social_service.criar(
                 db, post.tenant_id, "new_reaction", "post_rede_social", post.id, f"{nome} reagiu ao seu post."
             )
-        reagiu = True
-    else:
+        minha_reacao = tipo
+    elif reacao.tipo == tipo:
         auditoria_service.registrar(
             db, tenant_id, "post_rede_social_reacao_removida", "reacao_post", reacao.id, ator_id, {"post_id": post_id}
         )
         db.delete(reacao)
         db.flush()
-        reagiu = False
+        minha_reacao = None
+    else:
+        tipo_anterior = reacao.tipo
+        reacao.tipo = tipo
+        db.flush()
+        auditoria_service.registrar(
+            db,
+            tenant_id,
+            "post_rede_social_reacao_trocada",
+            "reacao_post",
+            reacao.id,
+            ator_id,
+            {"post_id": post_id, "de": tipo_anterior, "para": tipo},
+        )
+        minha_reacao = tipo
     db.commit()
 
-    total = db.query(func.count(ReacaoPost.id)).filter_by(post_id=post_id).scalar() or 0
-    return {"reagiu": reagiu, "total": total}
+    reacoes_por_tipo = _contagem_reacoes_por_tipo(db, post_id)
+    return {"minha_reacao": minha_reacao, "total": sum(reacoes_por_tipo.values()), "reacoes_por_tipo": reacoes_por_tipo}
+
+
+def compartilhar(db: Session, tenant_id: str, ator_id: str | None, post_id: int) -> dict:
+    """Repost simples (sem comentário próprio) — sempre aponta pra
+    RAIZ (`post.post_original_id or post.id`), então compartilhar um
+    repost na prática compartilha o post original, nunca encadeia.
+    Um tenant só compartilha o mesmo post raiz uma vez (evita spam de
+    repost duplicado no feed)."""
+    post = _obter(db, post_id)
+    post_original_id = post.post_original_id or post.id
+    original = _obter(db, post_original_id)
+
+    ja_compartilhado = (
+        db.query(PostRedeSocial).filter_by(tenant_id=tenant_id, post_original_id=post_original_id).one_or_none()
+    )
+    if ja_compartilhado is not None:
+        raise ValidacaoFalhou("Você já compartilhou este post.")
+
+    repost = PostRedeSocial(
+        tenant_id=tenant_id,
+        usuario_autor_id=int(ator_id) if ator_id else None,
+        texto="",
+        post_original_id=post_original_id,
+    )
+    db.add(repost)
+    db.flush()
+
+    auditoria_service.registrar(
+        db,
+        tenant_id,
+        "post_rede_social_compartilhado",
+        "post_rede_social",
+        repost.id,
+        ator_id,
+        {"post_original_id": post_original_id},
+    )
+    if original.tenant_id != tenant_id:
+        perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
+        nome = perfil.nome_exibicao if perfil is not None else tenant_id
+        notificacao_rede_social_service.criar(
+            db, original.tenant_id, "new_share", "post_rede_social", original.id, f"{nome} compartilhou seu post."
+        )
+    db.commit()
+    db.refresh(repost)
+    return _serializar(db, repost, tenant_id_atual=tenant_id)

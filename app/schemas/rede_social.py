@@ -134,7 +134,13 @@ class PostRedeSocialSchema(BaseModel):
     criado_em: datetime
     total_comentarios: int
     total_reacoes: int
-    eu_reagi: bool
+    reacoes_por_tipo: dict[str, int]
+    minha_reacao: str | None
+    total_compartilhamentos: int
+    post_original: "PostRedeSocialSchema | None"
+
+
+PostRedeSocialSchema.model_rebuild()
 
 
 class CriarComentarioRequestSchema(BaseModel):
@@ -151,9 +157,14 @@ class ComentarioPostSchema(BaseModel):
     criado_em: datetime
 
 
+class ReagirRequestSchema(BaseModel):
+    tipo: str = "curtir"
+
+
 class ReacaoPostSchema(BaseModel):
-    reagiu: bool
+    minha_reacao: str | None
     total: int
+    reacoes_por_tipo: dict[str, int]
 
 
 class NotificacaoRedeSocialSchema(BaseModel):

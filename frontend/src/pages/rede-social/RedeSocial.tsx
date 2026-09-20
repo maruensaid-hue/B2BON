@@ -38,6 +38,37 @@ const ROTULO_VERIFICACAO: Record<string, { texto: string; tone: "green" | "amber
   nao_verificada: { texto: "Não verificada", tone: "muted" },
 };
 
+// "Curtir" é o clique rápido; os outros 8 só aparecem no picker
+// expandido (mistura Facebook + LinkedIn, pedido explícito do
+// usuário) — ordem aqui é a ordem de exibição do picker.
+const ORDEM_REACOES = [
+  "curtir", "coracao", "risada", "espanto", "triste", "apoio", "interessante", "oracao", "genial",
+] as const;
+
+const EMOJI_REACAO: Record<string, string> = {
+  curtir: "👍",
+  coracao: "❤️",
+  risada: "😂",
+  espanto: "😮",
+  triste: "😢",
+  apoio: "🤝",
+  interessante: "🤔",
+  oracao: "🙏",
+  genial: "💡",
+};
+
+const ROTULO_REACAO: Record<string, string> = {
+  curtir: "Curtir",
+  coracao: "Amei",
+  risada: "Haha",
+  espanto: "Uau",
+  triste: "Triste",
+  apoio: "Apoio",
+  interessante: "Interessante",
+  oracao: "Obrigado",
+  genial: "Genial",
+};
+
 function listaParaTexto(valores: string[]): string {
   return valores.join(", ");
 }
@@ -80,7 +111,10 @@ interface PostRedeSocial {
   criado_em: string;
   total_comentarios: number;
   total_reacoes: number;
-  eu_reagi: boolean;
+  reacoes_por_tipo: Record<string, number>;
+  minha_reacao: string | null;
+  total_compartilhamentos: number;
+  post_original: PostRedeSocial | null;
 }
 
 interface ComentarioPost {
@@ -157,6 +191,8 @@ export function RedeSocial() {
   const [novoComentarioTexto, setNovoComentarioTexto] = useState<Record<number, string>>({});
   const [enviandoComentarioId, setEnviandoComentarioId] = useState<number | null>(null);
   const [reagindoId, setReagindoId] = useState<number | null>(null);
+  const [pickerReacaoAbertoId, setPickerReacaoAbertoId] = useState<number | null>(null);
+  const [compartilhandoId, setCompartilhandoId] = useState<number | null>(null);
   const [intents, setIntents] = useState<Intent[]>([]);
   const [publicandoIntent, setPublicandoIntent] = useState(false);
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
@@ -233,7 +269,9 @@ export function RedeSocial() {
   // post pode ter várias, carrossel).
   useEffect(() => {
     let cancelado = false;
-    const todasMidias = posts.flatMap((post) => post.midias);
+    // Um repost não tem mídia própria — a mídia real vive no
+    // `post_original` embutido, por isso inclui os dois níveis aqui.
+    const todasMidias = posts.flatMap((post) => [...post.midias, ...(post.post_original?.midias ?? [])]);
     const paraBuscar = todasMidias.filter((midia) => !midiaUrls[midia.id]);
     if (paraBuscar.length === 0) return;
     (async () => {
@@ -421,20 +459,53 @@ export function RedeSocial() {
     });
   }
 
-  async function reagirPost(postId: number) {
+  // Atualiza tanto um post "de primeiro nível" quanto o original
+  // embutido num repost — reagir/comentar num repost sempre alvo o
+  // post original (mesmo id retornado pela API), então o estado local
+  // precisa achar onde esse id vive na árvore de 1 nível do feed.
+  function atualizarPostNoEstado(postId: number, patch: Partial<PostRedeSocial>) {
+    setPosts((atual) =>
+      atual.map((post) => {
+        if (post.id === postId) return { ...post, ...patch };
+        if (post.post_original && post.post_original.id === postId) {
+          return { ...post, post_original: { ...post.post_original, ...patch } };
+        }
+        return post;
+      }),
+    );
+  }
+
+  async function reagirPost(postId: number, tipo: string = "curtir") {
     if (reagindoId !== null) return;
     setReagindoId(postId);
+    setPickerReacaoAbertoId(null);
     try {
-      const resultado = await api.post<{ reagiu: boolean; total: number }>(`/rede-social/posts/${postId}/reagir`);
-      setPosts((atual) =>
-        atual.map((post) =>
-          post.id === postId ? { ...post, eu_reagi: resultado.reagiu, total_reacoes: resultado.total } : post,
-        ),
+      const resultado = await api.post<{ minha_reacao: string | null; total: number; reacoes_por_tipo: Record<string, number> }>(
+        `/rede-social/posts/${postId}/reagir`,
+        { tipo },
       );
+      atualizarPostNoEstado(postId, {
+        minha_reacao: resultado.minha_reacao,
+        total_reacoes: resultado.total,
+        reacoes_por_tipo: resultado.reacoes_por_tipo,
+      });
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível reagir a este post.");
     } finally {
       setReagindoId(null);
+    }
+  }
+
+  async function compartilharPost(postId: number) {
+    if (compartilhandoId !== null) return;
+    setCompartilhandoId(postId);
+    try {
+      await api.post(`/rede-social/posts/${postId}/compartilhar`);
+      await carregarTudo();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível compartilhar este post.");
+    } finally {
+      setCompartilhandoId(null);
     }
   }
 
@@ -572,6 +643,185 @@ export function RedeSocial() {
     return `${window.location.origin}/convite-vitrine/${codigo}`;
   }
 
+  // Um repost (post.post_original != null) nunca tem mídia/ação
+  // próprias — é só o banner "X compartilhou" em volta do post
+  // original embutido (renderPost recursivo, embutido=true, mesmo
+  // espírito do "Repostar" do LinkedIn: reagir/comentar/compartilhar
+  // dentro do embed sempre alvo o post original, nunca o wrapper).
+  function renderPost(post: PostRedeSocial, embutido: boolean) {
+    const reacaoAtiva = post.minha_reacao;
+    return (
+      <div
+        key={post.id}
+        className={
+          embutido
+            ? "rounded-lg border border-border/60 bg-black/[0.02] p-2 text-[12px]"
+            : "rounded-lg border border-border p-3 text-[12px]"
+        }
+      >
+        {post.post_original ? (
+          <>
+            <div className="mb-2 flex items-center justify-between text-[11px] text-muted">
+              <span>
+                🔁 <span className="font-semibold text-text">{post.empresa_nome}</span> compartilhou ·{" "}
+                {new Date(post.criado_em).toLocaleString("pt-BR")}
+              </span>
+              {post.tenant_id === usuario?.tenant_id && (
+                <Button size="sm" variant="ghost" onClick={() => excluirPost(post.id)}>
+                  Excluir
+                </Button>
+              )}
+            </div>
+            {renderPost(post.post_original, true)}
+          </>
+        ) : (
+          <>
+            <div className="mb-1 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {post.empresa_logo_url && (
+                  <img src={post.empresa_logo_url} alt="" className="h-6 w-6 rounded object-cover" />
+                )}
+                <span className="font-semibold text-text">{post.empresa_nome}</span>
+                <span className="text-muted">· {post.autor_nome}</span>
+              </div>
+              <div className="flex items-center gap-2 text-muted">
+                <span>{new Date(post.criado_em).toLocaleString("pt-BR")}</span>
+                {post.tenant_id === usuario?.tenant_id && (
+                  <Button size="sm" variant="ghost" onClick={() => excluirPost(post.id)}>
+                    Excluir
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="text-text">{post.texto}</div>
+            {post.midias.length > 0 && (
+              <div className="relative mt-2">
+                {post.midias.map((midia, indice) => {
+                  if ((carrosselIndice[post.id] ?? 0) !== indice || !midiaUrls[midia.id]) return null;
+                  return midia.tipo === "video" ? (
+                    <video key={midia.id} src={midiaUrls[midia.id]} controls className="max-h-64 w-full rounded-lg" />
+                  ) : (
+                    <img
+                      key={midia.id}
+                      src={midiaUrls[midia.id]}
+                      alt=""
+                      className="max-h-64 w-full rounded-lg object-cover"
+                    />
+                  );
+                })}
+                {post.midias.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => moverCarrossel(post.id, post.midias.length, -1)}
+                      className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-2 py-1 text-white"
+                      aria-label="Foto anterior"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moverCarrossel(post.id, post.midias.length, 1)}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-2 py-1 text-white"
+                      aria-label="Próxima foto"
+                    >
+                      ›
+                    </button>
+                    <div className="mt-1 text-center text-[11px] text-muted">
+                      {(carrosselIndice[post.id] ?? 0) + 1} / {post.midias.length}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            {post.midias.length === 0 && post.imagem_url && (
+              <img src={post.imagem_url} alt="" className="mt-2 max-h-48 w-full rounded-lg object-cover" />
+            )}
+            {post.link_url && (
+              <a href={post.link_url} target="_blank" rel="noreferrer" className="mt-1 block text-cyan">
+                {post.link_url}
+              </a>
+            )}
+            <div className="mt-2 flex items-center gap-3 text-muted">
+              <div className="relative">
+                <span>
+                  <button
+                    type="button"
+                    onClick={() => reagirPost(post.id, "curtir")}
+                    disabled={reagindoId === post.id}
+                    className={reacaoAtiva ? "font-semibold text-cyan" : ""}
+                  >
+                    {reacaoAtiva ? EMOJI_REACAO[reacaoAtiva] : "👍"}{" "}
+                    {reacaoAtiva ? ROTULO_REACAO[reacaoAtiva] : "Reagir"}{" "}
+                    {post.total_reacoes > 0 && `(${post.total_reacoes})`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPickerReacaoAbertoId(pickerReacaoAbertoId === post.id ? null : post.id)}
+                    className="ml-1"
+                    aria-label="Mais opções de reação"
+                  >
+                    ▾
+                  </button>
+                </span>
+                {pickerReacaoAbertoId === post.id && (
+                  <div className="absolute bottom-full left-0 z-10 mb-1 flex gap-0.5 rounded-lg border border-border bg-bg p-1 shadow-lg">
+                    {ORDEM_REACOES.map((tipo) => (
+                      <button
+                        key={tipo}
+                        type="button"
+                        title={ROTULO_REACAO[tipo]}
+                        onClick={() => reagirPost(post.id, tipo)}
+                        className="rounded px-1 text-[16px] hover:bg-border/40"
+                      >
+                        {EMOJI_REACAO[tipo]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button type="button" onClick={() => alternarComentarios(post.id)}>
+                💬 Comentários {post.total_comentarios > 0 && `(${post.total_comentarios})`}
+              </button>
+              <button type="button" onClick={() => compartilharPost(post.id)} disabled={compartilhandoId === post.id}>
+                🔁 Compartilhar {post.total_compartilhamentos > 0 && `(${post.total_compartilhamentos})`}
+              </button>
+            </div>
+            {comentariosAbertos[post.id] && (
+              <div className="mt-2 flex flex-col gap-2 border-t border-border pt-2">
+                {(comentariosPorPost[post.id] ?? []).map((comentario) => (
+                  <div key={comentario.id} className="text-[11px]">
+                    <span className="font-semibold text-text">{comentario.empresa_nome}</span>
+                    <span className="text-muted"> · {comentario.autor_nome}: </span>
+                    <span className="text-text">{comentario.texto}</span>
+                  </div>
+                ))}
+                {(comentariosPorPost[post.id] ?? []).length === 0 && (
+                  <div className="text-[11px] text-muted">Nenhum comentário ainda.</div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Escreva um comentário..."
+                    value={novoComentarioTexto[post.id] ?? ""}
+                    onChange={(event) =>
+                      setNovoComentarioTexto((atual) => ({ ...atual, [post.id]: event.target.value }))
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") enviarComentario(post.id);
+                    }}
+                  />
+                  <Button size="sm" onClick={() => enviarComentario(post.id)} disabled={enviandoComentarioId === post.id}>
+                    Enviar
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
@@ -707,127 +957,7 @@ export function RedeSocial() {
           </div>
         </form>
         <div className="flex flex-col gap-3">
-          {posts.map((post) => (
-            <div key={post.id} className="rounded-lg border border-border p-3 text-[12px]">
-              <div className="mb-1 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {post.empresa_logo_url && (
-                    <img src={post.empresa_logo_url} alt="" className="h-6 w-6 rounded object-cover" />
-                  )}
-                  <span className="font-semibold text-text">{post.empresa_nome}</span>
-                  <span className="text-muted">· {post.autor_nome}</span>
-                </div>
-                <div className="flex items-center gap-2 text-muted">
-                  <span>{new Date(post.criado_em).toLocaleString("pt-BR")}</span>
-                  {post.tenant_id === usuario?.tenant_id && (
-                    <Button size="sm" variant="ghost" onClick={() => excluirPost(post.id)}>
-                      Excluir
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <div className="text-text">{post.texto}</div>
-              {post.midias.length > 0 && (
-                <div className="relative mt-2">
-                  {post.midias.map((midia, indice) => {
-                    if ((carrosselIndice[post.id] ?? 0) !== indice || !midiaUrls[midia.id]) return null;
-                    return midia.tipo === "video" ? (
-                      <video
-                        key={midia.id}
-                        src={midiaUrls[midia.id]}
-                        controls
-                        className="max-h-64 w-full rounded-lg"
-                      />
-                    ) : (
-                      <img
-                        key={midia.id}
-                        src={midiaUrls[midia.id]}
-                        alt=""
-                        className="max-h-64 w-full rounded-lg object-cover"
-                      />
-                    );
-                  })}
-                  {post.midias.length > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => moverCarrossel(post.id, post.midias.length, -1)}
-                        className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-2 py-1 text-white"
-                        aria-label="Foto anterior"
-                      >
-                        ‹
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => moverCarrossel(post.id, post.midias.length, 1)}
-                        className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-2 py-1 text-white"
-                        aria-label="Próxima foto"
-                      >
-                        ›
-                      </button>
-                      <div className="mt-1 text-center text-[11px] text-muted">
-                        {(carrosselIndice[post.id] ?? 0) + 1} / {post.midias.length}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-              {post.midias.length === 0 && post.imagem_url && (
-                <img src={post.imagem_url} alt="" className="mt-2 max-h-48 w-full rounded-lg object-cover" />
-              )}
-              {post.link_url && (
-                <a href={post.link_url} target="_blank" rel="noreferrer" className="mt-1 block text-cyan">
-                  {post.link_url}
-                </a>
-              )}
-              <div className="mt-2 flex items-center gap-3 text-muted">
-                <button
-                  type="button"
-                  onClick={() => reagirPost(post.id)}
-                  disabled={reagindoId === post.id}
-                  className={post.eu_reagi ? "font-semibold text-cyan" : ""}
-                >
-                  👍 {post.eu_reagi ? "Você reagiu" : "Reagir"} {post.total_reacoes > 0 && `(${post.total_reacoes})`}
-                </button>
-                <button type="button" onClick={() => alternarComentarios(post.id)}>
-                  💬 Comentários {post.total_comentarios > 0 && `(${post.total_comentarios})`}
-                </button>
-              </div>
-              {comentariosAbertos[post.id] && (
-                <div className="mt-2 flex flex-col gap-2 border-t border-border pt-2">
-                  {(comentariosPorPost[post.id] ?? []).map((comentario) => (
-                    <div key={comentario.id} className="text-[11px]">
-                      <span className="font-semibold text-text">{comentario.empresa_nome}</span>
-                      <span className="text-muted"> · {comentario.autor_nome}: </span>
-                      <span className="text-text">{comentario.texto}</span>
-                    </div>
-                  ))}
-                  {(comentariosPorPost[post.id] ?? []).length === 0 && (
-                    <div className="text-[11px] text-muted">Nenhum comentário ainda.</div>
-                  )}
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Escreva um comentário..."
-                      value={novoComentarioTexto[post.id] ?? ""}
-                      onChange={(event) =>
-                        setNovoComentarioTexto((atual) => ({ ...atual, [post.id]: event.target.value }))
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") enviarComentario(post.id);
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => enviarComentario(post.id)}
-                      disabled={enviandoComentarioId === post.id}
-                    >
-                      Enviar
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+          {posts.map((post) => renderPost(post, false))}
           {posts.length === 0 && <div className="text-[12px] text-muted">Nenhum post publicado na rede ainda.</div>}
         </div>
       </Card>

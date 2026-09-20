@@ -23,6 +23,7 @@ from app.schemas.rede_social import (
     PerfilEmpresaSchema,
     PostRedeSocialSchema,
     ReacaoPostSchema,
+    ReagirRequestSchema,
     RelacionamentoEmpresarialSchema,
     ResponderConexaoRequestSchema,
     SalaCompraSchema,
@@ -333,12 +334,27 @@ def listar_comentarios(
 @router.post("/posts/{post_id}/reagir", response_model=ReacaoPostSchema)
 def reagir_post(
     post_id: int,
+    dados: ReagirRequestSchema = ReagirRequestSchema(),
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> ReacaoPostSchema:
-    """Reação toggle em post (master prompt §45, Fase 2C)."""
-    return post_rede_social_service.reagir(db, tenant_id, ator_id, post_id)
+    """Reação em post (master prompt §45, Fase 2C; 9 tipos desde
+    2026-09-20 — curtir + 8 emojis) — troca a reação existente do
+    tenant, não soma."""
+    return post_rede_social_service.reagir(db, tenant_id, ator_id, post_id, tipo=dados.tipo)
+
+
+@router.post("/posts/{post_id}/compartilhar", response_model=PostRedeSocialSchema, status_code=201)
+def compartilhar_post(
+    post_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> PostRedeSocialSchema:
+    """Repost simples no feed do próprio tenant (2026-09-20) — sempre
+    aponta pra raiz, um tenant só compartilha o mesmo post uma vez."""
+    return post_rede_social_service.compartilhar(db, tenant_id, ator_id, post_id)
 
 
 @router.get("/notificacoes", response_model=list[NotificacaoRedeSocialSchema])

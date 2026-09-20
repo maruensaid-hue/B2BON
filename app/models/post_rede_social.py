@@ -12,7 +12,12 @@ class PostRedeSocial(Base):
     escopo). Anexo real de foto/vídeo vive em `MidiaPost` (1:N —
     carrossel de fotos, 2026-09-20); `texto` funciona como legenda
     única do post, compartilhada por todas as mídias (decisão de
-    escopo do carrossel)."""
+    escopo do carrossel). `post_original_id` (2026-09-20): quando
+    presente, esta linha é um "compartilhamento" (repost, sem mídia/
+    texto próprios de verdade — `texto` fica vazio) apontando pro post
+    raiz; `post_rede_social_service.compartilhar` sempre resolve pra
+    raiz (nunca aponta pra outro repost), então isso nunca encadeia
+    mais de 1 nível."""
 
     __tablename__ = "post_rede_social"
 
@@ -22,4 +27,5 @@ class PostRedeSocial(Base):
     texto: Mapped[str] = mapped_column(String)
     imagem_url: Mapped[str | None] = mapped_column(String, nullable=True)
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    post_original_id: Mapped[int | None] = mapped_column(ForeignKey("post_rede_social.id"), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

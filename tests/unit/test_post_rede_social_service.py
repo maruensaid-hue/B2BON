@@ -148,10 +148,29 @@ def test_reagir_toggle_cria_e_remove(db_session):
     post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post", None, None)
 
     resultado_1 = post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"])
-    assert resultado_1 == {"reagiu": True, "total": 1}
+    assert resultado_1 == {"minha_reacao": "curtir", "total": 1, "reacoes_por_tipo": {"curtir": 1}}
 
     resultado_2 = post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"])
-    assert resultado_2 == {"reagiu": False, "total": 0}
+    assert resultado_2 == {"minha_reacao": None, "total": 0, "reacoes_por_tipo": {}}
+
+
+def test_reagir_com_tipo_diferente_troca_em_vez_de_somar(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A)
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post", None, None)
+
+    post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"], tipo="curtir")
+    resultado = post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"], tipo="coracao")
+
+    assert resultado == {"minha_reacao": "coracao", "total": 1, "reacoes_por_tipo": {"coracao": 1}}
+
+
+def test_reagir_tipo_invalido_levanta_validacao_falhou(db_session):
+    autor = _criar_usuario(db_session, TENANT_A)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor.id), "Post", None, None)
+
+    with pytest.raises(ValidacaoFalhou):
+        post_rede_social_service.reagir(db_session, TENANT_A, str(autor.id), post["id"], tipo="furioso")
 
 
 def test_reagir_uma_reacao_por_tenant(db_session):
@@ -159,10 +178,10 @@ def test_reagir_uma_reacao_por_tenant(db_session):
     autor_b = _criar_usuario(db_session, TENANT_B)
     post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post", None, None)
 
-    post_rede_social_service.reagir(db_session, TENANT_A, str(autor_a.id), post["id"])
-    resultado = post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"])
+    post_rede_social_service.reagir(db_session, TENANT_A, str(autor_a.id), post["id"], tipo="genial")
+    resultado = post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"], tipo="apoio")
 
-    assert resultado == {"reagiu": True, "total": 2}
+    assert resultado == {"minha_reacao": "apoio", "total": 2, "reacoes_por_tipo": {"genial": 1, "apoio": 1}}
 
 
 def test_listar_feed_traz_contagens_e_eu_reagi(db_session):
@@ -177,8 +196,8 @@ def test_listar_feed_traz_contagens_e_eu_reagi(db_session):
 
     assert feed_visto_por_b[0]["total_comentarios"] == 1
     assert feed_visto_por_b[0]["total_reacoes"] == 1
-    assert feed_visto_por_b[0]["eu_reagi"] is True
-    assert feed_visto_por_a[0]["eu_reagi"] is False
+    assert feed_visto_por_b[0]["minha_reacao"] == "curtir"
+    assert feed_visto_por_a[0]["minha_reacao"] is None
 
 
 def test_criar_post_com_foto_anexada_comprime_e_serializa_midia(db_session):
@@ -271,3 +290,54 @@ def test_obter_midia_levanta_nao_encontrado_quando_post_nao_tem_midia(db_session
 
     with pytest.raises(NaoEncontrado):
         post_rede_social_service.obter_midia(db_session, post["id"], 1)
+
+
+def test_compartilhar_cria_repost_apontando_pro_original(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A)
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    original = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post original", None, None)
+
+    repost = post_rede_social_service.compartilhar(db_session, TENANT_B, str(autor_b.id), original["id"])
+
+    assert repost["tenant_id"] == TENANT_B
+    assert repost["texto"] == ""
+    assert repost["post_original"]["id"] == original["id"]
+    assert repost["post_original"]["texto"] == "Post original"
+
+    feed = post_rede_social_service.listar_feed(db_session)
+    assert len(feed) == 2
+    original_no_feed = next(item for item in feed if item["id"] == original["id"])
+    assert original_no_feed["total_compartilhamentos"] == 1
+
+
+def test_compartilhar_duas_vezes_pelo_mesmo_tenant_levanta_erro(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A)
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    original = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post original", None, None)
+    post_rede_social_service.compartilhar(db_session, TENANT_B, str(autor_b.id), original["id"])
+
+    with pytest.raises(ValidacaoFalhou):
+        post_rede_social_service.compartilhar(db_session, TENANT_B, str(autor_b.id), original["id"])
+
+
+def test_compartilhar_um_repost_aponta_sempre_pra_raiz(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A)
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    autor_c = _criar_usuario(db_session, "tenant-c")
+    original = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post original", None, None)
+    repost_b = post_rede_social_service.compartilhar(db_session, TENANT_B, str(autor_b.id), original["id"])
+
+    repost_c = post_rede_social_service.compartilhar(db_session, "tenant-c", str(autor_c.id), repost_b["id"])
+
+    assert repost_c["post_original"]["id"] == original["id"]
+
+
+def test_excluir_post_original_remove_reposts_junto(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A)
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    original = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post original", None, None)
+    post_rede_social_service.compartilhar(db_session, TENANT_B, str(autor_b.id), original["id"])
+
+    post_rede_social_service.excluir(db_session, TENANT_A, str(autor_a.id), original["id"])
+
+    assert post_rede_social_service.listar_feed(db_session) == []
