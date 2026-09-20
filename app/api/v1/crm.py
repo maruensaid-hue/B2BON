@@ -31,6 +31,7 @@ from app.schemas.crm import (
     NegocioSchema,
     PropostaNegocioSchema,
     RegistrarAtividadeRequestSchema,
+    ReordenarEstagiosRequestSchema,
 )
 from app.schemas.template_proposta import GerarPropostaRequestSchema
 from app.services import crm_service, proposta_service, template_proposta_service
@@ -99,6 +100,39 @@ def definir_estagio(
     restrito a admin/super_admin (antes desta entrega, qualquer
     usuário autenticado do tenant conseguia chamar esta rota)."""
     return crm_service.definir_estagio(db, tenant_id, ator_id, estagio_id, dados.nome, dados.ordem, dados.tipo)
+
+
+@router.delete(
+    "/estagios/{estagio_id}",
+    status_code=204,
+    dependencies=[Depends(exigir_papel("super_admin", "admin"))],
+)
+def excluir_estagio(
+    estagio_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """"Editar Funil" — exclui uma fila, restrito a admin/super_admin.
+    Recusa se houver negócio nela ou se for a última fila "aberto"."""
+    crm_service.excluir_estagio(db, tenant_id, ator_id, estagio_id)
+
+
+@router.post(
+    "/estagios/reordenar",
+    response_model=list[EstagioFunilSchema],
+    dependencies=[Depends(exigir_papel("super_admin", "admin"))],
+)
+def reordenar_estagios(
+    dados: ReordenarEstagiosRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> list[EstagioFunilSchema]:
+    """"Editar Funil" — reordena as filas do funil, restrito a
+    admin/super_admin. `ordem_ids` precisa conter exatamente as filas
+    atuais do tenant, na nova ordem desejada."""
+    return crm_service.reordenar_estagios(db, tenant_id, ator_id, dados.ordem_ids)
 
 
 @router.get("/negocios", response_model=list[NegocioSchema])

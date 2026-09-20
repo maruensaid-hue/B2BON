@@ -126,6 +126,64 @@ def definir_estagio(
     return estagio
 
 
+def excluir_estagio(db: Session, tenant_id: str, ator_id: str | None, estagio_id: int) -> None:
+    """"Editar Funil" — exclui uma fila, restrito a admin/super_admin
+    (rota). Recusa se houver negócio nela (mesmo espírito de exclusão de
+    conta: nunca some com dado do usuário por baixo dos panos) e recusa
+    se for a última fila do tipo "aberto" (invariante usado como
+    fallback em 3+ pontos — criar_negocio/mover_estagio/provider do
+    PREDATOR — sem isso um negócio novo cairia numa fila ganho/perdido
+    por acidente)."""
+    estagio = db.query(EstagioFunil).filter_by(id=estagio_id, tenant_id=tenant_id).one_or_none()
+    if estagio is None:
+        raise NaoEncontrado(f"Estágio {estagio_id} não encontrado")
+
+    tem_negocio = db.query(Negocio).filter_by(tenant_id=tenant_id, estagio_id=estagio_id).first() is not None
+    if tem_negocio:
+        raise RegraNegocioViolada("Esta fila tem negócios nela — mova-os para outra fila antes de excluir.")
+
+    if estagio.tipo == "aberto":
+        outras_abertas = (
+            db.query(EstagioFunil)
+            .filter(EstagioFunil.tenant_id == tenant_id, EstagioFunil.tipo == "aberto", EstagioFunil.id != estagio_id)
+            .first()
+        )
+        if outras_abertas is None:
+            raise RegraNegocioViolada("O funil precisa de pelo menos uma fila do tipo 'aberto'.")
+
+    db.delete(estagio)
+    auditoria_service.registrar(db, tenant_id, "estagio_funil_excluido", "estagio_funil", estagio_id, ator_id, {"nome": estagio.nome})
+    db.commit()
+
+
+def reordenar_estagios(db: Session, tenant_id: str, ator_id: str | None, ordem_ids: list[int]) -> list[EstagioFunil]:
+    """"Editar Funil" — reordena as filas do funil, restrito a
+    admin/super_admin (rota). `ordem_ids` precisa conter exatamente os
+    IDs de todas as filas atuais do tenant, na nova ordem desejada.
+
+    UniqueConstraint(tenant_id, ordem) do modelo exige duas passagens:
+    atribuir valores temporários (fora da faixa 1..N) primeiro evita
+    colisão ao trocar, por exemplo, as ordens 2 e 3 dentro da mesma
+    transação.
+    """
+    estagios = db.query(EstagioFunil).filter_by(tenant_id=tenant_id).all()
+    por_id = {e.id: e for e in estagios}
+    if set(ordem_ids) != set(por_id.keys()) or len(ordem_ids) != len(estagios):
+        raise ValidacaoFalhou("A nova ordem precisa conter exatamente as filas atuais do funil, sem repetir nem faltar nenhuma.")
+
+    offset = len(estagios) + 1000
+    for indice, estagio_id in enumerate(ordem_ids):
+        por_id[estagio_id].ordem = offset + indice
+    db.flush()
+    for indice, estagio_id in enumerate(ordem_ids):
+        por_id[estagio_id].ordem = indice + 1
+    db.flush()
+
+    auditoria_service.registrar(db, tenant_id, "estagio_funil_reordenado", "estagio_funil", ordem_ids[0], ator_id, {"ordem_ids": ordem_ids})
+    db.commit()
+    return db.query(EstagioFunil).filter_by(tenant_id=tenant_id).order_by(EstagioFunil.ordem).all()
+
+
 def obter_negocio(db: Session, tenant_id: str, negocio_id: int) -> Negocio:
     negocio = db.query(Negocio).filter_by(id=negocio_id, tenant_id=tenant_id).one_or_none()
     if negocio is None:

@@ -64,6 +64,57 @@ def test_criar_e_definir_estagio_bloqueado_para_papel_user(client, criar_usuario
     assert resposta_definir.status_code == 403
 
 
+def test_excluir_estagio_via_api(client):
+    novo = client.post("/api/v1/crm/estagios", json={"nome": "Fila Temporária", "tipo": "aberto"}).json()
+
+    resposta = client.delete(f"/api/v1/crm/estagios/{novo['id']}")
+
+    assert resposta.status_code == 204
+    listagem = client.get("/api/v1/crm/estagios").json()
+    assert novo["id"] not in {e["id"] for e in listagem}
+
+
+def test_excluir_estagio_com_negocio_retorna_409(client, criar_conta_com_decisor):
+    conta, decisor = criar_conta_com_decisor()
+    estagio = client.get("/api/v1/crm/estagios").json()[0]
+    client.post(
+        "/api/v1/crm/negocios",
+        json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio API", "estagio_id": estagio["id"]},
+    )
+
+    resposta = client.delete(f"/api/v1/crm/estagios/{estagio['id']}")
+
+    assert resposta.status_code == 409
+
+
+def test_excluir_estagio_bloqueado_para_papel_user(client, criar_usuario_autenticado):
+    headers_user = criar_usuario_autenticado(TENANT_ID, papel="user", email="user-excluir-estagio@teste.com.br")
+    estagio = client.get("/api/v1/crm/estagios").json()[0]
+
+    resposta = client.delete(f"/api/v1/crm/estagios/{estagio['id']}", headers=headers_user)
+
+    assert resposta.status_code == 403
+
+
+def test_reordenar_estagios_via_api(client):
+    estagios = client.get("/api/v1/crm/estagios").json()
+    nova_ordem = list(reversed([e["id"] for e in estagios]))
+
+    resposta = client.post("/api/v1/crm/estagios/reordenar", json={"ordem_ids": nova_ordem})
+
+    assert resposta.status_code == 200
+    assert [e["id"] for e in resposta.json()] == nova_ordem
+
+
+def test_reordenar_estagios_conjunto_incompleto_retorna_422(client):
+    estagios = client.get("/api/v1/crm/estagios").json()
+    ids_parciais = [e["id"] for e in estagios[:-1]]
+
+    resposta = client.post("/api/v1/crm/estagios/reordenar", json={"ordem_ids": ids_parciais})
+
+    assert resposta.status_code == 422
+
+
 def test_criar_e_listar_negocio_via_api(client, criar_conta_com_decisor):
     conta, decisor = criar_conta_com_decisor()
 

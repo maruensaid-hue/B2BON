@@ -24,6 +24,10 @@ class CriarEstagioRequestSchema(BaseModel):
     tipo: str = "aberto"
 
 
+class ReordenarEstagiosRequestSchema(BaseModel):
+    ordem_ids: list[int]
+
+
 class NegocioSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

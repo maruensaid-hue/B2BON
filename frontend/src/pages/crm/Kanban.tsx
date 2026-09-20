@@ -123,6 +123,8 @@ export function Kanban() {
   const [novoEstagioTipo, setNovoEstagioTipo] = useState<"aberto" | "ganho" | "perdido">("aberto");
   const [salvandoEstagio, setSalvandoEstagio] = useState(false);
   const [erroFunil, setErroFunil] = useState<string | null>(null);
+  const [estagioParaExcluirId, setEstagioParaExcluirId] = useState<number | null>(null);
+  const [reordenandoEstagioId, setReordenandoEstagioId] = useState<number | null>(null);
 
   const podeEditarFunil = usuario?.papel === "admin" || usuario?.papel === "super_admin";
 
@@ -521,6 +523,40 @@ export function Kanban() {
       setErroFunil(error instanceof ApiError ? error.message : "Não foi possível criar a fila.");
     } finally {
       setSalvandoEstagio(false);
+    }
+  }
+
+  async function excluirEstagio(estagioId: number) {
+    setSalvandoEstagio(true);
+    setErroFunil(null);
+    try {
+      await api.delete(`/crm/estagios/${estagioId}`);
+      setEstagioParaExcluirId(null);
+      await carregar();
+    } catch (error) {
+      setErroFunil(error instanceof ApiError ? error.message : "Não foi possível excluir a fila.");
+    } finally {
+      setSalvandoEstagio(false);
+    }
+  }
+
+  async function moverEstagioDeOrdem(estagioId: number, direcao: "cima" | "baixo") {
+    const indice = estagiosUnicos.findIndex((e) => e.id === estagioId);
+    const indiceAlvo = direcao === "cima" ? indice - 1 : indice + 1;
+    if (indice === -1 || indiceAlvo < 0 || indiceAlvo >= estagiosUnicos.length) return;
+
+    const novaOrdem = estagiosUnicos.map((e) => e.id);
+    [novaOrdem[indice], novaOrdem[indiceAlvo]] = [novaOrdem[indiceAlvo], novaOrdem[indice]];
+
+    setReordenandoEstagioId(estagioId);
+    setErroFunil(null);
+    try {
+      await api.post("/crm/estagios/reordenar", { ordem_ids: novaOrdem });
+      await carregar();
+    } catch (error) {
+      setErroFunil(error instanceof ApiError ? error.message : "Não foi possível reordenar as filas.");
+    } finally {
+      setReordenandoEstagioId(null);
     }
   }
 
@@ -960,13 +996,14 @@ export function Kanban() {
         onClose={() => {
           setModalEditarFunilAberto(false);
           setEstagioRenomeandoId(null);
+          setEstagioParaExcluirId(null);
           setErroFunil(null);
         }}
       >
         <div className="flex flex-col gap-3">
           {erroFunil && <div className="text-[12px] text-red">{erroFunil}</div>}
           <div className="flex flex-col gap-2">
-            {estagiosUnicos.map((estagio) => (
+            {estagiosUnicos.map((estagio, indice) => (
               <div key={estagio.id} className="flex items-center gap-2">
                 {estagioRenomeandoId === estagio.id ? (
                   <>
@@ -989,6 +1026,26 @@ export function Kanban() {
                   </>
                 ) : (
                   <>
+                    <div className="flex flex-col">
+                      <button
+                        type="button"
+                        className="leading-none text-muted hover:text-cyan disabled:opacity-30"
+                        onClick={() => moverEstagioDeOrdem(estagio.id, "cima")}
+                        disabled={indice === 0 || reordenandoEstagioId !== null}
+                        title="Mover para cima"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        className="leading-none text-muted hover:text-cyan disabled:opacity-30"
+                        onClick={() => moverEstagioDeOrdem(estagio.id, "baixo")}
+                        disabled={indice === estagiosUnicos.length - 1 || reordenandoEstagioId !== null}
+                        title="Mover para baixo"
+                      >
+                        ▼
+                      </button>
+                    </div>
                     <span className="flex-1 text-[12px] text-text">{estagio.nome}</span>
                     <Badge tone={estagio.tipo === "ganho" ? "green" : estagio.tipo === "perdido" ? "red" : "muted"}>
                       {estagio.tipo}
@@ -996,6 +1053,31 @@ export function Kanban() {
                     <Button size="sm" variant="ghost" onClick={() => iniciarRenomeacaoEstagio(estagio)}>
                       Renomear
                     </Button>
+                    {estagioParaExcluirId === estagio.id ? (
+                      <div className="flex items-center gap-1 text-[10px]">
+                        <span className="text-muted">Excluir?</span>
+                        <button
+                          type="button"
+                          className="text-red hover:underline disabled:opacity-50"
+                          onClick={() => excluirEstagio(estagio.id)}
+                          disabled={salvandoEstagio}
+                        >
+                          Sim
+                        </button>
+                        <button type="button" className="text-muted hover:underline" onClick={() => setEstagioParaExcluirId(null)}>
+                          Não
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-[11px] text-muted hover:text-red"
+                        onClick={() => setEstagioParaExcluirId(estagio.id)}
+                        title="Excluir fila"
+                      >
+                        🗑
+                      </button>
+                    )}
                   </>
                 )}
               </div>

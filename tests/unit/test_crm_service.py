@@ -9,7 +9,7 @@ from app.models.estagio_funil import EstagioFunil
 from app.models.icp import ICP
 from app.models.usuario import Usuario
 from app.services import atividade_service, crm_service
-from app.services.errors import NaoEncontrado, ValidacaoFalhou
+from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 TENANT_ID = "tenant-teste"
 
@@ -131,6 +131,72 @@ def test_definir_estagio_renomeia(db_session):
     atualizado = crm_service.definir_estagio(db_session, TENANT_ID, None, descoberta.id, nome="Prospecção")
 
     assert atualizado.nome == "Prospecção"
+
+
+def test_excluir_estagio_remove_fila_vazia(db_session):
+    estagios = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)
+    proposta = next(e for e in estagios if e.nome == "Proposta")
+
+    crm_service.excluir_estagio(db_session, TENANT_ID, None, proposta.id)
+
+    restantes = crm_service.listar_estagios(db_session, TENANT_ID)
+    assert len(restantes) == 4
+    assert proposta.id not in {e.id for e in restantes}
+
+
+def test_excluir_estagio_bloqueia_com_negocio_nela(db_session):
+    estagios = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)
+    descoberta = next(e for e in estagios if e.nome == "Descoberta")
+    conta = _criar_conta(db_session)
+    decisor = _criar_decisor(db_session, conta)
+    crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "Negócio Teste", estagio_id=descoberta.id)
+
+    with pytest.raises(RegraNegocioViolada):
+        crm_service.excluir_estagio(db_session, TENANT_ID, None, descoberta.id)
+
+
+def test_excluir_estagio_bloqueia_ultima_fila_aberta(db_session):
+    estagios = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)
+    abertas = [e for e in estagios if e.tipo == "aberto"]
+    # Remove todas menos uma — a última deve recusar.
+    for estagio in abertas[:-1]:
+        crm_service.excluir_estagio(db_session, TENANT_ID, None, estagio.id)
+
+    with pytest.raises(RegraNegocioViolada):
+        crm_service.excluir_estagio(db_session, TENANT_ID, None, abertas[-1].id)
+
+
+def test_excluir_estagio_inexistente_falha(db_session):
+    with pytest.raises(NaoEncontrado):
+        crm_service.excluir_estagio(db_session, TENANT_ID, None, 999999)
+
+
+def test_reordenar_estagios_aplica_nova_ordem(db_session):
+    estagios = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)
+    ids_atuais = [e.id for e in sorted(estagios, key=lambda e: e.ordem)]
+    nova_ordem = list(reversed(ids_atuais))
+
+    resultado = crm_service.reordenar_estagios(db_session, TENANT_ID, None, nova_ordem)
+
+    assert [e.id for e in resultado] == nova_ordem
+    assert [e.ordem for e in resultado] == [1, 2, 3, 4, 5]
+
+
+def test_reordenar_estagios_rejeita_conjunto_incompleto(db_session):
+    estagios = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)
+    ids_parciais = [e.id for e in estagios[:-1]]
+
+    with pytest.raises(ValidacaoFalhou):
+        crm_service.reordenar_estagios(db_session, TENANT_ID, None, ids_parciais)
+
+
+def test_reordenar_estagios_rejeita_id_de_outro_tenant(db_session):
+    estagios = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)
+    crm_service.garantir_estagios_padrao(db_session, "outro-tenant")
+    ids_com_intruso = [e.id for e in estagios[:-1]] + [999999]
+
+    with pytest.raises(ValidacaoFalhou):
+        crm_service.reordenar_estagios(db_session, TENANT_ID, None, ids_com_intruso)
 
 
 def test_criar_negocio_usa_primeiro_estagio_aberto_por_padrao(db_session):
