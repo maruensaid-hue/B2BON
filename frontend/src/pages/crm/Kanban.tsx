@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
@@ -115,17 +116,28 @@ export function Kanban() {
   const [nomeNovaProposta, setNomeNovaProposta] = useState("");
   const [erroProposta, setErroProposta] = useState<string | null>(null);
   const [contaEmEdicaoModalAberta, setContaEmEdicaoModalAberta] = useState(false);
+  const [modalEditarFunilAberto, setModalEditarFunilAberto] = useState(false);
+  const [estagioRenomeandoId, setEstagioRenomeandoId] = useState<number | null>(null);
+  const [nomeRenomeando, setNomeRenomeando] = useState("");
+  const [novoEstagioNome, setNovoEstagioNome] = useState("");
+  const [novoEstagioTipo, setNovoEstagioTipo] = useState<"aberto" | "ganho" | "perdido">("aberto");
+  const [salvandoEstagio, setSalvandoEstagio] = useState(false);
+  const [erroFunil, setErroFunil] = useState<string | null>(null);
+
+  const podeEditarFunil = usuario?.papel === "admin" || usuario?.papel === "super_admin";
 
   // Defesa contra a duplicidade de estágios já corrigida no backend
   // (UniqueConstraint tenant_id+ordem) — se ainda houver dado antigo
   // duplicado, a tela não volta a mostrar a mesma fila duas vezes.
+  // Chave por `id` (sempre único de verdade) — a chave antiga era
+  // `nome::tipo`, que escondia silenciosamente qualquer fila custom
+  // criada com o mesmo nome/tipo de outra ("Editar Funil").
   const estagiosUnicos = useMemo(() => {
-    const vistos = new Set<string>();
+    const vistos = new Set<number>();
     return estagios
       .filter((estagio) => {
-        const chave = `${estagio.nome}::${estagio.tipo}`;
-        if (vistos.has(chave)) return false;
-        vistos.add(chave);
+        if (vistos.has(estagio.id)) return false;
+        vistos.add(estagio.id);
         return true;
       })
       .sort((a, b) => a.ordem - b.ordem);
@@ -475,6 +487,43 @@ export function Kanban() {
     }
   }
 
+  function iniciarRenomeacaoEstagio(estagio: EstagioFunil) {
+    setEstagioRenomeandoId(estagio.id);
+    setNomeRenomeando(estagio.nome);
+    setErroFunil(null);
+  }
+
+  async function salvarRenomeacaoEstagio(estagioId: number) {
+    if (!nomeRenomeando.trim() || salvandoEstagio) return;
+    setSalvandoEstagio(true);
+    setErroFunil(null);
+    try {
+      await api.put(`/crm/estagios/${estagioId}`, { nome: nomeRenomeando.trim() });
+      setEstagioRenomeandoId(null);
+      await carregar();
+    } catch (error) {
+      setErroFunil(error instanceof ApiError ? error.message : "Não foi possível renomear a fila.");
+    } finally {
+      setSalvandoEstagio(false);
+    }
+  }
+
+  async function criarNovoEstagio() {
+    if (!novoEstagioNome.trim() || salvandoEstagio) return;
+    setSalvandoEstagio(true);
+    setErroFunil(null);
+    try {
+      await api.post("/crm/estagios", { nome: novoEstagioNome.trim(), tipo: novoEstagioTipo });
+      setNovoEstagioNome("");
+      setNovoEstagioTipo("aberto");
+      await carregar();
+    } catch (error) {
+      setErroFunil(error instanceof ApiError ? error.message : "Não foi possível criar a fila.");
+    } finally {
+      setSalvandoEstagio(false);
+    }
+  }
+
   const valorTotal = negocios.reduce((soma, negocio) => soma + negocio.valor, 0);
 
   return (
@@ -496,6 +545,11 @@ export function Kanban() {
           {usuario?.papel !== "user" && (
             <Button size="sm" variant="ghost" onClick={() => setModalImportarExportarAberto(true)}>
               Importar/exportar CSV
+            </Button>
+          )}
+          {podeEditarFunil && (
+            <Button size="sm" variant="ghost" onClick={() => setModalEditarFunilAberto(true)}>
+              Editar Funil
             </Button>
           )}
           <Button size="sm" onClick={() => setModalAberto(true)}>
@@ -899,6 +953,79 @@ export function Kanban() {
         onClose={() => setModalImportarExportarAberto(false)}
         onImportado={carregar}
       />
+
+      <Modal
+        title="Editar Funil"
+        open={modalEditarFunilAberto}
+        onClose={() => {
+          setModalEditarFunilAberto(false);
+          setEstagioRenomeandoId(null);
+          setErroFunil(null);
+        }}
+      >
+        <div className="flex flex-col gap-3">
+          {erroFunil && <div className="text-[12px] text-red">{erroFunil}</div>}
+          <div className="flex flex-col gap-2">
+            {estagiosUnicos.map((estagio) => (
+              <div key={estagio.id} className="flex items-center gap-2">
+                {estagioRenomeandoId === estagio.id ? (
+                  <>
+                    <Input
+                      value={nomeRenomeando}
+                      onChange={(event) => setNomeRenomeando(event.target.value)}
+                      className="flex-1"
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => salvarRenomeacaoEstagio(estagio.id)}
+                      disabled={salvandoEstagio || !nomeRenomeando.trim()}
+                    >
+                      Salvar
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEstagioRenomeandoId(null)}>
+                      Cancelar
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-[12px] text-text">{estagio.nome}</span>
+                    <Badge tone={estagio.tipo === "ganho" ? "green" : estagio.tipo === "perdido" ? "red" : "muted"}>
+                      {estagio.tipo}
+                    </Badge>
+                    <Button size="sm" variant="ghost" onClick={() => iniciarRenomeacaoEstagio(estagio)}>
+                      Renomear
+                    </Button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-1 border-t border-border pt-3">
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nova fila</div>
+            <div className="flex gap-2">
+              <Input
+                value={novoEstagioNome}
+                onChange={(event) => setNovoEstagioNome(event.target.value)}
+                placeholder="Nome da fila"
+                className="flex-1"
+              />
+              <Select
+                value={novoEstagioTipo}
+                onChange={(event) => setNovoEstagioTipo(event.target.value as "aberto" | "ganho" | "perdido")}
+              >
+                <option value="aberto">Aberto</option>
+                <option value="ganho">Ganho</option>
+                <option value="perdido">Perdido</option>
+              </Select>
+              <Button size="sm" onClick={criarNovoEstagio} disabled={salvandoEstagio || !novoEstagioNome.trim()}>
+                + Adicionar
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
 
       <Modal title="Motivo da perda" open={negocioParaMarcarPerdido !== null} onClose={() => setNegocioParaMarcarPerdido(null)}>
         {negocioParaMarcarPerdido && (

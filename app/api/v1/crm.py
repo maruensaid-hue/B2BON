@@ -21,6 +21,7 @@ from app.schemas.crm import (
     DashboardFlywheelSchema,
     DashboardFunilSchema,
     DefinirCustoAquisicaoRequestSchema,
+    CriarEstagioRequestSchema,
     DefinirEstagioRequestSchema,
     EstagioFunilSchema,
     ImportarNegociosRequestSchema,
@@ -65,7 +66,28 @@ def listar_estagios(
     return crm_service.listar_estagios(db, tenant_id)
 
 
-@router.put("/estagios/{estagio_id}", response_model=EstagioFunilSchema)
+@router.post(
+    "/estagios",
+    response_model=EstagioFunilSchema,
+    status_code=201,
+    dependencies=[Depends(exigir_papel("super_admin", "admin"))],
+)
+def criar_estagio(
+    dados: CriarEstagioRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> EstagioFunilSchema:
+    """"Editar Funil" — cria uma fila nova além das 5 padrão, restrito a
+    admin/super_admin."""
+    return crm_service.criar_estagio(db, tenant_id, ator_id, dados.nome, dados.tipo)
+
+
+@router.put(
+    "/estagios/{estagio_id}",
+    response_model=EstagioFunilSchema,
+    dependencies=[Depends(exigir_papel("super_admin", "admin"))],
+)
 def definir_estagio(
     estagio_id: int,
     dados: DefinirEstagioRequestSchema,
@@ -73,6 +95,9 @@ def definir_estagio(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> EstagioFunilSchema:
+    """"Editar Funil" — renomeia/reconfigura uma fila existente,
+    restrito a admin/super_admin (antes desta entrega, qualquer
+    usuário autenticado do tenant conseguia chamar esta rota)."""
     return crm_service.definir_estagio(db, tenant_id, ator_id, estagio_id, dados.nome, dados.ordem, dados.tipo)
 
 

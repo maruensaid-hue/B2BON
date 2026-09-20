@@ -90,6 +90,49 @@ def test_garantir_estagios_padrao_recua_quando_insercao_colide(db_session, monke
     assert len(estagios) == 5
 
 
+def test_criar_estagio_adiciona_alem_dos_5_padrao(db_session):
+    crm_service.garantir_estagios_padrao(db_session, TENANT_ID)
+
+    novo = crm_service.criar_estagio(db_session, TENANT_ID, None, "Qualificação", tipo="aberto")
+
+    estagios = crm_service.listar_estagios(db_session, TENANT_ID)
+    assert len(estagios) == 6
+    assert novo.nome == "Qualificação"
+    assert novo.tipo == "aberto"
+    assert novo.ordem == 6  # depois dos 5 padrão (ordem 1-5)
+
+
+def test_criar_estagio_sem_nome_falha(db_session):
+    with pytest.raises(ValidacaoFalhou):
+        crm_service.criar_estagio(db_session, TENANT_ID, None, "   ", tipo="aberto")
+
+
+def test_criar_estagio_tipo_invalido_falha(db_session):
+    with pytest.raises(ValidacaoFalhou):
+        crm_service.criar_estagio(db_session, TENANT_ID, None, "Estágio X", tipo="cancelado")
+
+
+def test_criar_estagio_permite_mais_de_um_do_mesmo_tipo(db_session):
+    """Nada no código assume 1 único estágio "ganho"/"perdido" — dois
+    estágios do mesmo tipo custom devem conviver sem conflito."""
+    crm_service.garantir_estagios_padrao(db_session, TENANT_ID)
+
+    extra_ganho = crm_service.criar_estagio(db_session, TENANT_ID, None, "Ganho (upsell)", tipo="ganho")
+
+    estagios_ganho = [e for e in crm_service.listar_estagios(db_session, TENANT_ID) if e.tipo == "ganho"]
+    assert len(estagios_ganho) == 2
+    assert extra_ganho.id in {e.id for e in estagios_ganho}
+
+
+def test_definir_estagio_renomeia(db_session):
+    estagios = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)
+    descoberta = next(e for e in estagios if e.nome == "Descoberta")
+
+    atualizado = crm_service.definir_estagio(db_session, TENANT_ID, None, descoberta.id, nome="Prospecção")
+
+    assert atualizado.nome == "Prospecção"
+
+
 def test_criar_negocio_usa_primeiro_estagio_aberto_por_padrao(db_session):
     conta = _criar_conta(db_session)
     decisor = _criar_decisor(db_session, conta)

@@ -20,6 +20,50 @@ def test_estagios_padrao_via_api(client):
     assert {e["tipo"] for e in estagios} == {"aberto", "ganho", "perdido"}
 
 
+def test_criar_estagio_via_api(client):
+    """Client de teste é super_admin por padrão — "Editar Funil"."""
+    resposta = client.post("/api/v1/crm/estagios", json={"nome": "Qualificação", "tipo": "aberto"})
+
+    assert resposta.status_code == 201
+    assert resposta.json()["nome"] == "Qualificação"
+
+    listagem = client.get("/api/v1/crm/estagios").json()
+    assert len(listagem) == 6
+
+
+def test_definir_estagio_renomeia_via_api(client):
+    estagio = client.get("/api/v1/crm/estagios").json()[0]
+
+    resposta = client.put(f"/api/v1/crm/estagios/{estagio['id']}", json={"nome": "Nome Novo"})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["nome"] == "Nome Novo"
+
+
+def test_criar_estagio_tipo_invalido_via_api_retorna_422(client):
+    resposta = client.post("/api/v1/crm/estagios", json={"nome": "Estágio X", "tipo": "cancelado"})
+
+    assert resposta.status_code == 422
+
+
+def test_criar_e_definir_estagio_bloqueado_para_papel_user(client, criar_usuario_autenticado):
+    """"Editar Funil" é poder exclusivo de admin/super_admin (pedido
+    explícito do usuário) — antes desta entrega, PUT /estagios/{id}
+    não tinha nenhuma restrição de papel."""
+    headers_user = criar_usuario_autenticado(TENANT_ID, papel="user", email="user-estagios@teste.com.br")
+    estagio = client.get("/api/v1/crm/estagios").json()[0]
+
+    resposta_criar = client.post(
+        "/api/v1/crm/estagios", json={"nome": "Estágio X", "tipo": "aberto"}, headers=headers_user
+    )
+    resposta_definir = client.put(
+        f"/api/v1/crm/estagios/{estagio['id']}", json={"nome": "Tentativa"}, headers=headers_user
+    )
+
+    assert resposta_criar.status_code == 403
+    assert resposta_definir.status_code == 403
+
+
 def test_criar_e_listar_negocio_via_api(client, criar_conta_com_decisor):
     conta, decisor = criar_conta_com_decisor()
 

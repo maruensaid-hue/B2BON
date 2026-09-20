@@ -65,6 +65,39 @@ def listar_estagios(db: Session, tenant_id: str) -> list[EstagioFunil]:
     return garantir_estagios_padrao(db, tenant_id)
 
 
+def criar_estagio(db: Session, tenant_id: str, ator_id: str | None, nome: str, tipo: str = "aberto") -> EstagioFunil:
+    """Estágio novo do funil, além dos 5 padrão — "Editar Funil"
+    (restrito a admin/super_admin na rota). Sempre entra no fim da
+    ordem atual; sem UI de reordenar nesta entrega (não pedido)."""
+    if not nome or not nome.strip():
+        raise ValidacaoFalhou("Informe um nome para o estágio.")
+    if tipo not in _TIPOS_ESTAGIO_VALIDOS:
+        raise ValidacaoFalhou(f"Tipo de estágio inválido: {tipo}")
+
+    estagios_atuais = garantir_estagios_padrao(db, tenant_id)
+    proxima_ordem = max((e.ordem for e in estagios_atuais), default=0) + 1
+
+    estagio = EstagioFunil(tenant_id=tenant_id, nome=nome.strip(), ordem=proxima_ordem, tipo=tipo)
+    db.add(estagio)
+    try:
+        db.commit()
+    except IntegrityError:
+        # Mesma corrida documentada em garantir_estagios_padrao — dois
+        # admins criando estágio ao mesmo tempo podem calcular a mesma
+        # "próxima ordem"; recua e tenta uma vez com a ordem seguinte
+        # em vez de estourar um 500 pro segundo clique.
+        db.rollback()
+        proxima_ordem = max((e.ordem for e in garantir_estagios_padrao(db, tenant_id)), default=0) + 1
+        estagio = EstagioFunil(tenant_id=tenant_id, nome=nome.strip(), ordem=proxima_ordem, tipo=tipo)
+        db.add(estagio)
+        db.commit()
+
+    db.refresh(estagio)
+    auditoria_service.registrar(db, tenant_id, "estagio_funil_criado", "estagio_funil", estagio.id, ator_id, {"nome": estagio.nome})
+    db.commit()
+    return estagio
+
+
 def definir_estagio(
     db: Session,
     tenant_id: str,

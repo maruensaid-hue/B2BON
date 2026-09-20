@@ -19,6 +19,11 @@ class DefinirEstagioRequestSchema(BaseModel):
     tipo: str | None = None
 
 
+class CriarEstagioRequestSchema(BaseModel):
+    nome: str
+    tipo: str = "aberto"
+
+
 class NegocioSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
