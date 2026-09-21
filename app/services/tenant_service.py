@@ -924,3 +924,66 @@ def criar_tenant_vitrine(
 
     _, url_checkout = pagamento_licenca_service.iniciar(db, tenant.id, plano_id, email_admin, payment_provider)
     return usuario, url_checkout
+
+
+def criar_tenant_publico(
+    db: Session,
+    razao_social: str,
+    nome_admin: str,
+    email_admin: str,
+    senha_admin: str,
+    aceite_termos: bool,
+    plano_id: int,
+    payment_provider: PaymentProvider,
+    cnpj: str | None = None,
+) -> tuple[Usuario, str | None]:
+    """Cadastro público sem convite (raio-X 2026-09-21, página de
+    boas-vindas) — mesma espinha dorsal de `criar_tenant_vitrine`, mas
+    sem nenhum `ConviteVitrine`: sem `tenant_id_origem` (não há tenant
+    convidador, então não cria Conta-prospect nenhuma no CRM de
+    ninguém), sem `convite.gratuito` (todo cadastro público é pago —
+    `plano_id` é validado direto contra `Plano.visivel_self_service`,
+    o plano Teste nunca aparece aqui), `tenant.tipo` sempre "cliente"
+    (a classificação "distribuidor" só faz sentido pro convite
+    cortesia da hierarquia)."""
+    if not aceite_termos:
+        raise ValidacaoFalhou("É preciso aceitar a Política de Privacidade e os Termos de Uso para se cadastrar.")
+
+    plano = db.query(Plano).filter_by(id=plano_id).one_or_none()
+    if plano is None:
+        raise NaoEncontrado(f"Plano {plano_id} não encontrado")
+    if not plano.visivel_self_service:
+        raise RegraNegocioViolada("Este plano não está disponível para cadastro self-service.")
+
+    if db.query(Usuario).filter_by(email=email_admin).one_or_none() is not None:
+        raise RegraNegocioViolada("E-mail já cadastrado.")
+
+    tenant_id = _gerar_tenant_id(db, razao_social)
+    tenant = Tenant(id=tenant_id, razao_social=razao_social, cnpj=cnpj, tipo="cliente")
+    db.add(tenant)
+    db.flush()
+
+    rede_social_service.criar_perfil_inicial(db, tenant.id, razao_social)
+
+    usuario = Usuario(
+        tenant_id=tenant.id,
+        nome=nome_admin,
+        email=email_admin,
+        senha_hash=auth_service.hash_senha(senha_admin),
+        papel="admin",
+        termos_aceitos_em=datetime.now(UTC),
+    )
+    db.add(usuario)
+    db.flush()
+
+    db.add(Licenca(tenant_id=tenant.id, plano_id=plano_id, status="pendente_pagamento"))
+
+    auditoria_service.registrar(
+        db, tenant.id, "tenant_publico_criado", "tenant", 0, None, {"razao_social": razao_social}
+    )
+
+    db.commit()
+    db.refresh(usuario)
+
+    _, url_checkout = pagamento_licenca_service.iniciar(db, tenant.id, plano_id, email_admin, payment_provider)
+    return usuario, url_checkout

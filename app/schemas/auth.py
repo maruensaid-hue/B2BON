@@ -86,6 +86,21 @@ class RegistrarVitrineRequestSchema(BaseModel):
     plano_id: int | None = None
 
 
+class RegistrarPublicoRequestSchema(BaseModel):
+    """Cadastro público sem convite (raio-X 2026-09-21, página de
+    boas-vindas) — `plano_id` é obrigatório aqui (sem convite não há
+    plano padrão pra cair de volta); o plano Teste nunca é aceito
+    (validado em `tenant_service.criar_tenant_publico`)."""
+
+    razao_social: str
+    cnpj: str | None = None
+    nome_admin: str
+    email_admin: EmailStr
+    senha_admin: str = Field(min_length=8, max_length=72)
+    aceite_termos: bool
+    plano_id: int
+
+
 class TokenResponseSchema(BaseModel):
     access_token: str
     token_type: str = "bearer"

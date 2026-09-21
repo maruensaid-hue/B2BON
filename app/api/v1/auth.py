@@ -38,6 +38,7 @@ from app.schemas.auth import (
     LoginRequestSchema,
     RecursosPlanoSchema,
     RedefinirSenhaRequestSchema,
+    RegistrarPublicoRequestSchema,
     RegistrarRequestSchema,
     RegistrarVitrineRequestSchema,
     RespostaMensagemSchema,
@@ -181,6 +182,39 @@ def registrar_vitrine(
         account_data,
         contact_enrichment,
         graph,
+        dados.cnpj,
+    )
+    return _resposta_token(usuario, db, checkout_url, primeiro_login=True, email_provider=email)
+
+
+@router.post(
+    "/registrar-publico",
+    response_model=TokenResponseSchema,
+    status_code=201,
+    # Sem convite, o cadastro público perde o "portão" implícito que um
+    # código de convite escasso dava — limite mais apertado que o padrão
+    # de `/registrar-vitrine` (raio-X 2026-09-21, achado pelo agente de
+    # validação do plano: menos tentativas, janela maior).
+    dependencies=[Depends(limitar_por_ip(max_tentativas=3, janela_segundos=600))],
+)
+def registrar_publico(
+    dados: RegistrarPublicoRequestSchema,
+    db: Session = Depends(get_db),
+    payment_provider: PaymentProvider = Depends(get_payment_provider),
+    email: EmailProvider = Depends(get_email_provider),
+) -> TokenResponseSchema:
+    """Cadastro público sem convite (raio-X 2026-09-21, página de
+    boas-vindas) — qualquer visitante escolhe um plano pago (nunca o
+    Teste, exclusivo de convite) e já sai direto pro checkout."""
+    usuario, checkout_url = tenant_service.criar_tenant_publico(
+        db,
+        dados.razao_social,
+        dados.nome_admin,
+        dados.email_admin,
+        dados.senha_admin,
+        dados.aceite_termos,
+        dados.plano_id,
+        payment_provider,
         dados.cnpj,
     )
     return _resposta_token(usuario, db, checkout_url, primeiro_login=True, email_provider=email)

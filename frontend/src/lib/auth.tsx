@@ -69,6 +69,16 @@ interface DadosRegistroVitrine {
   plano_id?: number;
 }
 
+interface DadosRegistroPublico {
+  razao_social: string;
+  cnpj?: string;
+  nome_admin: string;
+  email_admin: string;
+  senha_admin: string;
+  aceite_termos: boolean;
+  plano_id: number;
+}
+
 interface DadosRegistroConvite {
   codigo_convite: string;
   nome: string;
@@ -84,6 +94,9 @@ interface AuthContextValue {
   entrar: (email: string, senha: string) => Promise<void>;
   entrarComGoogle: (idToken: string) => Promise<void>;
   registrarVitrine: (dados: DadosRegistroVitrine) => Promise<string | null>;
+  /** Cadastro público sem convite (raio-X 2026-09-21, página de
+   * boas-vindas) — sempre exige um plano pago, nunca o Teste. */
+  criarContaPublica: (dados: DadosRegistroPublico) => Promise<string | null>;
   registrarComConvite: (dados: DadosRegistroConvite) => Promise<void>;
   sair: () => void;
   /** True uma única vez, logo após o primeiro login/cadastro — consumido
@@ -141,6 +154,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registrarVitrine = useCallback(async (dados: DadosRegistroVitrine) => {
     const resposta = await api.post<TokenResponse>("/auth/registrar-vitrine", dados);
+    setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
+    setUsuario(resposta.usuario);
+    setTemLicencaAtiva(resposta.tem_licenca_ativa);
+    setPrimeiroLoginPendente(resposta.primeiro_login);
+    return resposta.checkout_url;
+  }, []);
+
+  const criarContaPublica = useCallback(async (dados: DadosRegistroPublico) => {
+    const resposta = await api.post<TokenResponse>("/auth/registrar-publico", dados);
     setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
     setUsuario(resposta.usuario);
     setTemLicencaAtiva(resposta.tem_licenca_ativa);
@@ -211,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       entrar,
       entrarComGoogle,
       registrarVitrine,
+      criarContaPublica,
       registrarComConvite,
       sair,
       primeiroLoginPendente,
@@ -226,6 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       entrar,
       entrarComGoogle,
       registrarVitrine,
+      criarContaPublica,
       registrarComConvite,
       sair,
       primeiroLoginPendente,

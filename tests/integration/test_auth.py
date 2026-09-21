@@ -583,6 +583,71 @@ def test_planos_apenas_self_service_esconde_plano_teste(client, criar_plano):
     assert any(p["nome"] == "Starter Visivel" for p in so_self_service)
 
 
+def test_registrar_publico_com_plano_pago_retorna_checkout(client, criar_plano):
+    """Página de boas-vindas (raio-X 2026-09-21): cadastro público sem
+    nenhum convite, com seleção de plano pago."""
+    plano = criar_plano()
+
+    resposta = client.post(
+        "/api/v1/auth/registrar-publico",
+        json={
+            "razao_social": "Empresa Sem Convite Ltda",
+            "nome_admin": "Admin Público",
+            "email_admin": "publico@teste.com.br",
+            "senha_admin": "senha123",
+            "aceite_termos": True,
+            "plano_id": plano.id,
+        },
+    )
+
+    assert resposta.status_code == 201
+    corpo = resposta.json()
+    assert corpo["checkout_url"]
+    assert corpo["usuario"]["papel"] == "admin"
+    assert corpo["primeiro_login"] is True
+
+
+def test_registrar_publico_com_plano_teste_e_negado(client, criar_plano):
+    plano_teste = criar_plano(nome="Teste", preco_mensal=0.0, visivel_self_service=False)
+
+    resposta = client.post(
+        "/api/v1/auth/registrar-publico",
+        json={
+            "razao_social": "Tentativa Sem Pagar Ltda",
+            "nome_admin": "Admin",
+            "email_admin": "sem-pagar@teste.com.br",
+            "senha_admin": "senha123",
+            "aceite_termos": True,
+            "plano_id": plano_teste.id,
+        },
+    )
+
+    assert resposta.status_code == 409
+
+
+def test_registrar_publico_bloqueia_apos_muitas_tentativas(client, criar_plano):
+    """Sem convite pra servir de portão, o rate limit desta rota precisa
+    ser mais apertado que o de `/registrar-vitrine`."""
+    plano = criar_plano()
+    payload = {
+        "razao_social": "Empresa Rate Limit",
+        "nome_admin": "Admin",
+        "senha_admin": "senha123",
+        "aceite_termos": True,
+        "plano_id": plano.id,
+    }
+
+    for indice in range(3):
+        payload["email_admin"] = f"rate-limit-{indice}@teste.com.br"
+        resposta = client.post("/api/v1/auth/registrar-publico", json=payload)
+        assert resposta.status_code == 201
+
+    payload["email_admin"] = "rate-limit-4@teste.com.br"
+    resposta = client.post("/api/v1/auth/registrar-publico", json=payload)
+
+    assert resposta.status_code == 429
+
+
 def _assinatura_valida(payment_id: str, request_id: str, ts: str, segredo: str) -> str:
     manifest = f"id:{payment_id.lower()};request-id:{request_id};ts:{ts};"
     v1 = hmac.new(segredo.encode(), manifest.encode(), hashlib.sha256).hexdigest()

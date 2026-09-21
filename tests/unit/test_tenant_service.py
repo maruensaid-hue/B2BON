@@ -328,6 +328,84 @@ def test_criar_tenant_vitrine_tolera_falha_no_enriquecimento(db_session):
     assert conta.origem == "rede_social_convite"
 
 
+# --- Cadastro público sem convite (raio-X 2026-09-21, página de boas-vindas) ---
+
+
+def test_criar_tenant_publico_gera_licenca_pendente_de_pagamento(db_session):
+    plano = _plano(db_session)
+
+    usuario, checkout_url = tenant_service.criar_tenant_publico(
+        db_session, "Empresa Pública Ltda", "Admin Público", "admin@publica.com.br", "senha123", True, plano.id,
+        StubPaymentProvider(),
+    )
+
+    assert usuario.papel == "admin"
+    assert usuario.termos_aceitos_em is not None
+    assert checkout_url.startswith("https://checkout.stub.local/")
+    tenant = db_session.query(Tenant).filter_by(id=usuario.tenant_id).one()
+    assert tenant.tipo == "cliente"
+    licenca = db_session.query(Licenca).filter_by(tenant_id=usuario.tenant_id).one()
+    assert licenca.status == "pendente_pagamento"
+    assert licenca.plano_id == plano.id
+
+
+def test_criar_tenant_publico_nao_cria_conta_prospect_em_nenhum_tenant(db_session):
+    """Diferente do convite-vitrine: não há tenant convidador, então o
+    cadastro público não pode deixar nenhuma Conta-prospect órfã."""
+    plano = _plano(db_session)
+
+    tenant_service.criar_tenant_publico(
+        db_session, "Empresa Sem Prospect", "Admin", "admin-sp@publica.com.br", "senha123", True, plano.id,
+        StubPaymentProvider(),
+    )
+
+    assert db_session.query(Conta).filter_by(nome="Empresa Sem Prospect").one_or_none() is None
+
+
+def test_criar_tenant_publico_recusa_plano_teste(db_session):
+    plano_teste = Plano(nome="Teste", franquia_contas_mes=50, max_usuarios=1, preco_mensal=0, visivel_self_service=False)
+    db_session.add(plano_teste)
+    db_session.commit()
+
+    with pytest.raises(RegraNegocioViolada):
+        tenant_service.criar_tenant_publico(
+            db_session, "Empresa Teste", "Admin", "admin-teste@publica.com.br", "senha123", True, plano_teste.id,
+            StubPaymentProvider(),
+        )
+
+
+def test_criar_tenant_publico_plano_inexistente_levanta_nao_encontrado(db_session):
+    with pytest.raises(NaoEncontrado):
+        tenant_service.criar_tenant_publico(
+            db_session, "Empresa Sem Plano", "Admin", "sem-plano@publica.com.br", "senha123", True, 999999,
+            StubPaymentProvider(),
+        )
+
+
+def test_criar_tenant_publico_sem_aceitar_termos_e_bloqueado(db_session):
+    plano = _plano(db_session)
+
+    with pytest.raises(ValidacaoFalhou):
+        tenant_service.criar_tenant_publico(
+            db_session, "Empresa Sem Termos", "Admin", "sem-termos@publica.com.br", "senha123", False, plano.id,
+            StubPaymentProvider(),
+        )
+
+
+def test_criar_tenant_publico_email_ja_cadastrado_falha(db_session):
+    plano = _plano(db_session)
+    tenant_service.criar_tenant_publico(
+        db_session, "Empresa P1", "Admin P1", "repetido-publico@publica.com.br", "senha123", True, plano.id,
+        StubPaymentProvider(),
+    )
+
+    with pytest.raises(RegraNegocioViolada):
+        tenant_service.criar_tenant_publico(
+            db_session, "Empresa P2", "Admin P2", "repetido-publico@publica.com.br", "senha123", True, plano.id,
+            StubPaymentProvider(),
+        )
+
+
 # --- Hierarquia de tenants (raio-X: fundação da API de provisionamento) ---
 
 
