@@ -139,7 +139,7 @@ export function CentralNegocios() {
   return (
     <div className="mx-auto max-w-4xl p-5.5">
       <Link to="/" className="mb-4 inline-block text-[12px] text-cyan hover:underline">
-        ← Voltar para o login
+        ← Voltar para a tela de boas-vindas
       </Link>
 
       <div className="mb-6">

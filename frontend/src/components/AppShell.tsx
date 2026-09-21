@@ -428,6 +428,14 @@ function AvisoWhatsappPessoalFaltando() {
 
 export function AppShell() {
   const { usuario, temLicencaAtiva, sair, primeiroLoginPendente, consumirPrimeiroLoginPendente } = useAuth();
+  const navegar = useNavigate();
+  // Logout leva pra Central de Negócios, não direto pro login (raio-X
+  // 2026-09-21, página de boas-vindas) — mantém o visitante recém-saído
+  // vendo conteúdo da plataforma em vez de cair numa tela em branco.
+  function sairEVerConteudo() {
+    sair();
+    navegar("/central-de-negocios");
+  }
   // Rail icon-only (redesign Salesforce, raio-X 2026-09-21) — persistido
   // pra não perder o ganho de espaço a cada reload.
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("b2bon_sidebar_collapsed") === "true");
@@ -739,7 +747,7 @@ export function AppShell() {
             >
               {usuario?.nome?.[0]?.toUpperCase() ?? "?"}
             </NavLink>
-            <button onClick={sair} title="Sair" className="text-[13px] text-nav-muted hover:text-red">
+            <button onClick={sairEVerConteudo} title="Sair" className="text-[13px] text-nav-muted hover:text-red">
               ⏻
             </button>
           </div>
@@ -754,7 +762,7 @@ export function AppShell() {
               </div>
               <div className="text-[9px] tracking-wide text-nav-muted">{usuario?.papel?.toUpperCase()}</div>
             </NavLink>
-            <button onClick={sair} className="flex-shrink-0 text-[11px] text-nav-muted hover:text-red">
+            <button onClick={sairEVerConteudo} className="flex-shrink-0 text-[11px] text-nav-muted hover:text-red">
               Sair
             </button>
           </div>
