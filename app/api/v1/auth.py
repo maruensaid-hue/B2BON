@@ -36,6 +36,7 @@ from app.schemas.auth import (
     LicencaStatusResponseSchema,
     LoginGoogleRequestSchema,
     LoginRequestSchema,
+    MarcarTutorialModuloVistoRequestSchema,
     RecursosPlanoSchema,
     RedefinirSenhaRequestSchema,
     RegistrarPublicoRequestSchema,
@@ -269,6 +270,23 @@ def dispensar_banner_boas_vindas(
     usuario.boas_vindas_banner_dispensado = True
     db.commit()
     db.refresh(usuario)
+    return usuario
+
+
+@router.post("/marcar-tutorial-modulo-visto", response_model=UsuarioSchema)
+def marcar_tutorial_modulo_visto(
+    dados: MarcarTutorialModuloVistoRequestSchema,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> UsuarioSchema:
+    """Tutorial por módulo (raio-X 2026-09-21) — marca um módulo como já
+    visto (idempotente, não duplica), pro tutorial não reabrir sozinho
+    de novo nesse módulo."""
+    vistos = usuario.tutoriais_modulo_vistos or []
+    if dados.modulo not in vistos:
+        usuario.tutoriais_modulo_vistos = [*vistos, dados.modulo]
+        db.commit()
+        db.refresh(usuario)
     return usuario
 
 

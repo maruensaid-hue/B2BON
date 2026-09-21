@@ -46,3 +46,9 @@ class Usuario(Base):
     # `null` = nunca customizou, cai no default (todas visíveis, ordem
     # original) calculado em `panel_service.obter_preferencias_dashboard`.
     preferencias_dashboard: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Tutorial por módulo (raio-X 2026-09-21) — lista de chaves de módulo
+    # já vistas (ex.: ["crm", "prospeccao"]), coexiste com o tour grande
+    # de primeiro login. `null`/vazio = nenhum módulo visto ainda; marcado
+    # ao FECHAR o tutorial por qualquer motivo (concluiu ou pulou), nunca
+    # reaberto sozinho depois disso — só via botão manual "Rever tutorial".
+    tutoriais_modulo_vistos: Mapped[list | None] = mapped_column(JSON, nullable=True)

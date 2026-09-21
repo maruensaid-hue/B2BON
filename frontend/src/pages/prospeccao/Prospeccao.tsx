@@ -7,6 +7,7 @@ import { Input, Select, Textarea } from "@/components/ui/Input";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { Modal } from "@/components/ui/Modal";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
+import { TutorialProspeccao } from "@/pages/prospeccao/TutorialProspeccao";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { detectarColunas as detectarColunasGenerico, parseLinhasComMapa } from "@/lib/importarPlanilha";
@@ -196,7 +197,20 @@ function statusTone(status: string): "cyan" | "green" | "muted" {
 }
 
 export function Prospeccao() {
-  const { usuario } = useAuth();
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande. Só depois de `carregado` (não
+  // só `usuario`) pra reduzir a corrida com os `carregar*()` async —
+  // mesmo raciocínio de `Kanban.tsx`.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("prospeccao")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("prospeccao")) marcarTutorialModuloVisto("prospeccao");
+  }
   const [icps, setIcps] = useState<ICP[]>([]);
   const [icpSelecionadoId, setIcpSelecionadoId] = useState<number | null>(null);
   const [contas, setContas] = useState<Conta[]>([]);
@@ -243,15 +257,19 @@ export function Prospeccao() {
   const icpSelecionado = icps.find((icp) => icp.id === icpSelecionadoId) ?? null;
   const listaSelecionada = listas.find((lista) => lista.id === listaSelecionadaId) ?? null;
 
-  async function carregarIcps() {
+  async function carregarIcps(): Promise<number | null> {
     try {
       const resposta = await api.get<ICP[]>("/icp");
       setIcps(resposta);
       if (resposta.length > 0 && icpSelecionadoId === null) {
-        setIcpSelecionadoId(resposta.find((icp) => icp.ativo)?.id ?? resposta[0].id);
+        const idEscolhido = resposta.find((icp) => icp.ativo)?.id ?? resposta[0].id;
+        setIcpSelecionadoId(idEscolhido);
+        return idEscolhido;
       }
+      return icpSelecionadoId;
     } catch {
       setErro("Não foi possível carregar os ICPs.");
+      return null;
     }
   }
 
@@ -306,10 +324,24 @@ export function Prospeccao() {
   }
 
   useEffect(() => {
-    carregarIcps();
-    carregarListas();
-    carregarFranquia();
-    carregarLimiteEnriquecimento();
+    async function carregarTudo() {
+      const [icpResultado] = await Promise.allSettled([
+        carregarIcps(),
+        carregarListas(),
+        carregarFranquia(),
+        carregarLimiteEnriquecimento(),
+      ]);
+      // Só depois de carregarIcps() é que dá pra saber qual ICP foi
+      // selecionado — carregarContas depende desse id, então espera
+      // aqui também antes de marcar `carregado` (senão o passo do
+      // tutorial que mira "Ver detalhes" corre risco de não achar a
+      // conta ainda, mesmo com o ICP já carregado).
+      if (icpResultado.status === "fulfilled" && icpResultado.value !== null) {
+        await carregarContas(icpResultado.value);
+      }
+      setCarregado(true);
+    }
+    carregarTudo();
   }, []);
 
   useEffect(() => {
@@ -622,13 +654,23 @@ export function Prospeccao() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Prospecção</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">Prospecção</div>
+            <button
+              type="button"
+              onClick={() => setTutorialAberto(true)}
+              className="text-[11px] text-muted hover:text-cyan"
+            >
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">ICPs e contas geradas pelo PREDATOR</div>
         </div>
         <div className="flex gap-2">
           <Button
             size="sm"
             variant="violet"
+            data-tutorial-id="prospeccao:criar-icp"
             onClick={() => {
               setIcpEmEdicao(null);
               setModalIcpAberto(true);
@@ -672,7 +714,7 @@ export function Prospeccao() {
       ) : null}
 
       <Card className="mb-4">
-        <div className="mb-3 flex gap-2">
+        <div data-tutorial-id="prospeccao:origem" className="mb-3 flex gap-2">
           <button
             type="button"
             onClick={() => setOrigemContas("icp")}
@@ -742,7 +784,7 @@ export function Prospeccao() {
                   <Button size="sm" onClick={() => clonarIcp(icpSelecionado)}>
                     Clonar
                   </Button>
-                  <Button size="sm" onClick={() => setModalGerarAberto(true)}>
+                  <Button size="sm" data-tutorial-id="prospeccao:gerar-lista" onClick={() => setModalGerarAberto(true)}>
                     Gerar lista
                   </Button>
                   {confirmandoExclusaoIcpId === icpSelecionado.id ? (
@@ -772,7 +814,7 @@ export function Prospeccao() {
           <>
             <div className="mb-2 flex items-center justify-between">
               <SectionLabel>Listas de Prospecção</SectionLabel>
-              <Button size="sm" variant="violet" onClick={() => setModalListaAberto(true)}>
+              <Button size="sm" variant="violet" data-tutorial-id="prospeccao:criar-lista" onClick={() => setModalListaAberto(true)}>
                 + Criar lista
               </Button>
             </div>
@@ -906,7 +948,7 @@ export function Prospeccao() {
                 </td>
                 <td className="p-2">
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => setContaSelecionadaId(conta.id)}>
+                    <Button size="sm" data-tutorial-id="prospeccao:ver-detalhes" onClick={() => setContaSelecionadaId(conta.id)}>
                       Ver detalhes
                     </Button>
                     {confirmandoExclusaoContaId === conta.id ? (
@@ -1223,6 +1265,8 @@ export function Prospeccao() {
           }}
         />
       )}
+
+      <TutorialProspeccao open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

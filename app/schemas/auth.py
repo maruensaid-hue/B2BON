@@ -53,6 +53,11 @@ class UsuarioSchema(BaseModel):
     # `Usuario.boas_vindas_banner_dispensado` (from_attributes) — dispensa
     # em definitivo o banner de atalhos da Dashboard.
     boas_vindas_banner_dispensado: bool = False
+    # Tutorial por módulo (raio-X 2026-09-21) — lista de chaves de módulo
+    # já vistas; vem de `Usuario.tutoriais_modulo_vistos`, que é nullable
+    # no banco (nulo = nenhum módulo visto ainda) — frontend trata `null`
+    # com `?? []` antes de checar `.includes(...)`.
+    tutoriais_modulo_vistos: list[str] | None = None
 
 
 class LoginRequestSchema(BaseModel):
@@ -118,6 +123,10 @@ class LicencaStatusResponseSchema(BaseModel):
 
 class AtualizarWhatsappPessoalRequestSchema(BaseModel):
     whatsapp_pessoal: str | None = None
+
+
+class MarcarTutorialModuloVistoRequestSchema(BaseModel):
+    modulo: str
 
 
 class EsqueciSenhaRequestSchema(BaseModel):

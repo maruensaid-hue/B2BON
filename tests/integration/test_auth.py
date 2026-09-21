@@ -81,6 +81,31 @@ def test_dispensar_banner_boas_vindas_e_permanente(client, criar_usuario_autenti
     assert usuario.boas_vindas_banner_dispensado is True
 
 
+def test_marcar_tutorial_modulo_visto_e_idempotente(client, criar_usuario_autenticado, db_session):
+    headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="tutorial-modulo@teste.com.br")
+
+    primeira = client.post("/api/v1/auth/marcar-tutorial-modulo-visto", json={"modulo": "crm"}, headers=headers)
+    assert primeira.status_code == 200
+    assert primeira.json()["tutoriais_modulo_vistos"] == ["crm"]
+
+    segunda = client.post("/api/v1/auth/marcar-tutorial-modulo-visto", json={"modulo": "crm"}, headers=headers)
+    assert segunda.json()["tutoriais_modulo_vistos"] == ["crm"]
+
+    terceira = client.post("/api/v1/auth/marcar-tutorial-modulo-visto", json={"modulo": "prospeccao"}, headers=headers)
+    assert terceira.json()["tutoriais_modulo_vistos"] == ["crm", "prospeccao"]
+
+    usuario = db_session.query(Usuario).filter_by(email="tutorial-modulo@teste.com.br").one()
+    assert usuario.tutoriais_modulo_vistos == ["crm", "prospeccao"]
+
+
+def test_login_reflete_tutoriais_modulo_vistos_nulo_por_padrao(client, db_session):
+    _criar_usuario_senha(db_session, "sem-tutorial@teste.com.br", "senha-forte")
+
+    resposta = client.post("/api/v1/auth/login", json={"email": "sem-tutorial@teste.com.br", "senha": "senha-forte"})
+
+    assert resposta.json()["usuario"]["tutoriais_modulo_vistos"] is None
+
+
 def test_login_primeiro_login_true_so_na_primeira_vez(client, db_session):
     """Raio-X 2026-09-01: sinal pra disparar o tour guiado de onboarding
     no frontend uma única vez, sem campo novo no banco."""

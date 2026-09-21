@@ -45,6 +45,9 @@ export interface Usuario {
   /** Redesign Salesforce (raio-X 2026-09-21) — dispensa em definitivo o
    * banner de boas-vindas com atalhos na Dashboard. */
   boas_vindas_banner_dispensado: boolean;
+  /** Tutorial por módulo (raio-X 2026-09-21) — chaves de módulo já
+   * vistas (ex.: ["crm", "prospeccao"]); `null` = nenhum ainda. */
+  tutoriais_modulo_vistos: string[] | null;
 }
 
 interface TokenResponse {
@@ -117,6 +120,9 @@ interface AuthContextValue {
   /** Dispensa em definitivo o banner de boas-vindas da Dashboard (raio-X
    * 2026-09-21) — some da tela sem precisar de logout/login. */
   dispensarBannerBoasVindas: () => Promise<void>;
+  /** Tutorial por módulo (raio-X 2026-09-21) — marca um módulo como já
+   * visto, idempotente, pra não reabrir sozinho de novo. */
+  marcarTutorialModuloVisto: (modulo: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -225,6 +231,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const marcarTutorialModuloVisto = useCallback(async (modulo: string) => {
+    const atualizado = await api.post<Usuario>("/auth/marcar-tutorial-modulo-visto", { modulo });
+    setUsuario(atualizado);
+    atualizarUsuarioSalvo(atualizado);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       usuario,
@@ -242,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       confirmarAvisoWhatsappTemplate,
       atualizarWhatsappPessoal,
       dispensarBannerBoasVindas,
+      marcarTutorialModuloVisto,
     }),
     [
       usuario,
@@ -258,6 +271,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       confirmarAvisoWhatsappTemplate,
       atualizarWhatsappPessoal,
       dispensarBannerBoasVindas,
+      marcarTutorialModuloVisto,
     ],
   );
 

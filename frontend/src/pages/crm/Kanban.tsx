@@ -9,6 +9,7 @@ import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
 import { ImportarExportarNegocios } from "@/pages/crm/ImportarExportarNegocios";
+import { TutorialCrm } from "@/pages/crm/TutorialCrm";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { api, ApiError, getBlob, postFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -80,7 +81,21 @@ interface Conta {
 }
 
 export function Kanban() {
-  const { usuario } = useAuth();
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande. Só depois de `carregado` (não
+  // só `usuario`) pra não competir em corrida com o `carregar()` async
+  // — sem isso, o passo que mira um card de negócio podia ser marcado
+  // "indisponível" antes da lista terminar de chegar da API.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("crm")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("crm")) marcarTutorialModuloVisto("crm");
+  }
   const [searchParams] = useSearchParams();
   const negocioIdPreSelecionadoId = Number(searchParams.get("negocio_id")) || null;
   const [estagios, setEstagios] = useState<EstagioFunil[]>([]);
@@ -167,6 +182,8 @@ export function Kanban() {
       setNegocios(negociosResp);
     } catch {
       setErro("Não foi possível carregar o kanban.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -566,7 +583,16 @@ export function Kanban() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">CRM — Pipeline</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">CRM — Pipeline</div>
+            <button
+              type="button"
+              onClick={() => setTutorialAberto(true)}
+              className="text-[11px] text-muted hover:text-cyan"
+            >
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">
             {negocios.length} negócio(s) · R${Math.round(valorTotal / 1000)}k em pipeline
           </div>
@@ -579,16 +605,16 @@ export function Kanban() {
             className="w-64"
           />
           {usuario?.papel !== "user" && (
-            <Button size="sm" onClick={() => setModalImportarExportarAberto(true)}>
+            <Button size="sm" data-tutorial-id="crm:importar-exportar" onClick={() => setModalImportarExportarAberto(true)}>
               Importar/exportar CSV
             </Button>
           )}
           {podeEditarFunil && (
-            <Button size="sm" onClick={() => setModalEditarFunilAberto(true)}>
+            <Button size="sm" data-tutorial-id="crm:editar-funil" onClick={() => setModalEditarFunilAberto(true)}>
               Editar Funil
             </Button>
           )}
-          <Button size="sm" onClick={() => setModalAberto(true)}>
+          <Button size="sm" data-tutorial-id="crm:novo-negocio" onClick={() => setModalAberto(true)}>
             + Novo negócio
           </Button>
         </div>
@@ -596,7 +622,7 @@ export function Kanban() {
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
-      <div className="grid grid-cols-1 gap-2.5 overflow-x-auto sm:grid-cols-2 lg:grid-cols-4">
+      <div data-tutorial-id="crm:board" className="grid grid-cols-1 gap-2.5 overflow-x-auto sm:grid-cols-2 lg:grid-cols-4">
         {estagiosUnicos.map((estagio) => {
           const negociosDoEstagio = negociosFiltrados.filter((negocio) => negocio.estagio_id === estagio.id);
           return (
@@ -662,6 +688,7 @@ export function Kanban() {
                     R${Math.round(negocio.valor / 1000)}k
                   </div>
                   <Select
+                    data-tutorial-id="crm:mover-estagio"
                     value={negocio.estagio_id}
                     onChange={(event) => tentarMoverEstagio(negocio, Number(event.target.value))}
                   >
@@ -1142,6 +1169,8 @@ export function Kanban() {
           </div>
         )}
       </Modal>
+
+      <TutorialCrm open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }
