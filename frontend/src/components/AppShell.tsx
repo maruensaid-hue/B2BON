@@ -445,8 +445,28 @@ export function AppShell() {
   // Logout leva pra Central de Negócios, não direto pro login (raio-X
   // 2026-09-21, página de boas-vindas) — mantém o visitante recém-saído
   // vendo conteúdo da plataforma em vez de cair numa tela em branco.
+  //
+  // Bug real encontrado 2026-09-21: chamar `sair()` e `navegar(...)` juntos
+  // (mesmo com `setTimeout(sair, 0)`) deixava `ProtectedRoute` reagir ao
+  // `autenticado=false` antes do React terminar de desmontar este
+  // `AppShell` — ele empurrava um `<Navigate to="/login" replace/>` que
+  // sobrescrevia a navegação pra Central de Negócios já em andamento,
+  // mandando o usuário pro login em vez da página pública (confirmado com
+  // instrumentação de `history.pushState`/`replaceState`: mesmo com o
+  // `setTimeout`, a ordem de commit do React não garantia que o
+  // `ProtectedRoute` já tivesse desmontado antes do timeout disparar).
+  // Fix: só chama `sair()` no CLEANUP do `useEffect` deste componente —
+  // sinal 100% determinístico de que o `AppShell` (e o `ProtectedRoute`
+  // que o envolve) já desmontou de verdade, então não sobra mais nada
+  // reagindo à sessão sendo limpa.
+  const sairPendenteRef = useRef(false);
+  useEffect(() => {
+    return () => {
+      if (sairPendenteRef.current) sair();
+    };
+  }, [sair]);
   function sairEVerConteudo() {
-    sair();
+    sairPendenteRef.current = true;
     navegar("/central-de-negocios");
   }
   // Rail icon-only (redesign Salesforce, raio-X 2026-09-21) — persistido
