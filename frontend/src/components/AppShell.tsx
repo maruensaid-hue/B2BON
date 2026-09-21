@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { BuscaGlobal } from "@/components/busca/BuscaGlobal";
@@ -103,16 +104,19 @@ const CLASSE_ITEM_BASE =
 const CLASSE_ITEM_ATIVO = "border-cyan bg-cyan/15 font-bold text-cyan";
 const CLASSE_ITEM_INATIVO = "hover:bg-nav-hover hover:text-nav-text";
 
-function NavButton({ path, label, icon, end }: NavItem) {
+function NavButton({ path, label, icon, end, collapsed }: NavItem & { collapsed?: boolean }) {
   return (
     <NavLink
       to={path}
       end={end}
       data-tour-id={`nav:${path}`}
-      className={({ isActive }) => cn(CLASSE_ITEM_BASE, isActive ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO)}
+      title={collapsed ? label : undefined}
+      className={({ isActive }) =>
+        cn(CLASSE_ITEM_BASE, collapsed && "justify-center px-0", isActive ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO)
+      }
     >
       <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
-      <span className="overflow-hidden text-ellipsis">{label}</span>
+      {!collapsed && <span className="overflow-hidden text-ellipsis">{label}</span>}
     </NavLink>
   );
 }
@@ -131,22 +135,62 @@ function NavGroup({
   path,
   itens,
   tourToggleId,
+  collapsed,
 }: {
   label: string;
   icon: string;
   path?: string;
   itens: NavItem[];
   tourToggleId?: string;
+  collapsed?: boolean;
 }) {
   const location = useLocation();
   const algumFilhoAtivo = itens.some(
     (item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
   );
   const [aberto, setAberto] = useState(algumFilhoAtivo);
+  // Flyout do rail colapsado (redesign Salesforce, raio-X 2026-09-21) —
+  // estado independente de `aberto` (inline, só usado quando expandido).
+  const [flyoutAberto, setFlyoutAberto] = useState(false);
+  const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (algumFilhoAtivo) setAberto(true);
   }, [algumFilhoAtivo]);
+
+  // Colapsar a sidebar com o flyout aberto deixaria um portal órfão —
+  // fecha ao trocar de modo.
+  useEffect(() => {
+    if (!collapsed) setFlyoutAberto(false);
+  }, [collapsed]);
+
+  useEffect(() => {
+    if (!flyoutAberto) return;
+    function aoClicarFora(evento: MouseEvent) {
+      const alvo = evento.target as Node;
+      if (triggerRef.current?.contains(alvo) || flyoutRef.current?.contains(alvo)) return;
+      setFlyoutAberto(false);
+    }
+    function aoTeclar(evento: KeyboardEvent) {
+      if (evento.key === "Escape") setFlyoutAberto(false);
+    }
+    document.addEventListener("mousedown", aoClicarFora);
+    document.addEventListener("keydown", aoTeclar);
+    return () => {
+      document.removeEventListener("mousedown", aoClicarFora);
+      document.removeEventListener("keydown", aoTeclar);
+    };
+  }, [flyoutAberto]);
+
+  function alternarFlyout() {
+    if (!flyoutAberto && triggerRef.current) {
+      const retangulo = triggerRef.current.getBoundingClientRect();
+      setFlyoutPos({ top: retangulo.top, left: retangulo.right + 6 });
+    }
+    setFlyoutAberto((atual) => !atual);
+  }
 
   const seta = (
     <button
@@ -161,6 +205,60 @@ function NavGroup({
       {aberto ? "▾" : "▸"}
     </button>
   );
+
+  if (collapsed) {
+    return (
+      <div>
+        <button
+          ref={triggerRef}
+          type="button"
+          data-tour-toggle={tourToggleId}
+          title={label}
+          onClick={alternarFlyout}
+          className={cn(
+            CLASSE_ITEM_BASE,
+            "w-full justify-center px-0",
+            algumFilhoAtivo ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO,
+          )}
+        >
+          <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
+        </button>
+        {flyoutAberto &&
+          flyoutPos &&
+          createPortal(
+            <div
+              ref={flyoutRef}
+              className="fixed z-40 w-56 rounded-lg border border-nav-border bg-nav-bg p-1.5 shadow-xl"
+              style={{ top: flyoutPos.top, left: flyoutPos.left }}
+            >
+              {path ? (
+                <NavLink
+                  to={path}
+                  end
+                  onClick={() => setFlyoutAberto(false)}
+                  className={({ isActive }) =>
+                    cn(CLASSE_ITEM_BASE, "mb-1 font-bold", isActive ? CLASSE_ITEM_ATIVO : "text-nav-text")
+                  }
+                >
+                  <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
+                  <span>{label}</span>
+                </NavLink>
+              ) : (
+                <div className="mb-1 px-2.5 py-1 text-[11px] font-bold text-nav-text">{label}</div>
+              )}
+              <div className="flex flex-col gap-0.5">
+                {itens.map((item) => (
+                  <div key={item.path} onClick={() => setFlyoutAberto(false)}>
+                    <NavButton {...item} />
+                  </div>
+                ))}
+              </div>
+            </div>,
+            document.body,
+          )}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -335,7 +433,16 @@ function AvisoWhatsappPessoalFaltando() {
 
 export function AppShell() {
   const { usuario, temLicencaAtiva, sair, primeiroLoginPendente, consumirPrimeiroLoginPendente } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  // Rail icon-only (redesign Salesforce, raio-X 2026-09-21) — persistido
+  // pra não perder o ganho de espaço a cada reload.
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("b2bon_sidebar_collapsed") === "true");
+  function alternarCollapsed() {
+    setCollapsed((atual) => {
+      const novo = !atual;
+      localStorage.setItem("b2bon_sidebar_collapsed", String(novo));
+      return novo;
+    });
+  }
   const [mobileOpen, setMobileOpen] = useState(false);
   const [tourAberto, setTourAberto] = useState(false);
   // Painel de IA docado (raio-X 2026-09-21, consolida o antigo FaqModal):
@@ -462,33 +569,49 @@ export function AppShell() {
           <div className="flex h-8.5 w-8.5 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan to-[#005F7A] font-head text-[17px] font-black text-white">
             B
           </div>
-          <div className="overflow-hidden whitespace-nowrap">
-            <div className="font-head text-[15px] leading-none font-extrabold text-nav-text">
-              B2B <span className="text-cyan">ON</span>
+          {!collapsed && (
+            <div className="overflow-hidden whitespace-nowrap">
+              <div className="font-head text-[15px] leading-none font-extrabold text-nav-text">
+                B2B <span className="text-cyan">ON</span>
+              </div>
+              <div className="text-[9px] tracking-widest text-nav-muted">OPERATING NETWORK</div>
             </div>
-            <div className="text-[9px] tracking-widest text-nav-muted">OPERATING NETWORK</div>
-          </div>
+          )}
         </div>
 
         <nav className="flex-1 overflow-y-auto p-1.5">
           <button
             type="button"
             onClick={() => setBuscaAberta(true)}
-            className="mb-1.5 flex w-full items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-nav-muted transition-colors hover:bg-nav-hover hover:text-nav-text"
+            title={collapsed ? "Buscar" : undefined}
+            className={cn(
+              "mb-1.5 flex w-full items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-nav-muted transition-colors hover:bg-nav-hover hover:text-nav-text",
+              collapsed && "justify-center px-0",
+            )}
           >
             <span className="w-5 flex-shrink-0 text-center text-[15px]">🔍</span>
-            <span className="flex-1 overflow-hidden text-left text-ellipsis">Buscar</span>
-            <span className="flex-shrink-0 rounded border border-nav-border px-1 text-[9px] text-nav-muted">Ctrl K</span>
+            {!collapsed && (
+              <>
+                <span className="flex-1 overflow-hidden text-left text-ellipsis">Buscar</span>
+                <span className="flex-shrink-0 rounded border border-nav-border px-1 text-[9px] text-nav-muted">
+                  Ctrl K
+                </span>
+              </>
+            )}
           </button>
 
           <div className="relative mb-1.5">
             <button
               type="button"
               onClick={abrirNotificacoes}
-              className="flex w-full items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-nav-muted transition-colors hover:bg-nav-hover hover:text-nav-text"
+              title={collapsed ? "Notificações" : undefined}
+              className={cn(
+                "flex w-full items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-nav-muted transition-colors hover:bg-nav-hover hover:text-nav-text",
+                collapsed && "justify-center px-0",
+              )}
             >
               <span className="w-5 flex-shrink-0 text-center text-[15px]">🔔</span>
-              <span className="flex-1 overflow-hidden text-left text-ellipsis">Notificações</span>
+              {!collapsed && <span className="flex-1 overflow-hidden text-left text-ellipsis">Notificações</span>}
               {contagemNaoLidas > 0 && (
                 <span className="flex-shrink-0 rounded-full bg-red px-1.5 text-[9px] font-semibold text-white">
                   {contagemNaoLidas}
@@ -532,79 +655,117 @@ export function AppShell() {
 
           {temLicencaAtiva && (
             <div data-tour-id="dashboard">
-              <NavButton {...NAV_ITEMS_PAGOS[0]} />
+              <NavButton {...NAV_ITEMS_PAGOS[0]} collapsed={collapsed} />
             </div>
           )}
 
           {temLicencaAtiva && (
             <div data-tour-id="crm">
-              <NavGroup label={CRM_ITEM.label} icon={CRM_ITEM.icon} path={CRM_ITEM.path} itens={CRM_SUBITENS} />
+              <NavGroup
+                label={CRM_ITEM.label}
+                icon={CRM_ITEM.icon}
+                path={CRM_ITEM.path}
+                itens={CRM_SUBITENS}
+                collapsed={collapsed}
+              />
             </div>
           )}
 
           {temLicencaAtiva && (
             <div data-tour-id="map">
-              <NavButton {...NAV_ITEMS_PAGOS[1]} />
+              <NavButton {...NAV_ITEMS_PAGOS[1]} collapsed={collapsed} />
             </div>
           )}
 
           {temLicencaAtiva && (
             <div data-tour-id="predator">
-              <NavGroup label="Predator" icon="🐾" itens={PREDATOR_NAV_ITEMS} tourToggleId="predator" />
+              <NavGroup
+                label="Predator"
+                icon="🐾"
+                itens={PREDATOR_NAV_ITEMS}
+                tourToggleId="predator"
+                collapsed={collapsed}
+              />
             </div>
           )}
 
           <div data-tour-id="rede-social">
-            <NavButton {...NAV_ITEM_REDE_SOCIAL} />
+            <NavButton {...NAV_ITEM_REDE_SOCIAL} collapsed={collapsed} />
           </div>
 
           {temLicencaAtiva && (
             <div data-tour-id="leads">
-              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">Leads</div>
+              {!collapsed && (
+                <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">Leads</div>
+              )}
               {LEADS_NAV_ITEMS.map((item) => (
-                <NavButton key={item.path} {...item} />
+                <NavButton key={item.path} {...item} collapsed={collapsed} />
               ))}
             </div>
           )}
 
           {temLicencaAtiva && (usuario?.recursos_plano.registro_oportunidade || isSuperAdmin) && (
             <div data-tour-id="ro">
-              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">RO</div>
-              <NavButton {...RO_NAV_ITEM} />
-              {(ehAdminDistribuidor || isSuperAdmin) && <NavButton {...RO_NAV_ITEM_APROVACOES} />}
+              {!collapsed && (
+                <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">RO</div>
+              )}
+              <NavButton {...RO_NAV_ITEM} collapsed={collapsed} />
+              {(ehAdminDistribuidor || isSuperAdmin) && (
+                <NavButton {...RO_NAV_ITEM_APROVACOES} collapsed={collapsed} />
+              )}
             </div>
           )}
 
           {(isSuperAdmin || ehGestorHierarquico || isAdmin) && (
             <div data-tour-id="admin">
-              <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">Admin</div>
+              {!collapsed && (
+                <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">Admin</div>
+              )}
               {(isSuperAdmin || ehGestorHierarquico) &&
-                ADMIN_NAV_ITEMS_HIERARQUIA.map((item) => <NavButton key={item.path} {...item} />)}
-              {ehAdminDistribuidor && <NavButton {...ADMIN_NAV_ITEM_INTEGRACOES} />}
-              <NavButton {...ADMIN_NAV_ITEM_CONVITES} />
-              {isSuperAdmin && ADMIN_NAV_ITEMS_SUPER_ADMIN.map((item) => <NavButton key={item.path} {...item} />)}
+                ADMIN_NAV_ITEMS_HIERARQUIA.map((item) => (
+                  <NavButton key={item.path} {...item} collapsed={collapsed} />
+                ))}
+              {ehAdminDistribuidor && <NavButton {...ADMIN_NAV_ITEM_INTEGRACOES} collapsed={collapsed} />}
+              <NavButton {...ADMIN_NAV_ITEM_CONVITES} collapsed={collapsed} />
+              {isSuperAdmin &&
+                ADMIN_NAV_ITEMS_SUPER_ADMIN.map((item) => <NavButton key={item.path} {...item} collapsed={collapsed} />)}
             </div>
           )}
         </nav>
 
-        <div className="flex items-center gap-2.5 border-t border-nav-border p-2.5">
-          <NavLink to="/perfil" className="flex h-7.5 w-7.5 flex-shrink-0 items-center justify-center rounded-full bg-violet/25 text-xs font-bold text-violet">
-            {usuario?.nome?.[0]?.toUpperCase() ?? "?"}
-          </NavLink>
-          <NavLink to="/perfil" className="min-w-0 flex-1 overflow-hidden">
-            <div className="overflow-hidden text-[12px] font-semibold text-ellipsis whitespace-nowrap text-nav-text">
-              {usuario?.nome}
-            </div>
-            <div className="text-[9px] tracking-wide text-nav-muted">{usuario?.papel?.toUpperCase()}</div>
-          </NavLink>
-          <button onClick={sair} className="flex-shrink-0 text-[11px] text-nav-muted hover:text-red">
-            Sair
-          </button>
-        </div>
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-1.5 border-t border-nav-border p-2.5">
+            <NavLink
+              to="/perfil"
+              title="Meu Perfil"
+              className="flex h-7.5 w-7.5 flex-shrink-0 items-center justify-center rounded-full bg-violet/25 text-xs font-bold text-violet"
+            >
+              {usuario?.nome?.[0]?.toUpperCase() ?? "?"}
+            </NavLink>
+            <button onClick={sair} title="Sair" className="text-[13px] text-nav-muted hover:text-red">
+              ⏻
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2.5 border-t border-nav-border p-2.5">
+            <NavLink to="/perfil" className="flex h-7.5 w-7.5 flex-shrink-0 items-center justify-center rounded-full bg-violet/25 text-xs font-bold text-violet">
+              {usuario?.nome?.[0]?.toUpperCase() ?? "?"}
+            </NavLink>
+            <NavLink to="/perfil" className="min-w-0 flex-1 overflow-hidden">
+              <div className="overflow-hidden text-[12px] font-semibold text-ellipsis whitespace-nowrap text-nav-text">
+                {usuario?.nome}
+              </div>
+              <div className="text-[9px] tracking-wide text-nav-muted">{usuario?.papel?.toUpperCase()}</div>
+            </NavLink>
+            <button onClick={sair} className="flex-shrink-0 text-[11px] text-nav-muted hover:text-red">
+              Sair
+            </button>
+          </div>
+        )}
 
         <button
           className="absolute top-5 -right-2.75 z-30 flex h-5.5 w-5.5 items-center justify-center rounded-full border border-border bg-surf2 text-[11px] text-muted max-sm:hidden"
-          onClick={() => setCollapsed((value) => !value)}
+          onClick={alternarCollapsed}
         >
           {collapsed ? "›" : "‹"}
         </button>
