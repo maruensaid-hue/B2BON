@@ -11,9 +11,42 @@ from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
 from app.models.qualificacao import QualificacaoScore
 from app.models.reuniao import Reuniao
+from app.models.usuario import Usuario
+from app.services.errors import ValidacaoFalhou
 
 _PERIODO_PADRAO_DIAS = 30
 ALERTA_BAIXO_USO_LIMIAR = 0.5
+
+# Redesign Salesforce (raio-X 2026-09-21) — as 3 seções reordenáveis/
+# ocultáveis da Dashboard. Granularidade de seção, não de KpiCard
+# individual (ver decisão de escopo do plano).
+_CHAVES_DASHBOARD_VALIDAS = {"kpis_norte", "funil", "economia"}
+_PREFERENCIAS_DASHBOARD_PADRAO = [
+    {"chave": "kpis_norte", "visivel": True},
+    {"chave": "funil", "visivel": True},
+    {"chave": "economia", "visivel": True},
+]
+
+
+def obter_preferencias_dashboard(usuario: Usuario) -> list[dict]:
+    """Ordem/visibilidade das 3 seções da Dashboard — `null` (usuário
+    pré-migração ou que nunca customizou) cai no default: todas visíveis,
+    ordem original."""
+    if not usuario.preferencias_dashboard:
+        return [dict(item) for item in _PREFERENCIAS_DASHBOARD_PADRAO]
+    return usuario.preferencias_dashboard
+
+
+def salvar_preferencias_dashboard(db: Session, usuario: Usuario, itens: list[dict]) -> list[dict]:
+    chaves = [item["chave"] for item in itens]
+    if set(chaves) != _CHAVES_DASHBOARD_VALIDAS or len(chaves) != len(_CHAVES_DASHBOARD_VALIDAS):
+        raise ValidacaoFalhou(
+            "A configuração precisa conter exatamente as 3 seções da Dashboard, sem repetir nem faltar nenhuma."
+        )
+    usuario.preferencias_dashboard = itens
+    db.commit()
+    db.refresh(usuario)
+    return usuario.preferencias_dashboard
 
 
 def _mes_anterior(mes: str) -> str:

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -41,3 +41,8 @@ class Usuario(Base):
     # colega o dispensar. Backfill `True` pra usuários já existentes na
     # migração (ver alembic) — só quem se cadastra depois nasce com `False`.
     boas_vindas_banner_dispensado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Redesign Salesforce (raio-X 2026-09-21) — ordem/visibilidade das 3
+    # seções da Dashboard (grade de KPIs, funil, economia), por usuário.
+    # `null` = nunca customizou, cai no default (todas visíveis, ordem
+    # original) calculado em `panel_service.obter_preferencias_dashboard`.
+    preferencias_dashboard: Mapped[list | None] = mapped_column(JSON, nullable=True)

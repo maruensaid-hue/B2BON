@@ -116,3 +116,78 @@ def test_export_csv_dos_indicadores(client):
     assert resposta.status_code == 200
     assert resposta.headers["content-type"].startswith("text/csv")
     assert "indicador,valor" in resposta.text
+
+
+def test_preferencias_dashboard_default_todas_visiveis(client):
+    """Redesign Salesforce (raio-X 2026-09-21): sem customização ainda,
+    as 3 seções vêm todas visíveis, na ordem original."""
+    resposta = client.get("/api/v1/painel/preferencias-dashboard")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == [
+        {"chave": "kpis_norte", "visivel": True},
+        {"chave": "funil", "visivel": True},
+        {"chave": "economia", "visivel": True},
+    ]
+
+
+def test_salvar_preferencias_dashboard_reordena_e_oculta(client):
+    nova_ordem = [
+        {"chave": "economia", "visivel": True},
+        {"chave": "kpis_norte", "visivel": True},
+        {"chave": "funil", "visivel": False},
+    ]
+
+    resposta = client.put("/api/v1/painel/preferencias-dashboard", json={"itens": nova_ordem})
+
+    assert resposta.status_code == 200
+    assert resposta.json() == nova_ordem
+    assert client.get("/api/v1/painel/preferencias-dashboard").json() == nova_ordem
+
+
+def test_salvar_preferencias_dashboard_rejeita_conjunto_incompleto(client):
+    resposta = client.put(
+        "/api/v1/painel/preferencias-dashboard",
+        json={"itens": [{"chave": "kpis_norte", "visivel": True}, {"chave": "funil", "visivel": True}]},
+    )
+
+    assert resposta.status_code == 422
+
+
+def test_salvar_preferencias_dashboard_rejeita_chave_desconhecida(client):
+    resposta = client.put(
+        "/api/v1/painel/preferencias-dashboard",
+        json={
+            "itens": [
+                {"chave": "kpis_norte", "visivel": True},
+                {"chave": "funil", "visivel": True},
+                {"chave": "inventada", "visivel": True},
+            ]
+        },
+    )
+
+    assert resposta.status_code == 422
+
+
+def test_preferencias_dashboard_e_por_usuario_nao_por_tenant(client, criar_usuario_autenticado):
+    """Cada usuário customiza a própria Dashboard — um colega do mesmo
+    tenant que nunca customizou continua vendo o default."""
+    client.put(
+        "/api/v1/painel/preferencias-dashboard",
+        json={
+            "itens": [
+                {"chave": "kpis_norte", "visivel": False},
+                {"chave": "funil", "visivel": True},
+                {"chave": "economia", "visivel": True},
+            ]
+        },
+    )
+
+    headers_colega = criar_usuario_autenticado(TENANT_ID, papel="user", email="colega-dashboard@teste.com.br")
+    resposta_colega = client.get("/api/v1/painel/preferencias-dashboard", headers=headers_colega)
+
+    assert resposta_colega.json() == [
+        {"chave": "kpis_norte", "visivel": True},
+        {"chave": "funil", "visivel": True},
+        {"chave": "economia", "visivel": True},
+    ]

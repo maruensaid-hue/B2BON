@@ -3,13 +3,16 @@ from datetime import date
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_db, get_tenant_id
+from app.api.deps import exigir_papel, get_db, get_tenant_id, get_usuario_atual
+from app.models.usuario import Usuario
 from app.schemas.nps import DistribuicaoNpsSchema
 from app.schemas.painel import (
     ConfiguracaoPainelSchema,
     ConfiguracaoPainelUpsertSchema,
     IndicadoresResponseSchema,
     MetricaNorteSchema,
+    PreferenciaDashboardItemSchema,
+    PreferenciasDashboardUpsertSchema,
     RankingAssinanteSchema,
 )
 from app.services import panel_service
@@ -80,6 +83,23 @@ def distribuicao_nps(
 ) -> DistribuicaoNpsSchema:
     """Classificação promotor/neutro/detrator visível no painel (E11-H1)."""
     return DistribuicaoNpsSchema(**panel_service.distribuicao_nps(db, tenant_id))
+
+
+@router.get("/preferencias-dashboard", response_model=list[PreferenciaDashboardItemSchema])
+def obter_preferencias_dashboard(usuario: Usuario = Depends(get_usuario_atual)) -> list[dict]:
+    """Ordem/visibilidade das 3 seções da Dashboard (redesign Salesforce,
+    raio-X 2026-09-21) — por usuário, não por tenant."""
+    return panel_service.obter_preferencias_dashboard(usuario)
+
+
+@router.put("/preferencias-dashboard", response_model=list[PreferenciaDashboardItemSchema])
+def salvar_preferencias_dashboard(
+    dados: PreferenciasDashboardUpsertSchema,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    itens = [item.model_dump() for item in dados.itens]
+    return panel_service.salvar_preferencias_dashboard(db, usuario, itens)
 
 
 @router.get(

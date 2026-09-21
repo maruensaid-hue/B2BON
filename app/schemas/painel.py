@@ -37,6 +37,15 @@ class IndicadoresResponseSchema(BaseModel):
     atrito: IndicadoresAtritoSchema
 
 
+class PreferenciaDashboardItemSchema(BaseModel):
+    chave: str
+    visivel: bool
+
+
+class PreferenciasDashboardUpsertSchema(BaseModel):
+    itens: list[PreferenciaDashboardItemSchema]
+
+
 class RankingAssinanteSchema(BaseModel):
     """Só campos agregados — nenhum dado de conta/decisor/mensagem do
     assinante (isolamento multi-tenant do E8-H3, verificado por teste)."""
