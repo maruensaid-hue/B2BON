@@ -42,6 +42,9 @@ export interface Usuario {
    * faltando; computado só no login (não se atualiza sozinho durante a
    * sessão se uma conta nova for atribuída depois). */
   tem_conta_atribuida: boolean;
+  /** Redesign Salesforce (raio-X 2026-09-21) — dispensa em definitivo o
+   * banner de boas-vindas com atalhos na Dashboard. */
+  boas_vindas_banner_dispensado: boolean;
 }
 
 interface TokenResponse {
@@ -98,6 +101,9 @@ interface AuthContextValue {
   /** "Meu Perfil" (raio-X 2026-09-15) — salva o WhatsApp pessoal do
    * vendedor, usado no botão de redirecionamento dos templates. */
   atualizarWhatsappPessoal: (whatsappPessoal: string | null) => Promise<void>;
+  /** Dispensa em definitivo o banner de boas-vindas da Dashboard (raio-X
+   * 2026-09-21) — some da tela sem precisar de logout/login. */
+  dispensarBannerBoasVindas: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -187,6 +193,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const dispensarBannerBoasVindas = useCallback(async () => {
+    await api.post("/auth/dispensar-banner-boas-vindas");
+    setUsuario((atual) => {
+      if (!atual) return atual;
+      const atualizado = { ...atual, boas_vindas_banner_dispensado: true };
+      atualizarUsuarioSalvo(atualizado);
+      return atualizado;
+    });
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       usuario,
@@ -202,6 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       declararPagamento,
       confirmarAvisoWhatsappTemplate,
       atualizarWhatsappPessoal,
+      dispensarBannerBoasVindas,
     }),
     [
       usuario,
@@ -216,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       declararPagamento,
       confirmarAvisoWhatsappTemplate,
       atualizarWhatsappPessoal,
+      dispensarBannerBoasVindas,
     ],
   );
 

@@ -226,6 +226,18 @@ def atualizar_whatsapp_pessoal(
     return usuario
 
 
+@router.post("/dispensar-banner-boas-vindas", response_model=UsuarioSchema)
+def dispensar_banner_boas_vindas(
+    usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)
+) -> UsuarioSchema:
+    """Redesign Salesforce (raio-X 2026-09-21) — dispensa em definitivo o
+    banner de boas-vindas da Dashboard pro próprio usuário logado."""
+    usuario.boas_vindas_banner_dispensado = True
+    db.commit()
+    db.refresh(usuario)
+    return usuario
+
+
 @router.get("/licenca-status", response_model=LicencaStatusResponseSchema)
 def licenca_status(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> LicencaStatusResponseSchema:
     """Usado pela tela de retorno do checkout (Mercado Pago) pra saber

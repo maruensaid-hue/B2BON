@@ -57,6 +57,30 @@ def test_login_reflete_aviso_whatsapp_template_confirmado(client, db_session):
     assert resposta_depois.json()["usuario"]["aviso_whatsapp_template_confirmado"] is True
 
 
+def test_login_reflete_boas_vindas_banner_dispensado(client, db_session):
+    """Redesign Salesforce (raio-X 2026-09-21): banner de boas-vindas da
+    Dashboard, default False pra usuário que nunca dispensou."""
+    _criar_usuario_senha(db_session, "banner-boas-vindas@teste.com.br", "senha-forte")
+
+    resposta = client.post(
+        "/api/v1/auth/login", json={"email": "banner-boas-vindas@teste.com.br", "senha": "senha-forte"}
+    )
+
+    assert resposta.json()["usuario"]["boas_vindas_banner_dispensado"] is False
+
+
+def test_dispensar_banner_boas_vindas_e_permanente(client, criar_usuario_autenticado, db_session):
+    headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="dispensar-banner@teste.com.br")
+
+    resposta = client.post("/api/v1/auth/dispensar-banner-boas-vindas", headers=headers)
+
+    assert resposta.status_code == 200
+    assert resposta.json()["boas_vindas_banner_dispensado"] is True
+
+    usuario = db_session.query(Usuario).filter_by(email="dispensar-banner@teste.com.br").one()
+    assert usuario.boas_vindas_banner_dispensado is True
+
+
 def test_login_primeiro_login_true_so_na_primeira_vez(client, db_session):
     """Raio-X 2026-09-01: sinal pra disparar o tour guiado de onboarding
     no frontend uma única vez, sem campo novo no banco."""

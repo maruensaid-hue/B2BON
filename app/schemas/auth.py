@@ -49,6 +49,10 @@ class UsuarioSchema(BaseModel):
     # sem isso, um vendedor sem conta nenhuma atribuída seria incomodado
     # à toa (raio-X 2026-09-15).
     tem_conta_atribuida: bool = False
+    # Redesign Salesforce (raio-X 2026-09-21): vem direto de
+    # `Usuario.boas_vindas_banner_dispensado` (from_attributes) — dispensa
+    # em definitivo o banner de atalhos da Dashboard.
+    boas_vindas_banner_dispensado: bool = False
 
 
 class LoginRequestSchema(BaseModel):

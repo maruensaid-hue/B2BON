@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+import { BannerBoasVindas } from "@/components/onboarding/BannerBoasVindas";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { api } from "@/lib/api";
@@ -76,6 +77,8 @@ export function Dashboard() {
         <div className="font-head text-xl font-bold">Dashboard</div>
         <div className="mt-0.5 text-[11px] text-muted">Visão geral · CRM + MAP</div>
       </div>
+
+      <BannerBoasVindas />
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
