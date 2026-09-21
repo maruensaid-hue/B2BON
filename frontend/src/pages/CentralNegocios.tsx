@@ -377,9 +377,6 @@ export function CentralNegocios() {
           />
           <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/75 via-black/20 to-transparent p-3.5">
             <div className="text-[15px] font-bold text-white">🦈 Dicas — O Vendedor Tubarão</div>
-            <div className="text-[11px] text-white/80">
-              Conteúdo original da B2B ON, no espírito da marca — não são trechos literais de nenhum livro.
-            </div>
           </div>
         </div>
         <div className="flex flex-col gap-4">
