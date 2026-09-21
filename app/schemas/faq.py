@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,8 +19,19 @@ class FaqItemCreateSchema(BaseModel):
     resposta: str
 
 
+class TurnoFaqSchema(BaseModel):
+    autor: Literal["usuario", "ia"]
+    texto: str
+
+
 class FaqPerguntarRequestSchema(BaseModel):
     pergunta: str
+    # Painel de IA docado (raio-X 2026-09-21): o backend continua sem
+    # persistir conversa (mesma cautela de custo já documentada em
+    # faq_service.responder) — o frontend reenvia os últimos turnos
+    # visíveis a cada pergunta pra dar continuidade de contexto dentro
+    # da mesma sessão de painel aberto, sem precisar de tabela nova.
+    historico: list[TurnoFaqSchema] | None = None
 
 
 class FaqPerguntarResponseSchema(BaseModel):

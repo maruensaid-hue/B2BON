@@ -78,6 +78,26 @@ def test_faq_perguntar_responde_com_ia(client, fake_llm):
     assert resposta.json() == {"resposta": "Vai em Configuração e cadastra seu SMTP próprio."}
 
 
+def test_faq_perguntar_com_historico_responde_com_ia(client, fake_llm):
+    """Painel de IA docado (raio-X 2026-09-21): histórico opcional dá
+    continuidade sem persistir conversa no servidor."""
+    fake_llm.definir_respostas(["Sim, é o mesmo SMTP configurado antes."])
+
+    resposta = client.post(
+        "/api/v1/faq/perguntar",
+        json={
+            "pergunta": "E isso vale pra campanha também?",
+            "historico": [
+                {"autor": "usuario", "texto": "Como configuro o e-mail?"},
+                {"autor": "ia", "texto": "Vai em Configuração e cadastra seu SMTP próprio."},
+            ],
+        },
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"resposta": "Sim, é o mesmo SMTP configurado antes."}
+
+
 def test_faq_perguntar_sem_autenticacao_recusa(client):
     resposta = client.post("/api/v1/faq/perguntar", json={"pergunta": "Oi"}, headers={"Authorization": ""})
 

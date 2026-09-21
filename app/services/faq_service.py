@@ -111,10 +111,31 @@ Cadências, Campanhas, etc.) exigem licença.
 """
 
 
-def responder(pergunta: str, llm: LLMProvider) -> str:
+# Painel de IA docado (raio-X 2026-09-21): o frontend passa a persistir
+# o painel aberto entre navegações e reenviar os últimos turnos visíveis
+# a cada pergunta nova, pra dar continuidade de contexto dentro da mesma
+# sessão — sem precisar de tabela de conversa nova no backend (mesma
+# cautela de custo já documentada abaixo, só estendida pra caber
+# histórico).
+_LIMITE_TURNOS_HISTORICO = 6
+
+
+def responder(pergunta: str, llm: LLMProvider, historico: list[tuple[str, str]] | None = None) -> str:
     """FAQ interativa com IA (raio-X 2026-09-01) — reaproveita o mesmo
     LLMProvider já usado em cadências/enriquecimento, sem histórico
-    persistido (cada pergunta é uma chamada isolada, sem custo de guardar
-    conversa que ninguém pediu ainda)."""
-    resposta = llm_helpers.gerar(llm, LLMRequest(prompt=pergunta, system=_PROMPT_SISTEMA, max_tokens=800))
+    persistido no banco (cada chamada é isolada do lado do servidor,
+    sem custo de guardar conversa que ninguém pediu ainda). `historico`
+    é só o que o frontend já tem na tela (últimos turnos truncados em
+    `_LIMITE_TURNOS_HISTORICO`), reenviado a cada pergunta pra dar
+    continuidade — não é lido nem escrito em nenhuma tabela aqui."""
+    prompt = pergunta
+    if historico:
+        turnos_recentes = historico[-_LIMITE_TURNOS_HISTORICO:]
+        linhas = [f"{'Usuário' if autor == 'usuario' else 'Você'}: {texto}" for autor, texto in turnos_recentes]
+        prompt = (
+            "Histórico recente da conversa (mais antigo primeiro):\n"
+            + "\n".join(linhas)
+            + f"\n\nNova pergunta do usuário: {pergunta}"
+        )
+    resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt, system=_PROMPT_SISTEMA, max_tokens=800))
     return resposta.content

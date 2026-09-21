@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { BuscaGlobal } from "@/components/busca/BuscaGlobal";
 import { InstallBanner } from "@/components/InstallBanner";
-import { FaqModal } from "@/components/onboarding/FaqModal";
+import { PainelAjudaDocado } from "@/components/onboarding/PainelAjudaDocado";
 import { TourGuiado } from "@/components/onboarding/TourGuiado";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -338,7 +338,16 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [tourAberto, setTourAberto] = useState(false);
-  const [faqAberto, setFaqAberto] = useState(false);
+  // Painel de IA docado (raio-X 2026-09-21, consolida o antigo FaqModal):
+  // minimizado por padrão, persiste aberto/fechado entre navegações via
+  // localStorage — a transcrição em si não é persistida (só o boolean).
+  const [painelAjudaAberto, setPainelAjudaAberto] = useState(
+    () => localStorage.getItem("b2bon_painel_ajuda_aberto") === "true",
+  );
+  function alternarPainelAjuda(aberto: boolean) {
+    setPainelAjudaAberto(aberto);
+    localStorage.setItem("b2bon_painel_ajuda_aberto", String(aberto));
+  }
   const [buscaAberta, setBuscaAberta] = useState(false);
   const [notificacoesAbertas, setNotificacoesAbertas] = useState(false);
   const [notificacoes, setNotificacoes] = useState<NotificacaoRedeSocial[]>([]);
@@ -578,15 +587,6 @@ export function AppShell() {
           )}
         </nav>
 
-        <button
-          type="button"
-          onClick={() => setFaqAberto(true)}
-          className="mx-1.5 mb-1.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] text-nav-muted transition-colors hover:bg-nav-hover hover:text-nav-text"
-        >
-          <span className="w-5 flex-shrink-0 text-center text-[15px]">❓</span>
-          <span>FAQ</span>
-        </button>
-
         <div className="flex items-center gap-2.5 border-t border-nav-border p-2.5">
           <NavLink to="/perfil" className="flex h-7.5 w-7.5 flex-shrink-0 items-center justify-center rounded-full bg-violet/25 text-xs font-bold text-violet">
             {usuario?.nome?.[0]?.toUpperCase() ?? "?"}
@@ -652,11 +652,12 @@ export function AppShell() {
 
       <BuscaGlobal open={buscaAberta} onClose={() => setBuscaAberta(false)} />
       <TourGuiado key={tourKey} open={tourAberto} onClose={() => setTourAberto(false)} />
-      <FaqModal
-        open={faqAberto}
-        onClose={() => setFaqAberto(false)}
+      <PainelAjudaDocado
+        open={painelAjudaAberto}
+        onOpen={() => alternarPainelAjuda(true)}
+        onClose={() => alternarPainelAjuda(false)}
         onRefazerTour={() => {
-          setFaqAberto(false);
+          alternarPainelAjuda(false);
           abrirTour();
         }}
       />

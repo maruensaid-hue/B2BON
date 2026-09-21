@@ -35,5 +35,8 @@ def perguntar_faq(
     """FAQ interativa com IA (raio-X 2026-09-01) — distinta da FaqItem
     curada por tenant acima; qualquer usuário autenticado pode perguntar
     livremente sobre como usar a plataforma, sem limite de uso (respostas
-    curtas, custo bem menor que enriquecimento)."""
-    return FaqPerguntarResponseSchema(resposta=faq_service.responder(dados.pergunta, llm))
+    curtas, custo bem menor que enriquecimento). `historico` opcional
+    (painel de IA docado, raio-X 2026-09-21) dá continuidade de contexto
+    sem persistir conversa no servidor."""
+    historico = [(t.autor, t.texto) for t in dados.historico] if dados.historico else None
+    return FaqPerguntarResponseSchema(resposta=faq_service.responder(dados.pergunta, llm, historico))
