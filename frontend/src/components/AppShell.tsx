@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
@@ -224,6 +224,19 @@ function NavGroup({
     setFlyoutAberto((atual) => !atual);
   }
 
+  // Com muitos sub-itens (ex.: Predator, 11), o flyout aberto perto do
+  // fim da sidebar pode nascer com o rodapé fora da viewport, sem
+  // como rolar até lá — reposiciona pra cima depois de medir a altura
+  // real renderizada (raio-X 2026-09-21).
+  useLayoutEffect(() => {
+    if (!flyoutAberto || !flyoutRef.current) return;
+    const retangulo = flyoutRef.current.getBoundingClientRect();
+    const estouro = retangulo.bottom - (window.innerHeight - 8);
+    if (estouro > 0) {
+      setFlyoutPos((atual) => (atual ? { ...atual, top: Math.max(8, atual.top - estouro) } : atual));
+    }
+  }, [flyoutAberto]);
+
   return (
     <div>
       <button
@@ -252,8 +265,8 @@ function NavGroup({
         createPortal(
           <div
             ref={flyoutRef}
-            className="fixed z-40 w-60 rounded-lg border border-nav-border bg-nav-bg p-1.5 shadow-xl"
-            style={{ top: flyoutPos.top, left: flyoutPos.left }}
+            className="fixed z-40 w-60 overflow-y-auto rounded-lg border border-nav-border bg-nav-bg p-1.5 shadow-xl"
+            style={{ top: flyoutPos.top, left: flyoutPos.left, maxHeight: "calc(100vh - 16px)" }}
           >
             {path ? (
               <NavLink
