@@ -46,6 +46,10 @@ interface GrupoDicas {
   tema: string;
   emoji: string;
   imagem: string;
+  /** Retratos (rosto perto do topo da foto original) precisam de
+   * `object-top` — o crop central padrão corta a cabeça numa faixa
+   * baixa e larga como a do card. */
+  posicaoImagem?: "center" | "top";
   dicas: Dica[];
 }
 
@@ -148,6 +152,7 @@ const GRUPOS_DICAS: GrupoDicas[] = [
     tema: "Análise comportamental do cliente",
     emoji: "👥",
     imagem: "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=500&q=65&auto=format&fit=crop",
+    posicaoImagem: "top",
     dicas: [
       {
         emoji: "📊",
@@ -387,11 +392,15 @@ export function CentralNegocios() {
               style={{ animationDelay: `${indice * 80}ms` }}
             >
               <div className="relative">
-                <img src={grupo.imagem} alt={grupo.tema} loading="lazy" className="h-20 w-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
-                <div className="absolute inset-0 flex items-center gap-2 px-3.5">
-                  <span className="text-[22px] drop-shadow">{grupo.emoji}</span>
-                  <span className="text-[13px] font-bold text-white drop-shadow">{grupo.tema}</span>
+                <img
+                  src={grupo.imagem}
+                  alt={grupo.tema}
+                  loading="lazy"
+                  className={`h-36 w-full object-cover sm:h-44 ${grupo.posicaoImagem === "top" ? "object-top" : "object-center"}`}
+                />
+                <div className="absolute bottom-2.5 left-2.5 flex items-center gap-2 rounded-lg bg-black/60 px-2.5 py-1.5 backdrop-blur-sm">
+                  <span className="text-[18px] leading-none">{grupo.emoji}</span>
+                  <span className="text-[12.5px] font-bold text-white">{grupo.tema}</span>
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-2.5 p-3.5 sm:grid-cols-2">
