@@ -1,3 +1,4 @@
+import logging
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -6,6 +7,11 @@ from typing import TypedDict
 from urllib.parse import quote
 
 import httpx
+import sentry_sdk
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _TIMEOUT_SEGUNDOS = 6.0
 _USER_AGENT = "Mozilla/5.0 (compatible; B2BON-CentralNegocios/1.0)"
@@ -143,7 +149,14 @@ def _buscar_cambio() -> list[CotacaoMoeda]:
         )
         resposta.raise_for_status()
         dados = resposta.json()
-    except (httpx.HTTPError, ValueError):
+    except (httpx.HTTPError, ValueError) as erro:
+        # 2026-09-21: câmbio voltava vazio em produção (Render) sem
+        # explicação — a troca de User-Agent sozinha não resolveu, então
+        # capturamos o erro real (Sentry, se configurado) em vez de seguir
+        # adivinhando a causa às cegas.
+        logger.warning("Falha ao buscar câmbio/cripto/ouro na AwesomeAPI: %s", erro)
+        if settings.sentry_dsn:
+            sentry_sdk.capture_exception(erro)
         return []
 
     resultado: list[CotacaoMoeda] = []
