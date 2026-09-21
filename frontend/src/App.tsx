@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { CentralNegocios } from "@/pages/CentralNegocios";
 import { ConviteVitrine } from "@/pages/ConviteVitrine";
 import { CriarConta } from "@/pages/CriarConta";
 import { EsqueciSenha } from "@/pages/EsqueciSenha";
@@ -73,6 +74,7 @@ export default function App() {
       <Route path="/redefinir-senha/:token" element={<RedefinirSenha />} />
       <Route path="/convite-vitrine/:codigo" element={<ConviteVitrine />} />
       <Route path="/criar-conta" element={<CriarConta />} />
+      <Route path="/central-de-negocios" element={<CentralNegocios />} />
       <Route path="/convite/:codigo" element={<RegistrarConvite />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/termos" element={<Termos />} />
