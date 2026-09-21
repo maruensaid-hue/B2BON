@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { TutorialLeadsEmpresas } from "@/pages/leads/TutorialLeadsEmpresas";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -36,8 +37,19 @@ interface TenantResumo {
  * esperado, cada empresa pode ser de um ramo diferente. */
 export function LeadsEmpresas() {
   const navigate = useNavigate();
-  const { usuario } = useAuth();
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
   const isGestor = usuario?.papel === "admin" || usuario?.papel === "super_admin";
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("leads-empresas")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("leads-empresas")) marcarTutorialModuloVisto("leads-empresas");
+  }
   const isSuperAdmin = usuario?.papel === "super_admin";
   // Mesma condição de AppShell.tsx/MapContas.tsx — quem gerencia mais de
   // um tenant (hierarquia de distribuidores, raio-X 2026-09-10).
@@ -82,6 +94,8 @@ export function LeadsEmpresas() {
       setEmpresas(await api.get<LeadConta[]>(`/leads/contas${filtro}`));
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível carregar as empresas.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -143,7 +157,12 @@ export function LeadsEmpresas() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Leads — Empresas</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">Leads — Empresas</div>
+            <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">
             Clientes cadastrados direto no CRM — indicação, evento, contato pessoal — sem passar por um ICP
           </div>
@@ -183,7 +202,7 @@ export function LeadsEmpresas() {
               ))}
             </Select>
           )}
-          <Button size="sm" onClick={() => setModalAberto(true)}>
+          <Button size="sm" data-tutorial-id="leads-empresas:nova" onClick={() => setModalAberto(true)}>
             + Nova empresa
           </Button>
         </div>
@@ -191,7 +210,7 @@ export function LeadsEmpresas() {
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
-      <Card>
+      <Card data-tutorial-id="leads-empresas:lista">
         <SectionLabel>Empresas</SectionLabel>
         <table className="w-full border-collapse text-[12px]">
           <thead>
@@ -261,6 +280,8 @@ export function LeadsEmpresas() {
           </Button>
         </form>
       </Modal>
+
+      <TutorialLeadsEmpresas open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

@@ -6,7 +6,9 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import type { Conta, ICP } from "@/pages/prospeccao/Prospeccao";
+import { TutorialCampanhas } from "@/pages/campanhas/TutorialCampanhas";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface Campanha {
   id: number;
@@ -123,6 +125,18 @@ function toneStatusDestinatario(status: string): "cyan" | "green" | "red" | "mut
 }
 
 export function Campanhas() {
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("campanhas")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("campanhas")) marcarTutorialModuloVisto("campanhas");
+  }
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [campanhaSelecionadaId, setCampanhaSelecionadaId] = useState<number | null>(null);
   const [detalhe, setDetalhe] = useState<CampanhaDetalhe | null>(null);
@@ -153,6 +167,8 @@ export function Campanhas() {
       }
     } catch {
       setErro("Não foi possível carregar as campanhas.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -333,12 +349,17 @@ export function Campanhas() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Campanhas</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">Campanhas</div>
+            <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">
             Disparo de e-mail/WhatsApp em massa — sem personalização por IA, separado da Cadência
           </div>
         </div>
-        <Button size="sm" variant="violet" onClick={() => setModalCriarAberto(true)}>
+        <Button size="sm" variant="violet" data-tutorial-id="campanhas:nova" onClick={() => setModalCriarAberto(true)}>
           + Nova campanha
         </Button>
       </div>
@@ -378,7 +399,7 @@ export function Campanhas() {
                 <Badge tone={toneStatusCampanha(campanhaSelecionada.status)}>{campanhaSelecionada.status}</Badge>
                 {campanhaSelecionada.status === "rascunho" && !confirmandoExclusao && (
                   <>
-                    <Button size="sm" onClick={marcarPronta}>
+                    <Button size="sm" data-tutorial-id="campanhas:pronta" onClick={marcarPronta}>
                       Marcar como pronta
                     </Button>
                     <Button size="sm" variant="danger" onClick={() => setConfirmandoExclusao(true)}>
@@ -530,7 +551,7 @@ export function Campanhas() {
             </Card>
           )}
 
-          <Card>
+          <Card data-tutorial-id="campanhas:destinatarios">
             <SectionLabel>Destinatários ({detalhe.destinatarios.length})</SectionLabel>
             <table className="w-full border-collapse text-[12px]">
               <thead>
@@ -652,6 +673,8 @@ export function Campanhas() {
           </Button>
         </form>
       </Modal>
+
+      <TutorialCampanhas open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

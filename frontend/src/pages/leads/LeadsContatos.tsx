@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { TutorialLeadsContatos } from "@/pages/leads/TutorialLeadsContatos";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -26,8 +27,19 @@ interface LeadConta {
 
 export function LeadsContatos() {
   const navigate = useNavigate();
-  const { usuario } = useAuth();
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
   const isGestor = usuario?.papel === "admin" || usuario?.papel === "super_admin";
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("leads-contatos")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("leads-contatos")) marcarTutorialModuloVisto("leads-contatos");
+  }
 
   const [contatos, setContatos] = useState<LeadDecisor[]>([]);
   const [empresas, setEmpresas] = useState<LeadConta[]>([]);
@@ -49,6 +61,8 @@ export function LeadsContatos() {
       setEmpresas(empresasResp);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível carregar os contatos.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -142,7 +156,12 @@ export function LeadsContatos() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Leads — Contatos</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">Leads — Contatos</div>
+            <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">
             {isGestor ? "Contatos de todos os leads do time" : "Contatos dos leads da sua carteira"}
           </div>
@@ -154,7 +173,7 @@ export function LeadsContatos() {
             placeholder="Buscar por contato, cargo ou empresa..."
             className="w-64"
           />
-          <Button size="sm" onClick={() => setModalAberto(true)}>
+          <Button size="sm" data-tutorial-id="leads-contatos:novo" onClick={() => setModalAberto(true)}>
             + Novo contato
           </Button>
         </div>
@@ -162,7 +181,7 @@ export function LeadsContatos() {
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
-      <Card>
+      <Card data-tutorial-id="leads-contatos:lista">
         <SectionLabel>Contatos</SectionLabel>
         <table className="w-full border-collapse text-[12px]">
           <thead>
@@ -312,6 +331,8 @@ export function LeadsContatos() {
           </form>
         )}
       </Modal>
+
+      <TutorialLeadsContatos open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
+import { TutorialRelatorioEntrega } from "@/pages/relatorio-entrega/TutorialRelatorioEntrega";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface SaudeCanalEmail {
   canal: string;
@@ -92,6 +94,18 @@ function paraPercentual(valor: number | null | undefined): string {
 }
 
 export function RelatorioEntrega() {
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("relatorio-entrega")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("relatorio-entrega")) marcarTutorialModuloVisto("relatorio-entrega");
+  }
   const [relatorio, setRelatorio] = useState<RelatorioEntrega | null>(null);
   const [envios, setEnvios] = useState<ListaEnviosEmail | null>(null);
   const [filtroStatus, setFiltroStatus] = useState("todos");
@@ -108,6 +122,8 @@ export function RelatorioEntrega() {
       setRelatorio(await api.get<RelatorioEntrega>("/relatorio-entrega"));
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível carregar o relatório.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -175,7 +191,12 @@ export function RelatorioEntrega() {
   return (
     <div className="p-5.5">
       <div className="mb-5">
-        <div className="font-head text-xl font-bold">Relatório de Entrega</div>
+        <div className="flex items-center gap-2">
+          <div className="font-head text-xl font-bold">Relatório de Entrega</div>
+          <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+            🔄 Rever tutorial
+          </button>
+        </div>
         <div className="mt-0.5 text-[11px] text-muted">
           Entregabilidade de e-mail e taxa de resposta por canal — o que a plataforma consegue medir de verdade
         </div>
@@ -184,7 +205,7 @@ export function RelatorioEntrega() {
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
       {mensagem && <div className="mb-4 text-[12px] text-green">{mensagem}</div>}
 
-      <Card className="mb-4">
+      <Card className="mb-4" data-tutorial-id="relatorio-entrega:saude">
         <div className="mb-3 flex items-center justify-between">
           <SectionLabel>E-mail — últimos 7 dias</SectionLabel>
           <Badge tone={saude?.pausado ? "red" : "green"}>{saude?.pausado ? "Pausado" : "Saudável"}</Badge>
@@ -217,7 +238,7 @@ export function RelatorioEntrega() {
         )}
       </Card>
 
-      <Card className="mb-4">
+      <Card className="mb-4" data-tutorial-id="relatorio-entrega:resposta">
         <SectionLabel>Taxa de resposta por canal</SectionLabel>
         <div className="flex flex-wrap gap-2.5">
           {Object.entries(relatorio?.taxa_resposta_por_canal ?? {}).map(([canal, taxa]) => (
@@ -234,7 +255,7 @@ export function RelatorioEntrega() {
         </div>
       </Card>
 
-      <Card>
+      <Card data-tutorial-id="relatorio-entrega:detalhamento">
         <div className="mb-3 flex items-center justify-between">
           <SectionLabel>Detalhamento de envios de e-mail — por destinatário</SectionLabel>
           <span className="text-[11px] text-muted">{envios?.total ?? 0} destinatário(s) no filtro atual</span>
@@ -340,6 +361,8 @@ export function RelatorioEntrega() {
           onAtualizado={carregar}
         />
       )}
+
+      <TutorialRelatorioEntrega open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

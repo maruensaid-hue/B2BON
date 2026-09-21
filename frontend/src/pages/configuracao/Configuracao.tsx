@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
+import { TutorialConfiguracao } from "@/pages/configuracao/TutorialConfiguracao";
 import { api, ApiError, getBlob, postFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -272,8 +273,19 @@ function ListaItensTemplate({
 }
 
 export function Configuracao() {
-  const { usuario } = useAuth();
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
   const isGestor = usuario?.papel === "admin" || usuario?.papel === "super_admin";
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("configuracao")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("configuracao")) marcarTutorialModuloVisto("configuracao");
+  }
 
   const [ofertas, setOfertas] = useState<Oferta[]>([]);
   const [comunicacao, setComunicacao] = useState<ConfiguracaoComunicacao | null>(null);
@@ -377,6 +389,8 @@ export function Configuracao() {
       await carregarTemplateProposta();
     } catch {
       setErro("Não foi possível carregar a configuração.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -627,7 +641,12 @@ export function Configuracao() {
     <div className="p-5.5">
       <AvisoWhatsAppTemplate />
       <div className="mb-5">
-        <div className="font-head text-xl font-bold">Configuração</div>
+        <div className="flex items-center gap-2">
+          <div className="font-head text-xl font-bold">Configuração</div>
+          <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+            🔄 Rever tutorial
+          </button>
+        </div>
         <div className="mt-0.5 text-[11px] text-muted">
           Oferta e comunicação — pré-requisitos para o motor de prospecção gerar cadências
         </div>
@@ -636,7 +655,7 @@ export function Configuracao() {
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
       {mensagem && <div className="mb-4 text-[12px] text-green">{mensagem}</div>}
 
-      <Card className="mb-4">
+      <Card className="mb-4" data-tutorial-id="configuracao:oferta">
         <SectionLabel>Oferta</SectionLabel>
         <div className="mb-3 text-[11px] text-muted">
           Tudo que você preencher aqui — descrição, diferenciais e provas
@@ -729,7 +748,7 @@ export function Configuracao() {
         </form>
       </Card>
 
-      <Card>
+      <Card data-tutorial-id="configuracao:comunicacao">
         <SectionLabel>Tom e restrições de comunicação</SectionLabel>
         <form onSubmit={salvarComunicacao} className="flex flex-col gap-3">
           <div>
@@ -797,7 +816,7 @@ export function Configuracao() {
       </Card>
 
       {isGestor && (
-        <Card className="mt-4">
+        <Card className="mt-4" data-tutorial-id="configuracao:whatsapp">
           <SectionLabel>WhatsApp Business</SectionLabel>
           <div className="mb-3 text-[11px] text-muted">
             Conta própria da Meta pra este cliente — obrigatória pra disparar WhatsApp de cadência/campanha.
@@ -1011,6 +1030,8 @@ export function Configuracao() {
           />
         </div>
       </Card>
+
+      <TutorialConfiguracao open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

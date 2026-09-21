@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { TutorialCadencias } from "@/pages/cadencias/TutorialCadencias";
 import type { Conta, ICP, ListaProspeccao } from "@/pages/prospeccao/Prospeccao";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -98,8 +99,19 @@ function toneStatus(status: string): "cyan" | "amber" | "green" | "muted" {
 }
 
 export function Cadencias() {
-  const { usuario } = useAuth();
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
   const permiteAbTeste = usuario?.recursos_plano.ab_teste_cadencia ?? false;
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("cadencias")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("cadencias")) marcarTutorialModuloVisto("cadencias");
+  }
   const [searchParams] = useSearchParams();
   const cadenciaIdDaUrl = Number(searchParams.get("cadencia_id")) || null;
   const [cadencias, setCadencias] = useState<Cadencia[]>([]);
@@ -157,6 +169,8 @@ export function Cadencias() {
       }
     } catch {
       setErro("Não foi possível carregar as cadências.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -502,12 +516,17 @@ export function Cadencias() {
       <AvisoWhatsAppTemplate />
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Cadências</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">Cadências</div>
+            <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">
             Sequência de toques multicanal gerada por IA, mediante aprovação
           </div>
         </div>
-        <Button size="sm" variant="violet" onClick={() => setModalCriarAberto(true)}>
+        <Button size="sm" variant="violet" data-tutorial-id="cadencias:nova" onClick={() => setModalCriarAberto(true)}>
           + Nova cadência
         </Button>
       </div>
@@ -573,7 +592,7 @@ export function Cadencias() {
               <div className="flex items-center gap-2">
                 <Badge tone={toneStatus(cadenciaSelecionada.status)}>{cadenciaSelecionada.status}</Badge>
                 {(cadenciaSelecionada.status === "aguardando_aprovacao" || cadenciaSelecionada.status === "ativa") && (
-                  <Button size="sm" onClick={ativarCadencia}>
+                  <Button size="sm" data-tutorial-id="cadencias:ativar" onClick={ativarCadencia}>
                     {cadenciaSelecionada.status === "ativa" ? "Agendar novas mensagens" : "Ativar cadência"}
                   </Button>
                 )}
@@ -630,7 +649,7 @@ export function Cadencias() {
                 Parar esta cadência automaticamente se o cliente responder
               </label>
             )}
-            <div className="flex flex-col gap-1.5">
+            <div data-tutorial-id="cadencias:toques" className="flex flex-col gap-1.5">
               {toques.map((toque) => (
                 <div key={toque.id} className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
                   <span className="font-head font-bold text-text">#{toque.ordem}</span>
@@ -1050,6 +1069,8 @@ export function Cadencias() {
           </Button>
         </form>
       </Modal>
+
+      <TutorialCadencias open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

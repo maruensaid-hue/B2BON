@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ConversaModal } from "@/pages/rede-social/ConversaModal";
 import { SalaCorporativaModal } from "@/pages/rede-social/SalaCorporativaModal";
 import { PerfilEmpresaDetalheModal } from "@/pages/rede-social/PerfilEmpresaDetalheModal";
+import { TutorialShoal } from "@/pages/rede-social/TutorialShoal";
 import { api, ApiError, getBlob, postFiles } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -177,7 +178,18 @@ function toneStatusConvite(status: string): "green" | "muted" | "red" {
 }
 
 export function RedeSocial() {
-  const { usuario } = useAuth();
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("shoal")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("shoal")) marcarTutorialModuloVisto("shoal");
+  }
   const [perfil, setPerfil] = useState<PerfilEmpresa | null>(null);
   const [empresas, setEmpresas] = useState<EmpresaDiretorio[]>([]);
   const [conexoesPendentes, setConexoesPendentes] = useState<Conexao[]>([]);
@@ -252,6 +264,8 @@ export function RedeSocial() {
       setIntents(intentsResp);
     } catch {
       setErro("Não foi possível carregar o Shoal.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -828,7 +842,12 @@ export function RedeSocial() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Shoal</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">Shoal</div>
+            <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">Perfil, diretório e mensageria B2B ON</div>
         </div>
       </div>
@@ -836,7 +855,7 @@ export function RedeSocial() {
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
       {aviso && <div className="mb-4 text-[12px] text-amber">{aviso}</div>}
 
-      <Card className="mb-4">
+      <Card className="mb-4" data-tutorial-id="shoal:perfil">
         <div className="flex items-start justify-between">
           <div>
             <SectionLabel>Meu perfil</SectionLabel>
@@ -938,7 +957,7 @@ export function RedeSocial() {
         </Card>
       )}
 
-      <Card className="mb-4">
+      <Card className="mb-4" data-tutorial-id="shoal:feed">
         <SectionLabel>Feed da Rede</SectionLabel>
         <form onSubmit={publicarPost} className="mb-3 flex flex-col gap-2">
           <Textarea name="texto" required rows={2} placeholder="Compartilhe uma novidade com a rede..." />
@@ -1047,7 +1066,7 @@ export function RedeSocial() {
         </div>
       </Card>
 
-      <Card>
+      <Card data-tutorial-id="shoal:diretorio">
         <SectionLabel>Diretório de empresas</SectionLabel>
         <div className="mb-3 flex flex-wrap items-end gap-2.5">
           <div className="min-w-[140px] flex-1">
@@ -1329,6 +1348,8 @@ export function RedeSocial() {
           onClose={() => setPerfilDetalheTenantId(null)}
         />
       )}
+
+      <TutorialShoal open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

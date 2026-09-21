@@ -6,6 +6,7 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { Modal } from "@/components/ui/Modal";
+import { TutorialMap } from "@/pages/map/TutorialMap";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -85,7 +86,7 @@ function toneClassificacao(classificacao: string): "red" | "amber" | "green" | "
  * vê o time inteiro e pode filtrar por vendedor. Distinta de
  * MapTenants.tsx, exclusiva do super_admin. */
 export function MapContas() {
-  const { usuario } = useAuth();
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
   const isGestor = usuario?.papel === "admin" || usuario?.papel === "super_admin";
   const isSuperAdmin = usuario?.papel === "super_admin";
   // Mesma condição de AppShell.tsx/AdminTenants.tsx — quem gerencia mais
@@ -108,6 +109,18 @@ export function MapContas() {
   const [modalInteracaoAberto, setModalInteracaoAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [gerandoScript, setGerandoScript] = useState(false);
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande. `carregado` evita a corrida com
+  // o `carregarVisaoGeral()` async (mesmo padrão de Kanban.tsx).
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("map")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("map")) marcarTutorialModuloVisto("map");
+  }
 
   async function carregarVisaoGeral() {
     const params = new URLSearchParams();
@@ -123,6 +136,8 @@ export function MapContas() {
       setRanking(rankingResp);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível carregar o MAP.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -223,7 +238,12 @@ export function MapContas() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">MAP — Motor de Alta Performance</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">MAP — Motor de Alta Performance</div>
+            <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">
             {isGestor
               ? "Saúde das contas de todo o time — filtre por vendedor para focar numa carteira"
@@ -232,6 +252,7 @@ export function MapContas() {
         </div>
         <div className="flex items-center gap-2">
           <Input
+            data-tutorial-id="map:busca"
             value={busca}
             onChange={(event) => setBusca(event.target.value)}
             placeholder="Buscar por empresa..."
@@ -270,7 +291,7 @@ export function MapContas() {
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
-      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+      <div data-tutorial-id="map:kpis" className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         <KpiCard label="Score médio" value={dashboard?.score_medio?.toFixed(0) ?? "—"} colorClassName="text-cyan" />
         <KpiCard label="Críticas" value={dashboard?.criticas ?? "—"} colorClassName="text-red" />
         <KpiCard label="Atenção" value={dashboard?.atencao ?? "—"} colorClassName="text-amber" />
@@ -293,7 +314,7 @@ export function MapContas() {
       </div>
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
-        <Card>
+        <Card data-tutorial-id="map:ranking">
           <SectionLabel>Ranking de saúde das contas</SectionLabel>
           <table className="w-full border-collapse text-[12px]">
             <thead>
@@ -429,6 +450,8 @@ export function MapContas() {
           </Button>
         </form>
       </Modal>
+
+      <TutorialMap open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

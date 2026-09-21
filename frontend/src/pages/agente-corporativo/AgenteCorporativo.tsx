@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Select, Textarea } from "@/components/ui/Input";
+import { TutorialAgenteCorporativo } from "@/pages/agente-corporativo/TutorialAgenteCorporativo";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface Evidencia {
   tipo: string;
@@ -41,6 +43,22 @@ const ROTULO_STATUS: Record<string, { texto: string; tone: "green" | "amber" | "
 };
 
 export function AgenteCorporativo() {
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("agente-corporativo")) {
+      setTutorialAberto(true);
+    }
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("agente-corporativo")) {
+      marcarTutorialModuloVisto("agente-corporativo");
+    }
+  }
   const [modo, setModo] = useState("disabled");
   const [salvandoModo, setSalvandoModo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -66,6 +84,8 @@ export function AgenteCorporativo() {
       setMinhasPerguntas(minhasResp);
     } catch {
       setErro("Não foi possível carregar o Agente Corporativo.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -132,7 +152,12 @@ export function AgenteCorporativo() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="font-head text-[22px] font-extrabold text-text">Agente Corporativo</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="font-head text-[22px] font-extrabold text-text">Agente Corporativo</h1>
+          <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+            🔄 Rever tutorial
+          </button>
+        </div>
         <p className="text-[13px] text-muted">
           Um agente de IA que responde perguntas de outras empresas da rede, só com base no que você cadastrou —
           sempre revisado por um humano antes de sair.
@@ -141,7 +166,7 @@ export function AgenteCorporativo() {
 
       {erro && <div className="rounded-lg border border-red/30 bg-red/10 p-3 text-[12px] text-red">{erro}</div>}
 
-      <Card>
+      <Card data-tutorial-id="agente-corporativo:modo">
         <SectionLabel>Configurar seu agente</SectionLabel>
         <p className="mb-3 text-[12px] text-muted">
           "Interno" deixa você testar o agente sem expor às outras empresas. "Assistido" permite que empresas
@@ -158,7 +183,7 @@ export function AgenteCorporativo() {
         </div>
       </Card>
 
-      <Card>
+      <Card data-tutorial-id="agente-corporativo:testar">
         <SectionLabel>Testar seu agente</SectionLabel>
         <p className="mb-3 text-[12px] text-muted">
           Simula uma pergunta de outra empresa — não fica visível pra ninguém, é só pra você validar o que o agente
@@ -188,7 +213,7 @@ export function AgenteCorporativo() {
         )}
       </Card>
 
-      <Card>
+      <Card data-tutorial-id="agente-corporativo:pendentes">
         <SectionLabel>Perguntas recebidas</SectionLabel>
         <p className="mb-3 text-[12px] text-muted">
           Empresas conectadas perguntaram ao seu agente — revise o rascunho da IA, edite se precisar, e só então
@@ -241,6 +266,8 @@ export function AgenteCorporativo() {
           {minhasPerguntas.length === 0 && <div className="text-[12px] text-muted">Você ainda não perguntou a nenhuma empresa.</div>}
         </div>
       </Card>
+
+      <TutorialAgenteCorporativo open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

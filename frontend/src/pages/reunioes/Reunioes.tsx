@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { TutorialReunioes } from "@/pages/reunioes/TutorialReunioes";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface Reuniao {
   id: number;
@@ -41,6 +43,18 @@ function toneStatus(status: string): "cyan" | "green" | "amber" | "red" | "muted
 }
 
 export function Reunioes() {
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("reunioes")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("reunioes")) marcarTutorialModuloVisto("reunioes");
+  }
   const [reunioes, setReunioes] = useState<Reuniao[]>([]);
   const [filtroStatus, setFiltroStatus] = useState("");
   const [dossieAberto, setDossieAberto] = useState<Dossie | null>(null);
@@ -53,6 +67,8 @@ export function Reunioes() {
       setReunioes(await api.get<Reuniao[]>(`/reunioes${params}`));
     } catch {
       setErro("Não foi possível carregar as reuniões.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -102,12 +118,17 @@ export function Reunioes() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Reuniões</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">Reuniões</div>
+            <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">
             Horários propostos, confirmação, resultado e dossiê automático
           </div>
         </div>
-        <Select value={filtroStatus} onChange={(event) => setFiltroStatus(event.target.value)} className="w-52">
+        <Select data-tutorial-id="reunioes:filtro" value={filtroStatus} onChange={(event) => setFiltroStatus(event.target.value)} className="w-52">
           <option value="">Todos os status</option>
           <option value="horarios_propostos">Horários propostos</option>
           <option value="agendada">Agendada</option>
@@ -121,7 +142,7 @@ export function Reunioes() {
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
       {mensagem && <div className="mb-4 text-[12px] text-green">{mensagem}</div>}
 
-      <Card>
+      <Card data-tutorial-id="reunioes:lista">
         <SectionLabel>Reuniões</SectionLabel>
         <div className="flex flex-col gap-2">
           {reunioes.map((reuniao) => (
@@ -175,7 +196,7 @@ export function Reunioes() {
                       {reuniao.qualificada_confirmada ? "qualificada" : "não qualificada"}
                     </Badge>
                   )}
-                  <Button size="sm" onClick={() => verDossie(reuniao.id)}>
+                  <Button size="sm" data-tutorial-id="reunioes:dossie" onClick={() => verDossie(reuniao.id)}>
                     Ver dossiê
                   </Button>
                 </div>
@@ -212,6 +233,8 @@ export function Reunioes() {
           </div>
         )}
       </Modal>
+
+      <TutorialReunioes open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

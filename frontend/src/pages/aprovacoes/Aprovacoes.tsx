@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Select, Textarea } from "@/components/ui/Input";
+import { TutorialAprovacoes } from "@/pages/aprovacoes/TutorialAprovacoes";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface ItemFila {
   aprovacao_id: number;
@@ -44,6 +46,18 @@ const OPCOES_STATUS = [
 ];
 
 export function Aprovacoes() {
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("aprovacoes")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("aprovacoes")) marcarTutorialModuloVisto("aprovacoes");
+  }
   const [itens, setItens] = useState<ItemFila[]>([]);
   const [filtroCanal, setFiltroCanal] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("pendente");
@@ -60,6 +74,8 @@ export function Aprovacoes() {
       setItens(resposta);
     } catch {
       setErro("Não foi possível carregar a fila de aprovação.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -144,13 +160,18 @@ export function Aprovacoes() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Fila de Aprovação</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">Fila de Aprovação</div>
+            <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">
             Mensagens geradas por IA aguardando revisão antes de entrar na fila de envio
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={filtroStatus} onChange={(event) => setFiltroStatus(event.target.value)} className="w-36">
+          <Select data-tutorial-id="aprovacoes:filtro-status" value={filtroStatus} onChange={(event) => setFiltroStatus(event.target.value)} className="w-36">
             {OPCOES_STATUS.map((opcao) => (
               <option key={opcao.valor} value={opcao.valor}>
                 {opcao.rotulo}
@@ -164,7 +185,7 @@ export function Aprovacoes() {
             <option value="linkedin">LinkedIn</option>
           </Select>
           {filtroStatus === "pendente" && (
-            <Button size="sm" variant="violet" disabled={itens.length === 0} onClick={aprovarTudoVisivel}>
+            <Button size="sm" variant="violet" data-tutorial-id="aprovacoes:aprovar-todas" disabled={itens.length === 0} onClick={aprovarTudoVisivel}>
               Aprovar todas ({itens.length})
             </Button>
           )}
@@ -218,7 +239,7 @@ export function Aprovacoes() {
                   </Button>
                 )}
                 {item.status !== "aprovado" && (
-                  <Button size="sm" variant="green" onClick={() => aprovar(item.aprovacao_id)}>
+                  <Button size="sm" variant="green" data-tutorial-id="aprovacoes:aprovar-item" onClick={() => aprovar(item.aprovacao_id)}>
                     {item.status === "rejeitado" ? "Aprovar mesmo assim" : "Aprovar"}
                   </Button>
                 )}
@@ -239,6 +260,8 @@ export function Aprovacoes() {
           </Card>
         )}
       </div>
+
+      <TutorialAprovacoes open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

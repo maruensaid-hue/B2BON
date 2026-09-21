@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Input";
+import { TutorialInteligenciaRede } from "@/pages/inteligencia-rede/TutorialInteligenciaRede";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface IcpResumo {
   id: number;
@@ -115,6 +117,22 @@ interface SugestaoExpansao {
 const FORMATADOR_MOEDA = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 export function InteligenciaRede() {
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("inteligencia-rede")) {
+      setTutorialAberto(true);
+    }
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("inteligencia-rede")) {
+      marcarTutorialModuloVisto("inteligencia-rede");
+    }
+  }
   const [icps, setIcps] = useState<IcpResumo[]>([]);
   const [icpSelecionado, setIcpSelecionado] = useState<string>("");
   const [fits, setFits] = useState<FitIcpRede[]>([]);
@@ -136,26 +154,28 @@ export function InteligenciaRede() {
   const [sugestoesExpansao, setSugestoesExpansao] = useState<SugestaoExpansao[]>([]);
 
   useEffect(() => {
-    api
-      .get<SinalOportunidade[]>("/inteligencia-rede/sinais")
-      .then(setSinais)
-      .catch(() => setErro("Não foi possível carregar os sinais de oportunidade."));
-    api
-      .get<SaudeRelacionamento[]>("/inteligencia-rede/saude-relacionamentos")
-      .then(setSaudeRelacionamentos)
-      .catch(() => setErro("Não foi possível carregar a saúde dos relacionamentos."));
-    api
-      .get<RiscoPipeline[]>("/inteligencia-rede/riscos-pipeline")
-      .then(setRiscosPipeline)
-      .catch(() => setErro("Não foi possível carregar os riscos de pipeline."));
-    api
-      .get<AtribuicaoReceita>("/inteligencia-rede/atribuicao-receita")
-      .then(setAtribuicaoReceita)
-      .catch(() => setErro("Não foi possível carregar a atribuição de receita."));
-    api
-      .get<SugestaoExpansao[]>("/inteligencia-rede/sugestoes-expansao")
-      .then(setSugestoesExpansao)
-      .catch(() => setErro("Não foi possível carregar as sugestões de expansão."));
+    Promise.allSettled([
+      api
+        .get<SinalOportunidade[]>("/inteligencia-rede/sinais")
+        .then(setSinais)
+        .catch(() => setErro("Não foi possível carregar os sinais de oportunidade.")),
+      api
+        .get<SaudeRelacionamento[]>("/inteligencia-rede/saude-relacionamentos")
+        .then(setSaudeRelacionamentos)
+        .catch(() => setErro("Não foi possível carregar a saúde dos relacionamentos.")),
+      api
+        .get<RiscoPipeline[]>("/inteligencia-rede/riscos-pipeline")
+        .then(setRiscosPipeline)
+        .catch(() => setErro("Não foi possível carregar os riscos de pipeline.")),
+      api
+        .get<AtribuicaoReceita>("/inteligencia-rede/atribuicao-receita")
+        .then(setAtribuicaoReceita)
+        .catch(() => setErro("Não foi possível carregar a atribuição de receita.")),
+      api
+        .get<SugestaoExpansao[]>("/inteligencia-rede/sugestoes-expansao")
+        .then(setSugestoesExpansao)
+        .catch(() => setErro("Não foi possível carregar as sugestões de expansão.")),
+    ]).then(() => setCarregado(true));
   }, []);
 
   useEffect(() => {
@@ -260,14 +280,19 @@ export function InteligenciaRede() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="font-head text-[22px] font-extrabold text-text">Sinais de Oportunidade</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="font-head text-[22px] font-extrabold text-text">Sinais de Oportunidade</h1>
+          <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+            🔄 Rever tutorial
+          </button>
+        </div>
         <p className="text-[13px] text-muted">Inteligência comercial cruzando ICP, Intents e o Business Graph da rede</p>
       </div>
 
       {erro && <div className="rounded-lg border border-red/30 bg-red/10 p-3 text-[12px] text-red">{erro}</div>}
       {aviso && <div className="rounded-lg border border-cyan/30 bg-cyan/10 p-3 text-[12px] text-cyan">{aviso}</div>}
 
-      <Card>
+      <Card data-tutorial-id="inteligencia-rede:fit-icp">
         <SectionLabel>Fit por ICP na Rede</SectionLabel>
         <p className="mb-3 text-[12px] text-muted">
           Compara seu ICP contra o perfil público de todas as outras empresas do Shoal — quanto mais critérios
@@ -390,7 +415,7 @@ export function InteligenciaRede() {
       <Card>
         <div className="mb-3 flex items-center justify-between">
           <SectionLabel>Sinais de Oportunidade</SectionLabel>
-          <Button size="sm" onClick={gerarSinais} disabled={gerandoSinais}>
+          <Button size="sm" data-tutorial-id="inteligencia-rede:atualizar-sinais" onClick={gerarSinais} disabled={gerandoSinais}>
             {gerandoSinais ? "Atualizando..." : "Atualizar sinais"}
           </Button>
         </div>
@@ -435,7 +460,7 @@ export function InteligenciaRede() {
         </div>
       </Card>
 
-      <Card>
+      <Card data-tutorial-id="inteligencia-rede:saude-relacionamentos">
         <SectionLabel>Saúde dos Relacionamentos</SectionLabel>
         <p className="mb-3 text-[12px] text-muted">
           Relationship Agent: cruza a última interação (mensagem direta ou sala corporativa) com a existência de um
@@ -570,6 +595,8 @@ export function InteligenciaRede() {
           )}
         </div>
       </Card>
+
+      <TutorialInteligenciaRede open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }

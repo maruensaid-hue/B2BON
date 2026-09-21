@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { TutorialRegrasAprendidas } from "@/pages/regras-aprendidas/TutorialRegrasAprendidas";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface RegraAprendida {
   id: number;
@@ -149,6 +151,18 @@ function FormularioRegra({
 }
 
 export function RegrasAprendidas() {
+  const { usuario, marcarTutorialModuloVisto } = useAuth();
+  // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
+  // visita, coexiste com o tour grande.
+  const [tutorialAberto, setTutorialAberto] = useState(false);
+  const [carregado, setCarregado] = useState(false);
+  useEffect(() => {
+    if (usuario && carregado && !(usuario.tutoriais_modulo_vistos ?? []).includes("regras-aprendidas")) setTutorialAberto(true);
+  }, [usuario, carregado]);
+  function fecharTutorial() {
+    setTutorialAberto(false);
+    if (usuario && !(usuario.tutoriais_modulo_vistos ?? []).includes("regras-aprendidas")) marcarTutorialModuloVisto("regras-aprendidas");
+  }
   const [regras, setRegras] = useState<RegraAprendida[]>([]);
   const [correcoes, setCorrecoes] = useState<CorrecaoRecente[]>([]);
   const [icps, setIcps] = useState<IcpResumo[]>([]);
@@ -182,6 +196,8 @@ export function RegrasAprendidas() {
       setPadroesObservados(padroes);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível carregar as regras aprendidas.");
+    } finally {
+      setCarregado(true);
     }
   }
 
@@ -296,20 +312,25 @@ export function RegrasAprendidas() {
     <div className="p-5.5">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <div className="font-head text-xl font-bold">Regras Aprendidas</div>
+          <div className="flex items-center gap-2">
+            <div className="font-head text-xl font-bold">Regras Aprendidas</div>
+            <button type="button" onClick={() => setTutorialAberto(true)} className="text-[11px] text-muted hover:text-cyan">
+              🔄 Rever tutorial
+            </button>
+          </div>
           <div className="mt-0.5 text-[11px] text-muted">
             Padrões observados em edições e rejeições de mensagens — escritos por você, aplicados automaticamente
             na próxima geração de cadência
           </div>
         </div>
-        <Button size="sm" variant="violet" onClick={abrirCriacao}>
+        <Button size="sm" variant="violet" data-tutorial-id="regras-aprendidas:nova" onClick={abrirCriacao}>
           + Nova regra
         </Button>
       </div>
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
-      <Card>
+      <Card data-tutorial-id="regras-aprendidas:lista">
         <SectionLabel>Regras</SectionLabel>
         <div className="mb-3 text-[11px] text-muted">
           Toda regra ativa entra automaticamente no prompt de geração de toques de cadência cujo ICP/Oferta/canal
@@ -392,6 +413,7 @@ export function RegrasAprendidas() {
               <div className="flex flex-shrink-0 items-center gap-2">
                 <Button
                   size="sm"
+                  data-tutorial-id="regras-aprendidas:sugerir-ia"
                   disabled={sugerindoId === correcao.id}
                   onClick={() => sugerirComIa(correcao)}
                 >
@@ -457,7 +479,7 @@ export function RegrasAprendidas() {
         )}
       </Card>
 
-      <Card>
+      <Card data-tutorial-id="regras-aprendidas:padroes">
         <SectionLabel>Padrões da Empresa</SectionLabel>
         <p className="mb-3 text-[12px] text-muted">
           Correlações observadas no histórico real de negócios deste tenant — nunca uma garantia de resultado, só o
@@ -525,6 +547,8 @@ export function RegrasAprendidas() {
           salvando={salvando}
         />
       </Modal>
+
+      <TutorialRegrasAprendidas open={tutorialAberto} onClose={fecharTutorial} />
     </div>
   );
 }
