@@ -250,7 +250,7 @@ export function AdminPlanos() {
                   </div>
                 </td>
                 <td className="p-2">
-                  <Button size="sm" variant="ghost" onClick={() => abrirEdicao(plano)}>
+                  <Button size="sm" onClick={() => abrirEdicao(plano)}>
                     Editar
                   </Button>
                 </td>

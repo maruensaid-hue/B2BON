@@ -332,7 +332,7 @@ export function RegrasAprendidas() {
                 </div>
               </div>
               <div className="flex flex-shrink-0 items-center gap-2">
-                <Button size="sm" variant="ghost" onClick={() => abrirEdicao(regra)}>
+                <Button size="sm" onClick={() => abrirEdicao(regra)}>
                   Editar
                 </Button>
                 <Button
@@ -392,7 +392,6 @@ export function RegrasAprendidas() {
               <div className="flex flex-shrink-0 items-center gap-2">
                 <Button
                   size="sm"
-                  variant="ghost"
                   disabled={sugerindoId === correcao.id}
                   onClick={() => sugerirComIa(correcao)}
                 >

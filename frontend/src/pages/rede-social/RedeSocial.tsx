@@ -855,7 +855,7 @@ export function RedeSocial() {
                 Solicitar verificação
               </Button>
             )}
-            <Button size="sm" variant="ghost" onClick={() => setModalPerfilAberto(true)}>
+            <Button size="sm" onClick={() => setModalPerfilAberto(true)}>
               Editar
             </Button>
           </div>
@@ -885,7 +885,6 @@ export function RedeSocial() {
                 <div className="flex gap-2">
                   <Button
                     size="sm"
-                    variant="ghost"
                     onClick={() => navigator.clipboard.writeText(linkConvite(convite.codigo))}
                   >
                     Copiar link
@@ -897,7 +896,7 @@ export function RedeSocial() {
               )}
               {convite.status === "revogado" && (
                 <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => reativarConviteVitrine(convite.codigo)}>
+                  <Button size="sm" onClick={() => reativarConviteVitrine(convite.codigo)}>
                     Reativar
                   </Button>
                   <Button size="sm" variant="danger" onClick={() => excluirConviteVitrine(convite.codigo)}>
@@ -1021,10 +1020,10 @@ export function RedeSocial() {
                   </div>
                   {intent.tenant_id === usuario?.tenant_id && intent.status === "aberta" && (
                     <div className="flex gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => marcarIntentAtendida(intent.id)}>
+                      <Button size="sm" onClick={() => marcarIntentAtendida(intent.id)}>
                         Marcar atendida
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => encerrarIntent(intent.id)}>
+                      <Button size="sm" onClick={() => encerrarIntent(intent.id)}>
                         Encerrar
                       </Button>
                     </div>
@@ -1105,7 +1104,7 @@ export function RedeSocial() {
                     const conexao = conexaoComTenant(empresa.perfil.tenant_id);
                     if (!conexao) return null;
                     return (
-                      <Button size="sm" variant="ghost" onClick={() => desbloquearConexao(conexao.id)}>
+                      <Button size="sm" onClick={() => desbloquearConexao(conexao.id)}>
                         Desbloquear
                       </Button>
                     );
@@ -1136,12 +1135,11 @@ export function RedeSocial() {
                     })()}
                   {empresa.status_conexao === "aceita" && (
                     <>
-                      <Button size="sm" variant="ghost" onClick={() => setConversaTenantId(empresa.perfil.tenant_id)}>
+                      <Button size="sm" onClick={() => setConversaTenantId(empresa.perfil.tenant_id)}>
                         Mensagens
                       </Button>
                       <Button
                         size="sm"
-                        variant="ghost"
                         onClick={() => abrirSalaCorporativa(empresa.perfil.tenant_id, empresa.perfil.nome_exibicao)}
                       >
                         Sala Corporativa

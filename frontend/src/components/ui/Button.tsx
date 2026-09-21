@@ -5,7 +5,11 @@ import { cn } from "@/lib/cn";
 type Variant = "primary" | "violet" | "green" | "amber" | "ghost" | "danger";
 
 const variantClasses: Record<Variant, string> = {
-  primary: "bg-gradient-to-br from-cyan to-[#007AAA] text-bg",
+  // Cor lisa (sem gradiente) igual ao azul de destaque da barra lateral
+  // (`--color-cyan`) — raio-X 2026-09-21, padronização de botões: antes
+  // o degradê criava um segundo tom de azul visualmente diferente do
+  // `bg-cyan` usado em outros pontos da UI (ex.: item ativo do menu).
+  primary: "bg-cyan text-white",
   violet: "bg-gradient-to-br from-violet to-[#5B21B6] text-white",
   green: "bg-gradient-to-br from-green to-[#059669] text-white",
   amber: "bg-gradient-to-br from-amber to-[#B45309] text-bg",

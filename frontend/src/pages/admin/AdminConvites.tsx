@@ -139,7 +139,7 @@ export function AdminConvites() {
                   <div className="flex gap-2">
                     {convite.status === "disponivel" && (
                       <>
-                        <Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(linkConvite(convite.codigo))}>
+                        <Button size="sm" onClick={() => navigator.clipboard.writeText(linkConvite(convite.codigo))}>
                           Copiar link
                         </Button>
                         <Button size="sm" variant="danger" onClick={() => revogar(convite.codigo)}>
@@ -149,7 +149,7 @@ export function AdminConvites() {
                     )}
                     {convite.status === "revogado" && (
                       <>
-                        <Button size="sm" variant="ghost" onClick={() => reativar(convite.codigo)}>
+                        <Button size="sm" onClick={() => reativar(convite.codigo)}>
                           Reativar
                         </Button>
                         <Button size="sm" variant="danger" onClick={() => excluir(convite.codigo)}>

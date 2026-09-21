@@ -380,7 +380,6 @@ export function MapContas() {
                   </div>
                   <Button
                     size="sm"
-                    variant="ghost"
                     className="mt-2"
                     onClick={() => navigator.clipboard.writeText(script.script)}
                   >

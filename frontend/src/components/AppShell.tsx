@@ -17,6 +17,9 @@ interface NavItem {
   label: string;
   icon: string;
   end?: boolean;
+  /** Resumo de 3-4 palavras mostrado no flyout do grupo (redesign
+   * Salesforce, raio-X 2026-09-21) — não usado nos itens de topo soltos. */
+  descricao?: string;
 }
 
 interface NotificacaoRedeSocial {
@@ -37,23 +40,25 @@ const NAV_ITEMS_PAGOS: NavItem[] = [
 ];
 
 // CRM — o board (Pipeline) continua sendo a própria rota /crm; "Criar
-// Proposta" é um submenu embaixo, revelado pela seta do NavGroup.
-const CRM_ITEM: NavItem = { path: "/crm", label: "CRM", icon: "◈", end: true };
-const CRM_SUBITENS: NavItem[] = [{ path: "/crm/propostas/nova", label: "Criar Proposta", icon: "📄" }];
+// Proposta" é um submenu embaixo, revelado pelo flyout do NavGroup.
+const CRM_ITEM: NavItem = { path: "/crm", label: "CRM", icon: "◈", end: true, descricao: "Pipeline de negócios" };
+const CRM_SUBITENS: NavItem[] = [
+  { path: "/crm/propostas/nova", label: "Criar Proposta", icon: "📄", descricao: "Gerar proposta comercial" },
+];
 
 // PREDATOR — motor de prospecção/cadências/campanhas. Sem rota própria
-// (é só a categoria) — a seta expande/recolhe os módulos abaixo.
+// (é só a categoria) — o flyout mostra os módulos abaixo.
 const PREDATOR_NAV_ITEMS: NavItem[] = [
-  { path: "/prospeccao", label: "Prospecção", icon: "🎯" },
-  { path: "/cadencias", label: "Cadências", icon: "📨" },
-  { path: "/campanhas", label: "Campanhas", icon: "📣" },
-  { path: "/aprovacoes", label: "Aprovações", icon: "✅" },
-  { path: "/reunioes", label: "Reuniões", icon: "📅" },
-  { path: "/relatorio-entrega", label: "Relatório de Entrega", icon: "📊" },
-  { path: "/regras-aprendidas", label: "Regras Aprendidas", icon: "🧠" },
-  { path: "/inteligencia-rede", label: "Sinais de Oportunidade", icon: "🧭" },
-  { path: "/agente-corporativo", label: "Agente Corporativo", icon: "🤖" },
-  { path: "/configuracao", label: "Configuração", icon: "⚙" },
+  { path: "/prospeccao", label: "Prospecção", icon: "🎯", descricao: "Listas de contas" },
+  { path: "/cadencias", label: "Cadências", icon: "📨", descricao: "Sequências de toques" },
+  { path: "/campanhas", label: "Campanhas", icon: "📣", descricao: "Disparo em massa" },
+  { path: "/aprovacoes", label: "Aprovações", icon: "✅", descricao: "Revisar mensagens da IA" },
+  { path: "/reunioes", label: "Reuniões", icon: "📅", descricao: "Lembretes e transcrição" },
+  { path: "/relatorio-entrega", label: "Relatório de Entrega", icon: "📊", descricao: "Taxas de entrega" },
+  { path: "/regras-aprendidas", label: "Regras Aprendidas", icon: "🧠", descricao: "Regras de estilo" },
+  { path: "/inteligencia-rede", label: "Sinais de Oportunidade", icon: "🧭", descricao: "Fit e matches" },
+  { path: "/agente-corporativo", label: "Agente Corporativo", icon: "🤖", descricao: "IA responde perguntas" },
+  { path: "/configuracao", label: "Configuração", icon: "⚙", descricao: "Oferta e canais" },
 ];
 
 // Leads (E-Leads) — clientes avulsos cadastrados direto no CRM, fora do
@@ -103,6 +108,11 @@ const CLASSE_ITEM_BASE =
   "mb-0.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] whitespace-nowrap text-nav-muted transition-colors";
 const CLASSE_ITEM_ATIVO = "border-cyan bg-cyan/15 font-bold text-cyan";
 const CLASSE_ITEM_INATIVO = "hover:bg-nav-hover hover:text-nav-text";
+// Ícone maior quando a sidebar está colapsada (raio-X 2026-09-21, pedido
+// do usuário) — é o único elemento visual do item nesse estado, então
+// precisa de mais destaque do que quando acompanhado do rótulo por extenso.
+const CLASSE_ICONE_EXPANDIDO = "w-5 flex-shrink-0 text-center text-[14px]";
+const CLASSE_ICONE_COLAPSADO = "w-6 flex-shrink-0 text-center text-[20px]";
 
 function NavButton({ path, label, icon, end, collapsed }: NavItem & { collapsed?: boolean }) {
   return (
@@ -115,20 +125,53 @@ function NavButton({ path, label, icon, end, collapsed }: NavItem & { collapsed?
         cn(CLASSE_ITEM_BASE, collapsed && "justify-center px-0", isActive ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO)
       }
     >
-      <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
+      <span className={collapsed ? CLASSE_ICONE_COLAPSADO : CLASSE_ICONE_EXPANDIDO}>{icon}</span>
       {!collapsed && <span className="overflow-hidden text-ellipsis">{label}</span>}
     </NavLink>
   );
 }
 
-/** Menu com submenus revelados por seta — mesmo peso visual dos itens de
- * topo (não mais um rótulo pequeno em uppercase). `path` é opcional: se
- * informado, o cabeçalho também navega (ex.: CRM); se omitido, o
- * cabeçalho só expande/recolhe (ex.: PREDATOR, que não é uma página).
- * `tourToggleId`: marca o botão de expandir com `data-tour-toggle`, pra
- * o Tour Guiado (`TourGuiado.tsx`) conseguir abrir o grupo sozinho antes
- * de destacar um item de dentro dele (ex.: "visita detalhada" ao
- * PREDATOR — cada sub-módulo vira um passo do tour). */
+/** Item de dentro do flyout do `NavGroup` — mostra nome + um pequeno
+ * descritivo (3-4 palavras) abaixo, não só o nome (redesign Salesforce,
+ * raio-X 2026-09-21). Mantém `data-tour-id={nav:${path}}` igual ao
+ * `NavButton`, pro Tour Guiado continuar achando o elemento. */
+function FlyoutItem({ path, label, icon, end, descricao, onNavegar }: NavItem & { onNavegar: () => void }) {
+  return (
+    <NavLink
+      to={path}
+      end={end}
+      data-tour-id={`nav:${path}`}
+      onClick={onNavegar}
+      className={({ isActive }) =>
+        cn(
+          "flex items-start gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors",
+          isActive ? "bg-cyan/15 text-cyan" : "text-nav-text hover:bg-nav-hover",
+        )
+      }
+    >
+      <span className="mt-0.5 w-5 flex-shrink-0 text-center text-[14px]">{icon}</span>
+      <span className="flex min-w-0 flex-col">
+        <span className="overflow-hidden text-[12.5px] font-semibold text-ellipsis whitespace-nowrap">{label}</span>
+        {descricao && (
+          <span className="overflow-hidden text-[10px] text-nav-muted text-ellipsis whitespace-nowrap">
+            {descricao}
+          </span>
+        )}
+      </span>
+    </NavLink>
+  );
+}
+
+/** Menu com submenus revelados por um flyout ao lado do ícone — sempre
+ * disponível assim, colapsada ou expandida (redesign Salesforce, raio-X
+ * 2026-09-21; antes só existia flyout colapsado, e a sidebar expandida
+ * usava uma lista inline que foi removida). `path` é opcional: se
+ * informado, o cabeçalho do flyout também navega (ex.: CRM); se omitido,
+ * o cabeçalho é só um rótulo (ex.: PREDATOR, que não é uma página).
+ * `tourToggleId`: marca o botão-gatilho com `data-tour-toggle`, pro Tour
+ * Guiado (`TourGuiado.tsx`) conseguir abrir o flyout sozinho antes de
+ * destacar um item de dentro dele (ex.: "visita detalhada" ao PREDATOR —
+ * cada sub-módulo vira um passo do tour). */
 function NavGroup({
   label,
   icon,
@@ -136,6 +179,7 @@ function NavGroup({
   itens,
   tourToggleId,
   collapsed,
+  descricao,
 }: {
   label: string;
   icon: string;
@@ -143,28 +187,16 @@ function NavGroup({
   itens: NavItem[];
   tourToggleId?: string;
   collapsed?: boolean;
+  descricao?: string;
 }) {
   const location = useLocation();
   const algumFilhoAtivo = itens.some(
     (item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
   );
-  const [aberto, setAberto] = useState(algumFilhoAtivo);
-  // Flyout do rail colapsado (redesign Salesforce, raio-X 2026-09-21) —
-  // estado independente de `aberto` (inline, só usado quando expandido).
   const [flyoutAberto, setFlyoutAberto] = useState(false);
   const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const flyoutRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (algumFilhoAtivo) setAberto(true);
-  }, [algumFilhoAtivo]);
-
-  // Colapsar a sidebar com o flyout aberto deixaria um portal órfão —
-  // fecha ao trocar de modo.
-  useEffect(() => {
-    if (!collapsed) setFlyoutAberto(false);
-  }, [collapsed]);
 
   useEffect(() => {
     if (!flyoutAberto) return;
@@ -192,109 +224,72 @@ function NavGroup({
     setFlyoutAberto((atual) => !atual);
   }
 
-  const seta = (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.preventDefault();
-        setAberto((atual) => !atual);
-      }}
-      aria-label={aberto ? "Recolher submenu" : "Expandir submenu"}
-      className="flex-shrink-0 rounded px-1 text-[10px] text-nav-muted hover:text-nav-text"
-    >
-      {aberto ? "▾" : "▸"}
-    </button>
-  );
-
-  if (collapsed) {
-    return (
-      <div>
-        <button
-          ref={triggerRef}
-          type="button"
-          data-tour-toggle={tourToggleId}
-          title={label}
-          onClick={alternarFlyout}
-          className={cn(
-            CLASSE_ITEM_BASE,
-            "w-full justify-center px-0",
-            algumFilhoAtivo ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO,
-          )}
-        >
-          <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
-        </button>
-        {flyoutAberto &&
-          flyoutPos &&
-          createPortal(
-            <div
-              ref={flyoutRef}
-              className="fixed z-40 w-56 rounded-lg border border-nav-border bg-nav-bg p-1.5 shadow-xl"
-              style={{ top: flyoutPos.top, left: flyoutPos.left }}
-            >
-              {path ? (
-                <NavLink
-                  to={path}
-                  end
-                  onClick={() => setFlyoutAberto(false)}
-                  className={({ isActive }) =>
-                    cn(CLASSE_ITEM_BASE, "mb-1 font-bold", isActive ? CLASSE_ITEM_ATIVO : "text-nav-text")
-                  }
-                >
-                  <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
-                  <span>{label}</span>
-                </NavLink>
-              ) : (
-                <div className="mb-1 px-2.5 py-1 text-[11px] font-bold text-nav-text">{label}</div>
-              )}
-              <div className="flex flex-col gap-0.5">
-                {itens.map((item) => (
-                  <div key={item.path} onClick={() => setFlyoutAberto(false)}>
-                    <NavButton {...item} />
-                  </div>
-                ))}
-              </div>
-            </div>,
-            document.body,
-          )}
-      </div>
-    );
-  }
-
   return (
     <div>
-      {path ? (
-        <div className="flex items-center gap-1">
-          <NavLink
-            to={path}
-            end
-            className={({ isActive }) =>
-              cn(CLASSE_ITEM_BASE, "mb-0 flex-1", isActive || algumFilhoAtivo ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO)
-            }
+      <button
+        ref={triggerRef}
+        type="button"
+        data-tour-toggle={tourToggleId}
+        title={collapsed ? label : undefined}
+        onClick={alternarFlyout}
+        className={cn(
+          CLASSE_ITEM_BASE,
+          "w-full",
+          collapsed && "justify-center px-0",
+          algumFilhoAtivo ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO,
+        )}
+      >
+        <span className={collapsed ? CLASSE_ICONE_COLAPSADO : CLASSE_ICONE_EXPANDIDO}>{icon}</span>
+        {!collapsed && (
+          <>
+            <span className="flex-1 overflow-hidden text-left text-ellipsis">{label}</span>
+            <span className="flex-shrink-0 text-[10px]">▸</span>
+          </>
+        )}
+      </button>
+      {flyoutAberto &&
+        flyoutPos &&
+        createPortal(
+          <div
+            ref={flyoutRef}
+            className="fixed z-40 w-60 rounded-lg border border-nav-border bg-nav-bg p-1.5 shadow-xl"
+            style={{ top: flyoutPos.top, left: flyoutPos.left }}
           >
-            <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
-            <span className="flex-1 overflow-hidden text-ellipsis">{label}</span>
-          </NavLink>
-          {seta}
-        </div>
-      ) : (
-        <button
-          type="button"
-          data-tour-toggle={tourToggleId}
-          onClick={() => setAberto((atual) => !atual)}
-          className={cn(CLASSE_ITEM_BASE, "w-full", algumFilhoAtivo ? CLASSE_ITEM_ATIVO : CLASSE_ITEM_INATIVO)}
-        >
-          <span className="w-5 flex-shrink-0 text-center text-[15px]">{icon}</span>
-          <span className="flex-1 overflow-hidden text-left text-ellipsis">{label}</span>
-          <span className="flex-shrink-0 text-[10px]">{aberto ? "▾" : "▸"}</span>
-        </button>
-      )}
-      {aberto && (
-        <div className="mt-0.5 ml-4 flex flex-col gap-0.5 border-l border-nav-border pl-2">
-          {itens.map((item) => (
-            <NavButton key={item.path} {...item} />
-          ))}
-        </div>
-      )}
+            {path ? (
+              <NavLink
+                to={path}
+                end
+                onClick={() => setFlyoutAberto(false)}
+                className={({ isActive }) =>
+                  cn(
+                    "mb-1 flex items-start gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors",
+                    isActive ? "bg-cyan/15 text-cyan" : "text-nav-text hover:bg-nav-hover",
+                  )
+                }
+              >
+                <span className="mt-0.5 w-5 flex-shrink-0 text-center text-[14px]">{icon}</span>
+                <span className="flex flex-col">
+                  <span className="text-[12.5px] font-bold">{label}</span>
+                  {descricao && <span className="text-[10px] text-nav-muted">{descricao}</span>}
+                </span>
+              </NavLink>
+            ) : (
+              <div className="mb-1 flex items-start gap-2.5 px-2.5 py-1">
+                <span className="mt-0.5 w-5 flex-shrink-0 text-center text-[14px]">{icon}</span>
+                <span className="flex flex-col">
+                  <span className="text-[12.5px] font-bold text-nav-text">{label}</span>
+                  {descricao && <span className="text-[10px] text-nav-muted">{descricao}</span>}
+                </span>
+              </div>
+            )}
+            <div className="flex flex-col gap-0.5 border-t border-nav-border pt-1">
+              {itens.map((item) => (
+                <FlyoutItem key={item.path} {...item} onNavegar={() => setFlyoutAberto(false)} />
+              ))}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -589,7 +584,7 @@ export function AppShell() {
               collapsed && "justify-center px-0",
             )}
           >
-            <span className="w-5 flex-shrink-0 text-center text-[15px]">🔍</span>
+            <span className={collapsed ? CLASSE_ICONE_COLAPSADO : CLASSE_ICONE_EXPANDIDO}>🔍</span>
             {!collapsed && (
               <>
                 <span className="flex-1 overflow-hidden text-left text-ellipsis">Buscar</span>
@@ -610,7 +605,7 @@ export function AppShell() {
                 collapsed && "justify-center px-0",
               )}
             >
-              <span className="w-5 flex-shrink-0 text-center text-[15px]">🔔</span>
+              <span className={collapsed ? CLASSE_ICONE_COLAPSADO : CLASSE_ICONE_EXPANDIDO}>🔔</span>
               {!collapsed && <span className="flex-1 overflow-hidden text-left text-ellipsis">Notificações</span>}
               {contagemNaoLidas > 0 && (
                 <span className="flex-shrink-0 rounded-full bg-red px-1.5 text-[9px] font-semibold text-white">
@@ -667,6 +662,7 @@ export function AppShell() {
                 path={CRM_ITEM.path}
                 itens={CRM_SUBITENS}
                 collapsed={collapsed}
+                descricao={CRM_ITEM.descricao}
               />
             </div>
           )}
@@ -685,6 +681,7 @@ export function AppShell() {
                 itens={PREDATOR_NAV_ITEMS}
                 tourToggleId="predator"
                 collapsed={collapsed}
+                descricao="Motor de prospecção"
               />
             </div>
           )}

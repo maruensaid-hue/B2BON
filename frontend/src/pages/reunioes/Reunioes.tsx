@@ -175,7 +175,7 @@ export function Reunioes() {
                       {reuniao.qualificada_confirmada ? "qualificada" : "não qualificada"}
                     </Badge>
                   )}
-                  <Button size="sm" variant="ghost" onClick={() => verDossie(reuniao.id)}>
+                  <Button size="sm" onClick={() => verDossie(reuniao.id)}>
                     Ver dossiê
                   </Button>
                 </div>

@@ -243,7 +243,6 @@ export function MapTenants() {
                   </div>
                   <Button
                     size="sm"
-                    variant="ghost"
                     className="mt-2"
                     onClick={() => navigator.clipboard.writeText(script.script)}
                   >

@@ -293,7 +293,7 @@ export function RelatorioEntrega() {
                 {item.status === "erro" && (
                   <div className="flex flex-shrink-0 items-center gap-2">
                     {item.conta_id !== null && (
-                      <Button size="sm" variant="ghost" onClick={() => setContaEmEdicaoId(item.conta_id)}>
+                      <Button size="sm" onClick={() => setContaEmEdicaoId(item.conta_id)}>
                         Editar e-mail
                       </Button>
                     )}

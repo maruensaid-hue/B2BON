@@ -579,12 +579,12 @@ export function Kanban() {
             className="w-64"
           />
           {usuario?.papel !== "user" && (
-            <Button size="sm" variant="ghost" onClick={() => setModalImportarExportarAberto(true)}>
+            <Button size="sm" onClick={() => setModalImportarExportarAberto(true)}>
               Importar/exportar CSV
             </Button>
           )}
           {podeEditarFunil && (
-            <Button size="sm" variant="ghost" onClick={() => setModalEditarFunilAberto(true)}>
+            <Button size="sm" onClick={() => setModalEditarFunilAberto(true)}>
               Editar Funil
             </Button>
           )}
@@ -1050,7 +1050,7 @@ export function Kanban() {
                     <Badge tone={estagio.tipo === "ganho" ? "green" : estagio.tipo === "perdido" ? "red" : "muted"}>
                       {estagio.tipo}
                     </Badge>
-                    <Button size="sm" variant="ghost" onClick={() => iniciarRenomeacaoEstagio(estagio)}>
+                    <Button size="sm" onClick={() => iniciarRenomeacaoEstagio(estagio)}>
                       Renomear
                     </Button>
                     {estagioParaExcluirId === estagio.id ? (

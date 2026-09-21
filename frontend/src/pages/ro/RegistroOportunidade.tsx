@@ -142,7 +142,7 @@ export function RegistroOportunidade() {
                 <td className="p-2 text-muted">{registro.conta_id ?? "—"}</td>
                 <td className="p-2 text-right">
                   {registro.status === "ativo" && (
-                    <Button size="sm" variant="ghost" onClick={() => setModalDescontoId(registro.id)}>
+                    <Button size="sm" onClick={() => setModalDescontoId(registro.id)}>
                       Solicitar desconto
                     </Button>
                   )}

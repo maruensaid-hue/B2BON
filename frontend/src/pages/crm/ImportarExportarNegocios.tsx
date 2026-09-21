@@ -327,7 +327,7 @@ export function ImportarExportarNegocios({ open, onClose, onImportado }: Importa
             Baixe todas as oportunidades deste tenant num CSV — útil pra levar o histórico a outra plataforma, ou
             como backup.
           </div>
-          <Button type="button" variant="ghost" onClick={exportar} disabled={exportando}>
+          <Button type="button" onClick={exportar} disabled={exportando}>
             {exportando ? "Gerando..." : "Exportar CSV"}
           </Button>
         </div>
@@ -356,7 +356,7 @@ export function ImportarExportarNegocios({ open, onClose, onImportado }: Importa
                   </ul>
                 </div>
               )}
-              <Button type="button" variant="ghost" onClick={reiniciar}>
+              <Button type="button" onClick={reiniciar}>
                 Importar outro arquivo
               </Button>
             </div>

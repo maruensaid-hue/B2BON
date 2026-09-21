@@ -191,7 +191,6 @@ export function LeadsContatos() {
                 <td className="p-2">
                   <Button
                     size="sm"
-                    variant="ghost"
                     onClick={(event) => {
                       event.stopPropagation();
                       setContatoEmEdicao(contato);

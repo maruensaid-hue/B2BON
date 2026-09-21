@@ -759,7 +759,7 @@ export function Cadencias() {
                     ))}
                   </Select>
                 )}
-                <Button size="sm" variant="ghost" disabled={adicionandoToque} onClick={adicionarToqueReal}>
+                <Button size="sm" disabled={adicionandoToque} onClick={adicionarToqueReal}>
                   {adicionandoToque ? "Adicionando..." : "+ Adicionar toque"}
                 </Button>
               </div>
@@ -1041,7 +1041,7 @@ export function Cadencias() {
               </div>
             ))}
           </div>
-          <Button type="button" size="sm" variant="ghost" onClick={adicionarToque}>
+          <Button type="button" size="sm" onClick={adicionarToque}>
             + Adicionar toque
           </Button>
 

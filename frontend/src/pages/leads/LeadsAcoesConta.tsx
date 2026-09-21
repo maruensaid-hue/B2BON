@@ -369,7 +369,7 @@ export function LeadsAcoesConta() {
           </div>
           <div className="mt-0.5 text-[11px] text-muted">Lead avulso — fora do recorte de ICP</div>
         </div>
-        <Button size="sm" variant="ghost" onClick={() => setModalEnriquecimento(true)}>
+        <Button size="sm" onClick={() => setModalEnriquecimento(true)}>
           Enriquecer / mapear decisores / exportar
         </Button>
       </div>
@@ -406,7 +406,7 @@ export function LeadsAcoesConta() {
                 <div>Domínio: {conta.dominio ?? "—"}</div>
                 <div>Segmento: {conta.segmento ?? "—"}</div>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => setEditandoEmpresa(true)}>
+              <Button size="sm" onClick={() => setEditandoEmpresa(true)}>
                 Editar empresa
               </Button>
             </div>
@@ -472,7 +472,7 @@ export function LeadsAcoesConta() {
               ) : (
                 <div className="mb-2 text-[12px] text-muted">Nenhum próximo passo definido.</div>
               )}
-              <Button size="sm" variant="ghost" onClick={() => setEditandoProximoPasso(true)}>
+              <Button size="sm" onClick={() => setEditandoProximoPasso(true)}>
                 {conta.proximo_passo ? "Editar" : "Definir próximo passo"}
               </Button>
             </div>
@@ -484,7 +484,7 @@ export function LeadsAcoesConta() {
         <Card>
           <div className="mb-2 flex items-center justify-between">
             <SectionLabel>Contatos</SectionLabel>
-            <Button size="sm" variant="ghost" onClick={() => setModalContato(true)}>
+            <Button size="sm" onClick={() => setModalContato(true)}>
               + Contato
             </Button>
           </div>
@@ -528,7 +528,7 @@ export function LeadsAcoesConta() {
                     {decisor.email && <span className="text-muted"> · {decisor.email}</span>}
                     {decisor.telefone && <span className="text-muted"> · {decisor.telefone}</span>}
                   </div>
-                  <Button size="sm" variant="ghost" onClick={() => setDecisorEmEdicaoId(decisor.id)}>
+                  <Button size="sm" onClick={() => setDecisorEmEdicaoId(decisor.id)}>
                     Editar
                   </Button>
                 </div>
@@ -541,7 +541,7 @@ export function LeadsAcoesConta() {
         <Card>
           <div className="mb-2 flex items-center justify-between">
             <SectionLabel>Oportunidades</SectionLabel>
-            <Button size="sm" variant="ghost" onClick={() => setModalNegocio(true)}>
+            <Button size="sm" onClick={() => setModalNegocio(true)}>
               + Oportunidade
             </Button>
           </div>
@@ -574,7 +574,7 @@ export function LeadsAcoesConta() {
         <Card>
           <div className="mb-2 flex items-center justify-between">
             <SectionLabel>Reuniões</SectionLabel>
-            <Button size="sm" variant="ghost" onClick={() => setModalReuniao(true)} disabled={decisores.length === 0}>
+            <Button size="sm" onClick={() => setModalReuniao(true)} disabled={decisores.length === 0}>
               + Agendar
             </Button>
           </div>

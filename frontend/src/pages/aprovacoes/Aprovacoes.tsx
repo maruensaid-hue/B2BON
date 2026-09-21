@@ -208,7 +208,7 @@ export function Aprovacoes() {
                 {editavel &&
                   textoEditado[item.aprovacao_id] !== undefined &&
                   textoEditado[item.aprovacao_id] !== item.conteudo && (
-                    <Button size="sm" variant="ghost" onClick={() => salvarEdicao(item)}>
+                    <Button size="sm" onClick={() => salvarEdicao(item)}>
                       Salvar edição
                     </Button>
                   )}

@@ -278,7 +278,7 @@ export function CriarProposta() {
               <div className="flex items-center justify-between">
                 <div className="text-[12px] text-green">Proposta v{propostaGerada.versao} gerada com sucesso.</div>
                 <div className="flex gap-2">
-                  <Button type="button" variant="ghost" size="sm" onClick={baixar}>
+                  <Button type="button" size="sm" onClick={baixar}>
                     Baixar PDF
                   </Button>
                   <Button type="button" size="sm" onClick={gerar} disabled={gerando}>

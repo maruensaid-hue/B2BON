@@ -170,7 +170,7 @@ export function Dashboard() {
           <div className="font-head text-xl font-bold">Dashboard</div>
           <div className="mt-0.5 text-[11px] text-muted">Visão geral · CRM + MAP</div>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => setModalEditarAberto(true)}>
+        <Button size="sm" onClick={() => setModalEditarAberto(true)}>
           ⚙ Editar Dashboard
         </Button>
       </div>

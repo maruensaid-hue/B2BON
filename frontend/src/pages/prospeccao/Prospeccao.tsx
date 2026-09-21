@@ -732,7 +732,6 @@ export function Prospeccao() {
                 <div className="ml-auto flex gap-2">
                   <Button
                     size="sm"
-                    variant="ghost"
                     onClick={() => {
                       setIcpEmEdicao(icpSelecionado);
                       setModalIcpAberto(true);
@@ -740,7 +739,7 @@ export function Prospeccao() {
                   >
                     Nova versão
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => clonarIcp(icpSelecionado)}>
+                  <Button size="sm" onClick={() => clonarIcp(icpSelecionado)}>
                     Clonar
                   </Button>
                   <Button size="sm" onClick={() => setModalGerarAberto(true)}>
@@ -907,7 +906,7 @@ export function Prospeccao() {
                 </td>
                 <td className="p-2">
                   <div className="flex gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => setContaSelecionadaId(conta.id)}>
+                    <Button size="sm" onClick={() => setContaSelecionadaId(conta.id)}>
                       Ver detalhes
                     </Button>
                     {confirmandoExclusaoContaId === conta.id ? (

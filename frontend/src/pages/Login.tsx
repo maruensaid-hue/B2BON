@@ -200,7 +200,7 @@ export function Login() {
               onChange={(event) => setCodigoConvite(event.target.value)}
               placeholder="Código do convite"
             />
-            <Button type="submit" variant="ghost" className="w-full justify-center" disabled={!codigoConvite.trim()}>
+            <Button type="submit" className="w-full justify-center" disabled={!codigoConvite.trim()}>
               Continuar cadastro
             </Button>
           </form>

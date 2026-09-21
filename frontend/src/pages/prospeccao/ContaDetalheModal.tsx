@@ -420,7 +420,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                   <div className="rounded-lg bg-surf2 p-2 text-[11px] whitespace-pre-wrap text-text">{conta.observacoes}</div>
                 </div>
               )}
-              <Button size="sm" variant="ghost" onClick={() => setEditandoConta(true)}>
+              <Button size="sm" onClick={() => setEditandoConta(true)}>
                 Editar dados da conta
               </Button>
             </div>
@@ -463,25 +463,24 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
             <Button size="sm" variant="danger" disabled={carregando !== null} onClick={() => setMostrarDescarte(true)}>
               Descartar
             </Button>
-            <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={enriquecerSite}>
+            <Button size="sm" disabled={carregando !== null} onClick={enriquecerSite}>
               Pesquisar empresa (site)
             </Button>
             <Button
               size="sm"
-              variant="ghost"
               disabled={carregando !== null || !conta.cnpj}
               title={!conta.cnpj ? "Sem CNPJ cadastrado — preencha o CNPJ da conta pra habilitar este enriquecimento." : undefined}
               onClick={enriquecerBrasilApi}
             >
               Enriquecer (BrasilAPI)
             </Button>
-            <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={mapearDecisores}>
+            <Button size="sm" disabled={carregando !== null} onClick={mapearDecisores}>
               Mapear decisores
             </Button>
-            <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={exportarPdf}>
+            <Button size="sm" disabled={carregando !== null} onClick={exportarPdf}>
               Exportar PDF
             </Button>
-            <Button size="sm" variant="ghost" disabled={carregando !== null} onClick={sugerirEstrategiaVenda}>
+            <Button size="sm" disabled={carregando !== null} onClick={sugerirEstrategiaVenda}>
               {carregando === "estrategia-venda" ? "Gerando..." : "🧭 Sugerir estratégia"}
             </Button>
           </div>
@@ -594,7 +593,6 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                                 </Badge>
                                 <Button
                                   size="sm"
-                                  variant="ghost"
                                   disabled={carregando !== null}
                                   onClick={() => confirmarPapelDecisor(decisor.id, decisor.papel_sugerido as string)}
                                 >
@@ -628,7 +626,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                           >
                             {decisorExpandidoId === decisor.id ? "▾" : "▸"} Mensagens agendadas
                           </button>
-                          <Button size="sm" variant="ghost" onClick={() => setDecisorEmEdicaoId(decisor.id)}>
+                          <Button size="sm" onClick={() => setDecisorEmEdicaoId(decisor.id)}>
                             Editar
                           </Button>
                         </div>
