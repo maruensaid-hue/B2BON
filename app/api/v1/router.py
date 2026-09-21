@@ -10,6 +10,7 @@ from app.api.v1.busca import router as busca_router
 from app.api.v1.cadencias import router as cadencias_router
 from app.api.v1.campanhas import router as campanhas_router
 from app.api.v1.canais import router as canais_router
+from app.api.v1.central_negocios import router as central_negocios_router
 from app.api.v1.comunicacao import router as comunicacao_router
 from app.api.v1.configuracao_envio import router as configuracao_envio_router
 from app.api.v1.configuracao_email_smtp import router as configuracao_email_smtp_router
@@ -102,6 +103,7 @@ router.include_router(leads_router, dependencies=_exige_licenca)
 router.include_router(auth_router)
 router.include_router(convites_router)
 router.include_router(planos_router)
+router.include_router(central_negocios_router)
 router.include_router(rotulos_hierarquia_router)
 router.include_router(admin_tenants_router)
 # Fase 2 da hierarquia (raio-X): /integracoes é JWT (Distribuidor logado

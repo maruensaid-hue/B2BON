@@ -1,11 +1,31 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Card } from "@/components/ui/Card";
+import { api } from "@/lib/api";
 
-interface LinkExterno {
+interface CotacaoMoeda {
+  codigo: string;
+  nome: string;
+  valor: number;
+  variacao_pct: number;
+}
+
+interface Ibovespa {
+  pontos: number;
+  variacao_pct: number;
+}
+
+interface Mercado {
+  ibovespa: Ibovespa | null;
+  cambio: CotacaoMoeda[];
+}
+
+interface Noticia {
+  portal: string;
   titulo: string;
-  descricao: string;
-  url: string;
+  link: string;
+  publicado_em: string | null;
 }
 
 interface Dica {
@@ -18,29 +38,15 @@ interface GrupoDicas {
   dicas: Dica[];
 }
 
-const LINK_B3: LinkExterno = {
-  titulo: "B3 — Market Data e Índices",
-  descricao: "Cotações, Ibovespa e indicadores oficiais da bolsa brasileira, direto na fonte.",
-  url: "https://www.b3.com.br/pt_br/market-data-e-indices/",
-};
+const URL_B3 = "https://www.b3.com.br/pt_br/market-data-e-indices/";
+const PORTAIS_NOTICIAS = ["UOL Economia", "G1 Economia", "InfoMoney"];
 
-const LINKS_NOTICIAS: LinkExterno[] = [
-  {
-    titulo: "UOL Economia",
-    descricao: "As últimas notícias de economia e negócios do portal.",
-    url: "https://economia.uol.com.br/",
-  },
-  {
-    titulo: "G1 Economia",
-    descricao: "Cobertura de mercado, dólar e indicadores em tempo real.",
-    url: "https://g1.globo.com/economia/",
-  },
-  {
-    titulo: "IstoÉ Dinheiro",
-    descricao: "Reportagens e análises sobre empresas e mercado brasileiro.",
-    url: "https://www.istoedinheiro.com.br/",
-  },
-];
+const FORMATADOR_PONTOS = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+const FORMATADOR_VALOR_MOEDA = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+
+function formatarVariacao(pct: number): string {
+  return `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
+}
 
 // Conteúdo original, escrito pela B2B ON no tom da marca "O Vendedor
 // Tubarão" (raio-X 2026-09-21) — não é trecho de nenhum livro real, só
@@ -113,29 +119,51 @@ const GRUPOS_DICAS: GrupoDicas[] = [
   },
 ];
 
-function CardLinkExterno({ titulo, descricao, url }: LinkExterno) {
+function CartaoCotacao({ rotulo, valor, variacaoPct }: { rotulo: string; valor: string; variacaoPct: number }) {
+  const positivo = variacaoPct > 0;
+  const negativo = variacaoPct < 0;
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      className="flex flex-col gap-1 rounded-lg border border-border bg-surf2 p-3.5 transition-colors hover:border-cyan"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[13px] font-semibold text-text">{titulo}</div>
-        <div className="text-[11px] text-cyan">↗</div>
+    <div className="flex flex-col gap-1 rounded-lg border border-border bg-surf2 p-3.5">
+      <div className="text-[10px] font-semibold tracking-wide text-muted uppercase">{rotulo}</div>
+      <div className="text-[16px] font-bold text-text">{valor}</div>
+      <div className={`text-[11.5px] font-semibold ${positivo ? "text-green" : negativo ? "text-red" : "text-muted"}`}>
+        {formatarVariacao(variacaoPct)}
       </div>
-      <div className="text-[11.5px] text-muted">{descricao}</div>
-    </a>
+    </div>
   );
 }
 
-/** Central de Negócios (raio-X 2026-09-21) — página pública, alcançável
- * pelo botão "Sair" da página de boas-vindas. 100% conteúdo estático no
- * frontend: B3/notícias são links de saída pros sites reais (nunca
- * cotação/manchete inventada aqui); dicas de venda são conteúdo
- * original da B2B ON. */
+function CartaoIndisponivel({ rotulo }: { rotulo: string }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-border bg-surf2 p-3.5">
+      <div className="text-[10px] font-semibold tracking-wide text-muted uppercase">{rotulo}</div>
+      <div className="text-[12px] text-muted">Indisponível no momento</div>
+    </div>
+  );
+}
+
+/** Central de Negócios (raio-X 2026-09-21, dados ao vivo 2026-09-21) —
+ * página pública, alcançável pelo botão "Sair" da página de boas-vindas.
+ * B3/câmbio vêm de `GET /central-negocios/mercado` (Yahoo Finance +
+ * AwesomeAPI, cacheado 15min no backend); notícias vêm de
+ * `GET /central-negocios/noticias` (RSS real de cada portal) — nunca
+ * cotação/manchete inventada aqui. Dicas de venda continuam conteúdo
+ * original estático da B2B ON. */
 export function CentralNegocios() {
+  const [mercado, setMercado] = useState<Mercado | null>(null);
+  const [noticias, setNoticias] = useState<Noticia[] | null>(null);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    Promise.allSettled([api.get<Mercado>("/central-negocios/mercado"), api.get<Noticia[]>("/central-negocios/noticias")]).then(
+      ([resultadoMercado, resultadoNoticias]) => {
+        if (resultadoMercado.status === "fulfilled") setMercado(resultadoMercado.value);
+        if (resultadoNoticias.status === "fulfilled") setNoticias(resultadoNoticias.value);
+        setCarregando(false);
+      },
+    );
+  }, []);
+
   return (
     <div className="mx-auto max-w-4xl p-5.5">
       <Link to="/" className="mb-4 inline-block text-[12px] text-cyan hover:underline">
@@ -150,17 +178,73 @@ export function CentralNegocios() {
       </div>
 
       <Card className="mb-4">
-        <div className="mb-3 text-[10px] font-semibold tracking-wider text-muted uppercase">Mercado</div>
-        <CardLinkExterno {...LINK_B3} />
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="text-[10px] font-semibold tracking-wider text-muted uppercase">Mercado</div>
+          <a href={URL_B3} target="_blank" rel="noreferrer" className="text-[11px] text-cyan hover:underline">
+            Ver na B3 ↗
+          </a>
+        </div>
+        {carregando ? (
+          <div className="text-[12px] text-muted">Carregando cotações...</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+            {mercado?.ibovespa ? (
+              <CartaoCotacao
+                rotulo="Ibovespa"
+                valor={`${FORMATADOR_PONTOS.format(mercado.ibovespa.pontos)} pts`}
+                variacaoPct={mercado.ibovespa.variacao_pct}
+              />
+            ) : (
+              <CartaoIndisponivel rotulo="Ibovespa" />
+            )}
+            {mercado && mercado.cambio.length > 0
+              ? mercado.cambio.map((moeda) => (
+                  <CartaoCotacao
+                    key={moeda.codigo}
+                    rotulo={`${moeda.codigo} / BRL`}
+                    valor={`R$ ${FORMATADOR_VALOR_MOEDA.format(moeda.valor)}`}
+                    variacaoPct={moeda.variacao_pct}
+                  />
+                ))
+              : !mercado?.ibovespa && <CartaoIndisponivel rotulo="Câmbio" />}
+          </div>
+        )}
       </Card>
 
       <Card className="mb-4">
         <div className="mb-3 text-[10px] font-semibold tracking-wider text-muted uppercase">Notícias de negócios</div>
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-          {LINKS_NOTICIAS.map((link) => (
-            <CardLinkExterno key={link.url} {...link} />
-          ))}
-        </div>
+        {carregando ? (
+          <div className="text-[12px] text-muted">Carregando notícias...</div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {PORTAIS_NOTICIAS.map((portal) => {
+              const materias = (noticias ?? []).filter((noticia) => noticia.portal === portal);
+              return (
+                <div key={portal}>
+                  <div className="mb-2 text-[11.5px] font-bold text-cyan">{portal}</div>
+                  {materias.length === 0 ? (
+                    <div className="text-[11.5px] text-muted">Sem matérias disponíveis no momento.</div>
+                  ) : (
+                    <ul className="flex flex-col gap-2">
+                      {materias.map((materia) => (
+                        <li key={materia.link}>
+                          <a
+                            href={materia.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11.5px] leading-snug text-text hover:text-cyan hover:underline"
+                          >
+                            {materia.titulo}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
       <Card>

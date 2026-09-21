@@ -10,6 +10,12 @@ from app.graph.client import Neo4jClient
 from app.core.config import settings
 from app.core.rate_limit import limitador_ia, limitador_parceiros
 from app.integrations.brasilapi_client import BrasilApiClient, consultar_cnpj_brasilapi
+from app.integrations.central_negocios_client import (
+    MercadoClient,
+    NoticiasClient,
+    buscar_mercado,
+    buscar_noticias,
+)
 from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.claude_provider import ClaudeProvider
 from app.models.chave_api_parceiro import ChaveApiParceiro
@@ -76,6 +82,14 @@ def get_llm_provider() -> ClaudeProvider:
 
 def get_site_fetcher() -> SiteFetcher:
     return buscar_conteudo_site
+
+
+def get_mercado_client() -> MercadoClient:
+    return buscar_mercado
+
+
+def get_noticias_client() -> NoticiasClient:
+    return buscar_noticias
 
 
 def get_account_data_provider(db: Session = Depends(get_db)) -> AccountDataProvider:

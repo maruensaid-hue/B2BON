@@ -19,6 +19,8 @@ from app.api.deps import (
     get_email_validation_provider,
     get_graph_client,
     get_llm_provider,
+    get_mercado_client,
+    get_noticias_client,
     get_payment_provider,
     get_plan_limits_provider,
     get_rede_social_provider,
@@ -42,7 +44,7 @@ from app.providers.email_validation.stub import StubEmailVerificationProvider
 from app.providers.payment.stub import StubPaymentProvider
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.providers.rede_social.stub import StubRedeSocialProvider
-from app.services import auth_service
+from app.services import auth_service, central_negocios_service
 from tests.fakes import (
     FakeAccountDataProvider,
     FakeContactEnrichmentProvider,
@@ -146,6 +148,21 @@ def fake_brasilapi_client():
 
 
 @pytest.fixture()
+def fake_mercado_client():
+    return lambda: {
+        "ibovespa": {"pontos": 130000.5, "variacao_pct": 1.23},
+        "cambio": [{"codigo": "USD", "nome": "Dólar americano", "valor": 5.05, "variacao_pct": -0.5}],
+    }
+
+
+@pytest.fixture()
+def fake_noticias_client():
+    return lambda: [
+        {"portal": "UOL Economia", "titulo": "Manchete de teste", "link": "https://exemplo.com/1", "publicado_em": None},
+    ]
+
+
+@pytest.fixture()
 def fake_whatsapp() -> FakeWhatsAppProvider:
     return FakeWhatsAppProvider()
 
@@ -191,6 +208,8 @@ def client(
     fake_plan_limits: StubPlanLimitsProvider,
     fake_site_fetcher,
     fake_brasilapi_client,
+    fake_mercado_client,
+    fake_noticias_client,
     fake_whatsapp: FakeWhatsAppProvider,
     fake_email: FakeEmailProvider,
     fake_calendar: StubCalendarProvider,
@@ -201,6 +220,7 @@ def client(
 ) -> Generator[TestClient, None, None]:
     limitador_auth.resetar()  # a suíte inteira roda no mesmo processo — sem isto, um teste vaza rate-limit pro próximo
     limitador_ia.resetar()
+    central_negocios_service.resetar_cache()
 
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session
@@ -214,6 +234,8 @@ def client(
     app.dependency_overrides[get_plan_limits_provider] = lambda: fake_plan_limits
     app.dependency_overrides[get_site_fetcher] = lambda: fake_site_fetcher
     app.dependency_overrides[get_brasilapi_client] = lambda: fake_brasilapi_client
+    app.dependency_overrides[get_mercado_client] = lambda: fake_mercado_client
+    app.dependency_overrides[get_noticias_client] = lambda: fake_noticias_client
     app.dependency_overrides[get_whatsapp_provider] = lambda: fake_whatsapp
     app.dependency_overrides[_whatsapp_provider_do_webhook_whatsapp] = lambda: fake_whatsapp
     app.dependency_overrides[_whatsapp_provider_do_webhook_email] = lambda: fake_whatsapp
