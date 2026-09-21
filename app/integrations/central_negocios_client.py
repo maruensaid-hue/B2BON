@@ -138,7 +138,9 @@ def buscar_indices() -> list[Indice]:
 def _buscar_cambio() -> list[CotacaoMoeda]:
     try:
         pares = ",".join(f"{codigo}-BRL" for codigo, _ in _MOEDAS)
-        resposta = httpx.get(_URL_CAMBIO.format(pares=pares), timeout=_TIMEOUT_SEGUNDOS)
+        resposta = httpx.get(
+            _URL_CAMBIO.format(pares=pares), headers={"User-Agent": _USER_AGENT}, timeout=_TIMEOUT_SEGUNDOS
+        )
         resposta.raise_for_status()
         dados = resposta.json()
     except (httpx.HTTPError, ValueError):
