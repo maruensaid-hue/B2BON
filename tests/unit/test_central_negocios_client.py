@@ -16,48 +16,95 @@ class _RespostaFalsa:
         return self._json_data or {}
 
 
-def test_buscar_ibovespa_extrai_pontos_e_variacao(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_buscar_indice_extrai_pontos_variacao_e_serie(monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import UTC, datetime
+
+    instante = datetime(2026, 9, 21, 14, 0, tzinfo=UTC).timestamp()
     resposta_yahoo = {
         "chart": {
-            "result": [{"meta": {"regularMarketPrice": 130123.456, "regularMarketChangePercent": 1.2345}}]
+            "result": [
+                {
+                    "meta": {"regularMarketPrice": 130123.456, "regularMarketChangePercent": 1.2345},
+                    "timestamp": [instante, instante + 86400],
+                    "indicators": {"quote": [{"close": [129000.111, None]}]},
+                }
+            ]
         }
     }
     monkeypatch.setattr(httpx, "get", lambda url, **kwargs: _RespostaFalsa(resposta_yahoo))
 
-    resultado = central_negocios_client._buscar_ibovespa()
+    resultado = central_negocios_client._buscar_indice("^BVSP", "Ibovespa")
 
-    assert resultado == {"pontos": 130123.46, "variacao_pct": 1.23}
+    assert resultado["nome"] == "Ibovespa"
+    assert resultado["pontos"] == 130123.46
+    assert resultado["variacao_pct"] == 1.23
+    # `None` no ponto seguinte (pregão sem fechamento) é pulado, não quebra.
+    assert resultado["serie"] == [{"data": "21/09", "valor": 129000.11}]
 
 
-def test_buscar_ibovespa_falha_de_rede_nao_lanca(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_buscar_indice_falha_de_rede_nao_lanca(monkeypatch: pytest.MonkeyPatch) -> None:
     def get_falso(url: str, **kwargs):
         raise httpx.ConnectError("sem rede")
 
     monkeypatch.setattr(httpx, "get", get_falso)
 
-    assert central_negocios_client._buscar_ibovespa() is None
+    assert central_negocios_client._buscar_indice("^BVSP", "Ibovespa") is None
 
 
-def test_buscar_ibovespa_resposta_mal_formada_nao_lanca(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_buscar_indice_resposta_mal_formada_nao_lanca(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "get", lambda url, **kwargs: _RespostaFalsa({"chart": {"result": []}}))
 
-    assert central_negocios_client._buscar_ibovespa() is None
+    assert central_negocios_client._buscar_indice("^BVSP", "Ibovespa") is None
 
 
-def test_buscar_cambio_extrai_todas_as_moedas(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_buscar_indices_falha_de_um_indice_nao_derruba_os_demais(monkeypatch: pytest.MonkeyPatch) -> None:
+    resposta_ok = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {"regularMarketPrice": 100.0, "regularMarketChangePercent": 1.0},
+                    "timestamp": [],
+                    "indicators": {"quote": [{"close": []}]},
+                }
+            ]
+        }
+    }
+
+    def get_falso(url: str, **kwargs):
+        if "BVSP" in url:
+            raise httpx.ConnectError("fora do ar")
+        return _RespostaFalsa(resposta_ok)
+
+    monkeypatch.setattr(httpx, "get", get_falso)
+
+    indices = central_negocios_client.buscar_indices()
+
+    nomes = [indice["nome"] for indice in indices]
+    assert "Ibovespa" not in nomes
+    assert "Dow Jones (Nova Iorque)" in nomes
+    assert "Nasdaq" in nomes
+
+
+def test_buscar_cambio_extrai_todas_as_moedas_cripto_e_ouro(monkeypatch: pytest.MonkeyPatch) -> None:
     resposta_awesome = {
         "USDBRL": {"bid": "5.1104", "pctChange": "-0.657048"},
         "EURBRL": {"bid": "5.8609", "pctChange": "-0.840865"},
         "GBPBRL": {"bid": "6.8306", "pctChange": "-0.682917"},
         "JPYBRL": {"bid": "0.032454", "pctChange": "-0.844001"},
+        "BTCBRL": {"bid": "444552", "pctChange": "6.468"},
+        "ETHBRL": {"bid": "14224.7", "pctChange": "4.929"},
+        "XAUBRL": {"bid": "22189.6", "pctChange": "-1.276882"},
     }
     monkeypatch.setattr(httpx, "get", lambda url, **kwargs: _RespostaFalsa(resposta_awesome))
 
     resultado = central_negocios_client._buscar_cambio()
 
-    assert [item["codigo"] for item in resultado] == ["USD", "EUR", "GBP", "JPY"]
+    assert [item["codigo"] for item in resultado] == ["USD", "EUR", "GBP", "JPY", "BTC", "ETH", "XAU"]
     assert resultado[0]["valor"] == 5.1104
     assert resultado[0]["variacao_pct"] == -0.66
+    bitcoin = next(item for item in resultado if item["codigo"] == "BTC")
+    assert bitcoin["nome"] == "Bitcoin"
+    assert bitcoin["valor"] == 444552.0
 
 
 def test_buscar_cambio_moeda_faltando_na_resposta_e_ignorada(monkeypatch: pytest.MonkeyPatch) -> None:

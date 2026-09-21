@@ -150,8 +150,11 @@ def fake_brasilapi_client():
 @pytest.fixture()
 def fake_mercado_client():
     return lambda: {
-        "ibovespa": {"pontos": 130000.5, "variacao_pct": 1.23},
-        "cambio": [{"codigo": "USD", "nome": "Dólar americano", "valor": 5.05, "variacao_pct": -0.5}],
+        "indices": [{"nome": "Ibovespa", "pontos": 130000.5, "variacao_pct": 1.23, "serie": [{"data": "21/09", "valor": 130000.5}]}],
+        "cambio": [
+            {"codigo": "USD", "nome": "USD", "valor": 5.05, "variacao_pct": -0.5},
+            {"codigo": "BTC", "nome": "Bitcoin", "valor": 444552.0, "variacao_pct": 6.47},
+        ],
     }
 
 

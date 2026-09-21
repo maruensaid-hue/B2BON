@@ -8,13 +8,20 @@ class CotacaoMoedaSchema(BaseModel):
     variacao_pct: float
 
 
-class IbovespaSchema(BaseModel):
+class PontoSerieSchema(BaseModel):
+    data: str
+    valor: float
+
+
+class IndiceSchema(BaseModel):
+    nome: str
     pontos: float
     variacao_pct: float
+    serie: list[PontoSerieSchema]
 
 
 class MercadoSchema(BaseModel):
-    ibovespa: IbovespaSchema | None
+    indices: list[IndiceSchema]
     cambio: list[CotacaoMoedaSchema]
 
 

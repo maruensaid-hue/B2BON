@@ -3,7 +3,6 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { CentralNegocios } from "@/pages/CentralNegocios";
 import { ConviteVitrine } from "@/pages/ConviteVitrine";
 import { CriarConta } from "@/pages/CriarConta";
 import { EsqueciSenha } from "@/pages/EsqueciSenha";
@@ -29,11 +28,12 @@ const Relatorios = lazy(() => import("@/pages/admin/Relatorios").then((m) => ({ 
 const Aprovacoes = lazy(() => import("@/pages/aprovacoes/Aprovacoes").then((m) => ({ default: m.Aprovacoes })));
 const Cadencias = lazy(() => import("@/pages/cadencias/Cadencias").then((m) => ({ default: m.Cadencias })));
 const Campanhas = lazy(() => import("@/pages/campanhas/Campanhas").then((m) => ({ default: m.Campanhas })));
-// Dashboard puxa o recharts (biblioteca de gráfico pesada) — só ela usa
-// essa dependência, então separá-la em chunk próprio tira o peso do
-// gráfico do bundle principal mesmo sendo a rota inicial (o shell da
-// aplicação, com o menu, aparece antes do gráfico terminar de carregar).
+// Dashboard e Central de Negócios puxam o recharts (biblioteca de gráfico
+// pesada) — só elas usam essa dependência, então separá-las em chunk
+// próprio tira o peso do gráfico do bundle principal (Central de Negócios
+// é rota pública, carregada até por visitante deslogado).
 const Dashboard = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
+const CentralNegocios = lazy(() => import("@/pages/CentralNegocios").then((m) => ({ default: m.CentralNegocios })));
 const Configuracao = lazy(() => import("@/pages/configuracao/Configuracao").then((m) => ({ default: m.Configuracao })));
 const CriarProposta = lazy(() => import("@/pages/crm/CriarProposta").then((m) => ({ default: m.CriarProposta })));
 const Kanban = lazy(() => import("@/pages/crm/Kanban").then((m) => ({ default: m.Kanban })));
@@ -74,7 +74,14 @@ export default function App() {
       <Route path="/redefinir-senha/:token" element={<RedefinirSenha />} />
       <Route path="/convite-vitrine/:codigo" element={<ConviteVitrine />} />
       <Route path="/criar-conta" element={<CriarConta />} />
-      <Route path="/central-de-negocios" element={<CentralNegocios />} />
+      <Route
+        path="/central-de-negocios"
+        element={
+          <Suspense fallback={<CarregandoPagina />}>
+            <CentralNegocios />
+          </Suspense>
+        }
+      />
       <Route path="/convite/:codigo" element={<RegistrarConvite />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/termos" element={<Termos />} />

@@ -3,8 +3,10 @@ def test_obter_mercado_e_publico_sem_autenticacao(client):
 
     assert resposta.status_code == 200
     corpo = resposta.json()
-    assert corpo["ibovespa"]["pontos"] == 130000.5
+    assert corpo["indices"][0]["nome"] == "Ibovespa"
+    assert corpo["indices"][0]["serie"][0]["valor"] == 130000.5
     assert corpo["cambio"][0]["codigo"] == "USD"
+    assert corpo["cambio"][1]["nome"] == "Bitcoin"
 
 
 def test_obter_noticias_e_publico_sem_autenticacao(client):

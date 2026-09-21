@@ -10,7 +10,7 @@ def test_obter_mercado_usa_cache_dentro_do_ttl() -> None:
 
     def client():
         chamadas.append(1)
-        return {"ibovespa": {"pontos": 1.0, "variacao_pct": 0.1}, "cambio": []}
+        return {"indices": [{"nome": "Ibovespa", "pontos": 1.0, "variacao_pct": 0.1, "serie": []}], "cambio": []}
 
     central_negocios_service.obter_mercado(client)
     central_negocios_service.obter_mercado(client)
@@ -23,7 +23,7 @@ def test_obter_mercado_atualiza_apos_resetar_cache() -> None:
 
     def client():
         chamadas.append(1)
-        return {"ibovespa": None, "cambio": []}
+        return {"indices": [], "cambio": []}
 
     central_negocios_service.obter_mercado(client)
     central_negocios_service.resetar_cache()
@@ -33,9 +33,9 @@ def test_obter_mercado_atualiza_apos_resetar_cache() -> None:
 
 
 def test_obter_mercado_propaga_fonte_indisponivel_sem_inventar_dado() -> None:
-    resultado = central_negocios_service.obter_mercado(lambda: {"ibovespa": None, "cambio": []})
+    resultado = central_negocios_service.obter_mercado(lambda: {"indices": [], "cambio": []})
 
-    assert resultado["ibovespa"] is None
+    assert resultado["indices"] == []
     assert resultado["cambio"] == []
 
 

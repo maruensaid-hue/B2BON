@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { Card } from "@/components/ui/Card";
 import { api } from "@/lib/api";
@@ -11,13 +12,20 @@ interface CotacaoMoeda {
   variacao_pct: number;
 }
 
-interface Ibovespa {
+interface PontoSerie {
+  data: string;
+  valor: number;
+}
+
+interface Indice {
+  nome: string;
   pontos: number;
   variacao_pct: number;
+  serie: PontoSerie[];
 }
 
 interface Mercado {
-  ibovespa: Ibovespa | null;
+  indices: Indice[];
   cambio: CotacaoMoeda[];
 }
 
@@ -40,9 +48,18 @@ interface GrupoDicas {
 
 const URL_B3 = "https://www.b3.com.br/pt_br/market-data-e-indices/";
 const PORTAIS_NOTICIAS = ["UOL Economia", "G1 Economia", "InfoMoney"];
+const INTERVALO_CARROSSEL_MS = 6000;
 
 const FORMATADOR_PONTOS = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
-const FORMATADOR_VALOR_MOEDA = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+// Ativos de alto valor (Bitcoin, Ouro) ficam ilegíveis com 4 casas decimais
+// e câmbio comum (USD/EUR) perde precisão com só 2 — cada faixa de valor
+// usa a formatação que faz sentido pra ela.
+const FORMATADOR_VALOR_ALTO = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const FORMATADOR_VALOR_BAIXO = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+
+function formatarValorMoeda(valor: number): string {
+  return valor >= 100 ? FORMATADOR_VALOR_ALTO.format(valor) : FORMATADOR_VALOR_BAIXO.format(valor);
+}
 
 function formatarVariacao(pct: number): string {
   return `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
@@ -119,25 +136,112 @@ const GRUPOS_DICAS: GrupoDicas[] = [
   },
 ];
 
-function CartaoCotacao({ rotulo, valor, variacaoPct }: { rotulo: string; valor: string; variacaoPct: number }) {
-  const positivo = variacaoPct > 0;
-  const negativo = variacaoPct < 0;
+function Variacao({ pct }: { pct: number }) {
+  const positivo = pct > 0;
+  const negativo = pct < 0;
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-surf2 p-3.5">
-      <div className="text-[10px] font-semibold tracking-wide text-muted uppercase">{rotulo}</div>
-      <div className="text-[16px] font-bold text-text">{valor}</div>
-      <div className={`text-[11.5px] font-semibold ${positivo ? "text-green" : negativo ? "text-red" : "text-muted"}`}>
-        {formatarVariacao(variacaoPct)}
+    <span className={`font-semibold ${positivo ? "text-green" : negativo ? "text-red" : "text-muted"}`}>
+      {formatarVariacao(pct)}
+    </span>
+  );
+}
+
+/** Carrossel dos índices de bolsa (Ibovespa/Dow Jones/Nasdaq) — troca
+ * sozinho a cada `INTERVALO_CARROSSEL_MS`, com bolinhas clicáveis pra
+ * navegar manualmente. Gráfico de linha com a série do último mês. */
+function CarrosselIndices({ indices }: { indices: Indice[] }) {
+  const [ativo, setAtivo] = useState(0);
+
+  useEffect(() => {
+    if (indices.length < 2) return;
+    const intervalo = setInterval(() => setAtivo((atual) => (atual + 1) % indices.length), INTERVALO_CARROSSEL_MS);
+    return () => clearInterval(intervalo);
+  }, [indices.length]);
+
+  if (indices.length === 0) {
+    return <div className="text-[12px] text-muted">Índices indisponíveis no momento.</div>;
+  }
+
+  const indice = indices[Math.min(ativo, indices.length - 1)];
+
+  return (
+    <div>
+      <div className="mb-2 flex items-end justify-between gap-2">
+        <div>
+          <div className="text-[13px] font-bold text-text">{indice.nome}</div>
+          <div className="text-[11.5px] text-muted">
+            {FORMATADOR_PONTOS.format(indice.pontos)} pts · <Variacao pct={indice.variacao_pct} />
+          </div>
+        </div>
+        {indices.length > 1 && (
+          <div className="flex gap-1.5">
+            {indices.map((item, posicao) => (
+              <button
+                key={item.nome}
+                type="button"
+                onClick={() => setAtivo(posicao)}
+                aria-label={`Ver ${item.nome}`}
+                className={`h-1.5 w-5 rounded-full transition-colors ${posicao === ativo ? "bg-cyan" : "bg-border hover:bg-muted"}`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{ height: 160 }}>
+        {indice.serie.length > 1 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={indice.serie}>
+              <XAxis dataKey="data" tick={{ fill: "var(--color-muted)", fontSize: 9 }} interval="preserveStartEnd" />
+              <YAxis
+                domain={["auto", "auto"]}
+                tick={{ fill: "var(--color-muted)", fontSize: 9 }}
+                width={54}
+                tickFormatter={(valor: number) => FORMATADOR_PONTOS.format(valor)}
+              />
+              <Tooltip
+                contentStyle={{ background: "var(--color-surf2)", border: "1px solid var(--color-border)" }}
+                labelStyle={{ color: "var(--color-text)" }}
+                formatter={(valor) => FORMATADOR_PONTOS.format(Number(valor))}
+              />
+              <Line
+                type="monotone"
+                dataKey="valor"
+                stroke="var(--color-cyan)"
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center text-[11.5px] text-muted">
+            Série histórica indisponível no momento.
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function CartaoIndisponivel({ rotulo }: { rotulo: string }) {
+/** Janela de câmbio/cripto/ouro, lado a lado numa linha só (formato
+ * pedido pelo usuário: "USD = R$ 5,00 | EUR = R$ 6,00 | Bitcoin = R$
+ * 134.000,00"). */
+function JanelaCotacoes({ cambio }: { cambio: CotacaoMoeda[] }) {
+  if (cambio.length === 0) {
+    return <div className="text-[12px] text-muted">Cotações indisponíveis no momento.</div>;
+  }
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-surf2 p-3.5">
-      <div className="text-[10px] font-semibold tracking-wide text-muted uppercase">{rotulo}</div>
-      <div className="text-[12px] text-muted">Indisponível no momento</div>
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12.5px]">
+      {cambio.map((item, posicao) => (
+        <span key={item.codigo} className="flex items-center gap-2">
+          <span>
+            <span className="font-semibold text-text">{item.nome}</span>{" "}
+            <span className="text-muted">= R$ {formatarValorMoeda(item.valor)}</span>{" "}
+            <Variacao pct={item.variacao_pct} />
+          </span>
+          {posicao < cambio.length - 1 && <span className="text-border">|</span>}
+        </span>
+      ))}
     </div>
   );
 }
@@ -179,35 +283,24 @@ export function CentralNegocios() {
 
       <Card className="mb-4">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="text-[10px] font-semibold tracking-wider text-muted uppercase">Mercado</div>
+          <div className="text-[10px] font-semibold tracking-wider text-muted uppercase">Índices — B3, Nova Iorque e Nasdaq</div>
           <a href={URL_B3} target="_blank" rel="noreferrer" className="text-[11px] text-cyan hover:underline">
             Ver na B3 ↗
           </a>
         </div>
         {carregando ? (
+          <div className="text-[12px] text-muted">Carregando índices...</div>
+        ) : (
+          <CarrosselIndices indices={mercado?.indices ?? []} />
+        )}
+      </Card>
+
+      <Card className="mb-4">
+        <div className="mb-3 text-[10px] font-semibold tracking-wider text-muted uppercase">Câmbio, cripto e ouro</div>
+        {carregando ? (
           <div className="text-[12px] text-muted">Carregando cotações...</div>
         ) : (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
-            {mercado?.ibovespa ? (
-              <CartaoCotacao
-                rotulo="Ibovespa"
-                valor={`${FORMATADOR_PONTOS.format(mercado.ibovespa.pontos)} pts`}
-                variacaoPct={mercado.ibovespa.variacao_pct}
-              />
-            ) : (
-              <CartaoIndisponivel rotulo="Ibovespa" />
-            )}
-            {mercado && mercado.cambio.length > 0
-              ? mercado.cambio.map((moeda) => (
-                  <CartaoCotacao
-                    key={moeda.codigo}
-                    rotulo={`${moeda.codigo} / BRL`}
-                    valor={`R$ ${FORMATADOR_VALOR_MOEDA.format(moeda.valor)}`}
-                    variacaoPct={moeda.variacao_pct}
-                  />
-                ))
-              : !mercado?.ibovespa && <CartaoIndisponivel rotulo="Câmbio" />}
-          </div>
+          <JanelaCotacoes cambio={mercado?.cambio ?? []} />
         )}
       </Card>
 
