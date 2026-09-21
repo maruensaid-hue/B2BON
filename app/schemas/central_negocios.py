@@ -23,6 +23,8 @@ class IndiceSchema(BaseModel):
 class MercadoSchema(BaseModel):
     indices: list[IndiceSchema]
     cambio: list[CotacaoMoedaSchema]
+    # DEBUG TEMPORÁRIO — ver nota em `central_negocios_client.Mercado`.
+    debug_erro_cambio: str | None = None
 
 
 class NoticiaSchema(BaseModel):
