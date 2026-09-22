@@ -11,7 +11,7 @@ interface Plano {
   id: number;
   nome: string;
   franquia_contas_mes: number;
-  max_usuarios: number;
+  max_usuarios: number | null;
   preco_mensal: number;
 }
 
@@ -113,7 +113,8 @@ export function CriarConta() {
                   <div>
                     <div className="font-semibold">{plano.nome}</div>
                     <div className="text-[10.5px] text-muted">
-                      Até {plano.max_usuarios} usuários · {plano.franquia_contas_mes} contas/mês
+                      {plano.max_usuarios != null ? `Até ${plano.max_usuarios} usuários` : "Usuários ilimitados"} ·{" "}
+                      {plano.franquia_contas_mes} contas/mês
                     </div>
                   </div>
                   <div className="font-head text-[13px] font-bold text-cyan">

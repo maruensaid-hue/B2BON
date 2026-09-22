@@ -7,7 +7,7 @@ class PlanoSchema(BaseModel):
     id: int
     nome: str
     franquia_contas_mes: int
-    max_usuarios: int
+    max_usuarios: int | None
     preco_mensal: float
     visivel_self_service: bool
     limite_enriquecimento_site_semanal: int | None
@@ -25,7 +25,7 @@ class PlanoSchema(BaseModel):
 class CriarPlanoRequestSchema(BaseModel):
     nome: str
     franquia_contas_mes: int
-    max_usuarios: int
+    max_usuarios: int | None = None
     preco_mensal: float
     visivel_self_service: bool = True
     limite_enriquecimento_site_semanal: int | None = None

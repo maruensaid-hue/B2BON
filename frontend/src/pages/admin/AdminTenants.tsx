@@ -25,7 +25,7 @@ interface Plano {
   id: number;
   nome: string;
   franquia_contas_mes: number;
-  max_usuarios: number;
+  max_usuarios: number | null;
   preco_mensal: number;
 }
 

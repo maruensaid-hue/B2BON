@@ -17,7 +17,11 @@ class Plano(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     nome: Mapped[str] = mapped_column(String, unique=True)
     franquia_contas_mes: Mapped[int] = mapped_column(Integer)
-    max_usuarios: Mapped[int] = mapped_column(Integer)
+    # Nulo = sem limite — mesmo padrão dos limites de enriquecimento e
+    # retenção abaixo. Usado pelo plano "Teste" (raio-X 2026-09-22: admin
+    # gratuito precisa convidar quantos vendedores quiser, sem tocar nas
+    # demais restrições do plano).
+    max_usuarios: Mapped[int | None] = mapped_column(Integer, nullable=True)
     preco_mensal: Mapped[float] = mapped_column(Float)
     # False só pro plano "Teste" (raio-X): esse plano só pode ser
     # concedido por convite gratuito administrativo, nunca escolhido
