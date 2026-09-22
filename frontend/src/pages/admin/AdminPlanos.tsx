@@ -13,7 +13,7 @@ interface Plano {
   id: number;
   nome: string;
   franquia_contas_mes: number;
-  max_usuarios: number;
+  max_usuarios: number | null;
   preco_mensal: number;
   visivel_self_service: boolean;
   limite_enriquecimento_site_semanal: number | null;
@@ -65,8 +65,8 @@ function FormularioPlano({
           <Input name="franquia_contas_mes" type="number" min={0} required defaultValue={plano?.franquia_contas_mes} />
         </div>
         <div>
-          <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Máx. usuários</div>
-          <Input name="max_usuarios" type="number" min={0} required defaultValue={plano?.max_usuarios} />
+          <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Máx. usuários (vazio = sem limite)</div>
+          <Input name="max_usuarios" type="number" min={0} defaultValue={plano?.max_usuarios ?? ""} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -186,7 +186,7 @@ export function AdminPlanos() {
     const dados = {
       nome: String(form.get("nome")),
       franquia_contas_mes: Number(form.get("franquia_contas_mes")),
-      max_usuarios: Number(form.get("max_usuarios")),
+      max_usuarios: campoNumeroOuVazio(form.get("max_usuarios")),
       preco_mensal: Number(form.get("preco_mensal")),
       visivel_self_service: form.get("visivel_self_service") === "on",
       limite_enriquecimento_site_semanal: campoNumeroOuVazio(form.get("limite_enriquecimento_site_semanal")),
@@ -253,7 +253,7 @@ export function AdminPlanos() {
               <tr key={plano.id} className="border-b border-border">
                 <td className="p-2 font-semibold">{plano.nome}</td>
                 <td className="p-2 text-muted">{plano.franquia_contas_mes}</td>
-                <td className="p-2 text-muted">{plano.max_usuarios}</td>
+                <td className="p-2 text-muted">{plano.max_usuarios ?? "Sem limite"}</td>
                 <td className="p-2 text-cyan">R${plano.preco_mensal.toFixed(2)}</td>
                 <td className="p-2">
                   <div className="flex flex-wrap gap-1">

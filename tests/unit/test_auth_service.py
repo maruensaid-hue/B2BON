@@ -32,7 +32,7 @@ def _criar_usuario(db_session, **overrides) -> Usuario:
     return usuario
 
 
-def _criar_licenca(db_session, tenant_id: str, max_usuarios: int, status: str = "ativa") -> Licenca:
+def _criar_licenca(db_session, tenant_id: str, max_usuarios: int | None, status: str = "ativa") -> Licenca:
     if db_session.query(Tenant).filter_by(id=tenant_id).one_or_none() is None:
         db_session.add(Tenant(id=tenant_id, razao_social=f"Empresa {tenant_id}"))
         db_session.flush()
@@ -229,6 +229,32 @@ def test_gerar_convite_permite_quando_abaixo_do_limite(db_session):
     convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
 
     assert convite.status == "disponivel"
+
+
+def test_gerar_convite_sem_limite_quando_plano_max_usuarios_e_nulo(db_session):
+    """Raio-X 2026-09-22: plano "Teste" (free, só por convite) passa a ter
+    `max_usuarios=NULL` — admin gratuito convida quantos vendedores
+    precisar, sem nenhum teto."""
+    _criar_licenca(db_session, TENANT_ID, max_usuarios=None)
+    for numero in range(15):
+        _criar_usuario(db_session, email=f"vendedor{numero}@teste.com.br")
+
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
+
+    assert convite.status == "disponivel"
+
+
+def test_aceitar_convite_sem_limite_quando_plano_max_usuarios_e_nulo(db_session):
+    _criar_licenca(db_session, TENANT_ID, max_usuarios=None)
+    for numero in range(15):
+        _criar_usuario(db_session, email=f"vendedor{numero}@teste.com.br")
+    convite = auth_service.gerar_convite(db_session, TENANT_ID, None, "admin", "user", validade_horas=24)
+
+    usuario = auth_service.registrar_com_convite(
+        db_session, convite.codigo, "Vendedor 16", "vendedor16@teste.com.br", "senha123", aceite_termos=True
+    )
+
+    assert usuario.tenant_id == TENANT_ID
 
 
 def test_gerar_convite_admin_comum_nao_pode_conceder_super_admin(db_session):

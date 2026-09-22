@@ -11,7 +11,7 @@ interface Plano {
   id: number;
   nome: string;
   franquia_contas_mes: number;
-  max_usuarios: number;
+  max_usuarios: number | null;
   preco_mensal: number;
   limite_enriquecimento_site_semanal: number | null;
   limite_enriquecimento_contatos_semanal: number | null;
@@ -169,7 +169,8 @@ export function ConviteVitrine() {
                     <div>
                       <div className="font-semibold">{plano.nome}</div>
                       <div className="text-[10.5px] text-muted">
-                        Até {plano.max_usuarios} usuários · {plano.franquia_contas_mes} contas/mês
+                        {plano.max_usuarios != null ? `Até ${plano.max_usuarios} usuários` : "Usuários ilimitados"} ·{" "}
+                        {plano.franquia_contas_mes} contas/mês
                       </div>
                       <div className="mt-1 text-[9px] leading-snug text-muted/70">
                         Limites do plano: {formatarLimite(plano.limite_enriquecimento_site_semanal)} pesquisas de site

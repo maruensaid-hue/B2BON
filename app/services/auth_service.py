@@ -213,7 +213,7 @@ def _verificar_limite_de_usuarios(db: Session, tenant_id: str) -> None:
     if licenca is None:
         return
     plano = db.query(Plano).filter_by(id=licenca.plano_id).one_or_none()
-    if plano is None:
+    if plano is None or plano.max_usuarios is None:
         return
 
     usuarios_ativos = db.query(Usuario).filter_by(tenant_id=tenant_id, ativo=True).count()

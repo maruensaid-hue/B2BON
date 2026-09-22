@@ -53,6 +53,17 @@ def test_criar_plano_com_nome_duplicado_recusa(client):
     assert resposta.status_code == 409
 
 
+def test_criar_plano_com_max_usuarios_nulo_e_ilimitado(client):
+    """Raio-X 2026-09-22: `max_usuarios` nulo = sem limite, mesmo padrão
+    já usado pra `limite_enriquecimento_*_semanal`."""
+    resposta = client.post(
+        "/api/v1/planos", json=_payload_plano("Plano Sem Teto De Usuarios", max_usuarios=None)
+    )
+
+    assert resposta.status_code == 201
+    assert resposta.json()["max_usuarios"] is None
+
+
 def test_criar_plano_com_valor_negativo_recusa(client):
     resposta = client.post("/api/v1/planos", json=_payload_plano("Plano Negativo", max_usuarios=-1))
 
