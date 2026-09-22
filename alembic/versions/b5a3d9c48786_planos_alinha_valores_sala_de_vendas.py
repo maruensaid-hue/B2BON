@@ -5,9 +5,9 @@ Raio-X 2026-09-22: a pagina publica de Planos e Valores (e o botao
 plano diferentes dos que estavam gravados aqui desde a Onda A (valores
 provisorios, nunca decisao comercial fechada - ver docstring de
 `Plano`). Sem esse ajuste, o cliente veria um preco na vitrine e pagaria
-outro no Mercado Pago. "Teste" (convite gratuito) espelha Starter de
-proposito em usuarios/limites, igual ja fazia (franquia/enriquecimento) -
-mantido em sincronia aqui.
+outro no Mercado Pago. "Teste" (convite gratuito) so ganha os novos
+limites de cadencia/campanha aqui - usuarios ja ficou sem teto pra esse
+plano na revisao anterior (1e5087198fab), intencional, nao mexido aqui.
 
 Tambem adiciona `limite_cadencias_mes`/`limite_campanhas_mes` (mesmo
 padrao nullable=sem-teto dos limites de enriquecimento semanal, so que
@@ -18,7 +18,7 @@ cadencias, ~5% campanhas), mesma logica ja documentada pros limites de
 enriquecimento - ajustaveis depois via Admin -> Planos.
 
 Revision ID: b5a3d9c48786
-Revises: f7a8b9c0d1e2
+Revises: 1e5087198fab
 Create Date: 2026-09-22
 
 """
@@ -30,7 +30,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'b5a3d9c48786'
-down_revision: Union[str, Sequence[str], None] = 'f7a8b9c0d1e2'
+down_revision: Union[str, Sequence[str], None] = '1e5087198fab'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -53,7 +53,7 @@ def upgrade() -> None:
         limite_cadencias_mes=5, limite_campanhas_mes=2,
     ))
     op.execute(plano.update().where(plano.c.nome == 'Teste').values(
-        max_usuarios=5, limite_cadencias_mes=20, limite_campanhas_mes=10,
+        limite_cadencias_mes=20, limite_campanhas_mes=10,
     ))
     op.execute(plano.update().where(plano.c.nome == 'Starter').values(
         max_usuarios=5, preco_mensal=924.50, limite_cadencias_mes=20, limite_campanhas_mes=10,
@@ -67,7 +67,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(plano.update().where(plano.c.nome == 'Teste').values(max_usuarios=10))
     op.execute(plano.update().where(plano.c.nome == 'Starter').values(max_usuarios=10, preco_mensal=490.0))
     op.execute(plano.update().where(plano.c.nome == 'Professional').values(max_usuarios=25, preco_mensal=990.0))
     op.execute(plano.update().where(plano.c.nome == 'Enterprise').values(max_usuarios=999, preco_mensal=2490.0))

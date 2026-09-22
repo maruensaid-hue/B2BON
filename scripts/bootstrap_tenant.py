@@ -43,10 +43,11 @@ PLANOS_PADRAO = [
         **POC_STARTER_TESTE,
     },
     {
-        # Espelha Starter de propósito em usuários/limites (raio-X
-        # 2026-09-22, mesma lógica já usada pra franquia/enriquecimento) —
-        # só o preço difere (gratuito, convite administrativo).
-        "nome": "Teste", "franquia_contas_mes": 200, "max_usuarios": 5, "preco_mensal": 0.0,
+        # max_usuarios=None (sem limite) — raio-X 2026-09-22, admin
+        # gratuito precisa convidar quantos vendedores quiser; espelha
+        # Starter só na franquia/enriquecimento/cadência/campanha, não em
+        # usuários (essa restrição específica foi removida de propósito).
+        "nome": "Teste", "franquia_contas_mes": 200, "max_usuarios": None, "preco_mensal": 0.0,
         "visivel_self_service": False,
         "limite_enriquecimento_site_semanal": 50, "limite_enriquecimento_contatos_semanal": 50,
         "limite_cadencias_mes": 20, "limite_campanhas_mes": 10,
