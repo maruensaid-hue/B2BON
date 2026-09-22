@@ -79,12 +79,6 @@ class Indice(TypedDict):
 class Mercado(TypedDict):
     indices: list[Indice]
     cambio: list[CotacaoMoeda]
-    # DEBUG TEMPORÁRIO (2026-09-21): câmbio voltava vazio só em produção
-    # (Render), sem explicação — expõe a mensagem da exceção real (nunca
-    # stack trace) pra diagnosticar direto na resposta pública, já que o
-    # Sentry não está configurado nesse serviço. Remover assim que a causa
-    # for confirmada e corrigida de vez.
-    debug_erro_cambio: str | None
 
 
 class Noticia(TypedDict):
@@ -147,12 +141,7 @@ def buscar_indices() -> list[Indice]:
     return indices
 
 
-# DEBUG TEMPORÁRIO (2026-09-21) — ver nota em `Mercado.debug_erro_cambio`.
-_ultimo_erro_cambio: str | None = None
-
-
 def _buscar_cambio() -> list[CotacaoMoeda]:
-    global _ultimo_erro_cambio
     try:
         pares = ",".join(f"{codigo}-BRL" for codigo, _ in _MOEDAS)
         resposta = httpx.get(
@@ -160,16 +149,18 @@ def _buscar_cambio() -> list[CotacaoMoeda]:
         )
         resposta.raise_for_status()
         dados = resposta.json()
-        _ultimo_erro_cambio = None
     except (httpx.HTTPError, ValueError) as erro:
-        # 2026-09-21: câmbio voltava vazio em produção (Render) sem
-        # explicação — a troca de User-Agent sozinha não resolveu, então
-        # capturamos o erro real (Sentry, se configurado) em vez de seguir
-        # adivinhando a causa às cegas.
+        # 2026-09-21: raio-X em produção achou a causa real — a AwesomeAPI
+        # rate-limita (429) o IP de saída do Render, provavelmente
+        # compartilhado entre vários serviços/tenants. Loga (e manda pro
+        # Sentry, se configurado) em vez de falhar silenciosamente; quem
+        # cobre a experiência do usuário é o fallback "stale" em
+        # `central_negocios_service.obter_mercado` (mostra a última
+        # cotação boa em vez de "indisponível" por causa de um 429
+        # passageiro).
         logger.warning("Falha ao buscar câmbio/cripto/ouro na AwesomeAPI: %s", erro)
         if settings.sentry_dsn:
             sentry_sdk.capture_exception(erro)
-        _ultimo_erro_cambio = f"{type(erro).__name__}: {erro}"
         return []
 
     resultado: list[CotacaoMoeda] = []
@@ -193,8 +184,7 @@ def buscar_mercado() -> Mercado:
     """Cotações reais de mercado (índices de bolsa + câmbio/cripto/ouro) —
     nunca inventa um número: fonte indisponível vira lista vazia, tratado
     pelo frontend como "indisponível no momento", nunca um valor fabricado."""
-    cambio = _buscar_cambio()
-    return {"indices": buscar_indices(), "cambio": cambio, "debug_erro_cambio": _ultimo_erro_cambio}
+    return {"indices": buscar_indices(), "cambio": _buscar_cambio()}
 
 
 def _parsear_rss(portal: str, url: str) -> list[Noticia]:
