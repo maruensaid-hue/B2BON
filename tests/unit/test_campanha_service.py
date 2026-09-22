@@ -4,12 +4,14 @@ import pytest
 
 from app.models.conta import Conta
 from app.models.decisor import Decisor
+from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.schemas.campanha import DestinatarioAvulsoSchema
 from app.services import campanha_service, reputacao_service
 from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 from tests.fakes import FakeEmailProvider, FakeWhatsAppProvider
 
 TENANT_ID = "tenant-campanhas"
+PLAN_LIMITS = StubPlanLimitsProvider()
 
 
 def _criar_decisor(db_session, nome: str, email: str | None = "fulano@teste.com", suprimido: bool = False) -> Decisor:
@@ -40,18 +42,23 @@ def _criar_campanha_email(db_session, canais=None) -> int:
         "Assunto de teste",
         "Corpo de teste",
         None,
+        PLAN_LIMITS,
     )
     return campanha.id
 
 
 def test_criar_campanha_email_exige_assunto_e_conteudo(db_session):
     with pytest.raises(ValidacaoFalhou):
-        campanha_service.criar(db_session, TENANT_ID, None, "Sem conteúdo", "marketing", ["email"], None, None, None)
+        campanha_service.criar(
+            db_session, TENANT_ID, None, "Sem conteúdo", "marketing", ["email"], None, None, None, PLAN_LIMITS
+        )
 
 
 def test_criar_campanha_whatsapp_exige_template(db_session):
     with pytest.raises(ValidacaoFalhou):
-        campanha_service.criar(db_session, TENANT_ID, None, "Sem template", "vendas", ["whatsapp"], None, None, None)
+        campanha_service.criar(
+            db_session, TENANT_ID, None, "Sem template", "vendas", ["whatsapp"], None, None, None, PLAN_LIMITS
+        )
 
 
 def test_adicionar_de_decisores_pula_suprimido(db_session):
@@ -140,7 +147,16 @@ def test_processar_pendentes_envia_email_e_marca_concluida(db_session):
 
 def test_processar_pendentes_whatsapp_usa_template(db_session):
     campanha = campanha_service.criar(
-        db_session, TENANT_ID, None, "Campanha WhatsApp", "vendas", ["whatsapp"], None, None, "prospeccao_inicial"
+        db_session,
+        TENANT_ID,
+        None,
+        "Campanha WhatsApp",
+        "vendas",
+        ["whatsapp"],
+        None,
+        None,
+        "prospeccao_inicial",
+        PLAN_LIMITS,
     )
     decisor = _criar_decisor(db_session, "Fulano")
     campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha.id, [decisor.id])
@@ -197,7 +213,16 @@ def test_marcar_pronta_whatsapp_nao_bloqueado_por_email_pausado(db_session):
     de WhatsApp não deveria ser afetada pela pausa do e-mail."""
     _pausar_canal_email(db_session)
     campanha = campanha_service.criar(
-        db_session, TENANT_ID, None, "Campanha WhatsApp", "vendas", ["whatsapp"], None, None, "prospeccao_inicial"
+        db_session,
+        TENANT_ID,
+        None,
+        "Campanha WhatsApp",
+        "vendas",
+        ["whatsapp"],
+        None,
+        None,
+        "prospeccao_inicial",
+        PLAN_LIMITS,
     )
     decisor = _criar_decisor(db_session, "Fulano")
     campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha.id, [decisor.id])
@@ -233,7 +258,7 @@ def test_processar_pendentes_email_pausado_ainda_tenta_whatsapp(db_session):
     — só o e-mail é pulado, não o destinatário inteiro."""
     campanha = campanha_service.criar(
         db_session, TENANT_ID, None, "Campanha Multicanal", "vendas", ["email", "whatsapp"],
-        "Assunto", "Corpo", "prospeccao_inicial",
+        "Assunto", "Corpo", "prospeccao_inicial", PLAN_LIMITS,
     )
     decisor = _criar_decisor(db_session, "Fulano")
     campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha.id, [decisor.id])

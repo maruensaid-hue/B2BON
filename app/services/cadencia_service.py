@@ -22,6 +22,7 @@ from app.services import (
     auditoria_service,
     comunicacao_service,
     franquia_service,
+    limite_criacao_service,
     llm_helpers,
     optout_service,
     regra_aprendida_service,
@@ -311,6 +312,8 @@ def criar(
     db: Session, tenant_id: str, ator_id: str | None, dados: CadenciaCreateSchema, plan_limits: PlanLimitsProvider
 ) -> Cadencia:
     """Cadência com no mínimo 5 toques distribuídos entre canais disponíveis (E3-H1)."""
+    limite_criacao_service.verificar_limite_cadencias(db, tenant_id, plan_limits)
+
     if len(dados.toques) < MINIMO_TOQUES:
         raise RegraNegocioViolada(f"Uma cadência precisa de no mínimo {MINIMO_TOQUES} toques.")
 

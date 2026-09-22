@@ -12,6 +12,8 @@ class PlanoSchema(BaseModel):
     visivel_self_service: bool
     limite_enriquecimento_site_semanal: int | None
     limite_enriquecimento_contatos_semanal: int | None
+    limite_cadencias_mes: int | None
+    limite_campanhas_mes: int | None
     permite_ab_teste_cadencia: bool
     permite_auto_aprovacao: bool
     permite_webhook_relatorio: bool
@@ -30,6 +32,8 @@ class CriarPlanoRequestSchema(BaseModel):
     visivel_self_service: bool = True
     limite_enriquecimento_site_semanal: int | None = None
     limite_enriquecimento_contatos_semanal: int | None = None
+    limite_cadencias_mes: int | None = None
+    limite_campanhas_mes: int | None = None
     permite_ab_teste_cadencia: bool = False
     permite_auto_aprovacao: bool = False
     permite_webhook_relatorio: bool = False

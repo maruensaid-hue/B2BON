@@ -64,6 +64,8 @@ _CAMPOS_NUMERICOS_NAO_NEGATIVOS = (
     "preco_mensal",
     "limite_enriquecimento_site_semanal",
     "limite_enriquecimento_contatos_semanal",
+    "limite_cadencias_mes",
+    "limite_campanhas_mes",
     "retencao_dias_relatorio",
     "retencao_dias_auditoria",
 )

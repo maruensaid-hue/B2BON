@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends
 
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_plan_limits_provider, get_tenant_id
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.campanha import (
     AdicionarDestinatariosAvulsosRequestSchema,
     AdicionarDestinatariosDeDecisoresRequestSchema,
@@ -23,9 +24,19 @@ def criar_campanha(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> CampanhaSchema:
     return campanha_service.criar(
-        db, tenant_id, ator_id, dados.nome, dados.tipo, dados.canais, dados.assunto, dados.conteudo_email, dados.template_whatsapp_id
+        db,
+        tenant_id,
+        ator_id,
+        dados.nome,
+        dados.tipo,
+        dados.canais,
+        dados.assunto,
+        dados.conteudo_email,
+        dados.template_whatsapp_id,
+        plan_limits,
     )
 
 

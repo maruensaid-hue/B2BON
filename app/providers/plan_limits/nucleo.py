@@ -36,6 +36,14 @@ class NucleoPlanLimitsProvider(PlanLimitsProvider):
         plano = self._plano_ativo(tenant_id)
         return plano.limite_enriquecimento_contatos_semanal if plano is not None else 0
 
+    def obter_limite_cadencias_mes(self, tenant_id: str) -> int | None:
+        plano = self._plano_ativo(tenant_id)
+        return plano.limite_cadencias_mes if plano is not None else 0
+
+    def obter_limite_campanhas_mes(self, tenant_id: str) -> int | None:
+        plano = self._plano_ativo(tenant_id)
+        return plano.limite_campanhas_mes if plano is not None else 0
+
     def permite_ab_teste_cadencia(self, tenant_id: str) -> bool:
         plano = self._plano_ativo(tenant_id)
         return plano.permite_ab_teste_cadencia if plano is not None else False

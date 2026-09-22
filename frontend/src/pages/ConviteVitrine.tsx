@@ -13,6 +13,16 @@ interface Plano {
   franquia_contas_mes: number;
   max_usuarios: number;
   preco_mensal: number;
+  limite_enriquecimento_site_semanal: number | null;
+  limite_enriquecimento_contatos_semanal: number | null;
+  limite_cadencias_mes: number | null;
+  limite_campanhas_mes: number | null;
+}
+
+// Letras miúdas da janela de assinatura (raio-X 2026-09-22) — mesmo
+// padrão de `CriarConta.tsx`.
+function formatarLimite(valor: number | null): string {
+  return valor === null ? "sem limite" : String(valor);
 }
 
 interface InfoConvite {
@@ -152,7 +162,7 @@ export function ConviteVitrine() {
                     key={plano.id}
                     type="button"
                     onClick={() => setPlanoId(plano.id)}
-                    className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-[12px] transition-colors ${
+                    className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left text-[12px] transition-colors ${
                       planoId === plano.id ? "border-cyan bg-cyan/10" : "border-border hover:bg-surf2"
                     }`}
                   >
@@ -161,8 +171,14 @@ export function ConviteVitrine() {
                       <div className="text-[10.5px] text-muted">
                         Até {plano.max_usuarios} usuários · {plano.franquia_contas_mes} contas/mês
                       </div>
+                      <div className="mt-1 text-[9px] leading-snug text-muted/70">
+                        Limites do plano: {formatarLimite(plano.limite_enriquecimento_site_semanal)} pesquisas de site
+                        e {formatarLimite(plano.limite_enriquecimento_contatos_semanal)} de contatos por semana ·{" "}
+                        {formatarLimite(plano.limite_cadencias_mes)} cadências e{" "}
+                        {formatarLimite(plano.limite_campanhas_mes)} campanhas por mês.
+                      </div>
                     </div>
-                    <div className="font-head text-[13px] font-bold text-cyan">
+                    <div className="flex-shrink-0 font-head text-[13px] font-bold text-cyan">
                       R${plano.preco_mensal.toFixed(0)}
                       <span className="text-[9.5px] font-normal text-muted">/mês</span>
                     </div>

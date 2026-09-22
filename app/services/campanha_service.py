@@ -9,8 +9,9 @@ from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.decisor import Decisor
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.campanha import DestinatarioAvulsoSchema
-from app.services import atividade_service, auditoria_service, optout_service, reputacao_service
+from app.services import atividade_service, auditoria_service, limite_criacao_service, optout_service, reputacao_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 _SEPARADOR = ":"
@@ -37,7 +38,9 @@ def criar(
     assunto: str | None,
     conteudo_email: str | None,
     template_whatsapp_id: str | None,
+    plan_limits: PlanLimitsProvider,
 ) -> Campanha:
+    limite_criacao_service.verificar_limite_campanhas(db, tenant_id, plan_limits)
     _validar_canais(canais, assunto, conteudo_email, template_whatsapp_id)
     campanha = Campanha(
         tenant_id=tenant_id,
