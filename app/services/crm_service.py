@@ -748,7 +748,13 @@ def obter_custo_aquisicao(db: Session, tenant_id: str, periodo: str) -> CustoAqu
 
 
 def _periodo_padrao(data_inicio: date | None, data_fim: date | None) -> tuple[date, date]:
-    fim = data_fim or date.today()
+    # `Atividade.criado_em` é gravado em UTC pelo banco — usar `date.today()`
+    # (hora LOCAL do processo Python) misturava fusos: no Brasil (UTC-3),
+    # entre ~21h e meia-noite local o UTC já virou o dia seguinte, então
+    # `fim_dt` (meia-noite local) excluía atividades recém-criadas cujo
+    # `criado_em` UTC já estava "amanhã". `datetime.now(UTC).date()` mantém
+    # o período no mesmo fuso do timestamp que ele filtra.
+    fim = data_fim or datetime.now(UTC).date()
     inicio = data_inicio or (fim - timedelta(days=_PERIODO_PADRAO_DIAS))
     return inicio, fim
 
