@@ -34,6 +34,52 @@ const MODULOS: Modulo[] = [
   },
 ];
 
+interface TierModulo {
+  nome: string;
+  usuarios: string;
+  preco: string;
+}
+
+interface ModuloContratacao {
+  nome: string;
+  tiers: TierModulo[];
+}
+
+// Contratação avulsa por módulo (raio-X 2026-09-22) — pra quem não quer
+// a suíte inteira. Reaproveita os mesmos valores já validados na
+// contratação da suíte completa (é a mesma linha de cada módulo dentro
+// de cada faixa de `PLANOS` abaixo, só apresentada separada). Shoal
+// fica de fora — é sempre gratuito, não é vendido avulso.
+const CONTRATACAO_POR_MODULO: ModuloContratacao[] = [
+  {
+    nome: "MAP",
+    tiers: [
+      { nome: "Starter", usuarios: "Até 5 usuários", preco: "R$ 149,50/mês" },
+      { nome: "Professional", usuarios: "Até 10 usuários", preco: "R$ 269,10/mês" },
+      { nome: "Enterprise", usuarios: "Até 20 usuários", preco: "R$ 478,40/mês" },
+      { nome: "On Demand", usuarios: "Acima de 20 usuários", preco: "R$ 20,90/usuário/mês" },
+    ],
+  },
+  {
+    nome: "PREDATOR",
+    tiers: [
+      { nome: "Starter", usuarios: "Até 5 usuários", preco: "R$ 475,50/mês" },
+      { nome: "Professional", usuarios: "Até 10 usuários", preco: "R$ 855,90/mês" },
+      { nome: "Enterprise", usuarios: "Até 20 usuários", preco: "R$ 1.521,60/mês" },
+      { nome: "On Demand", usuarios: "Acima de 20 usuários", preco: "R$ 66,90/usuário/mês" },
+    ],
+  },
+  {
+    nome: "CRM",
+    tiers: [
+      { nome: "Starter", usuarios: "Até 5 usuários", preco: "R$ 299,50/mês" },
+      { nome: "Professional", usuarios: "Até 10 usuários", preco: "R$ 539,10/mês" },
+      { nome: "Enterprise", usuarios: "Até 20 usuários", preco: "R$ 958,40/mês" },
+      { nome: "On Demand", usuarios: "Acima de 20 usuários", preco: "R$ 41,90/usuário/mês" },
+    ],
+  },
+];
+
 interface Plano {
   nome: string;
   usuarios: string;
@@ -166,6 +212,46 @@ export function Planos() {
               >
                 {modulo.precoLabel}
               </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-14 mb-8 text-center">
+          <div className="text-[10px] font-semibold tracking-widest text-cyan uppercase">Ou contrate separado</div>
+          <div className="mt-1.5 font-head text-xl font-bold text-text">Contratação por módulo</div>
+          <div className="mx-auto mt-2 max-w-lg text-[12px] text-muted">
+            Precisa só de um módulo? MAP, PREDATOR e CRM também podem ser contratados avulsos, na
+            mesma faixa de desconto por usuário da suíte completa. Shoal é sempre gratuito, com ou
+            sem outro módulo contratado.
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {CONTRATACAO_POR_MODULO.map((modulo) => (
+            <div key={modulo.nome} className="flex flex-col gap-3 rounded-xl border border-border bg-surf p-4.5">
+              <div className="font-head text-[15px] font-bold text-text">{modulo.nome}</div>
+              <div className="flex flex-col gap-2.5 border-t border-border pt-3">
+                {modulo.tiers.map((tier) => (
+                  <div key={tier.nome} className="flex items-baseline justify-between gap-2 text-[12px]">
+                    <div>
+                      <div className="font-semibold text-text">{tier.nome}</div>
+                      <div className="text-[10.5px] text-muted">{tier.usuarios}</div>
+                    </div>
+                    <div className="flex-shrink-0 font-head text-[12.5px] font-bold text-cyan">{tier.preco}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-dashed border-border2 pt-2.5 text-[10.5px] text-muted">
+                Acima de 100 usuários: condições negociadas com o comercial.
+              </div>
+              <a
+                href={`mailto:comercial@cyberfort.com.br?subject=${encodeURIComponent(
+                  `Contratação avulsa: ${modulo.nome}`,
+                )}`}
+                className="mt-1 rounded-lg border border-border px-4 py-2.5 text-center text-[13px] font-bold text-text transition-colors hover:bg-surf2"
+              >
+                Falar com o comercial
+              </a>
             </div>
           ))}
         </div>
