@@ -36,7 +36,17 @@ def main() -> None:
 
         plano = db.query(Plano).filter_by(nome="E2E Teste").one_or_none()
         if plano is None:
-            plano = Plano(nome="E2E Teste", franquia_contas_mes=1000, max_usuarios=10, preco_mensal=0.0)
+            plano = Plano(
+                nome="E2E Teste",
+                franquia_contas_mes=1000,
+                max_usuarios=10,
+                preco_mensal=0.0,
+                # Contratação avulsa por módulo (raio-X 2026-09-24) — sem
+                # isso, o tenant de E2E não vê CRM/MAP/PREDATOR (nenhum
+                # módulo liberado é o default seguro pra plano novo, mas
+                # o E2E precisa da suíte inteira, igual um cliente real).
+                modulos_contratados=["map", "predator", "crm"],
+            )
             db.add(plano)
             db.flush()
 
@@ -53,6 +63,11 @@ def main() -> None:
                     senha_hash=hash_senha(SENHA),
                     papel="super_admin",
                     ativo=True,
+                    # Sem isso, o tour de primeiro acesso do CRM abre
+                    # sozinho na primeira visita e intercepta o clique em
+                    # "+ Novo negócio" — os testes E2E testam o fluxo real
+                    # de negócio, não o onboarding.
+                    tutoriais_modulo_vistos=["crm"],
                 )
             )
         else:
