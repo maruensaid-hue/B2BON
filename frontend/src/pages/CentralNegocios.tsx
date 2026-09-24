@@ -300,6 +300,21 @@ export function CentralNegocios() {
     );
   }, []);
 
+  // Raio-X 2026-09-24: a busca inicial só rodava uma vez no mount — quem
+  // já tinha a página aberta nunca via o câmbio se recuperar depois de
+  // uma falha temporária, só com F5 manual. Poll leve enquanto a aba
+  // estiver aberta (mesmo cadência do TTL de 15min do backend, só mais
+  // frequente pra parecer "ao vivo" sem bater demais no servidor).
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      api
+        .get<Mercado>("/central-negocios/mercado")
+        .then(setMercado)
+        .catch(() => undefined);
+    }, 120000);
+    return () => clearInterval(intervalo);
+  }, []);
+
   return (
     <div className="mx-auto max-w-4xl p-5.5">
       <Link to="/" className="mb-4 inline-block text-[12px] text-cyan hover:underline">

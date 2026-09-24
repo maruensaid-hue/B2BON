@@ -2,6 +2,7 @@ from app.models.alerta_detrator import AlertaDetrator
 from app.models.aprovacao import Aprovacao
 from app.models.atividade import Atividade
 from app.models.auditoria import AuditLog
+from app.models.cache_mercado_externo import CacheMercadoExterno
 from app.models.cadencia import Cadencia
 from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.campo_enriquecido import CampoEnriquecido
@@ -24,6 +25,7 @@ from app.models.convite_cadastro import ConviteCadastro
 from app.models.convite_vitrine import ConviteVitrine
 from app.models.conversa_qualificacao import ConversaQualificacao
 from app.models.decisor import Decisor
+from app.models.email_direto import EmailDireto
 from app.models.descarte_conta import DescarteConta
 from app.models.enriquecimento_semanal_consumo import EnriquecimentoSemanalConsumo
 from app.models.estagio_funil import EstagioFunil
@@ -174,4 +176,6 @@ __all__ = [
     "ConfiguracaoAgenteCorporativo",
     "PerguntaAgenteCorporativo",
     "RegistroUsoIa",
+    "CacheMercadoExterno",
+    "EmailDireto",
 ]

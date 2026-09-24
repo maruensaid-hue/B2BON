@@ -1,4 +1,5 @@
 import logging
+import time
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -141,14 +142,31 @@ def buscar_indices() -> list[Indice]:
     return indices
 
 
+def _buscar_cambio_com_retentativa(pares: str) -> dict:
+    """1 retentativa curta (raio-X 2026-09-24) — amortece um 429
+    passageiro da AwesomeAPI dentro da MESMA requisição, complementar
+    ao fallback stale persistido em `CacheMercadoExterno` (que cobre o
+    caso de bloqueio sustentado que sobrevive a um cold start)."""
+    ultimo_erro: Exception | None = None
+    for tentativa in range(2):
+        try:
+            resposta = httpx.get(
+                _URL_CAMBIO.format(pares=pares), headers={"User-Agent": _USER_AGENT}, timeout=_TIMEOUT_SEGUNDOS
+            )
+            resposta.raise_for_status()
+            return resposta.json()
+        except (httpx.HTTPError, ValueError) as erro:
+            ultimo_erro = erro
+            if tentativa == 0:
+                time.sleep(0.8)
+    assert ultimo_erro is not None
+    raise ultimo_erro
+
+
 def _buscar_cambio() -> list[CotacaoMoeda]:
+    pares = ",".join(f"{codigo}-BRL" for codigo, _ in _MOEDAS)
     try:
-        pares = ",".join(f"{codigo}-BRL" for codigo, _ in _MOEDAS)
-        resposta = httpx.get(
-            _URL_CAMBIO.format(pares=pares), headers={"User-Agent": _USER_AGENT}, timeout=_TIMEOUT_SEGUNDOS
-        )
-        resposta.raise_for_status()
-        dados = resposta.json()
+        dados = _buscar_cambio_com_retentativa(pares)
     except (httpx.HTTPError, ValueError) as erro:
         # 2026-09-21: raio-X em produção achou a causa real — a AwesomeAPI
         # rate-limita (429) o IP de saída do Render, provavelmente

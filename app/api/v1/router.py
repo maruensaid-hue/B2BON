@@ -22,6 +22,7 @@ from app.api.v1.crm import router as crm_router
 from app.api.v1.conversas import router as conversas_router
 from app.api.v1.cron import router as cron_router
 from app.api.v1.decisores import router as decisores_router
+from app.api.v1.email_direto import router as email_direto_router
 from app.api.v1.envios import router as envios_router
 from app.api.v1.faq import router as faq_router
 from app.api.v1.icp import router as icp_router
@@ -87,6 +88,7 @@ router.include_router(auditoria_router)
 router.include_router(ropa_router, dependencies=_exige_predator)
 router.include_router(cadencias_router, dependencies=_exige_predator)
 router.include_router(regras_aprendidas_router, dependencies=_exige_predator)
+router.include_router(email_direto_router, dependencies=_exige_predator)
 router.include_router(busca_router, dependencies=_exige_predator)
 router.include_router(campanhas_router, dependencies=_exige_predator)
 router.include_router(envios_router, dependencies=_exige_predator)

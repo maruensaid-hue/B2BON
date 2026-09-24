@@ -595,7 +595,13 @@ export function Kanban() {
                   <div className="mb-1 flex items-start justify-between gap-2">
                     <div>
                       <div className="text-[10px] font-bold tracking-wide text-cyan uppercase">{negocio.conta_nome}</div>
-                      <div className="text-[12px] font-bold">{negocio.nome}</div>
+                      <button
+                        type="button"
+                        onClick={() => setNegocioEmEdicao(negocio)}
+                        className="text-left text-[12px] font-bold hover:text-cyan hover:underline"
+                      >
+                        {negocio.nome}
+                      </button>
                       {negocio.decisor_nome && <div className="text-[10px] text-muted">{negocio.decisor_nome}</div>}
                     </div>
                     {negocioParaExcluir === negocio.id ? (
