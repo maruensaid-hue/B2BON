@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
-from app.api.deps import get_mercado_client, get_noticias_client
+from app.api.deps import get_db, get_mercado_client, get_noticias_client
 from app.integrations.central_negocios_client import MercadoClient, NoticiasClient
 from app.schemas.central_negocios import MercadoSchema, NoticiaSchema
 from app.services import central_negocios_service
@@ -9,10 +10,14 @@ router = APIRouter(prefix="/central-negocios", tags=["central-negocios"])
 
 
 @router.get("/mercado", response_model=MercadoSchema)
-def obter_mercado(mercado_client: MercadoClient = Depends(get_mercado_client)) -> MercadoSchema:
+def obter_mercado(
+    mercado_client: MercadoClient = Depends(get_mercado_client), db: Session = Depends(get_db)
+) -> MercadoSchema:
     """B3 (Ibovespa) + câmbio — página pública, sem autenticação (Central
-    de Negócios, raio-X 2026-09-21). Cacheado por 15min em `central_negocios_service`."""
-    return central_negocios_service.obter_mercado(mercado_client)
+    de Negócios, raio-X 2026-09-21). Cacheado por 15min em
+    `central_negocios_service`, com fallback persistido em banco pra
+    sobreviver a cold start (raio-X 2026-09-24)."""
+    return central_negocios_service.obter_mercado(mercado_client, db)
 
 
 @router.get("/noticias", response_model=list[NoticiaSchema])
