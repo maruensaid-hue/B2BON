@@ -129,6 +129,53 @@ def test_sem_regra_aprendida_prompt_nao_ganha_o_trecho(
     assert all("Regras aprendidas" not in chamada.prompt for chamada in fake_llm.chamadas)
 
 
+def test_toque_email_extrai_assunto_do_formato_da_ia(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm
+):
+    """Raio-X 2026-09-24: a IA passa a gerar um assunto pra toques de
+    email, num formato de texto puro (ASSUNTO:/CORPO:) — sem parsing
+    estruturado (JSON) neste projeto ainda. Se a IA não obedecer o
+    formato numa tentativa pontual (toque 3), cai em fallback silencioso
+    (assunto=None, texto inteiro vira conteudo), nunca derruba o toque."""
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    # toques 1, 3, 5 são email; 2 e 4 são whatsapp (cadência-padrão).
+    fake_llm.definir_respostas(
+        [
+            "ASSUNTO: Proposta para sua empresa\nCORPO:\nOlá, temos uma solução para você.",
+            "Mensagem de whatsapp normal.",
+            "Mensagem de prospecção sem o formato esperado.",
+            "Outra mensagem de whatsapp.",
+            "ASSUNTO: Follow-up\nCORPO:\nSegunda tentativa de contato.",
+        ]
+    )
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["mensagens_geradas"] == 5
+
+    prompts_email = [chamada.prompt for chamada in fake_llm.chamadas if "canal email" in chamada.prompt]
+    prompts_whatsapp = [chamada.prompt for chamada in fake_llm.chamadas if "canal whatsapp" in chamada.prompt]
+    assert all("ASSUNTO:" in prompt for prompt in prompts_email)
+    assert all("ASSUNTO:" not in prompt for prompt in prompts_whatsapp)
+
+    itens = client.get("/api/v1/aprovacoes", params={"cadencia_id": cadencia["id"]}).json()
+    itens_email = [item for item in itens if item["canal"] == "email"]
+    itens_whatsapp = [item for item in itens if item["canal"] == "whatsapp"]
+    assert len(itens_email) == 3
+    assert all(item["assunto"] is None for item in itens_whatsapp)
+
+    assuntos = {item["assunto"] for item in itens_email}
+    assert assuntos == {"Proposta para sua empresa", "Follow-up", None}
+    item_sem_assunto = next(item for item in itens_email if item["assunto"] is None)
+    assert "ASSUNTO:" not in item_sem_assunto["conteudo"]
+    assert "Mensagem de prospecção sem o formato esperado." in item_sem_assunto["conteudo"]
+    item_com_assunto = next(item for item in itens_email if item["assunto"] == "Proposta para sua empresa")
+    assert "ASSUNTO:" not in item_com_assunto["conteudo"]
+    assert "Olá, temos uma solução para você." in item_com_assunto["conteudo"]
+
+
 def test_gerar_para_lote_grande_e_bloqueado(client, onboarding_completo, criar_conta_com_decisor, criar_cadencia):
     """Bug real de produção: um lote grande (muitas contas x vários toques)
     fazia chamadas demais à IA numa única requisição e estourava o tempo

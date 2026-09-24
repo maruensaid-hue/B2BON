@@ -66,6 +66,57 @@ def test_mensagem_e_enviada_apos_aprovacao(db_session, decisor_de_teste):
     assert enviada.enviado_em is not None
 
 
+def test_criar_proposta_com_assunto_persiste_no_modelo(db_session, decisor_de_teste):
+    decisor, cadencia = decisor_de_teste
+    mensagem = aprovacao_service.criar_proposta(
+        db_session,
+        TENANT_ID,
+        cadencia.id,
+        decisor.id,
+        "email",
+        "template-1",
+        "Olá {{nome}}",
+        PLAN_LIMITS,
+        assunto="Assunto de teste",
+    )
+
+    assert mensagem.assunto == "Assunto de teste"
+
+
+def test_criar_proposta_sem_assunto_continua_funcionando(db_session, decisor_de_teste):
+    """Mesma chamada que `indicacao_service.py` já faz hoje, sem o kwarg
+    novo — precisa continuar funcionando com `assunto=None`."""
+    decisor, cadencia = decisor_de_teste
+    mensagem = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, cadencia.id, decisor.id, "whatsapp", None, "Olá {{nome}}", PLAN_LIMITS
+    )
+
+    assert mensagem.assunto is None
+
+
+def test_listar_fila_expoe_assunto_e_dados_do_decisor(db_session, decisor_de_teste):
+    decisor, cadencia = decisor_de_teste
+    decisor.email = "decisor@teste.com"
+    db_session.commit()
+    aprovacao_service.criar_proposta(
+        db_session,
+        TENANT_ID,
+        cadencia.id,
+        decisor.id,
+        "email",
+        "template-1",
+        "Olá {{nome}}",
+        PLAN_LIMITS,
+        assunto="Assunto de teste",
+    )
+
+    item = aprovacao_service.listar_fila(db_session, TENANT_ID)[0]
+
+    assert item["assunto"] == "Assunto de teste"
+    assert item["decisor_nome"] == decisor.nome
+    assert item["decisor_email"] == "decisor@teste.com"
+
+
 def test_marcar_enviada_mensagem_inexistente_levanta_nao_encontrado(db_session):
     with pytest.raises(NaoEncontrado):
         aprovacao_service.marcar_enviada(db_session, TENANT_ID, 9999)

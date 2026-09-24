@@ -28,6 +28,7 @@ def criar_proposta(
     toque_cadencia_id: int | None = None,
     variante_ab: str | None = None,
     agendado_para: datetime | None = None,
+    assunto: str | None = None,
 ) -> Mensagem:
     """Cria uma mensagem proposta e a correspondente entrada na fila.
 
@@ -44,6 +45,7 @@ def criar_proposta(
         decisor_id=decisor_id,
         canal=canal,
         template_id=template_id,
+        assunto=assunto,
         conteudo=conteudo,
         toque_cadencia_id=toque_cadencia_id,
         variante_ab=variante_ab,
@@ -190,10 +192,13 @@ def listar_fila(
             "mensagem_status": mensagem.status,
             "canal": mensagem.canal,
             "template_id": mensagem.template_id,
+            "assunto": mensagem.assunto,
             "conteudo": mensagem.conteudo,
             "cadencia_id": mensagem.cadencia_id,
             "conta_id": decisor.conta_id,
             "decisor_id": decisor.id,
+            "decisor_nome": decisor.nome,
+            "decisor_email": decisor.email,
             "agendado_para": mensagem.agendado_para,
             "criado_em": mensagem.criado_em,
         }

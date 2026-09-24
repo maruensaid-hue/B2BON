@@ -26,10 +26,13 @@ class AprovacaoFilaItemSchema(BaseModel):
     mensagem_status: str
     canal: str
     template_id: str | None
+    assunto: str | None
     conteudo: str
     cadencia_id: int | None
     conta_id: int
     decisor_id: int
+    decisor_nome: str
+    decisor_email: str | None
     agendado_para: datetime | None
     criado_em: datetime
 

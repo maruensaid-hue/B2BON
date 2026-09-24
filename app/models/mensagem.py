@@ -20,6 +20,9 @@ class Mensagem(Base):
     toque_cadencia_id: Mapped[int | None] = mapped_column(ForeignKey("toque_cadencia.id"), nullable=True)
     canal: Mapped[str] = mapped_column(String)  # whatsapp | email | linkedin
     template_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Só e-mail (raio-X 2026-09-24): nulo pra whatsapp/linkedin e para
+    # mensagens de e-mail geradas antes desta coluna existir.
+    assunto: Mapped[str | None] = mapped_column(String, nullable=True)
     conteudo: Mapped[str] = mapped_column(String)
     variante_ab: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(
