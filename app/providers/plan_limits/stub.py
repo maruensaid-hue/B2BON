@@ -17,6 +17,8 @@ class StubPlanLimitsProvider(PlanLimitsProvider):
         overrides: dict[str, int] | None = None,
         limite_enriquecimento_site_semanal: dict[str, int | None] | None = None,
         limite_enriquecimento_contatos_semanal: dict[str, int | None] | None = None,
+        limite_cadencias_mes: dict[str, int | None] | None = None,
+        limite_campanhas_mes: dict[str, int | None] | None = None,
         recursos_desabilitados: dict[str, set[str]] | None = None,
         retencao_dias_relatorio: dict[str, int | None] | None = None,
         retencao_dias_auditoria: dict[str, int | None] | None = None,
@@ -32,6 +34,8 @@ class StubPlanLimitsProvider(PlanLimitsProvider):
         # todo teste que nem toca nesse comportamento).
         self._limite_site = limite_enriquecimento_site_semanal or {}
         self._limite_contatos = limite_enriquecimento_contatos_semanal or {}
+        self._limite_cadencias = limite_cadencias_mes or {}
+        self._limite_campanhas = limite_campanhas_mes or {}
         # Recursos de escala (raio-X 2026-09-09): sem override, o stub é
         # permissivo (todo recurso liberado, sem teto de retenção) — só
         # quem explicitamente testa um gate passa `tenant_id` em
@@ -50,6 +54,12 @@ class StubPlanLimitsProvider(PlanLimitsProvider):
 
     def obter_limite_enriquecimento_contatos_semanal(self, tenant_id: str) -> int | None:
         return self._limite_contatos.get(tenant_id)
+
+    def obter_limite_cadencias_mes(self, tenant_id: str) -> int | None:
+        return self._limite_cadencias.get(tenant_id)
+
+    def obter_limite_campanhas_mes(self, tenant_id: str) -> int | None:
+        return self._limite_campanhas.get(tenant_id)
 
     def _permite(self, tenant_id: str, recurso: str) -> bool:
         return recurso not in self._recursos_desabilitados.get(tenant_id, set())

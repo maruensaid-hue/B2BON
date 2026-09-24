@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +13,18 @@ interface Plano {
   franquia_contas_mes: number;
   max_usuarios: number | null;
   preco_mensal: number;
+  limite_enriquecimento_site_semanal: number | null;
+  limite_enriquecimento_contatos_semanal: number | null;
+  limite_cadencias_mes: number | null;
+  limite_campanhas_mes: number | null;
+}
+
+// Letras miúdas da janela de assinatura (raio-X 2026-09-22) — de
+// propósito sem destaque (sem cor de aviso, fonte mínima): informa o
+// que o plano restringe, sem parecer uma limitação agressiva no momento
+// da escolha.
+function formatarLimite(valor: number | null): string {
+  return valor === null ? "sem limite" : String(valor);
 }
 
 /** Cadastro público sem convite (raio-X 2026-09-21, página de
@@ -22,6 +34,7 @@ interface Plano {
  * `ConviteVitrine.tsx`, sem nenhum campo de código. */
 export function CriarConta() {
   const { criarContaPublica } = useAuth();
+  const [searchParams] = useSearchParams();
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [aceiteTermos, setAceiteTermos] = useState(false);
@@ -33,10 +46,20 @@ export function CriarConta() {
       .get<Plano[]>("/planos?apenas_self_service=true")
       .then((resposta) => {
         setPlanos(resposta);
-        if (resposta.length > 0) setPlanoId(resposta[0].id);
+        // Vem da página de Planos e Valores com o plano já escolhido
+        // (`?plano=Professional`, por nome — mais estável no link do que
+        // o id numérico) — cai no primeiro da lista se não bater com
+        // nenhum nome (link direto sem esse parâmetro, ou nome digitado
+        // errado em algum lugar).
+        const nomeDesejado = searchParams.get("plano");
+        const planoPreSelecionado = nomeDesejado
+          ? resposta.find((plano) => plano.nome.toLowerCase() === nomeDesejado.toLowerCase())
+          : undefined;
+        if (planoPreSelecionado) setPlanoId(planoPreSelecionado.id);
+        else if (resposta.length > 0) setPlanoId(resposta[0].id);
       })
       .catch(() => setErro("Não foi possível carregar os planos agora. Tente de novo em instantes."));
-  }, []);
+  }, [searchParams]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -106,7 +129,7 @@ export function CriarConta() {
                   key={plano.id}
                   type="button"
                   onClick={() => setPlanoId(plano.id)}
-                  className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-[12px] transition-colors ${
+                  className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left text-[12px] transition-colors ${
                     planoId === plano.id ? "border-cyan bg-cyan/10" : "border-border hover:bg-surf2"
                   }`}
                 >
@@ -116,8 +139,14 @@ export function CriarConta() {
                       {plano.max_usuarios != null ? `Até ${plano.max_usuarios} usuários` : "Usuários ilimitados"} ·{" "}
                       {plano.franquia_contas_mes} contas/mês
                     </div>
+                    <div className="mt-1 text-[9px] leading-snug text-muted/70">
+                      Limites do plano: {formatarLimite(plano.limite_enriquecimento_site_semanal)} pesquisas de site e{" "}
+                      {formatarLimite(plano.limite_enriquecimento_contatos_semanal)} de contatos por semana ·{" "}
+                      {formatarLimite(plano.limite_cadencias_mes)} cadências e{" "}
+                      {formatarLimite(plano.limite_campanhas_mes)} campanhas por mês.
+                    </div>
                   </div>
-                  <div className="font-head text-[13px] font-bold text-cyan">
+                  <div className="flex-shrink-0 font-head text-[13px] font-bold text-cyan">
                     R${plano.preco_mensal.toFixed(0)}
                     <span className="text-[9.5px] font-normal text-muted">/mês</span>
                   </div>

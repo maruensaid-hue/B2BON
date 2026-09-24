@@ -39,30 +39,43 @@ PLANOS_PADRAO = [
     {
         "nome": "POC", "franquia_contas_mes": 50, "max_usuarios": 3, "preco_mensal": 0.0,
         "limite_enriquecimento_site_semanal": 15, "limite_enriquecimento_contatos_semanal": 15,
+        "limite_cadencias_mes": 5, "limite_campanhas_mes": 2,
         **POC_STARTER_TESTE,
     },
     {
-        "nome": "Teste", "franquia_contas_mes": 200, "max_usuarios": 10, "preco_mensal": 0.0,
+        # max_usuarios=None (sem limite) — raio-X 2026-09-22, admin
+        # gratuito precisa convidar quantos vendedores quiser; espelha
+        # Starter só na franquia/enriquecimento/cadência/campanha, não em
+        # usuários (essa restrição específica foi removida de propósito).
+        "nome": "Teste", "franquia_contas_mes": 200, "max_usuarios": None, "preco_mensal": 0.0,
         "visivel_self_service": False,
         "limite_enriquecimento_site_semanal": 50, "limite_enriquecimento_contatos_semanal": 50,
+        "limite_cadencias_mes": 20, "limite_campanhas_mes": 10,
         **POC_STARTER_TESTE,
     },
     {
-        "nome": "Starter", "franquia_contas_mes": 200, "max_usuarios": 10, "preco_mensal": 490.0,
+        # Preço/limite de usuários alinhados com a tabela comercial
+        # validada com o usuário (raio-X 2026-09-22) — ver migração
+        # `a1b2c3d4e5f6` pra quem já tinha "Starter" seedado com os
+        # valores provisórios antigos (R$490/10 usuários).
+        "nome": "Starter", "franquia_contas_mes": 200, "max_usuarios": 5, "preco_mensal": 924.50,
         "limite_enriquecimento_site_semanal": 50, "limite_enriquecimento_contatos_semanal": 50,
+        "limite_cadencias_mes": 20, "limite_campanhas_mes": 10,
         **POC_STARTER_TESTE,
     },
     {
-        "nome": "Professional", "franquia_contas_mes": 800, "max_usuarios": 25, "preco_mensal": 990.0,
+        "nome": "Professional", "franquia_contas_mes": 800, "max_usuarios": 10, "preco_mensal": 1664.10,
         "limite_enriquecimento_site_semanal": 200, "limite_enriquecimento_contatos_semanal": 200,
+        "limite_cadencias_mes": 80, "limite_campanhas_mes": 40,
         "permite_ab_teste_cadencia": True, "permite_auto_aprovacao": False,
         "permite_webhook_relatorio": True, "permite_api_parceiros": True, "permite_subtenants": True,
         "permite_registro_oportunidade": True,
         "retencao_dias_relatorio": 90, "retencao_dias_auditoria": 365,
     },
     {
-        "nome": "Enterprise", "franquia_contas_mes": 5000, "max_usuarios": 999, "preco_mensal": 2490.0,
+        "nome": "Enterprise", "franquia_contas_mes": 5000, "max_usuarios": 20, "preco_mensal": 2958.40,
         "limite_enriquecimento_site_semanal": 1250, "limite_enriquecimento_contatos_semanal": 1250,
+        "limite_cadencias_mes": 500, "limite_campanhas_mes": 250,
         "permite_ab_teste_cadencia": True, "permite_auto_aprovacao": True,
         "permite_webhook_relatorio": True, "permite_api_parceiros": True, "permite_subtenants": True,
         "permite_registro_oportunidade": True,

@@ -62,9 +62,17 @@ export function PaginaBoasVindas() {
               B2B <span className="text-cyan">ON</span>
             </div>
           </div>
-          <Link to="/login" className="text-[12.5px] font-semibold text-nav-muted hover:text-nav-text">
-            Fazer login
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              to="/planos"
+              className="rounded-lg border border-nav-border px-3.5 py-1.5 text-[12.5px] font-semibold text-nav-text hover:bg-nav-hover"
+            >
+              Planos e Valores
+            </Link>
+            <Link to="/login" className="text-[12.5px] font-semibold text-nav-muted hover:text-nav-text">
+              Fazer login
+            </Link>
+          </div>
         </div>
 
         <div className="mx-auto max-w-3xl px-5.5 pt-8 pb-16 text-center">

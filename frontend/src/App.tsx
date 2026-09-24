@@ -8,6 +8,7 @@ import { CriarConta } from "@/pages/CriarConta";
 import { EsqueciSenha } from "@/pages/EsqueciSenha";
 import { Login } from "@/pages/Login";
 import { PagamentoRetorno } from "@/pages/PagamentoRetorno";
+import { Planos } from "@/pages/Planos";
 import { RedefinirSenha } from "@/pages/RedefinirSenha";
 import { RegistrarConvite } from "@/pages/RegistrarConvite";
 import { Privacidade } from "@/pages/Privacidade";
@@ -76,6 +77,7 @@ export default function App() {
       <Route path="/redefinir-senha/:token" element={<RedefinirSenha />} />
       <Route path="/convite-vitrine/:codigo" element={<ConviteVitrine />} />
       <Route path="/criar-conta" element={<CriarConta />} />
+      <Route path="/planos" element={<Planos />} />
       <Route
         path="/central-de-negocios"
         element={

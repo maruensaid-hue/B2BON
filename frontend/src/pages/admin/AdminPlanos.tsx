@@ -18,6 +18,8 @@ interface Plano {
   visivel_self_service: boolean;
   limite_enriquecimento_site_semanal: number | null;
   limite_enriquecimento_contatos_semanal: number | null;
+  limite_cadencias_mes: number | null;
+  limite_campanhas_mes: number | null;
   permite_ab_teste_cadencia: boolean;
   permite_auto_aprovacao: boolean;
   permite_webhook_relatorio: boolean;
@@ -94,6 +96,20 @@ function FormularioPlano({
             min={0}
             defaultValue={plano?.limite_enriquecimento_contatos_semanal ?? ""}
           />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+            Cadências/mês (vazio = sem limite)
+          </div>
+          <Input name="limite_cadencias_mes" type="number" min={0} defaultValue={plano?.limite_cadencias_mes ?? ""} />
+        </div>
+        <div>
+          <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+            Campanhas/mês (vazio = sem limite)
+          </div>
+          <Input name="limite_campanhas_mes" type="number" min={0} defaultValue={plano?.limite_campanhas_mes ?? ""} />
         </div>
       </div>
 
@@ -175,6 +191,8 @@ export function AdminPlanos() {
       visivel_self_service: form.get("visivel_self_service") === "on",
       limite_enriquecimento_site_semanal: campoNumeroOuVazio(form.get("limite_enriquecimento_site_semanal")),
       limite_enriquecimento_contatos_semanal: campoNumeroOuVazio(form.get("limite_enriquecimento_contatos_semanal")),
+      limite_cadencias_mes: campoNumeroOuVazio(form.get("limite_cadencias_mes")),
+      limite_campanhas_mes: campoNumeroOuVazio(form.get("limite_campanhas_mes")),
       permite_ab_teste_cadencia: form.get("permite_ab_teste_cadencia") === "on",
       permite_auto_aprovacao: form.get("permite_auto_aprovacao") === "on",
       permite_webhook_relatorio: form.get("permite_webhook_relatorio") === "on",

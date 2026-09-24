@@ -35,6 +35,12 @@ class Plano(Base):
     # deliberadamente sem teto.
     limite_enriquecimento_site_semanal: Mapped[int | None] = mapped_column(Integer, nullable=True)
     limite_enriquecimento_contatos_semanal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Mesmo padrão nullable=sem-teto dos limites de enriquecimento acima,
+    # mas de ciclo MENSAL (não semanal) — raio-X 2026-09-22, pedido do
+    # usuário pra restringir também por volume de cadência/campanha
+    # criada, não só por usuários e franquia de contas.
+    limite_cadencias_mes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    limite_campanhas_mes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Gancho de upgrade além de volume (raio-X 2026-09-09): recursos que só
     # fazem sentido pra quem já opera em escala (teste A/B, auto-aprovação,
