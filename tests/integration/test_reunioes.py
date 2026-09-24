@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 import pytest
 
 from app.models.reuniao import Reuniao
@@ -130,6 +132,31 @@ def test_listar_reunioes_filtra_por_status(client, criar_conta_com_decisor):
 
     assert not any(r["id"] == confirmada["id"] for r in agendadas)
     assert any(r["id"] == confirmada["id"] for r in realizadas)
+
+
+def test_listar_reunioes_filtra_por_intervalo_de_data(client, criar_conta_com_decisor):
+    """Raio-X 2026-09-22 (página Agenda): `data_inicio`/`data_fim` casam
+    contra `data_hora` OU `horario_confirmado` — a reunião confirmada
+    aparece na janela que cobre "hoje" e desaparece numa janela que não
+    cobre."""
+    conta, decisor = criar_conta_com_decisor()
+    confirmada = _propor_e_confirmar(client, decisor.id)
+
+    hoje = date.today()
+    dentro = client.get(
+        "/api/v1/reunioes",
+        params={"data_inicio": (hoje - timedelta(days=30)).isoformat(), "data_fim": (hoje + timedelta(days=30)).isoformat()},
+    ).json()
+    fora = client.get(
+        "/api/v1/reunioes",
+        params={
+            "data_inicio": (hoje - timedelta(days=400)).isoformat(),
+            "data_fim": (hoje - timedelta(days=370)).isoformat(),
+        },
+    ).json()
+
+    assert any(r["id"] == confirmada["id"] for r in dentro)
+    assert not any(r["id"] == confirmada["id"] for r in fora)
 
 
 def test_dossie_apos_reuniao_realizada(client, criar_conta_com_decisor):

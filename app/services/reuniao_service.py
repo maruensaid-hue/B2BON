@@ -1,7 +1,8 @@
 import hashlib
 import hmac
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -52,12 +53,22 @@ def obter(db: Session, tenant_id: str, reuniao_id: int) -> Reuniao:
 
 
 def listar(
-    db: Session, tenant_id: str, status: str | None = None, conta_id: int | None = None
+    db: Session,
+    tenant_id: str,
+    status: str | None = None,
+    conta_id: int | None = None,
+    data_inicio: date | None = None,
+    data_fim: date | None = None,
 ) -> list[dict]:
     """Não existia rota de listagem — só ações por id (Onda J: faltava tela
     de Reuniões no frontend, esse é o endpoint que a alimenta). Nome de
     conta/decisor junto (mesmo padrão de `aprovacao_service.listar_fila`)
-    — a tela não deveria mostrar só IDs crus."""
+    — a tela não deveria mostrar só IDs crus.
+
+    `data_inicio`/`data_fim` (raio-X 2026-09-22, página Agenda) filtram por
+    `data_hora` OU `horario_confirmado` dentro do intervalo — uma reunião
+    confirmada pra uma data diferente da proposta original ainda precisa
+    aparecer na semana certa da agenda."""
     query = (
         db.query(Reuniao, Conta, Decisor)
         .join(Conta, Reuniao.conta_id == Conta.id)
@@ -68,6 +79,15 @@ def listar(
         query = query.filter(Reuniao.status == status)
     if conta_id is not None:
         query = query.filter(Reuniao.conta_id == conta_id)
+    if data_inicio is not None and data_fim is not None:
+        inicio_dt = datetime.combine(data_inicio, time.min)
+        fim_dt = datetime.combine(data_fim + timedelta(days=1), time.min)
+        query = query.filter(
+            or_(
+                Reuniao.data_hora.between(inicio_dt, fim_dt),
+                Reuniao.horario_confirmado.between(inicio_dt, fim_dt),
+            )
+        )
 
     return [
         {

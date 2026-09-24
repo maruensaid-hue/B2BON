@@ -14,10 +14,13 @@ interface ItemFila {
   mensagem_id: number;
   canal: string;
   template_id: string | null;
+  assunto: string | null;
   conteudo: string;
   cadencia_id: number | null;
   conta_id: number;
   decisor_id: number;
+  decisor_nome: string;
+  decisor_email: string | null;
   criado_em: string;
 }
 
@@ -62,6 +65,14 @@ export function Aprovacoes() {
   const [filtroCanal, setFiltroCanal] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("pendente");
   const [textoEditado, setTextoEditado] = useState<Record<number, string>>({});
+  // E-mail aparece colapsado no formato padrão de cliente de e-mail
+  // (raio-X 2026-09-24) — mesmo padrão de disclosure de
+  // `ContaDetalheModal.tsx` (decisorExpandidoId), sem fetch nenhum aqui
+  // porque o conteúdo já vem carregado na própria listagem.
+  const [itemExpandidoId, setItemExpandidoId] = useState<number | null>(null);
+  function alternarExpansaoItem(aprovacaoId: number) {
+    setItemExpandidoId((atual) => (atual === aprovacaoId ? null : aprovacaoId));
+  }
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
 
@@ -207,24 +218,45 @@ export function Aprovacoes() {
           // destravar uma cadência presa por uma rejeição antiga, já que o
           // backend não bloqueia aprovar por cima de um status anterior.
           const editavel = item.status === "pendente" || item.status === "editado";
+          const isEmail = item.canal === "email";
+          const expandido = itemExpandidoId === item.aprovacao_id;
           return (
             <Card key={item.aprovacao_id}>
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Badge tone={toneCanal(item.canal)}>{item.canal}</Badge>
                   {item.status !== "pendente" && <Badge tone={toneStatus(item.status)}>{item.status}</Badge>}
-                  <span className="text-[11px] text-muted">conta #{item.conta_id} · decisor #{item.decisor_id}</span>
+                  {!isEmail && <span className="text-[11px] text-muted">conta #{item.conta_id} · {item.decisor_nome}</span>}
                 </div>
                 <span className="text-[10px] text-muted">{new Date(item.criado_em).toLocaleString("pt-BR")}</span>
               </div>
-              <Textarea
-                rows={4}
-                readOnly={!editavel}
-                defaultValue={item.conteudo}
-                onChange={(event) =>
-                  setTextoEditado((atual) => ({ ...atual, [item.aprovacao_id]: event.target.value }))
-                }
-              />
+              {isEmail ? (
+                <button
+                  type="button"
+                  onClick={() => alternarExpansaoItem(item.aprovacao_id)}
+                  className="mb-2 flex w-full items-center gap-1.5 rounded-md bg-surf2 p-2 text-left text-[11px] text-text hover:border-cyan/50"
+                >
+                  <span className="text-muted">{expandido ? "▾" : "▸"}</span>
+                  <span className="truncate">
+                    Para: <span className="font-semibold">{item.decisor_nome}</span>{" "}
+                    <span className="text-muted">&lt;{item.decisor_email ?? "sem e-mail"}&gt;</span>
+                    {" · "}
+                    {new Date(item.criado_em).toLocaleDateString("pt-BR")}
+                    {" · "}
+                    <span className="font-semibold">{item.assunto ?? "(sem assunto)"}</span>
+                  </span>
+                </button>
+              ) : null}
+              {(!isEmail || expandido) && (
+                <Textarea
+                  rows={4}
+                  readOnly={!editavel}
+                  defaultValue={item.conteudo}
+                  onChange={(event) =>
+                    setTextoEditado((atual) => ({ ...atual, [item.aprovacao_id]: event.target.value }))
+                  }
+                />
+              )}
               <div className="mt-2 flex justify-end gap-2">
                 {editavel &&
                   textoEditado[item.aprovacao_id] !== undefined &&

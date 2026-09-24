@@ -20,7 +20,7 @@ inteiro (nao um subconjunto de features) - por isso um unico modulo
 "predator" cobre todos os routers do pipeline de prospeccao.
 
 Revision ID: 807d7076f1df
-Revises: b5a3d9c48786
+Revises: c9d8e7f6a5b4
 Create Date: 2026-09-24
 
 """
@@ -32,7 +32,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '807d7076f1df'
-down_revision: Union[str, Sequence[str], None] = 'b5a3d9c48786'
+down_revision: Union[str, Sequence[str], None] = 'c9d8e7f6a5b4'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

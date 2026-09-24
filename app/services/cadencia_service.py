@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -425,7 +426,7 @@ def _gerar_conteudo_toque(
     toque: ToqueCadencia,
     variante: str | None = None,
     regras_aprendidas: str = "",
-) -> tuple[str | None, bool]:
+) -> tuple[str | None, str | None, bool]:
     """Mensagem personalizada por conta/decisor — não mala direta (E3-H1).
 
     Tenta até `_TENTATIVAS_POR_TOQUE` vezes (mesmo padrão de
@@ -435,9 +436,9 @@ def _gerar_conteudo_toque(
     descartava o toque silenciosamente, podendo zerar o lote inteiro sem
     nenhum aviso.
 
-    Retorna `(conteudo, falhou_por_erro_ia)`. `conteudo` vem `None` por
-    dois motivos bem diferentes, por isso o segundo valor: (a) toda
-    tentativa violou as restrições configuradas — problema de
+    Retorna `(conteudo, assunto, falhou_por_erro_ia)`. `conteudo` vem
+    `None` por dois motivos bem diferentes, por isso o terceiro valor:
+    (a) toda tentativa violou as restrições configuradas — problema de
     configuração, quem chama deveria revisá-las; ou (b)
     `llm_helpers.gerar` levantou `RegraNegocioViolada` em toda tentativa
     (raio-X mais grave: a IA não respondeu com texto, limite de taxa,
@@ -453,13 +454,24 @@ def _gerar_conteudo_toque(
     prompt) já vem formatado como trecho de prompt pronto (ou string
     vazia) por `regra_aprendida_service.regras_aplicaveis_texto` — texto
     escrito por um humano depois de observar edição/rejeição repetida
-    neste tenant/ICP/oferta/canal."""
+    neste tenant/ICP/oferta/canal.
+
+    `assunto` (raio-X 2026-09-24, visão rica de negócio/Aprovações) só é
+    gerado pra canal email — a IA recebe uma instrução extra de formato
+    (`ASSUNTO:`/`CORPO:`); se ela não obedecer o formato, cai em
+    fallback silencioso (`assunto=None`, o texto inteiro vira
+    `conteudo`) — nunca perde a mensagem por causa de formatação."""
     enquadramento_variante = f" {_ENQUADRAMENTO_VARIANTE[variante]}" if variante else ""
     dores_e_gatilhos = (
         f" Dores prováveis desse perfil de cliente: {', '.join(icp.dores)}." if icp.dores else ""
     ) + (f" Gatilhos de abordagem: {', '.join(icp.gatilhos)}." if icp.gatilhos else "")
     diferenciais = f" Diferenciais: {', '.join(oferta.diferenciais)}." if oferta.diferenciais else ""
     provas_sociais = f" Provas sociais: {', '.join(oferta.provas_sociais)}." if oferta.provas_sociais else ""
+    instrucao_formato_email = (
+        " Responda EXATAMENTE neste formato, sem nada antes ou depois:\nASSUNTO: <linha única>\nCORPO:\n<corpo da mensagem>"
+        if toque.canal == "email"
+        else ""
+    )
     prompt = (
         f"Escreva o toque {toque.ordem} (canal {toque.canal}) de uma cadência de prospecção "
         f"para {decisor.nome} ({decisor.cargo or 'decisor'}) na empresa {conta.nome}, "
@@ -467,6 +479,7 @@ def _gerar_conteudo_toque(
         f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais}{regras_aprendidas} "
         f"Tom: {config.tom}.{enquadramento_variante} Nunca mencione: "
         f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
+        f"{instrucao_formato_email}"
     )
     falhou_por_erro_ia = False
     for _ in range(_TENTATIVAS_POR_TOQUE):
@@ -485,9 +498,15 @@ def _gerar_conteudo_toque(
             falhou_por_erro_ia = True
             continue
         falhou_por_erro_ia = False
-        if not comunicacao_service.validar_texto(resposta.content, config.restricoes):
-            return resposta.content, False
-    return None, falhou_por_erro_ia
+        assunto: str | None = None
+        conteudo = resposta.content
+        if toque.canal == "email":
+            correspondencia = re.match(r"ASSUNTO:\s*(.+?)\nCORPO:\s*(.+)", resposta.content, re.DOTALL)
+            if correspondencia:
+                assunto, conteudo = correspondencia.group(1).strip(), correspondencia.group(2).strip()
+        if not comunicacao_service.validar_texto(f"{assunto or ''}\n{conteudo}", config.restricoes):
+            return conteudo, assunto, False
+    return None, None, falhou_por_erro_ia
 
 
 def _rodape_por_canal(db: Session, tenant_id: str, decisor: Decisor, canal: str, conteudo: str) -> str:
@@ -560,7 +579,7 @@ def gerar_para_lote(
         contas_processadas.append(conta_id)
         for toque in toques:
             variante = variante_ab_para_decisor(decisor.id) if toque.ab_teste_habilitado else None
-            conteudo, falhou_por_erro_ia = _gerar_conteudo_toque(
+            conteudo, assunto, falhou_por_erro_ia = _gerar_conteudo_toque(
                 llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal]
             )
             if conteudo is None:
@@ -581,6 +600,7 @@ def gerar_para_lote(
                 plan_limits,
                 toque_cadencia_id=toque.id,
                 variante_ab=variante,
+                assunto=assunto,
             )
             mensagens_geradas += 1
 

@@ -13,6 +13,7 @@ class MensagemSchema(BaseModel):
     toque_cadencia_id: int | None
     canal: str
     template_id: str | None
+    assunto: str | None
     conteudo: str
     variante_ab: str | None
     status: str

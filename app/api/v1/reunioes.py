@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -41,11 +43,14 @@ router = APIRouter(prefix="/reunioes", tags=["reunioes"])
 def listar_reunioes(
     status: str | None = None,
     conta_id: int | None = None,
+    data_inicio: date | None = None,
+    data_fim: date | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> list[ReuniaoListaItemSchema]:
     return [
-        ReuniaoListaItemSchema(**item) for item in reuniao_service.listar(db, tenant_id, status, conta_id)
+        ReuniaoListaItemSchema(**item)
+        for item in reuniao_service.listar(db, tenant_id, status, conta_id, data_inicio, data_fim)
     ]
 
 

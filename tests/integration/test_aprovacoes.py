@@ -31,10 +31,38 @@ def cadencia_e_decisor(db_session):
     return cadencia, decisor, conta
 
 
-def _propor_mensagem(db_session, cadencia, decisor, canal="email", template_id="tpl-1", conteudo="Olá {{nome}}"):
+def _propor_mensagem(
+    db_session, cadencia, decisor, canal="email", template_id="tpl-1", conteudo="Olá {{nome}}", assunto=None
+):
     return aprovacao_service.criar_proposta(
-        db_session, TENANT_ID, cadencia.id, decisor.id, canal, template_id, conteudo, StubPlanLimitsProvider()
+        db_session, TENANT_ID, cadencia.id, decisor.id, canal, template_id, conteudo, StubPlanLimitsProvider(),
+        assunto=assunto,
     )
+
+
+def test_fila_expoe_assunto_e_dados_do_decisor(client, db_session, cadencia_e_decisor):
+    cadencia, decisor, _ = cadencia_e_decisor
+    decisor.email = "decisor@teste.com"
+    db_session.commit()
+    _propor_mensagem(db_session, cadencia, decisor, canal="email", assunto="Assunto de teste")
+
+    itens = client.get("/api/v1/aprovacoes", params={"canal": "email"}).json()
+
+    assert itens[0]["assunto"] == "Assunto de teste"
+    assert itens[0]["decisor_nome"] == decisor.nome
+    assert itens[0]["decisor_email"] == "decisor@teste.com"
+
+
+def test_fila_mensagem_sem_assunto_nao_quebra(client, db_session, cadencia_e_decisor):
+    """Mensagem de email gerada antes desta coluna existir (ou de canal
+    que nunca tem assunto) — nunca inventa um assunto pra dado antigo."""
+    cadencia, decisor, _ = cadencia_e_decisor
+    _propor_mensagem(db_session, cadencia, decisor, canal="whatsapp")
+
+    itens = client.get("/api/v1/aprovacoes", params={"canal": "whatsapp"}).json()
+
+    assert itens[0]["assunto"] is None
+    assert itens[0]["decisor_email"] is None
 
 
 def test_fila_filtra_por_canal_conta_e_cadencia(client, db_session, cadencia_e_decisor):

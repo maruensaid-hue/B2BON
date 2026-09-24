@@ -38,6 +38,7 @@ const CentralNegocios = lazy(() => import("@/pages/CentralNegocios").then((m) =>
 const Configuracao = lazy(() => import("@/pages/configuracao/Configuracao").then((m) => ({ default: m.Configuracao })));
 const CriarProposta = lazy(() => import("@/pages/crm/CriarProposta").then((m) => ({ default: m.CriarProposta })));
 const Kanban = lazy(() => import("@/pages/crm/Kanban").then((m) => ({ default: m.Kanban })));
+const NegocioDetalhe = lazy(() => import("@/pages/crm/NegocioDetalhe").then((m) => ({ default: m.NegocioDetalhe })));
 const LeadsAcoesConta = lazy(() => import("@/pages/leads/LeadsAcoesConta").then((m) => ({ default: m.LeadsAcoesConta })));
 const LeadsContatos = lazy(() => import("@/pages/leads/LeadsContatos").then((m) => ({ default: m.LeadsContatos })));
 const LeadsEmpresas = lazy(() => import("@/pages/leads/LeadsEmpresas").then((m) => ({ default: m.LeadsEmpresas })));
@@ -58,6 +59,7 @@ const AgenteCorporativo = lazy(() =>
 );
 const RedeSocial = lazy(() => import("@/pages/rede-social/RedeSocial").then((m) => ({ default: m.RedeSocial })));
 const Reunioes = lazy(() => import("@/pages/reunioes/Reunioes").then((m) => ({ default: m.Reunioes })));
+const Agenda = lazy(() => import("@/pages/agenda/Agenda").then((m) => ({ default: m.Agenda })));
 const RegistroOportunidade = lazy(() =>
   import("@/pages/ro/RegistroOportunidade").then((m) => ({ default: m.RegistroOportunidade })),
 );
@@ -112,6 +114,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <CriarProposta />
+              </Suspense>
+            }
+          />
+          <Route
+            path="crm/negocios/:id"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <NegocioDetalhe />
               </Suspense>
             }
           />
@@ -208,6 +218,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <Reunioes />
+              </Suspense>
+            }
+          />
+          <Route
+            path="agenda"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Agenda />
               </Suspense>
             }
           />
