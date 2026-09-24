@@ -34,9 +34,15 @@ NOME_PLANO = "Teste"
 
 def upgrade() -> None:
     conn = op.get_bind()
-    conn.execute(sa.text("UPDATE plano SET permite_subtenants = 1 WHERE nome = :nome"), {"nome": NOME_PLANO})
+    conn.execute(
+        sa.text("UPDATE plano SET permite_subtenants = :valor WHERE nome = :nome"),
+        {"valor": True, "nome": NOME_PLANO},
+    )
 
 
 def downgrade() -> None:
     conn = op.get_bind()
-    conn.execute(sa.text("UPDATE plano SET permite_subtenants = 0 WHERE nome = :nome"), {"nome": NOME_PLANO})
+    conn.execute(
+        sa.text("UPDATE plano SET permite_subtenants = :valor WHERE nome = :nome"),
+        {"valor": False, "nome": NOME_PLANO},
+    )
