@@ -5,7 +5,7 @@ retransmissao automatica de resposta do cliente, reply-to trocado pra
 um endereco nosso) e botao de "arquivar" o historico de mensagens.
 
 Revision ID: f4a5b6c7d8e9
-Revises: e3f4a5b6c7d8
+Revises: 327c75fdadef
 Create Date: 2026-09-24
 
 """
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 
 revision: str = "f4a5b6c7d8e9"
-down_revision: Union[str, None] = "e3f4a5b6c7d8"
+down_revision: Union[str, None] = "327c75fdadef"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
