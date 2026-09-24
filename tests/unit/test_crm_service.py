@@ -422,3 +422,82 @@ def test_dashboard_economia_calcula_ltv_cac_churn(db_session):
     assert resultado["ltv_medio"] == 1500.0
     assert resultado["novos_clientes"] == 2
     assert resultado["cac"] == 1500.0
+
+
+def test_dashboard_funil_filtra_por_vendedor(db_session):
+    """Raio-X 2026-09-24 (MAP por vendedor) — sem o filtro, comportamento
+    idêntico ao de sempre (regressão já cobre em outro teste); com o
+    filtro, escopa só os negócios daquele vendedor."""
+    vendedor1 = _criar_usuario(db_session, email="vendedor1@teste.com.br")
+    vendedor2 = _criar_usuario(db_session, email="vendedor2@teste.com.br")
+    conta = _criar_conta(db_session)
+    decisor = _criar_decisor(db_session, conta)
+    crm_service.criar_negocio(
+        db_session, TENANT_ID, None, conta.id, decisor.id, "N1", valor=100.0, vendedor_usuario_id=vendedor1.id
+    )
+    crm_service.criar_negocio(
+        db_session, TENANT_ID, None, conta.id, decisor.id, "N2", valor=200.0, vendedor_usuario_id=vendedor2.id
+    )
+
+    resultado_v1 = crm_service.dashboard_funil(db_session, TENANT_ID, vendedor_usuario_id=vendedor1.id)
+
+    total_quantidade = sum(e["quantidade"] for e in resultado_v1["estagios"])
+    total_valor = sum(e["valor_total"] for e in resultado_v1["estagios"])
+    assert total_quantidade == 1
+    assert total_valor == 100.0
+
+
+def test_dashboard_economia_filtra_por_vendedor_e_zera_cac_roi(db_session):
+    """`cac`/`roi` vêm de `CustoAquisicao.valor`, um número TENANT
+    INTEIRO — dividir isso só pelos novos-clientes de 1 vendedor
+    produziria um CAC fabricado, então ficam sempre `None` quando
+    escopado (decisão de escopo confirmada no plano)."""
+    vendedor1 = _criar_usuario(db_session, email="vendedor1@teste.com.br")
+    vendedor2 = _criar_usuario(db_session, email="vendedor2@teste.com.br")
+    conta1 = _criar_conta(db_session, nome="Cliente do vendedor 1", vendedor_usuario_id=vendedor1.id)
+    conta2 = _criar_conta(db_session, nome="Cliente do vendedor 2", vendedor_usuario_id=vendedor2.id)
+    decisor1 = _criar_decisor(db_session, conta1)
+    decisor2 = _criar_decisor(db_session, conta2)
+    estagio_ganho = next(e for e in crm_service.listar_estagios(db_session, TENANT_ID) if e.tipo == "ganho")
+    n1 = crm_service.criar_negocio(
+        db_session, TENANT_ID, None, conta1.id, decisor1.id, "N1", valor=1000.0, vendedor_usuario_id=vendedor1.id
+    )
+    crm_service.criar_negocio(
+        db_session, TENANT_ID, None, conta2.id, decisor2.id, "N2", valor=2000.0, vendedor_usuario_id=vendedor2.id
+    )
+    crm_service.mover_estagio(db_session, TENANT_ID, None, n1.id, estagio_ganho.id)
+    periodo_atual = datetime.now(UTC).strftime("%Y-%m")
+    crm_service.definir_custo_aquisicao(db_session, TENANT_ID, None, periodo_atual, 3000.0)
+
+    resultado = crm_service.dashboard_economia(
+        db_session, TENANT_ID, periodo_atual, vendedor_usuario_id=vendedor1.id
+    )
+
+    assert resultado["ltv_medio"] == 1000.0
+    assert resultado["novos_clientes"] == 1
+    assert resultado["cac"] is None
+    assert resultado["roi"] is None
+
+
+def test_listar_vendedores_com_contas_agrupa_por_vendedor(db_session):
+    vendedor1 = _criar_usuario(db_session, email="vendedor1@teste.com.br")
+    vendedor2 = _criar_usuario(db_session, email="vendedor2@teste.com.br")
+    _criar_conta(db_session, nome="Conta A", vendedor_usuario_id=vendedor1.id)
+    _criar_conta(db_session, nome="Conta B", vendedor_usuario_id=vendedor1.id)
+    _criar_conta(db_session, nome="Conta C", vendedor_usuario_id=vendedor2.id)
+    _criar_conta(db_session, nome="Conta Sem Vendedor")
+
+    resultado = crm_service.listar_vendedores_com_contas(db_session, TENANT_ID)
+
+    assert len(resultado) == 2
+    grupo1 = next(g for g in resultado if g["usuario_id"] == vendedor1.id)
+    grupo2 = next(g for g in resultado if g["usuario_id"] == vendedor2.id)
+    assert {c["nome"] for c in grupo1["contas"]} == {"Conta A", "Conta B"}
+    assert {c["nome"] for c in grupo2["contas"]} == {"Conta C"}
+    assert all("classificacao" in c and "score" in c for c in grupo1["contas"])
+
+
+def test_listar_vendedores_com_contas_sem_contas_atribuidas_retorna_vazio(db_session):
+    _criar_conta(db_session)
+
+    assert crm_service.listar_vendedores_com_contas(db_session, TENANT_ID) == []

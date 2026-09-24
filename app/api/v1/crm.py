@@ -32,6 +32,7 @@ from app.schemas.crm import (
     PropostaNegocioSchema,
     RegistrarAtividadeRequestSchema,
     ReordenarEstagiosRequestSchema,
+    VendedorComContasSchema,
 )
 from app.schemas.template_proposta import GerarPropostaRequestSchema
 from app.services import crm_service, proposta_service, template_proposta_service
@@ -385,12 +386,14 @@ def definir_custo_aquisicao(
 
 @router.get("/dashboard/funil", response_model=DashboardFunilSchema)
 def dashboard_funil(
+    vendedor_usuario_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> DashboardFunilSchema:
     """Estado atual do funil de vendas — sem filtro de período (o funil
-    é uma foto do pipeline agora, não um recorte por data de criação)."""
-    return DashboardFunilSchema(**crm_service.dashboard_funil(db, tenant_id))
+    é uma foto do pipeline agora, não um recorte por data de criação).
+    `vendedor_usuario_id` (raio-X 2026-09-24, MAP por vendedor) opcional."""
+    return DashboardFunilSchema(**crm_service.dashboard_funil(db, tenant_id, vendedor_usuario_id))
 
 
 @router.get("/dashboard/atividade", response_model=DashboardAtividadeSchema)
@@ -406,11 +409,23 @@ def dashboard_atividade(
 @router.get("/dashboard/economia", response_model=DashboardEconomiaSchema)
 def dashboard_economia(
     periodo: str,
+    vendedor_usuario_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> DashboardEconomiaSchema:
-    """LTV, CAC e Churn do período "YYYY-MM" (Onda B)."""
-    return DashboardEconomiaSchema(**crm_service.dashboard_economia(db, tenant_id, periodo))
+    """LTV, CAC e Churn do período "YYYY-MM" (Onda B). `vendedor_usuario_id`
+    (raio-X 2026-09-24, MAP por vendedor) opcional — `cac`/`roi` sempre
+    `None` quando escopado (ver `crm_service.dashboard_economia`)."""
+    return DashboardEconomiaSchema(**crm_service.dashboard_economia(db, tenant_id, periodo, vendedor_usuario_id))
+
+
+@router.get("/vendedores-com-contas", response_model=list[VendedorComContasSchema])
+def listar_vendedores_com_contas(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[VendedorComContasSchema]:
+    """Árvore vendedor → contas (raio-X 2026-09-24, MAP por vendedor)."""
+    return [VendedorComContasSchema(**item) for item in crm_service.listar_vendedores_com_contas(db, tenant_id)]
 
 
 @router.get("/dashboard/flywheel", response_model=DashboardFlywheelSchema)

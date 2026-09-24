@@ -11,6 +11,38 @@ from app.providers.crm.nucleo import NucleoCrmProvider
 TENANT_ID = "tenant-teste"
 
 
+def test_dashboard_funil_com_filtro_de_vendedor_via_api(client, db_session, criar_conta_com_decisor):
+    """Raio-X 2026-09-24 (MAP por vendedor) — plumbing do query param
+    opcional; a lógica de filtro em si já é testada em
+    `test_crm_service.py`."""
+    conta, decisor = criar_conta_com_decisor()
+    client.post(
+        "/api/v1/crm/negocios",
+        json={"conta_id": conta.id, "decisor_id": decisor.id, "nome": "Negócio", "valor": 100.0},
+    )
+
+    resposta_sem_filtro = client.get("/api/v1/crm/dashboard/funil")
+    assert resposta_sem_filtro.status_code == 200
+
+    resposta_com_filtro = client.get("/api/v1/crm/dashboard/funil", params={"vendedor_usuario_id": 999})
+    assert resposta_com_filtro.status_code == 200
+    assert sum(e["quantidade"] for e in resposta_com_filtro.json()["estagios"]) == 0
+
+
+def test_listar_vendedores_com_contas_via_api(client, db_session, criar_conta_com_decisor):
+    conta, _ = criar_conta_com_decisor()
+    conta.vendedor_usuario_id = 1  # ATOR_ID da fixture `client` é sempre "1"
+    db_session.commit()
+
+    resposta = client.get("/api/v1/crm/vendedores-com-contas")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert len(corpo) == 1
+    assert corpo[0]["usuario_id"] == 1
+    assert corpo[0]["contas"][0]["id"] == conta.id
+
+
 def test_estagios_padrao_via_api(client):
     resposta = client.get("/api/v1/crm/estagios")
 
