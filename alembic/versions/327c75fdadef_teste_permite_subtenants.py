@@ -13,7 +13,7 @@ do plano muda (self-service continua bloqueado, limites de
 enriquecimento/cadencia/campanha semanais/mensais continuam valendo).
 
 Revision ID: 327c75fdadef
-Revises: 807d7076f1df
+Revises: e3f4a5b6c7d8
 Create Date: 2026-09-24
 
 """
@@ -25,7 +25,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '327c75fdadef'
-down_revision: Union[str, Sequence[str], None] = '807d7076f1df'
+down_revision: Union[str, Sequence[str], None] = 'e3f4a5b6c7d8'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
