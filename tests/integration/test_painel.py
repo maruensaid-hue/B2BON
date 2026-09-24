@@ -29,6 +29,30 @@ def test_metrica_norte_conta_apenas_reunioes_qualificadas_realizadas(client, cri
     assert resposta.json()["valor_mes_atual"] == 1
 
 
+def test_metrica_norte_filtra_por_vendedor_usuario_id(client, criar_conta_com_decisor):
+    """Raio-X 2026-09-24 (MAP por vendedor) — sem o filtro, comportamento
+    idêntico ao de sempre (regressão já cobre acima); com o filtro,
+    escopa só o vendedor certo (`Reuniao.vendedor_id`, comparado como
+    string). `ATOR_ID` da fixture `client` é sempre "1" (primeiro
+    usuário criado)."""
+    conta, decisor = criar_conta_com_decisor()
+    proposta = client.post(f"/api/v1/decisores/{decisor.id}/reunioes/propor", json={"vendedor_id": "1"}).json()
+    horario = proposta["horarios_propostos"][0]
+    confirmada = client.post(
+        f"/api/v1/reunioes/{proposta['id']}/confirmar", json={"horario_escolhido": horario}
+    ).json()
+    client.post(f"/api/v1/reunioes/{confirmada['id']}/marcar-resultado", json={"status": "realizada"})
+    client.post(
+        f"/api/v1/reunioes/{confirmada['id']}/confirmar-qualificacao", json={"qualificada": True, "motivo": None}
+    )
+
+    resposta_do_vendedor = client.get("/api/v1/painel/metrica-norte", params={"vendedor_usuario_id": 1})
+    assert resposta_do_vendedor.json()["valor_mes_atual"] == 1
+
+    resposta_de_outro = client.get("/api/v1/painel/metrica-norte", params={"vendedor_usuario_id": 999})
+    assert resposta_de_outro.json()["valor_mes_atual"] == 0
+
+
 def test_metrica_norte_nao_conta_reuniao_sem_qualificacao_confirmada(client, criar_conta_com_decisor):
     conta, decisor = criar_conta_com_decisor()
     proposta = client.post(

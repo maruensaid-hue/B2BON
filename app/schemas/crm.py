@@ -185,6 +185,20 @@ class DashboardFunilSchema(BaseModel):
     taxa_conversao: float | None
 
 
+class ContaResumoVendedorSchema(BaseModel):
+    id: int
+    nome: str
+    nome_fantasia: str | None
+    score: float
+    classificacao: str
+
+
+class VendedorComContasSchema(BaseModel):
+    usuario_id: int
+    nome: str
+    contas: list[ContaResumoVendedorSchema]
+
+
 class AtividadePorUsuarioSchema(BaseModel):
     usuario_id: int
     nome: str

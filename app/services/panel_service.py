@@ -72,7 +72,9 @@ def definir_meta(db: Session, tenant_id: str, meta_mensal_reunioes: int | None) 
     return config
 
 
-def metrica_norte(db: Session, tenant_id: str, mes: str | None = None) -> dict:
+def metrica_norte(
+    db: Session, tenant_id: str, mes: str | None = None, vendedor_usuario_id: int | None = None
+) -> dict:
     """Métrica-norte (reuniões qualificadas realizadas/mês), com fonte
     exclusiva nos registros automáticos do CRM (E8-H1).
 
@@ -81,15 +83,17 @@ def metrica_norte(db: Session, tenant_id: str, mes: str | None = None) -> dict:
     (Onda 3) — a fonte é estruturalmente exclusiva do CRM, não apenas por
     convenção. "Qualificada" exige a confirmação humana de 1 toque
     (`qualificada_confirmada`, E6-H3), não apenas o agendamento.
+
+    `vendedor_usuario_id` (raio-X 2026-09-24, MAP por vendedor) filtra por
+    `Reuniao.vendedor_id` — coluna string, comparação por `str()`.
     """
     mes_atual = mes or date.today().strftime("%Y-%m")
     mes_ant = _mes_anterior(mes_atual)
 
-    realizadas = (
-        db.query(Reuniao)
-        .filter_by(tenant_id=tenant_id, status="realizada", qualificada_confirmada=True)
-        .all()
-    )
+    query = db.query(Reuniao).filter_by(tenant_id=tenant_id, status="realizada", qualificada_confirmada=True)
+    if vendedor_usuario_id is not None:
+        query = query.filter(Reuniao.vendedor_id == str(vendedor_usuario_id))
+    realizadas = query.all()
     valor_mes_atual = sum(1 for r in realizadas if r.horario_confirmado and r.horario_confirmado.strftime("%Y-%m") == mes_atual)
     valor_mes_anterior = sum(1 for r in realizadas if r.horario_confirmado and r.horario_confirmado.strftime("%Y-%m") == mes_ant)
 

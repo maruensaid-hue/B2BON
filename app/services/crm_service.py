@@ -759,7 +759,7 @@ def _periodo_padrao(data_inicio: date | None, data_fim: date | None) -> tuple[da
     return inicio, fim
 
 
-def dashboard_funil(db: Session, tenant_id: str) -> dict:
+def dashboard_funil(db: Session, tenant_id: str, vendedor_usuario_id: int | None = None) -> dict:
     """Contagem/valor por estágio e taxa de conversão — retrato do funil
     AGORA, sem filtro de período (bug real relatado pelo usuário:
     filtrava `Negocio.criado_em` pelos últimos 30 dias, então qualquer
@@ -768,9 +768,16 @@ def dashboard_funil(db: Session, tenant_id: str) -> dict:
     `listar_negocios` lista o tenant inteiro). Diferente de
     `dashboard_atividade` (atividade EM um período genuinamente faz
     sentido ser filtrada por data) — um funil de vendas é o estado
-    atual do pipeline, não um recorte de quando cada negócio nasceu."""
+    atual do pipeline, não um recorte de quando cada negócio nasceu.
+
+    `vendedor_usuario_id` (raio-X 2026-09-24, MAP por vendedor) filtra
+    por `Negocio.vendedor_usuario_id` — mesma coluna já usada em
+    `listar_negocios`."""
     estagios = garantir_estagios_padrao(db, tenant_id)
-    negocios = db.query(Negocio).filter_by(tenant_id=tenant_id).all()
+    query = db.query(Negocio).filter_by(tenant_id=tenant_id)
+    if vendedor_usuario_id is not None:
+        query = query.filter_by(vendedor_usuario_id=vendedor_usuario_id)
+    negocios = query.all()
 
     resumo = []
     for estagio in estagios:
@@ -840,20 +847,34 @@ def dashboard_atividade(db: Session, tenant_id: str, data_inicio: date | None = 
     }
 
 
-def dashboard_economia(db: Session, tenant_id: str, periodo: str) -> dict:
-    """LTV médio, CAC e taxa de churn do período "YYYY-MM" (Onda B)."""
+def dashboard_economia(db: Session, tenant_id: str, periodo: str, vendedor_usuario_id: int | None = None) -> dict:
+    """LTV médio, CAC e taxa de churn do período "YYYY-MM" (Onda B).
+
+    `vendedor_usuario_id` (raio-X 2026-09-24, MAP por vendedor) filtra
+    `Conta` por posse (`Conta.vendedor_usuario_id`) — propaga sozinho
+    pra `contas_clientes`/`scores_risco`, que já derivam de `contas`.
+    **`cac`/`roi` sempre `None` quando escopado por vendedor** —
+    `CustoAquisicao.valor` é um número TENANT INTEIRO; dividir isso só
+    pelos novos-clientes de 1 vendedor produziria um CAC fabricado
+    (custo de aquisição não é rastreado por vendedor)."""
     ano, mes = (int(parte) for parte in periodo.split("-"))
     inicio_periodo = date(ano, mes, 1)
     proximo_mes = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
     fim_periodo = proximo_mes - timedelta(days=1)
 
-    contas = db.query(Conta).filter_by(tenant_id=tenant_id).all()
+    query_contas = db.query(Conta).filter_by(tenant_id=tenant_id)
+    if vendedor_usuario_id is not None:
+        query_contas = query_contas.filter_by(vendedor_usuario_id=vendedor_usuario_id)
+    contas = query_contas.all()
     contas_clientes = [conta for conta in contas if conta.cliente_desde is not None]
+    ids_contas_no_escopo = {conta.id for conta in contas}
 
     estagios = {estagio.id: estagio for estagio in garantir_estagios_padrao(db, tenant_id)}
     negocios = db.query(Negocio).filter_by(tenant_id=tenant_id).all()
     valor_ganho_por_conta: dict[int, float] = {}
     for negocio in negocios:
+        if negocio.conta_id not in ids_contas_no_escopo:
+            continue
         estagio = estagios.get(negocio.estagio_id)
         if estagio and estagio.tipo == "ganho":
             valor_ganho_por_conta[negocio.conta_id] = valor_ganho_por_conta.get(negocio.conta_id, 0.0) + negocio.valor
@@ -863,8 +884,10 @@ def dashboard_economia(db: Session, tenant_id: str, periodo: str) -> dict:
         conta for conta in contas_clientes if inicio_periodo <= conta.cliente_desde.date() <= fim_periodo
     ]
 
-    custo = obter_custo_aquisicao(db, tenant_id, periodo)
-    cac = (custo.valor / len(novos_clientes)) if custo and novos_clientes else None
+    cac = None
+    if vendedor_usuario_id is None:
+        custo = obter_custo_aquisicao(db, tenant_id, periodo)
+        cac = (custo.valor / len(novos_clientes)) if custo and novos_clientes else None
 
     ativos_inicio = [
         conta
@@ -879,7 +902,7 @@ def dashboard_economia(db: Session, tenant_id: str, periodo: str) -> dict:
     ]
     taxa_churn = (len(cancelados_periodo) / len(ativos_inicio)) if ativos_inicio else None
 
-    roi = metricas_service.calcular_roi(ltv_medio, cac)
+    roi = metricas_service.calcular_roi(ltv_medio, cac) if vendedor_usuario_id is None else None
     scores_risco = [saude_conta_service.calcular_score_risco_da_conta(db, conta)["score"] for conta in contas]
     cs = metricas_service.calcular_cs_score(
         db, tenant_id, conta_ids=[conta.id for conta in contas], scores_risco=scores_risco
@@ -897,6 +920,48 @@ def dashboard_economia(db: Session, tenant_id: str, periodo: str) -> dict:
         "cs_score": cs["cs_score"],
         "nps_medio": cs["nps_medio"],
     }
+
+
+def listar_vendedores_com_contas(db: Session, tenant_id: str) -> list[dict]:
+    """Árvore vendedor → contas (raio-X 2026-09-24, MAP por vendedor) —
+    só vendedores com ao menos 1 conta atribuída aparecem (sem "vendedor
+    vazio" poluindo a árvore). Score de cada conta reaproveita
+    `saude_conta_service.calcular_score_risco_da_conta`, mesmo cálculo já
+    usado no ranking de saúde do MAP."""
+    contas = (
+        db.query(Conta)
+        .filter(Conta.tenant_id == tenant_id, Conta.vendedor_usuario_id.isnot(None))
+        .all()
+    )
+    if not contas:
+        return []
+
+    usuarios_por_id = {
+        usuario.id: usuario
+        for usuario in db.query(Usuario).filter(Usuario.id.in_({conta.vendedor_usuario_id for conta in contas})).all()
+    }
+
+    agrupado: dict[int, dict] = {}
+    for conta in contas:
+        usuario = usuarios_por_id.get(conta.vendedor_usuario_id)
+        grupo = agrupado.setdefault(
+            conta.vendedor_usuario_id,
+            {"usuario_id": conta.vendedor_usuario_id, "nome": usuario.nome if usuario else "Desconhecido", "contas": []},
+        )
+        risco = saude_conta_service.calcular_score_risco_da_conta(db, conta)
+        grupo["contas"].append(
+            {
+                "id": conta.id,
+                "nome": conta.nome,
+                "nome_fantasia": conta.nome_fantasia,
+                "score": risco["score"],
+                "classificacao": risco["classificacao"],
+            }
+        )
+
+    resultado = list(agrupado.values())
+    resultado.sort(key=lambda item: item["nome"])
+    return resultado
 
 
 def dashboard_flywheel(db: Session, tenant_id: str) -> dict:

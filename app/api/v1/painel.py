@@ -23,11 +23,14 @@ router = APIRouter(prefix="/painel", tags=["painel"])
 @router.get("/metrica-norte", response_model=MetricaNorteSchema)
 def metrica_norte(
     mes: str | None = None,
+    vendedor_usuario_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> MetricaNorteSchema:
-    """Métrica-norte com evolução mensal — fonte exclusiva no CRM (E8-H1)."""
-    return MetricaNorteSchema(**panel_service.metrica_norte(db, tenant_id, mes))
+    """Métrica-norte com evolução mensal — fonte exclusiva no CRM (E8-H1).
+    `vendedor_usuario_id` (raio-X 2026-09-24, MAP por vendedor) opcional —
+    sem ele, comportamento idêntico (visão global do Dashboard)."""
+    return MetricaNorteSchema(**panel_service.metrica_norte(db, tenant_id, mes, vendedor_usuario_id))
 
 
 @router.get("/configuracao-meta", response_model=ConfiguracaoPainelSchema)

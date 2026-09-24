@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { PainelDesempenho } from "@/components/dashboard/PainelDesempenho";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
@@ -9,6 +10,20 @@ import { Modal } from "@/components/ui/Modal";
 import { TutorialMap } from "@/pages/map/TutorialMap";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+
+interface ContaResumoVendedor {
+  id: number;
+  nome: string;
+  nome_fantasia: string | null;
+  score: number;
+  classificacao: string;
+}
+
+interface VendedorComContas {
+  usuario_id: number;
+  nome: string;
+  contas: ContaResumoVendedor[];
+}
 
 interface DashboardSaudeContas {
   score_medio: number | null;
@@ -109,6 +124,12 @@ export function MapContas() {
   const [modalInteracaoAberto, setModalInteracaoAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [gerandoScript, setGerandoScript] = useState(false);
+  // Árvore vendedor → contas (raio-X 2026-09-24, MAP espelha o
+  // Dashboard) — só pra quem já vê múltiplos vendedores, e só dentro
+  // do próprio tenant (sem cross-tenant, escopo desta rodada).
+  const [vendedoresComContas, setVendedoresComContas] = useState<VendedorComContas[]>([]);
+  const [vendedoresExpandidosIds, setVendedoresExpandidosIds] = useState<Set<number>>(new Set());
+  const [vendedorDesempenhoId, setVendedorDesempenhoId] = useState<number | null>(null);
   // Tutorial do módulo (raio-X 2026-09-21) — abre sozinho na primeira
   // visita, coexiste com o tour grande. `carregado` evita a corrida com
   // o `carregarVisaoGeral()` async (mesmo padrão de Kanban.tsx).
@@ -167,6 +188,26 @@ export function MapContas() {
         .catch(() => undefined);
     }
   }, [isGestor]);
+
+  useEffect(() => {
+    if (isGestor && !tenantSelecionadoId) {
+      api
+        .get<VendedorComContas[]>("/crm/vendedores-com-contas")
+        .then(setVendedoresComContas)
+        .catch(() => setVendedoresComContas([]));
+    } else {
+      setVendedoresComContas([]);
+    }
+  }, [isGestor, tenantSelecionadoId]);
+
+  function alternarVendedorExpandido(usuarioId: number) {
+    setVendedoresExpandidosIds((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(usuarioId)) novo.delete(usuarioId);
+      else novo.add(usuarioId);
+      return novo;
+    });
+  }
 
   useEffect(() => {
     if (podeVerHierarquia) {
@@ -313,6 +354,57 @@ export function MapContas() {
         />
       </div>
 
+      {vendedoresComContas.length > 0 && (
+        <Card className="mb-4">
+          <SectionLabel>Desempenho por vendedor</SectionLabel>
+          <div className="flex flex-col gap-1">
+            {vendedoresComContas.map((vendedor) => {
+              const expandido = vendedoresExpandidosIds.has(vendedor.usuario_id);
+              return (
+                <div key={vendedor.usuario_id}>
+                  <div className="flex items-center gap-2 py-1 text-[12px]">
+                    <button
+                      type="button"
+                      className="text-muted hover:text-cyan"
+                      onClick={() => alternarVendedorExpandido(vendedor.usuario_id)}
+                    >
+                      {expandido ? "▾" : "▸"}
+                    </button>
+                    <button
+                      type="button"
+                      className="font-semibold text-text hover:text-cyan hover:underline"
+                      onClick={() => setVendedorDesempenhoId(vendedor.usuario_id)}
+                    >
+                      {vendedor.nome}
+                    </button>
+                    <span className="text-muted">
+                      {vendedor.contas.length} conta{vendedor.contas.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {expandido && (
+                    <div className="ml-6 flex flex-col gap-0.5 border-l border-border pl-3">
+                      {vendedor.contas.map((conta) => (
+                        <button
+                          key={conta.id}
+                          type="button"
+                          onClick={() => setContaSelecionadaId(conta.id)}
+                          className={`flex items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[11.5px] hover:bg-surf2 ${
+                            conta.id === contaSelecionadaId ? "bg-surf2" : ""
+                          }`}
+                        >
+                          <span>{conta.nome_fantasia || conta.nome}</span>
+                          <Badge tone={toneClassificacao(conta.classificacao)}>{conta.score.toFixed(0)}</Badge>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
         <Card data-tutorial-id="map:ranking">
           <SectionLabel>Ranking de saúde das contas</SectionLabel>
@@ -450,6 +542,25 @@ export function MapContas() {
           </Button>
         </form>
       </Modal>
+
+      {vendedorDesempenhoId !== null && (
+        <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[8vh]">
+          <div className="absolute inset-0 bg-slate-950/70" onClick={() => setVendedorDesempenhoId(null)} />
+          <div className="relative flex max-h-[84vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border2 bg-surf shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border p-3">
+              <div className="text-[13px] font-bold text-text">
+                Desempenho — {vendedoresComContas.find((v) => v.usuario_id === vendedorDesempenhoId)?.nome}
+              </div>
+              <button type="button" className="text-muted hover:text-text" onClick={() => setVendedorDesempenhoId(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <PainelDesempenho vendedorUsuarioId={vendedorDesempenhoId} />
+            </div>
+          </div>
+        </div>
+      )}
 
       <TutorialMap open={tutorialAberto} onClose={fecharTutorial} />
     </div>
