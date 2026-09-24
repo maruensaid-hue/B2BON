@@ -1,13 +1,45 @@
+import hashlib
+import hmac
 from datetime import UTC, datetime
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.cadencia import Cadencia
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
 from app.services import auditoria_service
-from app.services.errors import NaoEncontrado
+from app.services.errors import NaoEncontrado, ValidacaoFalhou
+
+# Separador seguro pra local-part de e-mail (raio-X 2026-09-24, Webmail
+# — caixa de entrada) — mesma técnica HMAC stateless de
+# `optout_service.gerar_token`, só troca ":" por "." porque o token
+# vira parte de um endereço de e-mail (`resp+{token}@dominio`), onde
+# ":" cru é incomum/arriscado sem aspas RFC 5321.
+_SEPARADOR_TOKEN_RESPOSTA = "."
+
+
+def gerar_token_resposta(tenant_id: str, decisor_id: int) -> str:
+    payload = f"{tenant_id}{_SEPARADOR_TOKEN_RESPOSTA}{decisor_id}"
+    assinatura = hmac.new(settings.secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    return f"{payload}{_SEPARADOR_TOKEN_RESPOSTA}{assinatura}"
+
+
+def validar_token_resposta(token: str) -> tuple[str, int]:
+    partes = token.split(_SEPARADOR_TOKEN_RESPOSTA)
+    if len(partes) != 3:
+        raise ValidacaoFalhou("Token de resposta inválido.")
+    tenant_id, decisor_id_str, assinatura = partes
+    try:
+        decisor_id = int(decisor_id_str)
+    except ValueError as erro:
+        raise ValidacaoFalhou("Token de resposta inválido.") from erro
+
+    esperado = gerar_token_resposta(tenant_id, decisor_id).rsplit(_SEPARADOR_TOKEN_RESPOSTA, 1)[-1]
+    if not hmac.compare_digest(assinatura, esperado):
+        raise ValidacaoFalhou("Token de resposta inválido.")
+    return tenant_id, decisor_id
 
 
 def marcar_resposta(db: Session, tenant_id: str, decisor_id: int) -> dict:

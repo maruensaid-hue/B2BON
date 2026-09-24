@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     # webhook do Mercado Pago, só que ECDSA em vez de HMAC).
     sendgrid_webhook_verification_key: str = ""
 
+    # Subdomínio de recebimento do Webmail (raio-X 2026-09-24) — precisa
+    # de um registro MX próprio apontando pro SendGrid Inbound Parse
+    # (separado do domínio raiz, que já tem SPF/DKIM/DMARC pra ENVIO).
+    # Vazio (default) = recebimento desligado, e-mail direto continua
+    # com o reply-to de sempre (e-mail real do tenant) — a feature liga
+    # sozinha quando isto for configurado, sem precisar de mudança de
+    # código nenhuma.
+    dominio_respostas: str = ""
+
     # Mercado Pago (cadastro self-service com escolha de plano) — vazio
     # usa StubPaymentProvider em dev/teste. Webhook secret é o "Secret
     # Key" configurado na seção de Webhooks do painel do Mercado Pago,

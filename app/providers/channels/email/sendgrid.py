@@ -24,6 +24,7 @@ class SendGridEmailProvider(EmailProvider):
         pixel_url: str | None = None,
         mensagem_id: int | None = None,
         campanha_destinatario_id: int | None = None,
+        reply_to: str | None = None,
     ) -> ResultadoEnvio:
         conteudo = [{"type": "text/plain", "value": corpo}]
         if pixel_url:
@@ -48,7 +49,7 @@ class SendGridEmailProvider(EmailProvider):
                 }
             ],
             "from": {"email": settings.sendgrid_remetente_email, "name": remetente_nome},
-            "reply_to": {"email": remetente_email},
+            "reply_to": {"email": reply_to or remetente_email},
             "subject": assunto,
             "content": conteudo,
         }

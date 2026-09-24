@@ -1,9 +1,17 @@
 import json
+import re
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_email_provider, get_llm_provider, get_payment_provider, resolver_whatsapp_provider
+from app.api.deps import (
+    get_db,
+    get_email_provider,
+    get_llm_provider,
+    get_payment_provider,
+    resolver_email_provider,
+    resolver_whatsapp_provider,
+)
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
@@ -14,6 +22,7 @@ from app.providers.payment.base import PaymentProvider
 from app.schemas.reputacao import RegistrarEventoReputacaoRequestSchema, SaudeCanalSchema
 from app.schemas.whatsapp import WebhookEmailRequestSchema, WebhookWhatsAppRequestSchema
 from app.services import (
+    email_direto_service,
     optout_service,
     pagamento_licenca_service,
     qualificacao_service,
@@ -23,7 +32,7 @@ from app.services import (
     resposta_service,
     sendgrid_webhook_service,
 )
-from app.services.errors import NaoAutorizado, NaoEncontrado
+from app.services.errors import NaoAutorizado, NaoEncontrado, ValidacaoFalhou
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -157,6 +166,52 @@ def webhook_email(
         db, dados.tenant_id, decisor.id, "email", dados.texto, llm, whatsapp
     )
     return {**resultado_resposta, **resultado_qualificacao}
+
+
+_PADRAO_TOKEN_RESPOSTA = re.compile(r"resp\+([^@]+)@")
+_PADRAO_EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def _extrair_token_resposta(campo_to: str) -> str | None:
+    """`to` do Inbound Parse pode vir como `"resp+TOKEN@dominio"` ou
+    `"Nome <resp+TOKEN@dominio>"` — extrai só o token do local-part."""
+    correspondencia = _PADRAO_TOKEN_RESPOSTA.search(campo_to)
+    return correspondencia.group(1) if correspondencia else None
+
+
+def _extrair_email(campo_from: str) -> str:
+    """`from` do Inbound Parse pode vir como `"Fulano <fulano@x.com>"` —
+    extrai só o endereço; sem match, devolve o campo bruto (nunca quebra
+    por causa de um formato inesperado)."""
+    correspondencia = _PADRAO_EMAIL.search(campo_from)
+    return correspondencia.group(0) if correspondencia else campo_from
+
+
+@router.post("/email/inbound")
+async def webhook_email_inbound(request: Request, db: Session = Depends(get_db)) -> dict:
+    """SendGrid Inbound Parse (raio-X 2026-09-24, Webmail — caixa de
+    entrada) — resposta de um cliente a um `EmailDireto` cujo reply-to
+    foi trocado pro endereço de resposta nosso (`resposta_service.
+    gerar_token_resposta`, ativo só quando `settings.dominio_respostas`
+    está configurado). Sempre responde 200 mesmo com token
+    inválido/expirado — o SendGrid re-tenta indefinidamente em erro, e
+    um token velho (ex.: decisor já excluído) não é motivo pra isso."""
+    formulario = await request.form()
+    token = _extrair_token_resposta(str(formulario.get("to", "")))
+    if token is None:
+        return {"recebido": True, "processado": False}
+    try:
+        tenant_id, decisor_id = resposta_service.validar_token_resposta(token)
+    except ValidacaoFalhou:
+        return {"recebido": True, "processado": False}
+
+    remetente_email = _extrair_email(str(formulario.get("from", "")))
+    assunto = str(formulario.get("subject", ""))
+    corpo = str(formulario.get("text", ""))
+
+    email_provider = resolver_email_provider(tenant_id, db)
+    email_direto_service.processar_recebido(db, tenant_id, decisor_id, remetente_email, assunto, corpo, email_provider)
+    return {"recebido": True, "processado": True}
 
 
 @router.get("/email/aberto/{token}.png")

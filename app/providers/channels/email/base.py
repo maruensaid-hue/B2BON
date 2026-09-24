@@ -37,6 +37,7 @@ class EmailProvider(ABC):
         pixel_url: str | None = None,
         mensagem_id: int | None = None,
         campanha_destinatario_id: int | None = None,
+        reply_to: str | None = None,
     ) -> ResultadoEnvio:
         """`tenant_id` viaja até o provider pra permitir anexar contexto de
         tenant em eventos assíncronos do ESP (ex.: `custom_args` do SendGrid,
@@ -54,5 +55,13 @@ class EmailProvider(ABC):
         (`custom_args`, só implementado no SendGrid) pra que um bounce
         assíncrono depois seja correlacionado à mensagem/destinatário
         exatos, não só ao tenant. Sem eles, o `sendgrid_webhook_service`
-        só sabe pausar o canal inteiro, sem saber qual contato causou."""
+        só sabe pausar o canal inteiro, sem saber qual contato causou.
+
+        `reply_to` (raio-X 2026-09-24, Webmail — caixa de entrada), quando
+        presente, sobrepõe o reply-to padrão (que hoje é `remetente_email`
+        no SendGrid, ou nada explícito no SMTP) — usado só pelo e-mail
+        direto pra rotear a resposta do cliente pro endereço de Inbound
+        Parse em vez do e-mail real do tenant, retransmitido depois pelo
+        próprio webhook. `None` (default) preserva o comportamento atual
+        em todas as implementações."""
         raise NotImplementedError

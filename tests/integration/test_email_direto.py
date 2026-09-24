@@ -60,6 +60,90 @@ def test_listar_enviados_com_e_sem_filtro_de_conta(client, conta_e_decisor):
     assert resposta_vazia.json() == []
 
 
+def test_listar_recebidos_com_e_sem_filtro_de_conta(client, db_session, conta_e_decisor):
+    from app.services import email_direto_service
+
+    conta, decisor = conta_e_decisor
+    from tests.fakes import FakeEmailProvider
+
+    email_direto_service.processar_recebido(
+        db_session, TENANT_ID, decisor.id, "cliente@empresa.com", "Assunto", "Corpo", FakeEmailProvider()
+    )
+
+    resposta = client.get("/api/v1/email-direto/recebidos")
+    assert resposta.status_code == 200
+    assert len(resposta.json()) == 1
+    assert resposta.json()[0]["remetente_email"] == "cliente@empresa.com"
+
+    resposta_vazia = client.get("/api/v1/email-direto/recebidos", params={"conta_id": conta.id + 999})
+    assert resposta_vazia.json() == []
+
+
+def test_arquivar_conversa_e_pendentes(client, conta_e_decisor):
+    conta, decisor = conta_e_decisor
+    client.post("/api/v1/email-direto", json={"decisor_id": decisor.id, "assunto": "Assunto", "corpo": "Corpo"})
+
+    pendentes = client.get("/api/v1/email-direto/pendentes-arquivamento").json()
+    assert len(pendentes) == 1
+    assert pendentes[0]["decisor_id"] == decisor.id
+    assert pendentes[0]["total_enviados"] == 1
+
+    resposta = client.post("/api/v1/email-direto/arquivar", json={"decisor_id": decisor.id})
+    assert resposta.status_code == 200
+    assert resposta.json() == {"enviados_arquivados": 1, "recebidos_arquivados": 0}
+
+    assert client.get("/api/v1/email-direto/pendentes-arquivamento").json() == []
+    assert client.get("/api/v1/email-direto").json() == []
+
+
+def test_webhook_email_inbound_com_token_valido_persiste_e_retransmite(client, db_session, conta_e_decisor, fake_email):
+    from app.services import resposta_service
+
+    conta, decisor = conta_e_decisor
+    token = resposta_service.gerar_token_resposta(TENANT_ID, decisor.id)
+
+    resposta = client.post(
+        "/api/v1/webhooks/email/inbound",
+        data={
+            "to": f"resp+{token}@respostas.teste.com.br",
+            "from": "Cliente Teste <cliente@empresa.com>",
+            "subject": "Re: Proposta",
+            "text": "Aceito a proposta!",
+        },
+        headers={"Authorization": ""},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"recebido": True, "processado": True}
+
+    recebidos = client.get("/api/v1/email-direto/recebidos").json()
+    assert len(recebidos) == 1
+    assert recebidos[0]["remetente_email"] == "cliente@empresa.com"
+    assert recebidos[0]["assunto"] == "Re: Proposta"
+
+
+def test_webhook_email_inbound_com_token_invalido_nao_derruba(client):
+    resposta = client.post(
+        "/api/v1/webhooks/email/inbound",
+        data={"to": "resp+token-adulterado@respostas.teste.com.br", "from": "x@y.com", "subject": "x", "text": "x"},
+        headers={"Authorization": ""},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"recebido": True, "processado": False}
+
+
+def test_webhook_email_inbound_sem_token_no_destinatario_nao_derruba(client):
+    resposta = client.post(
+        "/api/v1/webhooks/email/inbound",
+        data={"to": "contato@empresa.com", "from": "x@y.com", "subject": "x", "text": "x"},
+        headers={"Authorization": ""},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"recebido": True, "processado": False}
+
+
 def test_configuracao_get_e_put(client):
     resposta_inicial = client.get("/api/v1/email-direto/configuracao")
     assert resposta_inicial.status_code == 200
