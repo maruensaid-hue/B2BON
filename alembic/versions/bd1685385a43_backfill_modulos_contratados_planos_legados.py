@@ -18,7 +18,7 @@ tinha acesso total). Planos avulsos de verdade (modulos_contratados
 com exatamente 1 item) nao sao tocados.
 
 Revision ID: bd1685385a43
-Revises: 327c75fdadef
+Revises: f4a5b6c7d8e9
 Create Date: 2026-09-24
 
 """
@@ -30,7 +30,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'bd1685385a43'
-down_revision: Union[str, Sequence[str], None] = '327c75fdadef'
+down_revision: Union[str, Sequence[str], None] = 'f4a5b6c7d8e9'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
