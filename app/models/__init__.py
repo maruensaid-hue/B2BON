@@ -25,6 +25,7 @@ from app.models.convite_cadastro import ConviteCadastro
 from app.models.convite_vitrine import ConviteVitrine
 from app.models.conversa_qualificacao import ConversaQualificacao
 from app.models.decisor import Decisor
+from app.models.email_direto import EmailDireto
 from app.models.descarte_conta import DescarteConta
 from app.models.enriquecimento_semanal_consumo import EnriquecimentoSemanalConsumo
 from app.models.estagio_funil import EstagioFunil
@@ -176,4 +177,5 @@ __all__ = [
     "PerguntaAgenteCorporativo",
     "RegistroUsoIa",
     "CacheMercadoExterno",
+    "EmailDireto",
 ]

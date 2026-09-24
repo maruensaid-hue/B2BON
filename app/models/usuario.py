@@ -52,3 +52,10 @@ class Usuario(Base):
     # ao FECHAR o tutorial por qualquer motivo (concluiu ou pulou), nunca
     # reaberto sozinho depois disso — só via botão manual "Rever tutorial".
     tutoriais_modulo_vistos: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Webmail (raio-X 2026-09-24) — configuração pessoal do vendedor pro
+    # e-mail direto, mesmo molde de `whatsapp_pessoal` (por usuário, não
+    # por tenant). Opcional — sem `email_nome_exibicao`, cai no `nome`;
+    # sem `email_assinatura`, cai na assinatura de cadência do tenant
+    # (`ConfiguracaoEnvio.assinatura`), nunca fica sem nenhuma assinatura.
+    email_nome_exibicao: Mapped[str | None] = mapped_column(String, nullable=True)
+    email_assinatura: Mapped[str | None] = mapped_column(String, nullable=True)

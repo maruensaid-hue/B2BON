@@ -1,12 +1,13 @@
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.configuracao_comunicacao import ConfiguracaoComunicacao
 from app.models.icp import ICP
 from app.models.oferta import Oferta
 from app.schemas.comunicacao import ConfiguracaoComunicacaoUpsertSchema
-from app.services import auditoria_service, llm_helpers
+from app.services import auditoria_service, llm_helpers, optout_service
 from app.services.errors import RegraNegocioViolada
 
 
@@ -32,6 +33,17 @@ def salvar(
     db.commit()
     db.refresh(config)
     return config
+
+
+def rodape_email(tenant_id: str, decisor_id: int, conteudo: str) -> str:
+    """Rodapé de opt-out do canal e-mail — extraído do branch `email` de
+    `cadencia_service._rodape_por_canal` (raio-X 2026-09-24, Webmail)
+    pra ser reaproveitado também pelo e-mail direto/pessoal
+    (`email_direto_service`), sem duplicar a montagem do link. Mesmo
+    texto de sempre, comportamento idêntico ao já existente."""
+    token = optout_service.gerar_token(tenant_id, decisor_id)
+    link = f"{settings.url_base_api}/opt-out/email/{token}"
+    return f"{conteudo}\n\nPara não receber mais e-mails: {link}"
 
 
 def validar_texto(texto: str, restricoes: list[str]) -> list[str]:

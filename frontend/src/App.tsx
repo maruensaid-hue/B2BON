@@ -60,6 +60,7 @@ const AgenteCorporativo = lazy(() =>
 const RedeSocial = lazy(() => import("@/pages/rede-social/RedeSocial").then((m) => ({ default: m.RedeSocial })));
 const Reunioes = lazy(() => import("@/pages/reunioes/Reunioes").then((m) => ({ default: m.Reunioes })));
 const Agenda = lazy(() => import("@/pages/agenda/Agenda").then((m) => ({ default: m.Agenda })));
+const Webmail = lazy(() => import("@/pages/webmail/Webmail").then((m) => ({ default: m.Webmail })));
 const RegistroOportunidade = lazy(() =>
   import("@/pages/ro/RegistroOportunidade").then((m) => ({ default: m.RegistroOportunidade })),
 );
@@ -226,6 +227,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <Agenda />
+              </Suspense>
+            }
+          />
+          <Route
+            path="webmail"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Webmail />
               </Suspense>
             }
           />

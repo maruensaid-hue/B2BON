@@ -4,7 +4,6 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.aprovacao import Aprovacao
@@ -25,7 +24,6 @@ from app.services import (
     franquia_service,
     limite_criacao_service,
     llm_helpers,
-    optout_service,
     regra_aprendida_service,
     reputacao_service,
 )
@@ -511,9 +509,7 @@ def _gerar_conteudo_toque(
 
 def _rodape_por_canal(db: Session, tenant_id: str, decisor: Decisor, canal: str, conteudo: str) -> str:
     if canal == "email":
-        token = optout_service.gerar_token(tenant_id, decisor.id)
-        link = f"{settings.url_base_api}/opt-out/email/{token}"
-        return f"{conteudo}\n\nPara não receber mais e-mails: {link}"
+        return comunicacao_service.rodape_email(tenant_id, decisor.id, conteudo)
     if canal == "whatsapp":
         return f"{conteudo}\n\nResponda SAIR para parar de receber mensagens."
     return conteudo

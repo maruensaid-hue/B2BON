@@ -1,4 +1,13 @@
-from app.services.comunicacao_service import validar_texto
+from app.services.comunicacao_service import rodape_email, validar_texto
+
+
+def test_rodape_email_inclui_link_de_opt_out():
+    """Extraído de `cadencia_service._rodape_por_canal` (raio-X
+    2026-09-24, Webmail) — mesmo texto/formato de sempre."""
+    resultado = rodape_email("tenant-teste", 1, "Olá, tudo bem?")
+
+    assert resultado.startswith("Olá, tudo bem?\n\nPara não receber mais e-mails: ")
+    assert "/opt-out/email/" in resultado
 
 
 def test_validar_texto_detecta_restricao_violada():
