@@ -220,6 +220,7 @@ class FakeEmailProvider(EmailProvider):
         pixel_url: str | None = None,
         mensagem_id: int | None = None,
         campanha_destinatario_id: int | None = None,
+        reply_to: str | None = None,
     ) -> ResultadoEnvioEmail:
         self.envios.append(
             {
@@ -232,6 +233,7 @@ class FakeEmailProvider(EmailProvider):
                 "pixel_url": pixel_url,
                 "mensagem_id": mensagem_id,
                 "campanha_destinatario_id": campanha_destinatario_id,
+                "reply_to": reply_to,
             }
         )
         if self.falhar_proximos > 0:

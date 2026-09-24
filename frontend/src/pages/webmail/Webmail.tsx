@@ -29,12 +29,32 @@ interface EmailEnviado {
   criado_em: string;
 }
 
+interface EmailRecebido {
+  id: number;
+  decisor_id: number | null;
+  decisor_nome: string | null;
+  conta_id: number | null;
+  conta_nome: string | null;
+  remetente_email: string;
+  assunto: string;
+  corpo: string;
+  criado_em: string;
+}
+
+interface PendenteArquivamento {
+  decisor_id: number;
+  decisor_nome: string;
+  conta_nome: string;
+  total_enviados: number;
+  total_recebidos: number;
+}
+
 interface ConfiguracaoAgente {
   email_nome_exibicao: string | null;
   email_assinatura: string | null;
 }
 
-type Aba = "escrever" | "enviados" | "configuracoes";
+type Aba = "escrever" | "enviados" | "recebidos" | "arquivar" | "configuracoes";
 
 /** Webmail / agente de e-mail direto (raio-X 2026-09-24) — comunicação
  * direta com leads do CRM, síncrona (sem fila de aprovação, diferente
@@ -59,6 +79,12 @@ export function Webmail() {
         <Button size="sm" variant={aba === "enviados" ? "primary" : "ghost"} onClick={() => setAba("enviados")}>
           📤 Enviados
         </Button>
+        <Button size="sm" variant={aba === "recebidos" ? "primary" : "ghost"} onClick={() => setAba("recebidos")}>
+          📥 Recebidos
+        </Button>
+        <Button size="sm" variant={aba === "arquivar" ? "primary" : "ghost"} onClick={() => setAba("arquivar")}>
+          🗄️ Arquivar
+        </Button>
         <Button size="sm" variant={aba === "configuracoes" ? "primary" : "ghost"} onClick={() => setAba("configuracoes")}>
           ⚙️ Configurações
         </Button>
@@ -66,6 +92,8 @@ export function Webmail() {
 
       {aba === "escrever" && <AbaEscrever aoEnviar={() => setAba("enviados")} />}
       {aba === "enviados" && <AbaEnviados />}
+      {aba === "recebidos" && <AbaRecebidos />}
+      {aba === "arquivar" && <AbaArquivar />}
       {aba === "configuracoes" && <AbaConfiguracoes />}
     </div>
   );
@@ -239,6 +267,130 @@ function AbaEnviados() {
           </Card>
         );
       })}
+    </div>
+  );
+}
+
+function AbaRecebidos() {
+  const [itens, setItens] = useState<EmailRecebido[]>([]);
+  const [expandidoId, setExpandidoId] = useState<number | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .get<EmailRecebido[]>("/email-direto/recebidos")
+      .then(setItens)
+      .catch(() => setErro("Não foi possível carregar os e-mails recebidos."));
+  }, []);
+
+  if (erro) return <div className="text-[12px] text-red">{erro}</div>;
+
+  if (itens.length === 0) {
+    return (
+      <Card>
+        <div className="text-center text-[12px] text-muted">Nenhum e-mail recebido ainda.</div>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {itens.map((item) => {
+        const expandido = expandidoId === item.id;
+        return (
+          <Card key={item.id}>
+            <button
+              type="button"
+              onClick={() => setExpandidoId((atual) => (atual === item.id ? null : item.id))}
+              className="flex w-full items-center gap-1.5 rounded-md bg-surf2 p-2 text-left text-[11px] text-text hover:border-cyan/50"
+            >
+              <span className="text-muted">{expandido ? "▾" : "▸"}</span>
+              <span className="truncate">
+                De: <span className="font-semibold">{item.decisor_nome ?? "Contato desconhecido"}</span>{" "}
+                <span className="text-muted">&lt;{item.remetente_email}&gt;</span>
+                {" · "}
+                {new Date(item.criado_em).toLocaleDateString("pt-BR")}
+                {" · "}
+                <span className="font-semibold">{item.assunto || "(sem assunto)"}</span>
+              </span>
+              {item.conta_nome && <Badge tone="cyan">{item.conta_nome}</Badge>}
+            </button>
+            {expandido && <div className="mt-2 whitespace-pre-line rounded-md bg-surf2 p-2 text-[12px] text-text">{item.corpo}</div>}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+function AbaArquivar() {
+  const [itens, setItens] = useState<PendenteArquivamento[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [arquivandoId, setArquivandoId] = useState<number | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [mensagem, setMensagem] = useState<string | null>(null);
+
+  async function carregar() {
+    try {
+      setItens(await api.get<PendenteArquivamento[]>("/email-direto/pendentes-arquivamento"));
+    } catch {
+      setErro("Não foi possível carregar as conversas pendentes.");
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  useEffect(() => {
+    carregar();
+  }, []);
+
+  async function arquivar(decisorId: number, decisorNome: string) {
+    if (arquivandoId) return;
+    setArquivandoId(decisorId);
+    setErro(null);
+    setMensagem(null);
+    try {
+      await api.post("/email-direto/arquivar", { decisor_id: decisorId });
+      setMensagem(`Conversa com ${decisorNome} arquivada.`);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível arquivar a conversa.");
+    } finally {
+      setArquivandoId(null);
+    }
+  }
+
+  if (carregando) return <div className="text-[12px] text-muted">Carregando...</div>;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {erro && <div className="text-[12px] text-red">{erro}</div>}
+      {mensagem && <div className="text-[12px] text-green">{mensagem}</div>}
+      {itens.length === 0 ? (
+        <Card>
+          <div className="text-center text-[12px] text-muted">Nenhuma conversa pendente de arquivamento.</div>
+        </Card>
+      ) : (
+        itens.map((item) => (
+          <Card key={item.decisor_id} className="flex items-center justify-between gap-2">
+            <div className="text-[12px]">
+              <div className="font-semibold text-text">
+                {item.decisor_nome} <span className="text-muted">— {item.conta_nome}</span>
+              </div>
+              <div className="text-muted">
+                {item.total_enviados} enviado(s) · {item.total_recebidos} recebido(s)
+              </div>
+            </div>
+            <Button
+              size="sm"
+              disabled={arquivandoId === item.decisor_id}
+              onClick={() => arquivar(item.decisor_id, item.decisor_nome)}
+            >
+              {arquivandoId === item.decisor_id ? "Arquivando..." : "🗄️ Arquivar conversa"}
+            </Button>
+          </Card>
+        ))
+      )}
     </div>
   );
 }

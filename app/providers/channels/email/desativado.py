@@ -19,5 +19,6 @@ class EmailDesativadoProvider(EmailProvider):
         pixel_url: str | None = None,
         mensagem_id: int | None = None,
         campanha_destinatario_id: int | None = None,
+        reply_to: str | None = None,
     ) -> ResultadoEnvio:
         return ResultadoEnvio(sucesso=False, motivo_falha="Envio de e-mail não está configurado no servidor.")

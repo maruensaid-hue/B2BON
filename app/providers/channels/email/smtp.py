@@ -41,11 +41,14 @@ class SmtpEmailProvider(EmailProvider):
         pixel_url: str | None = None,
         mensagem_id: int | None = None,
         campanha_destinatario_id: int | None = None,
+        reply_to: str | None = None,
     ) -> ResultadoEnvio:
         mensagem = EmailMessage()
         mensagem["Subject"] = assunto
         mensagem["From"] = f"{remetente_nome} <{remetente_email}>"
         mensagem["To"] = destinatario
+        if reply_to:
+            mensagem["Reply-To"] = reply_to
         mensagem.set_content(corpo)
 
         if pixel_url:

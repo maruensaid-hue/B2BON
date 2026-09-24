@@ -28,4 +28,8 @@ class EmailDireto(Base):
     status: Mapped[str] = mapped_column(String)  # enviado | falhou
     motivo_falha: Mapped[str | None] = mapped_column(String, nullable=True)
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Arquivamento de conversa (raio-X 2026-09-24) — marcado por
+    # `email_direto_service.arquivar_conversa`, some das abas
+    # Enviados/Recebidos por padrão mas nunca é excluído.
+    arquivado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
