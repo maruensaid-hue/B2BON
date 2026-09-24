@@ -71,7 +71,13 @@ def _garantir_licenca_ativa(db_session: Session, tenant_id: str) -> None:
 
     plano = db_session.query(Plano).filter_by(nome="Plano Padrão Teste").one_or_none()
     if plano is None:
-        plano = Plano(nome="Plano Padrão Teste", franquia_contas_mes=1000, max_usuarios=50, preco_mensal=0.0)
+        plano = Plano(
+            nome="Plano Padrão Teste",
+            franquia_contas_mes=1000,
+            max_usuarios=50,
+            preco_mensal=0.0,
+            modulos_contratados=["map", "predator", "crm"],
+        )
         db_session.add(plano)
         db_session.flush()
 
@@ -301,6 +307,7 @@ def criar_plano(db_session: Session):
             "franquia_contas_mes": 500,
             "max_usuarios": 20,
             "preco_mensal": 499.0,
+            "modulos_contratados": ["map", "predator", "crm"],
         }
         dados.update(overrides)
         plano = Plano(**dados)

@@ -22,6 +22,7 @@ class StubPlanLimitsProvider(PlanLimitsProvider):
         recursos_desabilitados: dict[str, set[str]] | None = None,
         retencao_dias_relatorio: dict[str, int | None] | None = None,
         retencao_dias_auditoria: dict[str, int | None] | None = None,
+        modulos_bloqueados: dict[str, set[str]] | None = None,
     ) -> None:
         self._franquia_padrao = (
             franquia_padrao if franquia_padrao is not None else settings.franquia_contas_mes_stub_default
@@ -45,6 +46,11 @@ class StubPlanLimitsProvider(PlanLimitsProvider):
         self._recursos_desabilitados = recursos_desabilitados or {}
         self._retencao_relatorio = retencao_dias_relatorio or {}
         self._retencao_auditoria = retencao_dias_auditoria or {}
+        # Contratação avulsa por módulo (raio-X 2026-09-24): sem override,
+        # o stub libera os três módulos (map/predator/crm) pra não exigir
+        # ajuste em nenhum teste existente — só quem explicitamente testa
+        # um tenant "só com MAP" passa `modulos_bloqueados`.
+        self._modulos_bloqueados = modulos_bloqueados or {}
 
     def obter_franquia_contas_mes(self, tenant_id: str) -> int:
         return self._overrides.get(tenant_id, self._franquia_padrao)
@@ -87,3 +93,6 @@ class StubPlanLimitsProvider(PlanLimitsProvider):
 
     def obter_retencao_dias_auditoria(self, tenant_id: str) -> int | None:
         return self._retencao_auditoria.get(tenant_id)
+
+    def permite_modulo(self, tenant_id: str, modulo: str) -> bool:
+        return modulo not in self._modulos_bloqueados.get(tenant_id, set())

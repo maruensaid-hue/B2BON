@@ -6,6 +6,7 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { Modal } from "@/components/ui/Modal";
+import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { TutorialProspeccao } from "@/pages/prospeccao/TutorialProspeccao";
 import { api, ApiError } from "@/lib/api";
@@ -648,6 +649,10 @@ export function Prospeccao() {
     } finally {
       setExecutandoLimpeza(false);
     }
+  }
+
+  if (!usuario?.recursos_plano.modulo_predator) {
+    return <AcessoRestrito mensagem="O PREDATOR não faz parte do seu plano atual. Fale com o time comercial pra contratar." />;
   }
 
   return (

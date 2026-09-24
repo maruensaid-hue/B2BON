@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
+import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { ImportarExportarNegocios } from "@/pages/crm/ImportarExportarNegocios";
 import { TutorialCrm } from "@/pages/crm/TutorialCrm";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
@@ -578,6 +579,10 @@ export function Kanban() {
   }
 
   const valorTotal = negocios.reduce((soma, negocio) => soma + negocio.valor, 0);
+
+  if (!usuario?.recursos_plano.modulo_crm) {
+    return <AcessoRestrito mensagem="O CRM não faz parte do seu plano atual. Fale com o time comercial pra contratar." />;
+  }
 
   return (
     <div className="p-5.5">

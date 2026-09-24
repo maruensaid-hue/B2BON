@@ -22,6 +22,8 @@ class PlanoSchema(BaseModel):
     permite_registro_oportunidade: bool
     retencao_dias_relatorio: int | None
     retencao_dias_auditoria: int | None
+    modulos_contratados: list[str]
+    categoria: str
 
 
 class CriarPlanoRequestSchema(BaseModel):
@@ -42,6 +44,8 @@ class CriarPlanoRequestSchema(BaseModel):
     permite_registro_oportunidade: bool = False
     retencao_dias_relatorio: int | None = None
     retencao_dias_auditoria: int | None = None
+    modulos_contratados: list[str] = ["map", "predator", "crm"]
+    categoria: str = "suite"
 
 
 class AtualizarPlanoRequestSchema(CriarPlanoRequestSchema):

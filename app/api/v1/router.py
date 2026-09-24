@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.api.deps import exigir_licenca_ativa
+from app.api.deps import exigir_licenca_ativa, exigir_modulo
 from app.api.v1.admin_tenants import router as admin_tenants_router
 from app.api.v1.agente_corporativo import router as agente_corporativo_router
 from app.api.v1.aprovacoes import router as aprovacoes_router
@@ -63,43 +63,54 @@ router = APIRouter()
 # convites, planos, admin de tenant, webhooks/optout/cron (públicos,
 # com seu próprio mecanismo de autenticação) e a própria Rede Social
 # ficam de fora deliberadamente.
+#
+# Contratação avulsa por módulo (raio-X 2026-09-24): além de licença
+# ativa, cada router de MAP/PREDATOR/CRM agora também exige que o plano
+# da licença tenha aquele módulo específico em `modulos_contratados`
+# (`exigir_modulo`) — um plano de suíte libera os três, um plano avulso
+# só o seu. Routers "compartilhados" (ajuda, onboarding, notificações,
+# gestão de usuários do próprio tenant, etc.) continuam só com
+# `_exige_licenca`, sem amarrar a nenhum módulo específico.
 _exige_licenca = [Depends(exigir_licenca_ativa)]
+_exige_map = [Depends(exigir_licenca_ativa), Depends(exigir_modulo("map"))]
+_exige_predator = [Depends(exigir_licenca_ativa), Depends(exigir_modulo("predator"))]
+_exige_crm = [Depends(exigir_licenca_ativa), Depends(exigir_modulo("crm"))]
 
-router.include_router(icp_router, dependencies=_exige_licenca)
-router.include_router(oferta_router, dependencies=_exige_licenca)
+router.include_router(icp_router, dependencies=_exige_predator)
+router.include_router(oferta_router, dependencies=_exige_predator)
 router.include_router(comunicacao_router, dependencies=_exige_licenca)
 router.include_router(onboarding_router, dependencies=_exige_licenca)
-router.include_router(contas_router, dependencies=_exige_licenca)
-router.include_router(listas_prospeccao_router, dependencies=_exige_licenca)
-router.include_router(aprovacoes_router, dependencies=_exige_licenca)
+router.include_router(contas_router, dependencies=_exige_crm)
+router.include_router(listas_prospeccao_router, dependencies=_exige_predator)
+router.include_router(aprovacoes_router, dependencies=_exige_predator)
 router.include_router(auditoria_router)
-router.include_router(ropa_router, dependencies=_exige_licenca)
-router.include_router(cadencias_router, dependencies=_exige_licenca)
-router.include_router(regras_aprendidas_router, dependencies=_exige_licenca)
-router.include_router(busca_router, dependencies=_exige_licenca)
-router.include_router(campanhas_router, dependencies=_exige_licenca)
-router.include_router(envios_router, dependencies=_exige_licenca)
-router.include_router(whatsapp_router, dependencies=_exige_licenca)
+router.include_router(ropa_router, dependencies=_exige_predator)
+router.include_router(cadencias_router, dependencies=_exige_predator)
+router.include_router(regras_aprendidas_router, dependencies=_exige_predator)
+router.include_router(busca_router, dependencies=_exige_predator)
+router.include_router(campanhas_router, dependencies=_exige_predator)
+router.include_router(envios_router, dependencies=_exige_predator)
+router.include_router(whatsapp_router, dependencies=_exige_predator)
 router.include_router(webhooks_router)
 router.include_router(optout_router)
 router.include_router(cron_router)
-router.include_router(configuracao_envio_router, dependencies=_exige_licenca)
-router.include_router(configuracao_whatsapp_router, dependencies=_exige_licenca)
-router.include_router(configuracao_email_smtp_router, dependencies=_exige_licenca)
-router.include_router(linkedin_router, dependencies=_exige_licenca)
-router.include_router(canais_router, dependencies=_exige_licenca)
-router.include_router(relatorio_entrega_router, dependencies=_exige_licenca)
-router.include_router(qualificacao_router, dependencies=_exige_licenca)
-router.include_router(conversas_router, dependencies=_exige_licenca)
+router.include_router(configuracao_envio_router, dependencies=_exige_predator)
+router.include_router(configuracao_whatsapp_router, dependencies=_exige_predator)
+router.include_router(configuracao_email_smtp_router, dependencies=_exige_predator)
+router.include_router(linkedin_router, dependencies=_exige_predator)
+router.include_router(canais_router, dependencies=_exige_predator)
+router.include_router(relatorio_entrega_router, dependencies=_exige_predator)
+router.include_router(qualificacao_router, dependencies=_exige_predator)
+router.include_router(conversas_router, dependencies=_exige_predator)
 router.include_router(notificacoes_router, dependencies=_exige_licenca)
-router.include_router(decisores_router, dependencies=_exige_licenca)
-router.include_router(reunioes_router, dependencies=_exige_licenca)
+router.include_router(decisores_router, dependencies=_exige_crm)
+router.include_router(reunioes_router, dependencies=_exige_predator)
 router.include_router(titulares_router, dependencies=_exige_licenca)
 router.include_router(faq_router, dependencies=_exige_licenca)
 router.include_router(painel_router, dependencies=_exige_licenca)
-router.include_router(nps_router, dependencies=_exige_licenca)
+router.include_router(nps_router, dependencies=_exige_predator)
 router.include_router(indicacoes_router, dependencies=_exige_licenca)
-router.include_router(leads_router, dependencies=_exige_licenca)
+router.include_router(leads_router, dependencies=_exige_predator)
 router.include_router(auth_router)
 router.include_router(convites_router)
 router.include_router(planos_router)
@@ -114,16 +125,19 @@ router.include_router(admin_tenants_router)
 router.include_router(integracoes_router)
 router.include_router(parceiros_router)
 router.include_router(relatorios_router)
-router.include_router(crm_router, dependencies=_exige_licenca)
+router.include_router(crm_router, dependencies=_exige_crm)
 router.include_router(rede_social_router)
-router.include_router(inteligencia_rede_router, dependencies=_exige_licenca)
-router.include_router(agente_corporativo_router, dependencies=_exige_licenca)
+router.include_router(inteligencia_rede_router, dependencies=_exige_predator)
+router.include_router(agente_corporativo_router, dependencies=_exige_predator)
 router.include_router(verificacao_empresa_router)
+# /motor é ferramenta interna do super_admin/CyberFort (cross-tenant, já
+# travada por papel no próprio APIRouter) — não é o "MAP" vendido ao
+# cliente, por isso fica só em `_exige_licenca`, sem `exigir_modulo`.
 router.include_router(motor_router, dependencies=_exige_licenca)
 # MAP de contas — visível a user/admin/super_admin dentro do próprio
 # tenant (escopo aplicado no serviço), distinto do /motor acima (só
-# super_admin, cross-tenant).
-router.include_router(saude_conta_router, dependencies=_exige_licenca)
-router.include_router(registro_oportunidade_router, dependencies=_exige_licenca)
+# super_admin, cross-tenant). Este sim é o módulo MAP vendido avulso.
+router.include_router(saude_conta_router, dependencies=_exige_map)
+router.include_router(registro_oportunidade_router, dependencies=_exige_predator)
 router.include_router(usuarios_router, dependencies=_exige_licenca)
-router.include_router(template_proposta_router, dependencies=_exige_licenca)
+router.include_router(template_proposta_router, dependencies=_exige_crm)

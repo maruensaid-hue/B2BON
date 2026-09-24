@@ -585,8 +585,17 @@ export function AppShell() {
   const isAdmin = usuario?.papel === "admin";
   const ehGestorHierarquico = usuario?.papel === "admin" && ["distribuidor", "revendedor"].includes(usuario.tenant_tipo);
   const ehAdminDistribuidor = usuario?.papel === "admin" && usuario.tenant_tipo === "distribuidor";
+  const temModuloMap = temLicencaAtiva && (usuario?.recursos_plano.modulo_map ?? false);
+  const temModuloPredator = temLicencaAtiva && (usuario?.recursos_plano.modulo_predator ?? false);
+  const temModuloCrm = temLicencaAtiva && (usuario?.recursos_plano.modulo_crm ?? false);
   const navItems = temLicencaAtiva
-    ? [NAV_ITEMS_PAGOS[0], CRM_ITEM, ...CRM_SUBITENS, NAV_ITEMS_PAGOS[1], ...PREDATOR_NAV_ITEMS, NAV_ITEM_REDE_SOCIAL]
+    ? [
+        NAV_ITEMS_PAGOS[0],
+        ...(temModuloCrm ? [CRM_ITEM, ...CRM_SUBITENS] : []),
+        ...(temModuloMap ? [NAV_ITEMS_PAGOS[1]] : []),
+        ...(temModuloPredator ? PREDATOR_NAV_ITEMS : []),
+        NAV_ITEM_REDE_SOCIAL,
+      ]
     : [NAV_ITEM_REDE_SOCIAL];
 
   return (
@@ -695,7 +704,7 @@ export function AppShell() {
             </div>
           )}
 
-          {temLicencaAtiva && (
+          {temModuloCrm && (
             <div data-tour-id="crm">
               <NavGroup
                 label={CRM_ITEM.label}
@@ -708,13 +717,13 @@ export function AppShell() {
             </div>
           )}
 
-          {temLicencaAtiva && (
+          {temModuloMap && (
             <div data-tour-id="map">
               <NavButton {...NAV_ITEMS_PAGOS[1]} collapsed={collapsed} />
             </div>
           )}
 
-          {temLicencaAtiva && (
+          {temModuloPredator && (
             <div data-tour-id="predator">
               <NavGroup
                 label="Predator"
@@ -731,7 +740,7 @@ export function AppShell() {
             <NavButton {...NAV_ITEM_REDE_SOCIAL} collapsed={collapsed} />
           </div>
 
-          {temLicencaAtiva && (
+          {temModuloPredator && (
             <div data-tour-id="leads">
               {!collapsed && (
                 <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">Leads</div>
@@ -742,7 +751,7 @@ export function AppShell() {
             </div>
           )}
 
-          {temLicencaAtiva && (usuario?.recursos_plano.registro_oportunidade || isSuperAdmin) && (
+          {temModuloPredator && (usuario?.recursos_plano.registro_oportunidade || isSuperAdmin) && (
             <div data-tour-id="ro">
               {!collapsed && (
                 <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-widest text-nav-muted uppercase">RO</div>

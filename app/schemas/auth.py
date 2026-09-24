@@ -15,6 +15,11 @@ class RecursosPlanoSchema(BaseModel):
     subtenants: bool = False
     registro_oportunidade: bool = False
     retencao_dias_relatorio: int | None = None
+    # Contratação avulsa por módulo (raio-X 2026-09-24) — um plano de
+    # suíte libera os três; um plano avulso só o(s) contratado(s).
+    modulo_map: bool = False
+    modulo_predator: bool = False
+    modulo_crm: bool = False
 
 
 class UsuarioSchema(BaseModel):

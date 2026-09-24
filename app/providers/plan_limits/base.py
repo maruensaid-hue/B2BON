@@ -70,3 +70,13 @@ class PlanLimitsProvider(ABC):
     @abstractmethod
     def obter_retencao_dias_auditoria(self, tenant_id: str) -> int | None:
         raise NotImplementedError
+
+    @abstractmethod
+    def permite_modulo(self, tenant_id: str, modulo: str) -> bool:
+        """Contratação avulsa por módulo (raio-X 2026-09-24) — `modulo` é
+        "map"/"predator"/"crm". Todo plano de suíte libera os três; um
+        plano avulso libera só o(s) módulo(s) contratado(s). Sem licença
+        ativa nenhuma, `False` pra qualquer módulo (mesmo padrão de
+        `obter_limite_enriquecimento_*`: ausência de plano bloqueia, não
+        libera)."""
+        raise NotImplementedError
