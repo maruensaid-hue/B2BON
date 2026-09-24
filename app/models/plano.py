@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Float, Integer, String
+from sqlalchemy import JSON, Boolean, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -55,3 +55,13 @@ class Plano(Base):
     # Nulo = sem limite — mesmo padrão dos limites de enriquecimento acima.
     retencao_dias_relatorio: Mapped[int | None] = mapped_column(Integer, nullable=True)
     retencao_dias_auditoria: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Contratação avulsa por módulo (raio-X 2026-09-24) — lista de
+    # "map"/"predator"/"crm" que esse plano libera (mesmo padrão JSON já
+    # usado em `Cadencia.canais`/`Usuario.tutoriais_modulo_vistos`).
+    # `categoria` só organiza a exibição no picker de checkout ("suite" =
+    # os 5 planos originais, com os 3 módulos sempre juntos; "modulo" =
+    # os planos avulsos novos, com só 1 módulo cada) — não tem nenhum
+    # papel na checagem de acesso, que olha só `modulos_contratados`.
+    modulos_contratados: Mapped[list] = mapped_column(JSON, default=list)
+    categoria: Mapped[str] = mapped_column(String, default="suite", server_default="suite")

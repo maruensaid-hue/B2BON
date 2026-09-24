@@ -72,3 +72,43 @@ def test_limite_enriquecimento_sem_licenca_bloqueia_com_zero(db_session):
 
     assert provider.obter_limite_enriquecimento_site_semanal("tenant-sem-licenca") == 0
     assert provider.obter_limite_enriquecimento_contatos_semanal("tenant-sem-licenca") == 0
+
+
+def test_plano_de_suite_libera_os_tres_modulos(db_session):
+    plano = Plano(
+        nome="Enterprise", franquia_contas_mes=5000, max_usuarios=20, preco_mensal=2958.40,
+        modulos_contratados=["map", "predator", "crm"],
+    )
+    db_session.add(plano)
+    db_session.flush()
+    db_session.add(Licenca(tenant_id=TENANT_ID, plano_id=plano.id, status="ativa"))
+    db_session.commit()
+
+    provider = NucleoPlanLimitsProvider(db_session)
+
+    assert provider.permite_modulo(TENANT_ID, "map") is True
+    assert provider.permite_modulo(TENANT_ID, "predator") is True
+    assert provider.permite_modulo(TENANT_ID, "crm") is True
+
+
+def test_plano_avulso_libera_so_o_modulo_contratado(db_session):
+    plano = Plano(
+        nome="MAP Starter", franquia_contas_mes=0, max_usuarios=5, preco_mensal=149.50,
+        modulos_contratados=["map"],
+    )
+    db_session.add(plano)
+    db_session.flush()
+    db_session.add(Licenca(tenant_id=TENANT_ID, plano_id=plano.id, status="ativa"))
+    db_session.commit()
+
+    provider = NucleoPlanLimitsProvider(db_session)
+
+    assert provider.permite_modulo(TENANT_ID, "map") is True
+    assert provider.permite_modulo(TENANT_ID, "predator") is False
+    assert provider.permite_modulo(TENANT_ID, "crm") is False
+
+
+def test_permite_modulo_sem_licenca_bloqueia(db_session):
+    provider = NucleoPlanLimitsProvider(db_session)
+
+    assert provider.permite_modulo("tenant-sem-licenca", "map") is False

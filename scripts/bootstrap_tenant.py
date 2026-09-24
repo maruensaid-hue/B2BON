@@ -35,11 +35,15 @@ POC_STARTER_TESTE = {
     "permite_registro_oportunidade": False,
     "retencao_dias_relatorio": 30, "retencao_dias_auditoria": 90,
 }
+# Contratação avulsa por módulo (raio-X 2026-09-24) — todo plano de
+# suíte libera os três módulos.
+_TODOS_MODULOS = ["map", "predator", "crm"]
 PLANOS_PADRAO = [
     {
         "nome": "POC", "franquia_contas_mes": 50, "max_usuarios": 3, "preco_mensal": 0.0,
         "limite_enriquecimento_site_semanal": 15, "limite_enriquecimento_contatos_semanal": 15,
         "limite_cadencias_mes": 5, "limite_campanhas_mes": 2,
+        "modulos_contratados": _TODOS_MODULOS, "categoria": "suite",
         **POC_STARTER_TESTE,
     },
     {
@@ -51,6 +55,7 @@ PLANOS_PADRAO = [
         "visivel_self_service": False,
         "limite_enriquecimento_site_semanal": 50, "limite_enriquecimento_contatos_semanal": 50,
         "limite_cadencias_mes": 20, "limite_campanhas_mes": 10,
+        "modulos_contratados": _TODOS_MODULOS, "categoria": "suite",
         **POC_STARTER_TESTE,
     },
     {
@@ -61,12 +66,14 @@ PLANOS_PADRAO = [
         "nome": "Starter", "franquia_contas_mes": 200, "max_usuarios": 5, "preco_mensal": 924.50,
         "limite_enriquecimento_site_semanal": 50, "limite_enriquecimento_contatos_semanal": 50,
         "limite_cadencias_mes": 20, "limite_campanhas_mes": 10,
+        "modulos_contratados": _TODOS_MODULOS, "categoria": "suite",
         **POC_STARTER_TESTE,
     },
     {
         "nome": "Professional", "franquia_contas_mes": 800, "max_usuarios": 10, "preco_mensal": 1664.10,
         "limite_enriquecimento_site_semanal": 200, "limite_enriquecimento_contatos_semanal": 200,
         "limite_cadencias_mes": 80, "limite_campanhas_mes": 40,
+        "modulos_contratados": _TODOS_MODULOS, "categoria": "suite",
         "permite_ab_teste_cadencia": True, "permite_auto_aprovacao": False,
         "permite_webhook_relatorio": True, "permite_api_parceiros": True, "permite_subtenants": True,
         "permite_registro_oportunidade": True,
@@ -76,12 +83,44 @@ PLANOS_PADRAO = [
         "nome": "Enterprise", "franquia_contas_mes": 5000, "max_usuarios": 20, "preco_mensal": 2958.40,
         "limite_enriquecimento_site_semanal": 1250, "limite_enriquecimento_contatos_semanal": 1250,
         "limite_cadencias_mes": 500, "limite_campanhas_mes": 250,
+        "modulos_contratados": _TODOS_MODULOS, "categoria": "suite",
         "permite_ab_teste_cadencia": True, "permite_auto_aprovacao": True,
         "permite_webhook_relatorio": True, "permite_api_parceiros": True, "permite_subtenants": True,
         "permite_registro_oportunidade": True,
         "retencao_dias_relatorio": None, "retencao_dias_auditoria": None,
     },
 ]
+
+# Planos avulsos por módulo (raio-X 2026-09-24) — mesmos valores já
+# publicados em `frontend/src/pages/Planos.tsx`. Franquia/enriquecimento/
+# cadência/campanha só fazem sentido pra quem tem PREDATOR; nos planos
+# MAP/CRM avulsos ficam em 0 (irrelevante, a rota já está bloqueada pelo
+# módulo mesmo assim). "On Demand" por módulo não vira `Plano` — mesmo
+# padrão da suíte, é "fale com o comercial".
+_PLANO_AVULSO_BASE = {
+    "franquia_contas_mes": 0,
+    "limite_enriquecimento_site_semanal": 0, "limite_enriquecimento_contatos_semanal": 0,
+    "limite_cadencias_mes": 0, "limite_campanhas_mes": 0,
+    "categoria": "modulo",
+    "retencao_dias_relatorio": 30, "retencao_dias_auditoria": 90,
+    **POC_STARTER_TESTE,
+}
+for _nome, _preco, _max_usuarios, _modulo in [
+    ("MAP Starter", 149.50, 5, "map"),
+    ("MAP Professional", 269.10, 10, "map"),
+    ("MAP Enterprise", 478.40, 20, "map"),
+    ("PREDATOR Starter", 475.50, 5, "predator"),
+    ("PREDATOR Professional", 855.90, 10, "predator"),
+    ("PREDATOR Enterprise", 1521.60, 20, "predator"),
+    ("CRM Starter", 299.50, 5, "crm"),
+    ("CRM Professional", 539.10, 10, "crm"),
+    ("CRM Enterprise", 958.40, 20, "crm"),
+]:
+    PLANOS_PADRAO.append({
+        "nome": _nome, "max_usuarios": _max_usuarios, "preco_mensal": _preco,
+        "modulos_contratados": [_modulo],
+        **_PLANO_AVULSO_BASE,
+    })
 
 
 def _garantir_planos_padrao(db) -> None:

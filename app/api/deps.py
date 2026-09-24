@@ -384,6 +384,28 @@ def exigir_plano_permite_api_parceiros(
     return usuario
 
 
+_NOMES_MODULO = {"map": "MAP", "predator": "PREDATOR", "crm": "CRM"}
+
+
+def exigir_modulo(modulo: str):
+    """Dependency factory pra contratação avulsa por módulo (raio-X
+    2026-09-24) — mesmo padrão de `exigir_plano_permite_api_parceiros`,
+    mas parametrizada. Combinada com `exigir_licenca_ativa` nas listas de
+    `dependencies=` de `app/api/v1/router.py`: sem licença ativa nenhuma
+    já barra antes desta rodar; com licença ativa mas de um plano avulso
+    de outro módulo, barra aqui."""
+
+    def _dependencia(
+        tenant_id: str = Depends(get_tenant_id),
+        plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+    ) -> None:
+        if not plan_limits.permite_modulo(tenant_id, modulo):
+            nome = _NOMES_MODULO.get(modulo, modulo)
+            raise NaoAutorizado(f"Este recurso é exclusivo de quem contratou o módulo {nome}.")
+
+    return _dependencia
+
+
 def get_chave_api_atual(
     authorization: str | None = Header(None, alias="Authorization"),
     db: Session = Depends(get_db),

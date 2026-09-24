@@ -38,6 +38,9 @@ interface TierModulo {
   nome: string;
   usuarios: string;
   preco: string;
+  /** Ausente = "On Demand" avulso, sem Plano de checkout (preço varia
+   * por assento) — mesmo padrão do "On Demand" da suíte completa. */
+  checkoutPlanoNome?: string;
 }
 
 interface ModuloContratacao {
@@ -45,36 +48,73 @@ interface ModuloContratacao {
   tiers: TierModulo[];
 }
 
-// Contratação avulsa por módulo (raio-X 2026-09-22) — pra quem não quer
-// a suíte inteira. Reaproveita os mesmos valores já validados na
-// contratação da suíte completa (é a mesma linha de cada módulo dentro
-// de cada faixa de `PLANOS` abaixo, só apresentada separada). Shoal
-// fica de fora — é sempre gratuito, não é vendido avulso.
+// Contratação avulsa por módulo (raio-X 2026-09-22, checkout self-service
+// real desde 2026-09-24) — pra quem não quer a suíte inteira. Reaproveita
+// os mesmos valores já validados na contratação da suíte completa (é a
+// mesma linha de cada módulo dentro de cada faixa de `PLANOS` abaixo, só
+// apresentada separada). `checkoutPlanoNome` bate com o nome dos 9 novos
+// `Plano`s avulsos (migração `807d7076f1df`). Shoal fica de fora — é
+// sempre gratuito, não é vendido avulso.
 const CONTRATACAO_POR_MODULO: ModuloContratacao[] = [
   {
     nome: "MAP",
     tiers: [
-      { nome: "Starter", usuarios: "Até 5 usuários", preco: "R$ 149,50/mês" },
-      { nome: "Professional", usuarios: "Até 10 usuários", preco: "R$ 269,10/mês" },
-      { nome: "Enterprise", usuarios: "Até 20 usuários", preco: "R$ 478,40/mês" },
+      { nome: "Starter", usuarios: "Até 5 usuários", preco: "R$ 149,50/mês", checkoutPlanoNome: "MAP Starter" },
+      {
+        nome: "Professional",
+        usuarios: "Até 10 usuários",
+        preco: "R$ 269,10/mês",
+        checkoutPlanoNome: "MAP Professional",
+      },
+      {
+        nome: "Enterprise",
+        usuarios: "Até 20 usuários",
+        preco: "R$ 478,40/mês",
+        checkoutPlanoNome: "MAP Enterprise",
+      },
       { nome: "On Demand", usuarios: "Acima de 20 usuários", preco: "R$ 20,90/usuário/mês" },
     ],
   },
   {
     nome: "PREDATOR",
     tiers: [
-      { nome: "Starter", usuarios: "Até 5 usuários", preco: "R$ 475,50/mês" },
-      { nome: "Professional", usuarios: "Até 10 usuários", preco: "R$ 855,90/mês" },
-      { nome: "Enterprise", usuarios: "Até 20 usuários", preco: "R$ 1.521,60/mês" },
+      {
+        nome: "Starter",
+        usuarios: "Até 5 usuários",
+        preco: "R$ 475,50/mês",
+        checkoutPlanoNome: "PREDATOR Starter",
+      },
+      {
+        nome: "Professional",
+        usuarios: "Até 10 usuários",
+        preco: "R$ 855,90/mês",
+        checkoutPlanoNome: "PREDATOR Professional",
+      },
+      {
+        nome: "Enterprise",
+        usuarios: "Até 20 usuários",
+        preco: "R$ 1.521,60/mês",
+        checkoutPlanoNome: "PREDATOR Enterprise",
+      },
       { nome: "On Demand", usuarios: "Acima de 20 usuários", preco: "R$ 66,90/usuário/mês" },
     ],
   },
   {
     nome: "CRM",
     tiers: [
-      { nome: "Starter", usuarios: "Até 5 usuários", preco: "R$ 299,50/mês" },
-      { nome: "Professional", usuarios: "Até 10 usuários", preco: "R$ 539,10/mês" },
-      { nome: "Enterprise", usuarios: "Até 20 usuários", preco: "R$ 958,40/mês" },
+      { nome: "Starter", usuarios: "Até 5 usuários", preco: "R$ 299,50/mês", checkoutPlanoNome: "CRM Starter" },
+      {
+        nome: "Professional",
+        usuarios: "Até 10 usuários",
+        preco: "R$ 539,10/mês",
+        checkoutPlanoNome: "CRM Professional",
+      },
+      {
+        nome: "Enterprise",
+        usuarios: "Até 20 usuários",
+        preco: "R$ 958,40/mês",
+        checkoutPlanoNome: "CRM Enterprise",
+      },
       { nome: "On Demand", usuarios: "Acima de 20 usuários", preco: "R$ 41,90/usuário/mês" },
     ],
   },
@@ -237,7 +277,17 @@ export function Planos() {
                       <div className="font-semibold text-text">{tier.nome}</div>
                       <div className="text-[10.5px] text-muted">{tier.usuarios}</div>
                     </div>
-                    <div className="flex-shrink-0 font-head text-[12.5px] font-bold text-cyan">{tier.preco}</div>
+                    <div className="flex-shrink-0 text-right">
+                      <div className="font-head text-[12.5px] font-bold text-cyan">{tier.preco}</div>
+                      {tier.checkoutPlanoNome && (
+                        <Link
+                          to={`/criar-conta?plano=${encodeURIComponent(tier.checkoutPlanoNome)}`}
+                          className="text-[10px] font-semibold text-cyan hover:underline"
+                        >
+                          Assinar →
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -246,11 +296,11 @@ export function Planos() {
               </div>
               <a
                 href={`mailto:comercial@cyberfort.com.br?subject=${encodeURIComponent(
-                  `Contratação avulsa: ${modulo.nome}`,
+                  `Contratação avulsa: ${modulo.nome} — On Demand / acima de 100 usuários`,
                 )}`}
                 className="mt-1 rounded-lg border border-border px-4 py-2.5 text-center text-[13px] font-bold text-text transition-colors hover:bg-surf2"
               >
-                Falar com o comercial
+                Falar com o comercial (On Demand / +100 usuários)
               </a>
             </div>
           ))}

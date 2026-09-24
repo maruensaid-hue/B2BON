@@ -28,6 +28,10 @@ interface Plano {
   permite_registro_oportunidade: boolean;
   retencao_dias_relatorio: number | null;
   retencao_dias_auditoria: number | null;
+  /** Contratação avulsa por módulo (raio-X 2026-09-24) — "suite" (os 3
+   * módulos sempre juntos) ou "modulo" (só o(s) contratado(s)). */
+  categoria: string;
+  modulos_contratados: string[];
 }
 
 const RECURSOS_PLANO: { campo: keyof Plano; rotulo: string }[] = [
@@ -37,6 +41,12 @@ const RECURSOS_PLANO: { campo: keyof Plano; rotulo: string }[] = [
   { campo: "permite_api_parceiros", rotulo: "API de parceiros" },
   { campo: "permite_subtenants", rotulo: "Criar sub-tenants (revenda)" },
   { campo: "permite_registro_oportunidade", rotulo: "Registro de Oportunidade (RO)" },
+];
+
+const MODULOS_DISPONIVEIS: { valor: string; rotulo: string }[] = [
+  { valor: "map", rotulo: "MAP" },
+  { valor: "predator", rotulo: "PREDATOR" },
+  { valor: "crm", rotulo: "CRM" },
 ];
 
 function campoNumeroOuVazio(valor: FormDataEntryValue | null): number | null {
@@ -78,6 +88,35 @@ function FormularioPlano({
           <input type="checkbox" name="visivel_self_service" defaultChecked={plano?.visivel_self_service ?? true} />
           Visível no cadastro self-service
         </label>
+      </div>
+
+      <div>
+        <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Categoria</div>
+        <select
+          name="categoria"
+          defaultValue={plano?.categoria ?? "suite"}
+          className="w-full rounded-lg border border-border bg-surf px-2.5 py-2 text-[12px] text-text"
+        >
+          <option value="suite">Suíte completa</option>
+          <option value="modulo">Módulo avulso</option>
+        </select>
+      </div>
+      <div>
+        <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+          Módulos contratados (o que este plano libera de verdade)
+        </div>
+        <div className="flex gap-4">
+          {MODULOS_DISPONIVEIS.map(({ valor, rotulo }) => (
+            <label key={valor} className="flex items-center gap-1.5 text-[12px] text-muted">
+              <input
+                type="checkbox"
+                name={`modulo_${valor}`}
+                defaultChecked={plano?.modulos_contratados.includes(valor) ?? true}
+              />
+              {rotulo}
+            </label>
+          ))}
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -189,6 +228,10 @@ export function AdminPlanos() {
       max_usuarios: campoNumeroOuVazio(form.get("max_usuarios")),
       preco_mensal: Number(form.get("preco_mensal")),
       visivel_self_service: form.get("visivel_self_service") === "on",
+      categoria: String(form.get("categoria")),
+      modulos_contratados: MODULOS_DISPONIVEIS.map(({ valor }) => valor).filter(
+        (valor) => form.get(`modulo_${valor}`) === "on",
+      ),
       limite_enriquecimento_site_semanal: campoNumeroOuVazio(form.get("limite_enriquecimento_site_semanal")),
       limite_enriquecimento_contatos_semanal: campoNumeroOuVazio(form.get("limite_enriquecimento_contatos_semanal")),
       limite_cadencias_mes: campoNumeroOuVazio(form.get("limite_cadencias_mes")),
@@ -244,6 +287,7 @@ export function AdminPlanos() {
               <th className="p-2 text-left">Franquia</th>
               <th className="p-2 text-left">Usuários</th>
               <th className="p-2 text-left">Preço</th>
+              <th className="p-2 text-left">Módulos</th>
               <th className="p-2 text-left">Recursos exclusivos</th>
               <th className="p-2 text-left">Ações</th>
             </tr>
@@ -255,6 +299,11 @@ export function AdminPlanos() {
                 <td className="p-2 text-muted">{plano.franquia_contas_mes}</td>
                 <td className="p-2 text-muted">{plano.max_usuarios ?? "Sem limite"}</td>
                 <td className="p-2 text-cyan">R${plano.preco_mensal.toFixed(2)}</td>
+                <td className="p-2 text-muted">
+                  {plano.categoria === "modulo"
+                    ? plano.modulos_contratados.map((m) => m.toUpperCase()).join(", ")
+                    : "Suíte (MAP+PREDATOR+CRM)"}
+                </td>
                 <td className="p-2">
                   <div className="flex flex-wrap gap-1">
                     {RECURSOS_PLANO.filter(({ campo }) => plano[campo]).map(({ campo, rotulo }) => (
@@ -276,7 +325,7 @@ export function AdminPlanos() {
             ))}
             {planos.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-4 text-center text-muted">
+                <td colSpan={7} className="p-4 text-center text-muted">
                   Nenhum plano cadastrado ainda.
                 </td>
               </tr>

@@ -17,12 +17,55 @@ interface Plano {
   limite_enriquecimento_contatos_semanal: number | null;
   limite_cadencias_mes: number | null;
   limite_campanhas_mes: number | null;
+  categoria: string;
+  modulos_contratados: string[];
 }
 
 // Letras miúdas da janela de assinatura (raio-X 2026-09-22) — mesmo
 // padrão de `CriarConta.tsx`.
 function formatarLimite(valor: number | null): string {
   return valor === null ? "sem limite" : String(valor);
+}
+
+function PlanoOpcao({
+  plano,
+  selecionado,
+  onSelecionar,
+}: {
+  plano: Plano;
+  selecionado: boolean;
+  onSelecionar: (id: number) => void;
+}) {
+  const temPredator = plano.modulos_contratados.includes("predator");
+  return (
+    <button
+      type="button"
+      onClick={() => onSelecionar(plano.id)}
+      className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left text-[12px] transition-colors ${
+        selecionado ? "border-cyan bg-cyan/10" : "border-border hover:bg-surf2"
+      }`}
+    >
+      <div>
+        <div className="font-semibold">{plano.nome}</div>
+        <div className="text-[10.5px] text-muted">
+          {plano.max_usuarios != null ? `Até ${plano.max_usuarios} usuários` : "Usuários ilimitados"}
+          {temPredator && ` · ${plano.franquia_contas_mes} contas/mês`}
+        </div>
+        {temPredator && (
+          <div className="mt-1 text-[9px] leading-snug text-muted/70">
+            Limites do plano: {formatarLimite(plano.limite_enriquecimento_site_semanal)} pesquisas de site e{" "}
+            {formatarLimite(plano.limite_enriquecimento_contatos_semanal)} de contatos por semana ·{" "}
+            {formatarLimite(plano.limite_cadencias_mes)} cadências e {formatarLimite(plano.limite_campanhas_mes)}{" "}
+            campanhas por mês.
+          </div>
+        )}
+      </div>
+      <div className="flex-shrink-0 font-head text-[13px] font-bold text-cyan">
+        R${plano.preco_mensal.toFixed(0)}
+        <span className="text-[9.5px] font-normal text-muted">/mês</span>
+      </div>
+    </button>
+  );
 }
 
 interface InfoConvite {
@@ -54,6 +97,9 @@ export function ConviteVitrine() {
       })
       .catch(() => setErro("Este link de convite não é mais válido."));
   }, [codigo]);
+
+  const planosSuite = planos.filter((plano) => plano.categoria !== "modulo");
+  const planosModulo = planos.filter((plano) => plano.categoria === "modulo");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -156,39 +202,36 @@ export function ConviteVitrine() {
           ) : (
             <div>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Escolha um plano</div>
+              {planosSuite.length > 0 && (
+                <div className="mb-1 text-[9.5px] font-semibold tracking-wide text-muted uppercase">
+                  Suíte completa
+                </div>
+              )}
               <div className="flex flex-col gap-2">
-                {planos.map((plano) => (
-                  <button
-                    key={plano.id}
-                    type="button"
-                    onClick={() => setPlanoId(plano.id)}
-                    className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left text-[12px] transition-colors ${
-                      planoId === plano.id ? "border-cyan bg-cyan/10" : "border-border hover:bg-surf2"
-                    }`}
-                  >
-                    <div>
-                      <div className="font-semibold">{plano.nome}</div>
-                      <div className="text-[10.5px] text-muted">
-                        {plano.max_usuarios != null ? `Até ${plano.max_usuarios} usuários` : "Usuários ilimitados"} ·{" "}
-                        {plano.franquia_contas_mes} contas/mês
-                      </div>
-                      <div className="mt-1 text-[9px] leading-snug text-muted/70">
-                        Limites do plano: {formatarLimite(plano.limite_enriquecimento_site_semanal)} pesquisas de site
-                        e {formatarLimite(plano.limite_enriquecimento_contatos_semanal)} de contatos por semana ·{" "}
-                        {formatarLimite(plano.limite_cadencias_mes)} cadências e{" "}
-                        {formatarLimite(plano.limite_campanhas_mes)} campanhas por mês.
-                      </div>
-                    </div>
-                    <div className="flex-shrink-0 font-head text-[13px] font-bold text-cyan">
-                      R${plano.preco_mensal.toFixed(0)}
-                      <span className="text-[9.5px] font-normal text-muted">/mês</span>
-                    </div>
-                  </button>
+                {planosSuite.map((plano) => (
+                  <PlanoOpcao key={plano.id} plano={plano} selecionado={planoId === plano.id} onSelecionar={setPlanoId} />
                 ))}
-                {planos.length === 0 && !erro && (
-                  <div className="text-[11px] text-muted">Carregando planos...</div>
-                )}
               </div>
+              {planosModulo.length > 0 && (
+                <>
+                  <div className="mt-3 mb-1 text-[9.5px] font-semibold tracking-wide text-muted uppercase">
+                    Módulos avulsos
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {planosModulo.map((plano) => (
+                      <PlanoOpcao
+                        key={plano.id}
+                        plano={plano}
+                        selecionado={planoId === plano.id}
+                        onSelecionar={setPlanoId}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+              {planos.length === 0 && !erro && (
+                <div className="text-[11px] text-muted">Carregando planos...</div>
+              )}
             </div>
           )}
 

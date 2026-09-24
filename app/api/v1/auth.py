@@ -90,6 +90,9 @@ def _resposta_token(
         subtenants=plan_limits.permite_subtenants(usuario.tenant_id),
         registro_oportunidade=plan_limits.permite_registro_oportunidade(usuario.tenant_id),
         retencao_dias_relatorio=plan_limits.obter_retencao_dias_relatorio(usuario.tenant_id),
+        modulo_map=plan_limits.permite_modulo(usuario.tenant_id, "map"),
+        modulo_predator=plan_limits.permite_modulo(usuario.tenant_id, "predator"),
+        modulo_crm=plan_limits.permite_modulo(usuario.tenant_id, "crm"),
     )
     tem_conta_atribuida = (
         db.query(Conta).filter_by(tenant_id=usuario.tenant_id, vendedor_usuario_id=usuario.id).first() is not None

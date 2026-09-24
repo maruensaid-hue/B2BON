@@ -75,3 +75,7 @@ class NucleoPlanLimitsProvider(PlanLimitsProvider):
     def obter_retencao_dias_auditoria(self, tenant_id: str) -> int | None:
         plano = self._plano_ativo(tenant_id)
         return plano.retencao_dias_auditoria if plano is not None else 0
+
+    def permite_modulo(self, tenant_id: str, modulo: str) -> bool:
+        plano = self._plano_ativo(tenant_id)
+        return modulo in plano.modulos_contratados if plano is not None else False

@@ -21,6 +21,11 @@ export interface RecursosPlano {
   subtenants: boolean;
   registro_oportunidade: boolean;
   retencao_dias_relatorio: number | null;
+  /** Contratação avulsa por módulo (raio-X 2026-09-24) — um plano de
+   * suíte libera os três; um plano avulso só o(s) contratado(s). */
+  modulo_map: boolean;
+  modulo_predator: boolean;
+  modulo_crm: boolean;
 }
 
 export interface Usuario {
