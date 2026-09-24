@@ -54,6 +54,7 @@ const PREDATOR_NAV_ITEMS: NavItem[] = [
   { path: "/campanhas", label: "Campanhas", icon: "📣", descricao: "Disparo em massa" },
   { path: "/aprovacoes", label: "Aprovações", icon: "✅", descricao: "Revisar mensagens da IA" },
   { path: "/reunioes", label: "Reuniões", icon: "📅", descricao: "Lembretes e transcrição" },
+  { path: "/agenda", label: "Agenda", icon: "🗓️", descricao: "Visão semanal de compromissos" },
   { path: "/relatorio-entrega", label: "Relatório de Entrega", icon: "📊", descricao: "Taxas de entrega" },
   { path: "/regras-aprendidas", label: "Regras Aprendidas", icon: "🧠", descricao: "Regras de estilo" },
   { path: "/inteligencia-rede", label: "Sinais de Oportunidade", icon: "🧭", descricao: "Fit e matches" },

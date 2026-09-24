@@ -2,16 +2,16 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
+import { PropostasNegocio } from "@/components/PropostasNegocio";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
 import { ImportarExportarNegocios } from "@/pages/crm/ImportarExportarNegocios";
 import { TutorialCrm } from "@/pages/crm/TutorialCrm";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
-import { api, ApiError, getBlob, postFile } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 const MOTIVOS_PERDA = [
@@ -51,20 +51,6 @@ interface DecisorResumo {
 interface OfertaResumo {
   id: number;
   nome: string;
-}
-
-interface PropostaNegocio {
-  id: number;
-  negocio_id: number;
-  versao: number;
-  numero: number | null;
-  nome: string | null;
-  nome_arquivo: string;
-  tipo_mime: string;
-  tamanho_bytes: number;
-  gerada_automaticamente: boolean;
-  enviada_por_usuario_id: number | null;
-  criado_em: string;
 }
 
 interface ICP {
@@ -126,10 +112,6 @@ export function Kanban() {
   const [meetingBrief, setMeetingBrief] = useState<string | null>(null);
   const [gerandoBrief, setGerandoBrief] = useState(false);
   const [atividadesDoNegocio, setAtividadesDoNegocio] = useState<Atividade[]>([]);
-  const [propostasDoNegocio, setPropostasDoNegocio] = useState<PropostaNegocio[]>([]);
-  const [enviandoProposta, setEnviandoProposta] = useState(false);
-  const [nomeNovaProposta, setNomeNovaProposta] = useState("");
-  const [erroProposta, setErroProposta] = useState<string | null>(null);
   const [contaEmEdicaoModalAberta, setContaEmEdicaoModalAberta] = useState(false);
   const [modalEditarFunilAberto, setModalEditarFunilAberto] = useState(false);
   const [estagioRenomeandoId, setEstagioRenomeandoId] = useState<number | null>(null);
@@ -254,17 +236,14 @@ export function Kanban() {
   }
 
   useEffect(() => {
-    setNomeNovaProposta("");
     setMeetingBrief(null);
     if (!negocioEmEdicao) {
       setDecisoresDaContaEmEdicao([]);
       setAtividadesDoNegocio([]);
-      setPropostasDoNegocio([]);
       return;
     }
     recarregarDecisoresDaContaEmEdicao();
     carregarAtividadesDoNegocio(negocioEmEdicao.id);
-    carregarPropostasDoNegocio(negocioEmEdicao.id);
   }, [negocioEmEdicao]);
 
   async function carregarAtividadesDoNegocio(negocioId: number) {
@@ -293,45 +272,6 @@ export function Kanban() {
     if (!negocioEmEdicao) return;
     await api.post(`/crm/negocios/${negocioEmEdicao.id}/atividades`, { tipo, descricao });
     await carregarAtividadesDoNegocio(negocioEmEdicao.id);
-  }
-
-  async function carregarPropostasDoNegocio(negocioId: number) {
-    try {
-      setPropostasDoNegocio(await api.get<PropostaNegocio[]>(`/crm/negocios/${negocioId}/propostas`));
-    } catch {
-      setPropostasDoNegocio([]);
-    }
-  }
-
-  async function enviarProposta(arquivo: File) {
-    if (!negocioEmEdicao || enviandoProposta) return;
-    setEnviandoProposta(true);
-    setErroProposta(null);
-    try {
-      const nome = nomeNovaProposta.trim();
-      await postFile(`/crm/negocios/${negocioEmEdicao.id}/propostas`, arquivo, nome ? { nome } : undefined);
-      setNomeNovaProposta("");
-      await carregarPropostasDoNegocio(negocioEmEdicao.id);
-    } catch (error) {
-      setErroProposta(error instanceof ApiError ? error.message : "Não foi possível enviar a proposta.");
-    } finally {
-      setEnviandoProposta(false);
-    }
-  }
-
-  async function baixarProposta(proposta: PropostaNegocio) {
-    if (!negocioEmEdicao) return;
-    try {
-      const blob = await getBlob(`/crm/negocios/${negocioEmEdicao.id}/propostas/${proposta.id}/download`);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = proposta.nome_arquivo;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setErroProposta("Não foi possível baixar a proposta.");
-    }
   }
 
   async function moverEstagio(negocioId: number, estagioId: number, motivoPerda?: string) {
@@ -874,13 +814,18 @@ export function Kanban() {
               <span>
                 Empresa: <span className="font-semibold text-text">{negocioEmEdicao.conta_nome}</span>
               </span>
-              <button
-                type="button"
-                className="text-cyan hover:underline"
-                onClick={() => setContaEmEdicaoModalAberta(true)}
-              >
-                Editar empresa / enriquecer contatos
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="text-cyan hover:underline"
+                  onClick={() => setContaEmEdicaoModalAberta(true)}
+                >
+                  Editar empresa / enriquecer contatos
+                </button>
+                <Link to={`/crm/negocios/${negocioEmEdicao.id}`} className="text-cyan hover:underline">
+                  ⤢ Abrir tela completa
+                </Link>
+              </div>
             </div>
             <div>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome do negócio</div>
@@ -940,65 +885,14 @@ export function Kanban() {
             >
               {gerandoBrief ? "Preparando..." : "🧠 Preparar reunião"}
             </button>
-            {meetingBrief && (
-              <div className="mt-2 rounded-md bg-surf2 p-2 text-[11px] whitespace-pre-line text-text">
-                {meetingBrief}
-              </div>
-            )}
+            <div className="mt-2 rounded-md bg-surf2 p-2 text-[11px] whitespace-pre-line text-text">
+              {meetingBrief ?? <span className="text-muted">Nenhum resumo gerado ainda.</span>}
+            </div>
           </div>
 
           <ListaAtividades atividades={atividadesDoNegocio} aoRegistrar={registrarAtividadeDoNegocio} />
 
-          <div>
-            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Propostas</div>
-            <div className="mb-3 flex flex-col gap-2 rounded-lg border border-border p-2.5">
-              {erroProposta && <div className="text-[11px] text-red">{erroProposta}</div>}
-              <Input
-                value={nomeNovaProposta}
-                onChange={(event) => setNomeNovaProposta(event.target.value)}
-                placeholder="Nome da proposta (opcional)"
-                className="text-[11px]"
-              />
-              <SeletorArquivo
-                accept=".pdf,.docx"
-                disabled={enviandoProposta}
-                onSelecionar={enviarProposta}
-                rotulo={enviandoProposta ? "Enviando..." : "Selecionar arquivo"}
-              />
-              <Link
-                to={`/crm/propostas/nova?negocio_id=${negocioEmEdicao.id}`}
-                className="text-[11px] text-cyan hover:underline"
-              >
-                Gerar proposta automática →
-              </Link>
-            </div>
-
-            {propostasDoNegocio.length === 0 ? (
-              <div className="text-[11px] text-muted">Nenhuma proposta anexada ainda.</div>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {propostasDoNegocio.map((proposta) => (
-                  <div key={proposta.id} className="flex items-center justify-between gap-2 border-b border-border py-1 text-[11px]">
-                    <div>
-                      <div className="text-text">
-                        v{proposta.versao} — {proposta.nome ?? proposta.nome_arquivo}
-                        {proposta.numero && <span className="text-muted"> (#{proposta.numero})</span>}
-                        {proposta.gerada_automaticamente && (
-                          <span className="ml-1.5 rounded-full bg-cyan/15 px-1.5 py-px text-[10px] text-cyan">
-                            gerada automaticamente
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-muted">{new Date(proposta.criado_em).toLocaleString("pt-BR")}</div>
-                    </div>
-                    <button type="button" className="text-cyan hover:underline" onClick={() => baixarProposta(proposta)}>
-                      Baixar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <PropostasNegocio negocioId={negocioEmEdicao.id} />
           </div>
         )}
       </Modal>
