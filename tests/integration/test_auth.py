@@ -98,6 +98,38 @@ def test_marcar_tutorial_modulo_visto_e_idempotente(client, criar_usuario_autent
     assert usuario.tutoriais_modulo_vistos == ["crm", "prospeccao"]
 
 
+@pytest.mark.parametrize(
+    "endpoint,payload",
+    [
+        ("/api/v1/auth/marcar-tutorial-modulo-visto", {"modulo": "crm"}),
+        ("/api/v1/auth/dispensar-banner-boas-vindas", None),
+        ("/api/v1/auth/whatsapp-pessoal", {"whatsapp_pessoal": "11999990000"}),
+    ],
+)
+def test_endpoints_de_usuario_nao_apagam_recursos_plano(
+    client, criar_usuario_autenticado, endpoint, payload
+):
+    """Raio-X 2026-09-24 (bug real reportado por usuário): esses endpoints
+    devolvem `UsuarioSchema`, mas `recursos_plano`/`tenant_tipo` nunca vêm
+    de `Usuario` (são enriquecidos a partir do `Plano`/`Tenant` de
+    verdade). Um `return usuario` cru fazia esses campos caírem nos
+    defaults do schema (tudo `False`) — se o frontend confiasse nessa
+    resposta pra substituir a sessão inteira (como `marcarTutorialModulo
+    Visto` fazia), CRM/MAP/PREDATOR sumiam da sidebar até logout/login.
+    Método HTTP varia (PUT pro whatsapp-pessoal), então bate direto no
+    client conforme necessário."""
+    headers = criar_usuario_autenticado(TENANT_ID, papel="user", email=f"regressao-{endpoint.split('/')[-1]}@teste.com.br")
+    metodo = client.put if endpoint.endswith("whatsapp-pessoal") else client.post
+
+    resposta = metodo(endpoint, json=payload, headers=headers)
+
+    assert resposta.status_code == 200
+    recursos_plano = resposta.json()["recursos_plano"]
+    assert recursos_plano["modulo_map"] is True
+    assert recursos_plano["modulo_predator"] is True
+    assert recursos_plano["modulo_crm"] is True
+
+
 def test_login_reflete_tutoriais_modulo_vistos_nulo_por_padrao(client, db_session):
     _criar_usuario_senha(db_session, "sem-tutorial@teste.com.br", "senha-forte")
 

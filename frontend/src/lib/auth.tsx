@@ -237,9 +237,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const marcarTutorialModuloVisto = useCallback(async (modulo: string) => {
-    const atualizado = await api.post<Usuario>("/auth/marcar-tutorial-modulo-visto", { modulo });
-    setUsuario(atualizado);
-    atualizarUsuarioSalvo(atualizado);
+    // Raio-X 2026-09-24 (bug real reportado): NUNCA substituir `usuario`
+    // pela resposta deste endpoint — `/auth/marcar-tutorial-modulo-visto`
+    // devolve o `Usuario` cru do banco, sem `recursos_plano`/`tenant_tipo`
+    // (campos só enriquecidos em `_resposta_token`, no login). Um
+    // `setUsuario(resposta)` direto apagava `recursos_plano.modulo_*` da
+    // sessão (voltavam ao default `False` do schema), escondendo CRM/MAP/
+    // PREDATOR da sidebar até fazer logout/login de novo. Mesmo padrão
+    // seguro de merge já usado por `dispensarBannerBoasVindas` etc. acima.
+    await api.post("/auth/marcar-tutorial-modulo-visto", { modulo });
+    setUsuario((atual) => {
+      if (!atual || (atual.tutoriais_modulo_vistos ?? []).includes(modulo)) return atual;
+      const atualizado = { ...atual, tutoriais_modulo_vistos: [...(atual.tutoriais_modulo_vistos ?? []), modulo] };
+      atualizarUsuarioSalvo(atualizado);
+      return atualizado;
+    });
   }, []);
 
   const value = useMemo<AuthContextValue>(

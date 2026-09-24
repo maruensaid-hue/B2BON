@@ -72,14 +72,21 @@ def _enviar_email_boas_vindas_primeiro_login(usuario: Usuario, email_provider: E
         logger.warning("Falha ao enviar e-mail de boas-vindas pro usuário %s", usuario.id, exc_info=True)
 
 
-def _resposta_token(
-    usuario: Usuario,
-    db: Session,
-    checkout_url: str | None = None,
-    primeiro_login: bool = False,
-    email_provider: EmailProvider | None = None,
-) -> TokenResponseSchema:
-    licenca = db.query(Licenca).filter_by(tenant_id=usuario.tenant_id).one_or_none()
+def _construir_usuario_schema(usuario: Usuario, db: Session) -> UsuarioSchema:
+    """Único lugar que monta o `UsuarioSchema` completo — `tenant_tipo`,
+    `recursos_plano`, `aviso_whatsapp_template_confirmado` e
+    `tem_conta_atribuida` NUNCA vêm de `Usuario` (a docstring de cada
+    campo em `UsuarioSchema` explica de onde vêm de verdade), então
+    `UsuarioSchema.model_validate(usuario)` sozinho sempre cai nos
+    defaults do schema (ex.: `recursos_plano` todo `False`).
+
+    Raio-X 2026-09-24 (bug real reportado): `marcar_tutorial_modulo_visto`
+    fazia só `return usuario` (o ORM cru) sob este mesmo `response_model`
+    — o frontend substituía a sessão inteira por essa resposta incompleta,
+    apagando `recursos_plano.modulo_map/predator/crm` e escondendo CRM/MAP/
+    PREDATOR da sidebar até logout/login. Todo endpoint que devolve
+    `UsuarioSchema` fora do login tem que passar por aqui, não só
+    `return usuario`."""
     tenant = db.query(Tenant).filter_by(id=usuario.tenant_id).one_or_none()
     plan_limits = NucleoPlanLimitsProvider(db)
     recursos_plano = RecursosPlanoSchema(
@@ -97,7 +104,7 @@ def _resposta_token(
     tem_conta_atribuida = (
         db.query(Conta).filter_by(tenant_id=usuario.tenant_id, vendedor_usuario_id=usuario.id).first() is not None
     )
-    usuario_schema = UsuarioSchema.model_validate(usuario).model_copy(
+    return UsuarioSchema.model_validate(usuario).model_copy(
         update={
             "tenant_tipo": tenant.tipo if tenant is not None else "cliente",
             "recursos_plano": recursos_plano,
@@ -105,6 +112,17 @@ def _resposta_token(
             "tem_conta_atribuida": tem_conta_atribuida,
         }
     )
+
+
+def _resposta_token(
+    usuario: Usuario,
+    db: Session,
+    checkout_url: str | None = None,
+    primeiro_login: bool = False,
+    email_provider: EmailProvider | None = None,
+) -> TokenResponseSchema:
+    licenca = db.query(Licenca).filter_by(tenant_id=usuario.tenant_id).one_or_none()
+    usuario_schema = _construir_usuario_schema(usuario, db)
     if primeiro_login and email_provider is not None:
         _enviar_email_boas_vindas_primeiro_login(usuario, email_provider)
     return TokenResponseSchema(
@@ -245,8 +263,8 @@ def redefinir_senha(dados: RedefinirSenhaRequestSchema, db: Session = Depends(ge
 
 
 @router.get("/eu", response_model=UsuarioSchema)
-def eu(usuario: Usuario = Depends(get_usuario_atual)) -> UsuarioSchema:
-    return usuario
+def eu(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> UsuarioSchema:
+    return _construir_usuario_schema(usuario, db)
 
 
 @router.put("/whatsapp-pessoal", response_model=UsuarioSchema)
@@ -261,7 +279,7 @@ def atualizar_whatsapp_pessoal(
     usuario.whatsapp_pessoal = dados.whatsapp_pessoal
     db.commit()
     db.refresh(usuario)
-    return usuario
+    return _construir_usuario_schema(usuario, db)
 
 
 @router.post("/dispensar-banner-boas-vindas", response_model=UsuarioSchema)
@@ -273,7 +291,7 @@ def dispensar_banner_boas_vindas(
     usuario.boas_vindas_banner_dispensado = True
     db.commit()
     db.refresh(usuario)
-    return usuario
+    return _construir_usuario_schema(usuario, db)
 
 
 @router.post("/marcar-tutorial-modulo-visto", response_model=UsuarioSchema)
@@ -290,7 +308,7 @@ def marcar_tutorial_modulo_visto(
         usuario.tutoriais_modulo_vistos = [*vistos, dados.modulo]
         db.commit()
         db.refresh(usuario)
-    return usuario
+    return _construir_usuario_schema(usuario, db)
 
 
 @router.get("/licenca-status", response_model=LicencaStatusResponseSchema)
