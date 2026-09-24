@@ -48,15 +48,20 @@ PLANOS_PADRAO = [
     },
     {
         # max_usuarios=None (sem limite) — raio-X 2026-09-22, admin
-        # gratuito precisa convidar quantos vendedores quiser; espelha
-        # Starter só na franquia/enriquecimento/cadência/campanha, não em
-        # usuários (essa restrição específica foi removida de propósito).
+        # gratuito precisa convidar quantos vendedores quiser. permite_
+        # subtenants=True — raio-X 2026-09-24, mesmo racional: quem recebe
+        # o plano Teste pra avaliar a plataforma precisa conseguir testar
+        # a hierarquia de revenda também. Espelha Starter só na franquia/
+        # enriquecimento/cadência/campanha — essas duas restrições
+        # específicas foram removidas de propósito, sobrescrevendo
+        # POC_STARTER_TESTE abaixo.
         "nome": "Teste", "franquia_contas_mes": 200, "max_usuarios": None, "preco_mensal": 0.0,
         "visivel_self_service": False,
         "limite_enriquecimento_site_semanal": 50, "limite_enriquecimento_contatos_semanal": 50,
         "limite_cadencias_mes": 20, "limite_campanhas_mes": 10,
         "modulos_contratados": _TODOS_MODULOS, "categoria": "suite",
         **POC_STARTER_TESTE,
+        "permite_subtenants": True,
     },
     {
         # Preço/limite de usuários alinhados com a tabela comercial
