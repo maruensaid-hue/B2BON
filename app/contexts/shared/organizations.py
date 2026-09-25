@@ -21,16 +21,17 @@ from app.services.errors import NaoEncontrado
 class OrganizationRef(BaseModel):
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
-    id: int
+    # `int` no CRM interno; `str` (id canônico) quando vem de um `CrmAdapter`.
+    id: int | str
     tenant_id: str
     nome: str
     nome_fantasia: str | None = None
     cnpj: str | None = None
     dominio: str | None = None
-    vendedor_usuario_id: int | None = None
+    vendedor_usuario_id: int | str | None = None
     cliente_desde: datetime | None = None
     cliente_cancelado_em: datetime | None = None
-    criado_em: datetime
+    criado_em: datetime | None = None
 
 
 class PersonRef(BaseModel):

@@ -7,15 +7,18 @@ cliente e desempenho por vendedor.
 
 from sqlalchemy.orm import Session
 
-from app.contexts.map import economics, risk, saude
-from app.contexts.map.data_source import CrmInternoMapDataSource, MapDataSource
+from app.contexts.map import economics, interacoes, risk, saude
+from app.contexts.map.data_source import CanonicalMapDataSource, CrmInternoMapDataSource, MapDataSource
 from app.models.usuario import Usuario
 
 calcular_roi = economics.calcular_roi
-listar_interacoes = saude.listar_interacoes
+listar_interacoes = interacoes.listar_interacoes
 TIPOS_INTERACAO_VALIDOS = risk.TIPOS_VALIDOS
 calcular_score = risk.calcular_score
 classificar = risk.classificar
+
+
+__all__ = ["CanonicalMapDataSource", "CrmInternoMapDataSource", "MapDataSource"]
 
 
 def _fonte(db: Session, fonte: MapDataSource | None) -> MapDataSource:
@@ -42,9 +45,10 @@ def economia(
     vendedor_usuario_id: int | None = None,
     fonte: MapDataSource | None = None,
 ) -> dict:
+    fonte_efetiva = _fonte(db, fonte)
     return economics.dashboard_economia(
-        _fonte(db, fonte),
-        lambda conta: saude.score_risco_conta(db, conta)["score"],
+        fonte_efetiva,
+        lambda conta: saude.score_risco(fonte_efetiva, conta)["score"],
         tenant_id,
         periodo,
         vendedor_usuario_id,
@@ -58,7 +62,8 @@ def funil(db: Session, tenant_id: str, vendedor_usuario_id: int | None = None, f
 def vendedores_com_contas(db: Session, tenant_id: str, fonte: MapDataSource | None = None) -> list[dict]:
     """Árvore vendedor → contas, com o score de risco de cada conta. Só
     vendedores com ao menos 1 conta atribuída aparecem."""
-    contas = _fonte(db, fonte).contas(tenant_id, apenas_com_vendedor=True)
+    fonte_efetiva = _fonte(db, fonte)
+    contas = fonte_efetiva.contas(tenant_id, apenas_com_vendedor=True)
     if not contas:
         return []
 
@@ -72,7 +77,7 @@ def vendedores_com_contas(db: Session, tenant_id: str, fonte: MapDataSource | No
             conta.vendedor_usuario_id,
             {"usuario_id": conta.vendedor_usuario_id, "nome": usuario.nome if usuario else "Desconhecido", "contas": []},
         )
-        risco = saude.score_risco_conta(db, conta)
+        risco = saude.score_risco(fonte_efetiva, conta)
         grupo["contas"].append(
             {
                 "id": conta.id,

@@ -1,5 +1,13 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 2 — Canonical Business Model (2026-09-25)
+
+- Modelo canônico comercial (21 entidades) e fundação de procurement (20) em `app/contexts/shared/canonical/`.
+- Contrato de adapter (`app/contexts/integrations/contract.py`) e `B2BOnCrmAdapter`.
+- `CanonicalMapDataSource`: MAP sobre qualquer adapter; paridade provada contra o CRM interno.
+- Eventos de domínio com outbox transacional (`evento_dominio`, migração `1ca76a6cdfbc`); publicados em criação/mudança de estágio de negócio, novo cliente e aprovação de mensagem.
+- Docs: 04_CANONICAL_MODEL, ENTITY_MAPPING, EVENT_MODEL, ADAPTER_CONTRACT, 17_MIGRATION_STRATEGY.
+
 ## Fase 1 — Domain Separation (2026-09-25)
 
 - Novo pacote `app/contexts/` com `shared` (entitlements, Organization/Person),

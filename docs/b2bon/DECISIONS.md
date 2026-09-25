@@ -75,3 +75,28 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   para `staging`, onde nenhum teste rodava.
 - **Decisão**: `ci.yml` dispara em push/PR para `master` e `staging`.
 - **Status**: ACEITA.
+
+## D-010 · 2026-09-25 · Fase 2 · Modelo canônico em Pydantic no Shared Kernel, com proveniência e classificação obrigatórias
+- **Decisão**: `app/contexts/shared/canonical/`. Toda entidade herda
+  `CanonicalEntity(id, tenant_id, source, origin, classification)`.
+  Classificação default INTERNAL; dado interno do comprador default
+  CONFIDENTIAL. Nenhuma tabela nova por entidade canônica: o canônico
+  é contrato de troca, não schema de persistência.
+- **Consequência**: a barreira Buy/Sell (Fase 10) e a Business Network
+  (Fase 7) têm um eixo de classificação para filtrar desde já.
+- **Status**: ACEITA.
+
+## D-011 · 2026-09-25 · Fase 2 · Eventos de domínio via transactional outbox (`evento_dominio`)
+- **Decisão**: `publicar` grava na mesma transação; `processar_pendentes`
+  entrega fora do request, com retry e limite. Sem broker externo.
+- **Consequência**: sem fila/worker (TD-032), o dispatcher roda por cron
+  (Fase 3). Migrar para broker só se o volume exigir.
+- **Status**: ACEITA.
+
+## D-012 · 2026-09-25 · Fase 2 · Revision ids do Alembic são aleatórios; migração testada também em Postgres
+- **Contexto**: o id "legível" `a1b2c3d4e5f6` colidiu com uma migração
+  existente e criou duas heads.
+- **Decisão**: gerar ids com `uuid4().hex[:12]`. Toda migração nova é
+  validada em Postgres 16 local (upgrade → downgrade -1 → upgrade),
+  além do teste SQLite existente.
+- **Status**: ACEITA.

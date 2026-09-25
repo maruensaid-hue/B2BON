@@ -1,7 +1,22 @@
-# 17 — Estratégia de migração (Strangler, §9)
+# 17 — MIGRATION STRATEGY
 
-> **Placeholder criado na Fase 0.** Conteúdo completo será escrito na
-> fase responsável. Não contém decisões ainda.
+## Código: Strangler Pattern (Fases 1+)
 
-- **Fase responsável**: 1 em diante
-- **Estado atual / ponto de partida**: Alembic com cabeça única validada em teste; SQLite e Postgres precisam ser compatíveis. Strangler descrito em `phases/PHASE_1_PLAN.md`.
+1. Criar o destino em `app/contexts/<ctx>/` com contrato.
+2. Mover a implementação; deixar alias/shim no local antigo (TD-039).
+3. Apontar chamadores novos para o contrato; a fitness function impede regressão.
+4. Remover o shim quando não houver mais chamadores.
+
+## Banco: Alembic
+
+- Cabeça única obrigatória (`tests/test_alembic_upgrade.py` roda `upgrade head` em SQLite).
+- Revision id aleatório (`uuid4().hex[:12]`) — D-012.
+- Toda migração nova é testada em Postgres 16 local: upgrade → downgrade -1 → upgrade.
+- Migração compatível com SQLite e Postgres (`sa.func.now()`, booleans como `sa.true()`/strings, sem SQL específico de dialeto).
+- Migração de dados que mexe em preço/plano **só** com instrução do PO.
+
+## Histórico
+
+| Fase | Revisão | O quê |
+|---|---|---|
+| 2 | `1ca76a6cdfbc` | tabela `evento_dominio` |

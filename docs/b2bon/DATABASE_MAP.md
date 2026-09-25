@@ -50,6 +50,8 @@ O `SECURITY_BOUNDARIES.md` de raiz diz que o staging de CNPJ é a
 | Notificação | notificacao_vendedor |
 | Cache | cache_mercado_externo |
 
+**Fase 2:** nova tabela `evento_dominio` (outbox de eventos, `tenant_id` + FK). Total: 93 tabelas.
+
 Nenhuma tabela de Procurement, Bid, Credit Wallet, Usage Ledger
 completo, Entitlement, Integration Registry ou vetores existe.
 

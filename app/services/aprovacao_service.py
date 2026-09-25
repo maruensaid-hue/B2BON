@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.shared import events as eventos
 from app.models.aprovacao import Aprovacao
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
@@ -110,6 +111,7 @@ def _aplicar_regra_auto_aprovacao(
         conta_id=_conta_id_da_mensagem(db, mensagem),
         canal=mensagem.canal,
     )
+    _publicar_mensagem_aprovada(db, tenant_id, None, mensagem)
 
 
 def definir_regra(
@@ -213,6 +215,14 @@ def _obter_aprovacao(db: Session, tenant_id: str, aprovacao_id: int) -> Aprovaca
     return aprovacao
 
 
+def _publicar_mensagem_aprovada(db: Session, tenant_id: str, ator_id: str | None, mensagem: Mensagem) -> None:
+    eventos.publicar(
+        db, eventos.TipoEvento.MESSAGE_APPROVED, tenant_id, "mensagem", mensagem.id,
+        {"canal": mensagem.canal, "decisor_id": mensagem.decisor_id, "cadencia_id": mensagem.cadencia_id},
+        ator_id=ator_id,
+    )
+
+
 def aprovar(db: Session, tenant_id: str, ator_id: str | None, aprovacao_id: int) -> Aprovacao:
     aprovacao = _obter_aprovacao(db, tenant_id, aprovacao_id)
     mensagem = db.query(Mensagem).filter_by(id=aprovacao.mensagem_id).one()
@@ -233,6 +243,7 @@ def aprovar(db: Session, tenant_id: str, ator_id: str | None, aprovacao_id: int)
         conta_id=_conta_id_da_mensagem(db, mensagem),
         canal=mensagem.canal,
     )
+    _publicar_mensagem_aprovada(db, tenant_id, ator_id, mensagem)
     db.commit()
     db.refresh(aprovacao)
     return aprovacao
@@ -264,6 +275,7 @@ def aprovar_lote(db: Session, tenant_id: str, ator_id: str | None, aprovacao_ids
             conta_id=_conta_id_da_mensagem(db, mensagem),
             canal=mensagem.canal,
         )
+        _publicar_mensagem_aprovada(db, tenant_id, ator_id, mensagem)
 
     db.commit()
     for aprovacao in aprovacoes:

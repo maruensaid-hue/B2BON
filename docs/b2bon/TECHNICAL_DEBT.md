@@ -48,4 +48,6 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-038 | `crm_service` ↔ `saude_conta_service` tinham import circular (mitigado com import local) | Fase 0 | Frágil | 1 | PAID (Fase 1: nenhum dos dois importa mais o outro) |
 | TD-039 | Shims de compatibilidade em `conta_service`, `crm_service` e `metricas_service` (aliases para os contextos) | Fase 1 | Dois caminhos para a mesma função | 2–3 (remover quando não houver chamador) | OPEN |
 | TD-040 | `decisores_da_conta(db, conta_id)` não filtra por tenant (confia em validação prévia do chamador) | `contexts/shared/organizations.py` | Risco de isolamento se chamado sem `obter_conta` antes | 2 | OPEN |
+| TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher ainda sem gatilho | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
+| TD-042 | `B2BOnCrmAdapter.list_*` sem paginação para pipelines/estágios/ofertas e `CanonicalMapDataSource` carrega tudo em memória | `adapters/b2bon_crm.py`, `map/data_source.py` | Custo em tenants grandes | 17 | OPEN |
 | TD-037 | `starlette.testclient` com `httpx` deprecated (warning) | saída do pytest | Quebra futura na atualização | oportunista | OPEN |

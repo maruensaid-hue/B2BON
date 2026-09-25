@@ -37,3 +37,4 @@
 |---|---|---|---|
 | 0 | 1.465 passed | lint OK (25 warnings), build OK | 4/4 |
 | 1 | 1.530 passed | lint OK (25 warnings), build OK | 4/4 |
+| 2 | 1.592 passed (+ migração em Postgres 16) | sem mudança | sem mudança |

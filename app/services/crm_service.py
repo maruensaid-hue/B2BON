@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.contexts.map import contract as map_contract
+from app.contexts.shared import events as eventos
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.atividade import Atividade
@@ -273,6 +274,10 @@ def criar_negocio(
     auditoria_service.registrar(
         db, tenant_id, "negocio_criado", "negocio", negocio.id, ator_id, {"conta_id": conta_id}, conta_id=conta_id
     )
+    eventos.publicar(
+        db, eventos.TipoEvento.OPPORTUNITY_CREATED, tenant_id, "negocio", negocio.id,
+        {"conta_id": conta_id, "valor": negocio.valor, "estagio_id": negocio.estagio_id}, ator_id=ator_id,
+    )
     db.commit()
     db.refresh(negocio)
     return negocio
@@ -329,12 +334,14 @@ def mover_estagio(
 
     negocio.estagio_id = novo_estagio.id
 
+    virou_cliente = False
     if novo_estagio.tipo == "ganho":
         if negocio.ganho_em is None:
             negocio.ganho_em = datetime.now(UTC)
         conta = db.query(Conta).filter_by(id=negocio.conta_id).one()
         if conta.cliente_desde is None:
             conta.cliente_desde = datetime.now(UTC)
+            virou_cliente = True
     elif novo_estagio.tipo == "perdido":
         if not motivo_perda or not motivo_perda.strip():
             raise ValidacaoFalhou("Informe o motivo da perda para marcar o negócio como perdido.")
@@ -359,6 +366,15 @@ def mover_estagio(
         {"novo_estagio": novo_estagio.nome, "tipo": novo_estagio.tipo},
         conta_id=negocio.conta_id,
     )
+    eventos.publicar(
+        db, eventos.TipoEvento.OPPORTUNITY_STAGE_CHANGED, tenant_id, "negocio", negocio.id,
+        {"conta_id": negocio.conta_id, "estagio_id": novo_estagio.id, "tipo_estagio": novo_estagio.tipo}, ator_id=ator_id,
+    )
+    if virou_cliente:
+        eventos.publicar(
+            db, eventos.TipoEvento.CUSTOMER_CREATED, tenant_id, "conta", negocio.conta_id,
+            {"negocio_id": negocio.id}, ator_id=ator_id,
+        )
     db.commit()
     db.refresh(negocio)
     return negocio
