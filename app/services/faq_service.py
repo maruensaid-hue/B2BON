@@ -1,9 +1,9 @@
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.faq_item import FaqItem
-from app.services import llm_helpers
 
 
 def criar(db: Session, tenant_id: str, pergunta: str, resposta: str) -> FaqItem:
@@ -120,7 +120,14 @@ Cadências, Campanhas, etc.) exigem licença.
 _LIMITE_TURNOS_HISTORICO = 6
 
 
-def responder(pergunta: str, llm: LLMProvider, historico: list[tuple[str, str]] | None = None) -> str:
+def responder(
+    db: Session,
+    tenant_id: str,
+    usuario_id: int | None,
+    pergunta: str,
+    llm: LLMProvider,
+    historico: list[tuple[str, str]] | None = None,
+) -> str:
     """FAQ interativa com IA (raio-X 2026-09-01) — reaproveita o mesmo
     LLMProvider já usado em cadências/enriquecimento, sem histórico
     persistido no banco (cada chamada é isolada do lado do servidor,
@@ -137,5 +144,9 @@ def responder(pergunta: str, llm: LLMProvider, historico: list[tuple[str, str]] 
             + "\n".join(linhas)
             + f"\n\nNova pergunta do usuário: {pergunta}"
         )
-    resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt, system=_PROMPT_SISTEMA, max_tokens=800))
+    resposta = intel.gerar(
+        db, llm,
+        intel.ContextoIA(tenant_id=tenant_id, feature="plataforma.faq", usuario_id=usuario_id),
+        LLMRequest(prompt=prompt, system=_PROMPT_SISTEMA, max_tokens=800),
+    )
     return resposta.content

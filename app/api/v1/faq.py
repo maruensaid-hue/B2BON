@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_llm_provider, get_tenant_id
+from app.api.deps import get_db, get_llm_provider, get_tenant_id, get_usuario_atual
 from app.llm.base import LLMProvider
+from app.models.usuario import Usuario
 from app.schemas.faq import FaqItemCreateSchema, FaqItemSchema, FaqPerguntarRequestSchema, FaqPerguntarResponseSchema
 from app.services import faq_service
 
@@ -31,6 +32,8 @@ def listar_faq(
 def perguntar_faq(
     dados: FaqPerguntarRequestSchema,
     llm: LLMProvider = Depends(get_llm_provider),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
 ) -> FaqPerguntarResponseSchema:
     """FAQ interativa com IA (raio-X 2026-09-01) — distinta da FaqItem
     curada por tenant acima; qualquer usuário autenticado pode perguntar
@@ -39,4 +42,4 @@ def perguntar_faq(
     (painel de IA docado, raio-X 2026-09-21) dá continuidade de contexto
     sem persistir conversa no servidor."""
     historico = [(t.autor, t.texto) for t in dados.historico] if dados.historico else None
-    return FaqPerguntarResponseSchema(resposta=faq_service.responder(dados.pergunta, llm, historico))
+    return FaqPerguntarResponseSchema(resposta=faq_service.responder(db, usuario.tenant_id, usuario.id, dados.pergunta, llm, historico))

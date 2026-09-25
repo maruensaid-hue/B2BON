@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 import httpx
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.contexts.shared.organizations import decisores_da_conta, normalizar_dominio, obter_conta
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.integrations.brasilapi_client import BrasilApiClient
@@ -32,13 +33,7 @@ from app.providers.account_data.receita_federal_downloader import normalizar_cna
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
-from app.services import (
-    atividade_service,
-    auditoria_service,
-    descarte_service,
-    enriquecimento_limite_service,
-    llm_helpers,
-)
+from app.services import atividade_service, auditoria_service, descarte_service, enriquecimento_limite_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 
@@ -328,8 +323,18 @@ def enriquecer(
             "Tente novamente mais tarde."
         ) from erro
 
-    resposta = llm_helpers.gerar(
+    resposta = intel.gerar(
+        db,
         llm,
+        intel.ContextoIA(
+            tenant_id=tenant_id,
+            feature="predator.enriquecimento_site",
+            usuario_id=ator_id,
+            entidade_tipo="conta",
+            entidade_id=conta_id,
+            # Sem ator = fila de enriquecimento em lote (cron): gatilho automático.
+            gatilho=None if ator_id else intel.registro.Gatilho.AUTOMATICO,
+        ),
         LLMRequest(
             prompt=(
                 f"A seguir está o conteúdo de várias páginas do site institucional da empresa "

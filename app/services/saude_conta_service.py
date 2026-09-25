@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.contexts.map import contract as map_contract
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
@@ -10,7 +11,7 @@ from app.models.decisor import Decisor
 from app.models.interacao_conta import InteracaoConta
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
-from app.services import auditoria_service, llm_helpers, tenant_service
+from app.services import auditoria_service, tenant_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 _TIPOS_VALIDOS = map_contract.TIPOS_INTERACAO_VALIDOS
@@ -188,8 +189,10 @@ def gerar_script_resgate(db: Session, usuario: Usuario, conta_id: int, llm: LLMP
     historico = "\n".join(f"- {i.tipo} ({i.criado_em:%Y-%m-%d}): {i.descricao or ''}" for i in interacoes) or "sem interações registradas"
     contexto_decisor = f" O contato principal é {decisor.nome} ({decisor.cargo or 'decisor'})." if decisor else ""
 
-    resposta = llm_helpers.gerar(
+    resposta = intel.gerar(
+        db,
         llm,
+        intel.ContextoIA(tenant_id=conta.tenant_id, feature="map.script_resgate_conta", usuario_id=usuario.id, entidade_tipo="conta", entidade_id=conta.id),
         LLMRequest(
             prompt=(
                 f"A conta '{conta.nome_fantasia or conta.nome}' está classificada como "

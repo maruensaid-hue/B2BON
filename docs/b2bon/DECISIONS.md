@@ -123,3 +123,41 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Decisão**: entregas únicas por (assinatura, evento), assinatura
   HMAC com timestamp, segredo criptografado em repouso, retry com backoff.
 - **Status**: ACEITA.
+
+## D-016 · 2026-09-25 · Fase 4 · Toda chamada de IA passa pelo AI Gateway, com feature registrada e roteamento C0–C3
+- **Decisão**: `intel.gerar(db, llm, ContextoIA, LLMRequest)` é o único
+  caminho (fitness function). C2 = modelo que já estava em produção
+  (sem troca silenciosa). Quatro features curtas (FAQ, explicar match,
+  sugerir regra, amostra de tom) vão para C1 (econômico).
+- **Consequência**: custo atribuível por tenant/módulo/feature/agente;
+  base do Usage Ledger da Fase 5. Mudança de comportamento: as 4 features
+  C1 respondem com modelo menor (reversível por env).
+- **Status**: ACEITA.
+
+## D-017 · 2026-09-25 · Fase 4 · Corporate Brain sem embeddings (busca por palavra-chave)
+- **Contexto**: volume pequeno por tenant; pgvector exige extensão no
+  Neon e pipeline de embeddings com custo e provider adicional.
+- **Decisão**: busca lexical normalizada, com propósito e orçamento no
+  Context Engine. Reavaliar na Fase 17 com métrica de recall.
+- **Status**: ACEITA.
+
+## D-018 · 2026-09-25 · Fase 4 · Ledger de IA grava em sessão própria, inclusive falhas e bloqueios
+- **Decisão**: o registro de uso é independente da transação do
+  chamador. Falha e bloqueio por teto também são linhas do ledger.
+- **Consequência**: "nenhuma chamada não contabilizada" (§82) vale mesmo
+  com rollback do chamador. Em SQLite de desenvolvimento, com transação
+  de escrita aberta, a gravação pode esperar o lock (TD-046).
+- **Status**: ACEITA.
+
+## D-019 · 2026-09-25 · Fase 5 · Custo do provedor em tabela versionada; créditos só com política definida pelo PO
+- **Decisão**: `preco_modelo_ia` (USD/MTok, com fonte e vigência) mede o
+  custo de toda chamada. A conversão para créditos fica
+  `PENDING_DEFINITION` até o PO definir a taxa: o sistema não inventa preço (§71 por analogia, §55).
+- **Consequência**: FinOps de custo funciona já. Carteira, excedente e
+  bloqueio por saldo ficam prontos e inertes até a política ser ativada.
+- **Status**: ACEITA.
+
+## D-020 · 2026-09-25 · Fase 5 · Tenant não vê custo em USD; limite em USD é só da operação
+- **Decisão**: o custo do provedor é dado interno da B2B ON. O tenant vê
+  chamadas e créditos, e define limites por número de chamadas.
+- **Status**: ACEITA.

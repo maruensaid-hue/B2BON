@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.core.config import settings
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.llm.base import LLMProvider
@@ -15,7 +16,7 @@ from app.models.mensagem import Mensagem
 from app.models.pesquisa_nps import PesquisaNps
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.rede_social.base import RedeSocialProvider
-from app.services import aprovacao_service, auditoria_service, llm_helpers
+from app.services import aprovacao_service, auditoria_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 
@@ -61,8 +62,10 @@ def solicitar(
     db.add(indicacao)
     db.flush()
 
-    resposta = llm_helpers.gerar(
+    resposta = intel.gerar(
+        db,
         llm,
+        intel.ContextoIA(tenant_id=tenant_id, feature="predator.mensagem_indicacao", entidade_tipo="pesquisa_nps", entidade_id=pesquisa.id),
         LLMRequest(
             prompt=(
                 f"Escreva uma mensagem curta e calorosa para {decisor.nome}, da empresa {conta.nome}, que acabou "

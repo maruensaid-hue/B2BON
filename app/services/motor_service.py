@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
@@ -10,7 +11,7 @@ from app.models.interacao_tenant import InteracaoTenant
 from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
-from app.services import auditoria_service, llm_helpers, rede_social_service
+from app.services import auditoria_service, rede_social_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 _TIPOS_VALIDOS = map_contract.TIPOS_INTERACAO_VALIDOS
@@ -124,7 +125,7 @@ def dashboard_motor(db: Session) -> dict:
     }
 
 
-def gerar_script_resgate(db: Session, tenant_id: str, llm: LLMProvider) -> dict:
+def gerar_script_resgate(db: Session, tenant_id: str, llm: LLMProvider, tenant_id_operador: str | None = None) -> dict:
     """Script de reengajamento sugerido ao Admin B2B ON, gerado pela mesma
     camada `LLMProvider` já usada no PREDATOR (Onda D)."""
     risco = calcular_score_risco(db, tenant_id)
@@ -134,8 +135,12 @@ def gerar_script_resgate(db: Session, tenant_id: str, llm: LLMProvider) -> dict:
     resumo_sinais = ", ".join(f"{tipo}: +{pontos}" for tipo, pontos in risco["sinais"].items()) or "nenhum sinal negativo recente"
     historico = "\n".join(f"- {i.tipo} ({i.criado_em:%Y-%m-%d}): {i.descricao or ''}" for i in interacoes) or "sem interações registradas"
 
-    resposta = llm_helpers.gerar(
+    resposta = intel.gerar(
+        db,
         llm,
+        # Ferramenta interna CyberFort: o custo é de quem opera (tenant do
+        # super_admin), nunca do tenant analisado.
+        intel.ContextoIA(tenant_id=tenant_id_operador or tenant_id, feature="map.script_resgate_tenant", workflow=f"tenant_analisado:{tenant_id}"),
         LLMRequest(
             prompt=(
                 f"O tenant '{perfil.nome_exibicao}' da B2B ON está classificado como "

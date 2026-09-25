@@ -74,6 +74,9 @@ const LEADS_NAV_ITEMS: NavItem[] = [
 // (entrou via convite-vitrine, Onda H) tem acesso.
 const NAV_ITEM_REDE_SOCIAL: NavItem = { path: "/rede-social", label: "Shoal", icon: "◎", end: false };
 
+// B2B ON Intelligence (Fase 4) — Corporate Brain do tenant, qualquer plano pago.
+const NAV_ITEM_CEREBRO: NavItem = { path: "/inteligencia/cerebro", label: "Cérebro Corporativo", icon: "🧬" };
+
 // RO (Registro de Oportunidade) — deal registration: qualquer papel
 // registra/vê as próprias oportunidades; "Aprovar Descontos" é só de
 // quem decide desconto pra toda a rede (admin do tenant raiz/distribuidor,
@@ -107,6 +110,7 @@ const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
 // de admin de tenant tipo="distribuidor" (decisão validada com o usuário).
 const ADMIN_NAV_ITEM_INTEGRACOES: NavItem = { path: "/admin/integracoes", label: "Integrações", icon: "🔌" };
 const ADMIN_NAV_ITEM_API: NavItem = { path: "/admin/api", label: "API & Webhooks", icon: "🧩" };
+const ADMIN_NAV_ITEM_IA: NavItem = { path: "/admin/ia", label: "IA & Créditos", icon: "💠" };
 
 const CLASSE_ITEM_BASE =
   "mb-0.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] whitespace-nowrap text-nav-muted transition-colors";
@@ -599,6 +603,7 @@ export function AppShell() {
         ...(temModuloMap ? [NAV_ITEMS_PAGOS[1]] : []),
         ...(temModuloPredator ? PREDATOR_NAV_ITEMS : []),
         NAV_ITEM_REDE_SOCIAL,
+        NAV_ITEM_CEREBRO,
       ]
     : [NAV_ITEM_REDE_SOCIAL];
 
@@ -744,6 +749,8 @@ export function AppShell() {
             <NavButton {...NAV_ITEM_REDE_SOCIAL} collapsed={collapsed} />
           </div>
 
+          {temLicencaAtiva && <NavButton {...NAV_ITEM_CEREBRO} collapsed={collapsed} />}
+
           {temModuloPredator && (
             <div data-tour-id="leads">
               {!collapsed && (
@@ -778,6 +785,7 @@ export function AppShell() {
                 ))}
               {ehAdminDistribuidor && <NavButton {...ADMIN_NAV_ITEM_INTEGRACOES} collapsed={collapsed} />}
               {(isAdmin || isSuperAdmin) && <NavButton {...ADMIN_NAV_ITEM_API} collapsed={collapsed} />}
+              {(isAdmin || isSuperAdmin) && <NavButton {...ADMIN_NAV_ITEM_IA} collapsed={collapsed} />}
               <NavButton {...ADMIN_NAV_ITEM_CONVITES} collapsed={collapsed} />
               {isSuperAdmin &&
                 ADMIN_NAV_ITEMS_SUPER_ADMIN.map((item) => <NavButton key={item.path} {...item} collapsed={collapsed} />)}

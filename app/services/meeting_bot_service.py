@@ -2,12 +2,13 @@ import logging
 
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.reuniao import Reuniao
 from app.providers.meeting_bot.base import MeetingBotProvider
-from app.services import atividade_service, llm_helpers
+from app.services import atividade_service
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +49,12 @@ def processar_transcricao(db: Session, reuniao: Reuniao, llm: LLMProvider, texto
     cadastro da Conta quanto no da Oportunidade (uma linha só, com
     `conta_id` e `negocio_id` preenchidos ao mesmo tempo — mesmo mecanismo
     já usado em `reuniao_service._confirmar_interno`)."""
-    resposta = llm_helpers.gerar(
+    resposta = intel.gerar(
+        db,
         llm,
+        intel.ContextoIA(tenant_id=reuniao.tenant_id, feature="predator.resumo_reuniao", entidade_tipo="reuniao", entidade_id=reuniao.id),
         LLMRequest(
-            prompt=f"Transcrição da reunião:\n\n{texto_transcricao}",
+            prompt="Transcrição da reunião:\n\n" + intel.prompt_seguro.bloco_dados_externos("transcricao_reuniao", texto_transcricao),
             system=(
                 "Você resume reuniões de vendas B2B para o CRM, de forma objetiva e curta: "
                 "principais pontos discutidos, decisões tomadas e próximos passos combinados. "

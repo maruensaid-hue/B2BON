@@ -1,5 +1,27 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 5 — AI FinOps & Credits (2026-09-25)
+
+- Custo do provedor por chamada (tabela `preco_modelo_ia` versionada, 6 modelos).
+- Créditos: política `PENDING_DEFINITION` (taxa a definir pelo PO), carteira por tenant, extrato, excedente.
+- Orçamentos/quotas por tenant/módulo/feature com bloqueio antes do provedor.
+- Dashboard FinOps (super_admin, USD) e consumo do tenant (créditos, sem USD). UI: Admin → IA & Créditos.
+- Migração `f892ebf6e6f9`.
+
+## Merge paralelo (2026-09-25)
+
+- Integradas as features de outra sessão (captura pública de lead, representantes com comissão, e-mail de notificação da Rede). Migração de merge `b53c1ac42468`.
+
+## Fase 4 — AI Intelligence Foundation (2026-09-25)
+
+- AI Gateway único (14/14 chamadas), roteador C0–C3, registro de features/agentes/ferramentas.
+- Correção: `temperature` não é mais enviada a modelos que a rejeitam (`claude-sonnet-5`).
+- Ledger de IA completo (sucesso/falha/bloqueio, cache tokens, correlation id) em sessão própria.
+- Corporate Brain + Context Engine com propósito; perfis de empresa/usuário consolidados; Learning Loop nas aprovações.
+- Anti-injeção: bloco de dados externos + instrução automática; teto de IA automática por tenant/hora.
+- UI: Cérebro Corporativo. API: `/api/v1/inteligencia/*`.
+- Migração `af4fcaf0098f`.
+
 ## Fase 3 — API & Integration Foundation (2026-09-25)
 
 - API de produto `/api/v1/map/*` e `/api/v1/predator/*` com chave de API por tenant (escopos, rate limit, licença e módulo no backend).

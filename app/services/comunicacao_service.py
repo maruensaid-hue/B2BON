@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
@@ -7,7 +8,7 @@ from app.models.configuracao_comunicacao import ConfiguracaoComunicacao
 from app.models.icp import ICP
 from app.models.oferta import Oferta
 from app.schemas.comunicacao import ConfiguracaoComunicacaoUpsertSchema
-from app.services import auditoria_service, llm_helpers, optout_service
+from app.services import auditoria_service, optout_service
 from app.services.errors import RegraNegocioViolada
 
 
@@ -71,8 +72,10 @@ def gerar_amostra(
     for indice in range(quantidade):
         texto_valido: str | None = None
         for _ in range(tentativas_por_mensagem):
-            resposta = llm_helpers.gerar(
+            resposta = intel.gerar(
+                db,
                 llm,
+                intel.ContextoIA(tenant_id=tenant_id, feature="plataforma.amostra_comunicacao"),
                 LLMRequest(
                     prompt=(
                         f"Escreva a mensagem de prospecção nº {indice + 1} para o ICP "

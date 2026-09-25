@@ -28,11 +28,11 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 
 | ID | Dívida | Evidência | Impacto | Fase | Status |
 |---|---|---|---|---|---|
-| TD-020 | 11 de 14 call sites de IA não medidos | `AI_CURRENT_STATE.md` §2 | FinOps impossível; gate §82 falha | 4/5 | OPEN |
-| TD-021 | Ledger `registro_uso_ia` best-effort, com campos insuficientes | idem §3 | Perda silenciosa de uso | 5 | OPEN |
-| TD-022 | `LLMRequest` sem contexto (tenant, módulo, feature, classe de modelo) | `app/llm/schemas.py` | Não há roteamento nem atribuição | 4 | OPEN |
-| TD-023 | Sem delimitação de dado externo nos prompts | idem §6 | Prompt injection | 4 | OPEN |
-| TD-024 | Rate limit de IA só em 5 rotas. Webhooks e cron sem limite | idem §2 | Custo sem controle | 4/5 | OPEN |
+| TD-020 | 11 de 14 call sites de IA não medidos | `AI_CURRENT_STATE.md` §2 | FinOps impossível; gate §82 falha | 4/5 | PAID (Fase 4: 14/14 pelo gateway + fitness function) |
+| TD-021 | Ledger `registro_uso_ia` best-effort, com campos insuficientes | idem §3 | Perda silenciosa de uso | 5 | PAID (Fases 4–5): ledger + custo + débito atômicos em sessão própria; falha de gravação vira log `LEDGER_IA_FALHOU` (alerta a configurar no Sentry, TD-049) |
+| TD-022 | `LLMRequest` sem contexto (tenant, módulo, feature, classe de modelo) | `app/llm/schemas.py` | Não há roteamento nem atribuição | 4 | PAID (Fase 4: `ContextoIA` + roteador) |
+| TD-023 | Sem delimitação de dado externo nos prompts | idem §6 | Prompt injection | 4 | PAID (Fase 4: `prompt_seguro` + instrução automática); testes adversariais na Fase 17 |
+| TD-024 | Rate limit de IA só em 5 rotas. Webhooks e cron sem limite | idem §2 | Custo sem controle | 4/5 | PAID (Fase 4: teto automático por tenant/hora); quotas por plano na Fase 5 |
 
 ## Infra / processo
 
@@ -51,6 +51,11 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-043 | Telas da B2B ON chamam rotas internas, não a API de produto (cliente zero só no nível de contrato) | `05_API_ARCHITECTURE.md` §8 | Duas superfícies HTTP para a mesma regra | 14/17 | OPEN |
 | TD-044 | `AssinaturaWebhookParceiro.segredo` (API de Distribuidor, pré-Fase 3) grava o segredo HMAC em texto puro | `app/models/assinatura_webhook_parceiro.py` | Vazamento do banco expõe segredo de assinatura | 17 | OPEN |
 | TD-045 | Rate limit da API de produto é em memória (1 instância) | `app/core/rate_limit.py` | Limite não vale entre instâncias | 17 | OPEN |
+| TD-046 | Ledger de IA em sessão própria pode esperar lock em SQLite de dev com transação de escrita aberta | `gateway.py` | Só desenvolvimento local | 17 | OPEN |
+| TD-047 | Teto de IA automática e rate limit em memória (1 instância) | `gateway.limitador_automatico` | Não vale entre instâncias | 17 | OPEN |
+| TD-048 | Custo de APIs externas (Brave, Lusha, BrasilAPI) e de compute não entra no ledger de IA | `09_AI_FINOPS.md` §1 | Custo por feature subestimado quando há enriquecimento | 16/17 | OPEN |
+| TD-049 | Sem alerta automático para `LEDGER_IA_FALHOU` e orçamento em alerta | logs | Perda de ledger passaria despercebida | 17 | OPEN |
+| TD-050 | Carteira usa `SELECT … FOR UPDATE` (no-op em SQLite); concorrência real só testada em Postgres na Fase 17 | `finops/creditos.py` | Débito concorrente em SQLite dev | 17 | OPEN |
 | TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher com gatilho por cron desde a Fase 3 | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
 | TD-042 | `B2BOnCrmAdapter.list_*` sem paginação para pipelines/estágios/ofertas e `CanonicalMapDataSource` carrega tudo em memória | `adapters/b2bon_crm.py`, `map/data_source.py` | Custo em tenants grandes | 17 | OPEN |
 | TD-037 | `starlette.testclient` com `httpx` deprecated (warning) | saída do pytest | Quebra futura na atualização | oportunista | OPEN |

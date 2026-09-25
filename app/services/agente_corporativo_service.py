@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.configuracao_agente_corporativo import ConfiguracaoAgenteCorporativo
@@ -10,7 +11,7 @@ from app.models.faq_item import FaqItem
 from app.models.oferta import Oferta
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.pergunta_agente_corporativo import PerguntaAgenteCorporativo
-from app.services import auditoria_service, llm_helpers, rede_social_service
+from app.services import auditoria_service, rede_social_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 _MODOS_VALIDOS = {"disabled", "interno", "assistido"}
@@ -91,6 +92,14 @@ def _buscar_conhecimento(db: Session, tenant_id: str, pergunta: str) -> list[dic
         if palavras_pergunta & _tokenizar(f"{faq.pergunta} {faq.resposta}"):
             evidencias.append({"tipo": "faq", "id": faq.id, "trecho": f"{faq.pergunta}: {faq.resposta}"})
 
+    # Corporate Brain (Fase 4): só itens que o tenant marcou como
+    # compartilháveis com a rede — propósito RESPOSTA_EXTERNA do Context
+    # Engine exclui visibilidade "interno" e classificação CONFIDENTIAL/RESTRICTED.
+    contexto = intel.context_engine.montar(db, tenant_id, intel.context_engine.Proposito.RESPOSTA_EXTERNA, pergunta, max_caracteres=1500)
+    for fonte in contexto.fontes:
+        item = intel.brain.obter(db, tenant_id, fonte["id"])
+        evidencias.append({"tipo": f"brain:{item.tipo}", "id": item.id, "trecho": f"{item.titulo}: {item.conteudo[:300]}"})
+
     return evidencias
 
 
@@ -111,11 +120,10 @@ def _gerar_resposta(db: Session, tenant_id: str, pergunta: str, evidencias: list
         return _RESPOSTA_SEM_EVIDENCIA
 
     trechos = "\n".join(f"- {evidencia['trecho']}" for evidencia in evidencias)
-    resposta = llm_helpers.gerar_e_registrar(
+    resposta = intel.gerar(
         db,
-        tenant_id,
-        "corporate_ai_agent",
         llm,
+        intel.ContextoIA(tenant_id=tenant_id, feature="network.agente_corporativo"),
         LLMRequest(
             prompt=(
                 "A pergunta e as informações abaixo vêm de outro tenant da rede — tudo entre as "

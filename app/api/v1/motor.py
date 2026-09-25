@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_usuario_atual
 from app.llm.base import LLMProvider
+from app.models.usuario import Usuario
 from app.schemas.motor import (
     DashboardMotorSchema,
     InteracaoTenantSchema,
@@ -50,5 +51,6 @@ def script_resgate(
     tenant_id: str,
     db: Session = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
+    usuario: Usuario = Depends(get_usuario_atual),
 ) -> ScriptResgateSchema:
-    return motor_service.gerar_script_resgate(db, tenant_id, llm)
+    return motor_service.gerar_script_resgate(db, tenant_id, llm, tenant_id_operador=usuario.tenant_id)

@@ -231,6 +231,9 @@ def client(
     limitador_auth.resetar()  # a suíte inteira roda no mesmo processo — sem isto, um teste vaza rate-limit pro próximo
     limitador_ia.resetar()
     limitador_api.resetar()
+    from app.contexts.intelligence.gateway import limitador_automatico
+
+    limitador_automatico.resetar()
     central_negocios_service.resetar_cache()
 
     def override_get_db() -> Generator[Session, None, None]:
