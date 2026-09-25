@@ -58,6 +58,8 @@ O `SECURITY_BOUNDARIES.md` de raiz diz que o staging de CNPJ é a
 
 **Merge paralelo (outra sessão):** `link_captura_lead`, `representante`, `comissao_representante`. **Fase 5:** `preco_modelo_ia`, `politica_creditos_ia`, `carteira_creditos`, `movimento_credito`, `orcamento_ia`; `registro_uso_ia` + `custo_usd`, `preco_id`, `creditos_consumidos`. Total: 110 tabelas.
 
+**Fase 6:** `necessidade_oportunidade`; `oferta` ganhou as colunas de Offer Intelligence (§25) e `disponivel_para_venda`. Total: 111 tabelas.
+
 Nenhuma tabela de Procurement, Bid, Credit Wallet, Usage Ledger
 completo, Entitlement, Integration Registry ou vetores existe.
 

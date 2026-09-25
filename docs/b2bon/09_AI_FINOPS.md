@@ -84,5 +84,5 @@ saldo e extrato. Sem custo em USD.
 
 - Estrutural: `test_gateway_ia_unico_caminho.py` (Fase 4).
 - Contábil: `test_finops.py::test_gate_nenhuma_chamada_de_ia_sem_contabilizacao`,
-  parametrizado pelas 14 features registradas. Cada chamada gera 1 linha
+  parametrizado por todas as features registradas (15 após a Fase 6). Cada chamada gera 1 linha
   de ledger com custo e créditos e 1 movimento na carteira.

@@ -17,6 +17,10 @@ from app.schemas.inteligencia_rede import (
 from app.services import intent_service, sinal_oportunidade_service
 
 router = APIRouter(prefix="/inteligencia-rede", tags=["inteligencia-rede"])
+# C7 (Fase 6): riscos de pipeline e expansão leem só dado de CRM (negócio,
+# oferta, atividade). Mesmo path, mas o gate é CRM ou PREDATOR, não só
+# PREDATOR. Atribuição de receita continua PREDATOR: depende dos sinais da rede.
+router_crm = APIRouter(prefix="/inteligencia-rede", tags=["inteligencia-rede"])
 
 
 @router.get("/fit-icp", response_model=list[FitIcpRedeSchema])
@@ -112,7 +116,7 @@ def listar_saude_relacionamentos(
     return sinal_oportunidade_service.listar_saude_relacionamentos(db, tenant_id)
 
 
-@router.get("/riscos-pipeline", response_model=list[RiscoPipelineSchema])
+@router_crm.get("/riscos-pipeline", response_model=list[RiscoPipelineSchema])
 def listar_riscos_pipeline(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
@@ -130,7 +134,7 @@ def calcular_atribuicao_receita(
     return sinal_oportunidade_service.calcular_atribuicao_receita(db, tenant_id)
 
 
-@router.get("/sugestoes-expansao", response_model=list[SugestaoExpansaoSchema])
+@router_crm.get("/sugestoes-expansao", response_model=list[SugestaoExpansaoSchema])
 def sugerir_expansao(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),

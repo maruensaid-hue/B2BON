@@ -30,6 +30,7 @@ from app.api.v1.finops import router as finops_router
 from app.api.v1.icp import router as icp_router
 from app.api.v1.indicacoes import router as indicacoes_router
 from app.api.v1.inteligencia_rede import router as inteligencia_rede_router
+from app.api.v1.inteligencia_rede import router_crm as inteligencia_rede_crm_router
 from app.api.v1.integracoes import router as integracoes_router
 from app.api.v1.inteligencia import router as inteligencia_router
 from app.api.v1.leads import router as leads_router
@@ -38,6 +39,7 @@ from app.api.v1.motor import router as motor_router
 from app.api.v1.notificacoes import router as notificacoes_router
 from app.api.v1.nps import router as nps_router
 from app.api.v1.ofertas import router as oferta_router
+from app.api.v1.oportunidades import router as oportunidades_router
 from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.optout import router as optout_router
 from app.api.v1.painel import router as painel_router
@@ -153,8 +155,10 @@ router.include_router(integracoes_router)
 router.include_router(parceiros_router)
 router.include_router(relatorios_router)
 router.include_router(crm_router, dependencies=_exige_crm)
+router.include_router(oportunidades_router, dependencies=_exige_crm)
 router.include_router(rede_social_router)
 router.include_router(inteligencia_rede_router, dependencies=_exige_predator)
+router.include_router(inteligencia_rede_crm_router, dependencies=_exige_organizacao)
 router.include_router(agente_corporativo_router, dependencies=_exige_predator)
 router.include_router(verificacao_empresa_router)
 # /motor é ferramenta interna do super_admin/CyberFort (cross-tenant, já

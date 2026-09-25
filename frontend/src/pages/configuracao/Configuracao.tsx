@@ -17,6 +17,38 @@ interface Oferta {
   diferenciais: string[];
   provas_sociais: string[];
   ativo: boolean;
+  categoria?: string | null;
+  modelo_precificacao?: string | null;
+  ticket_medio?: number | null;
+  margem_media?: number | null;
+  disponivel_para_venda?: boolean;
+  [campo: string]: unknown;
+}
+
+// Offer Intelligence (Fase 6, master prompt §25): alimenta o Next Best
+// Offer, o Discovery Gap e o White Space. Tudo opcional; o que ficar em
+// branco vira "informação insuficiente" nas recomendações, nunca palpite.
+const CAMPOS_LISTA_INTELIGENCIA_OFERTA: [string, string, string][] = [
+  ["problemas_resolvidos", "Problemas que resolve", "Custo alto com licenças de software"],
+  ["dores", "Dores do cliente", "Ninguém sabe quem usa cada licença"],
+  ["casos_uso", "Casos de uso", "Auditoria de fornecedores de software"],
+  ["personas", "Personas (cargos)", "Diretor de TI"],
+  ["industrias", "Indústrias / segmentos", "Varejo"],
+  ["requisitos", "Requisitos que atende", "Integração com Active Directory"],
+  ["prerequisitos", "Pré-requisitos do cliente", "Inventário de software"],
+  ["incompatibilidades", "Incompatibilidades", "Ambiente mainframe legado"],
+  ["objecoes", "Objeções comuns", "Já temos planilha"],
+  ["cases", "Cases", "Rede X reduziu 30% do custo"],
+  ["cross_sell", "Cross-sell (nomes de outras ofertas)", ""],
+  ["upsell", "Upsell (nomes de outras ofertas)", ""],
+  ["bundles", "Bundles", ""],
+  ["perguntas_descoberta", "Perguntas de descoberta", "Quantas licenças ativas vocês têm?"],
+  ["criterios_qualificacao", "Critérios de qualificação", "Mais de 200 estações"],
+];
+
+function numeroOuNulo(valor: FormDataEntryValue | null): number | null {
+  const texto = String(valor ?? "").trim().replace(",", ".");
+  return texto === "" ? null : Number(texto);
 }
 
 interface ConfiguracaoComunicacao {
@@ -424,6 +456,15 @@ export function Configuracao() {
       descricao: String(form.get("descricao")),
       diferenciais: paraListaPorLinha(String(form.get("diferenciais") ?? "")),
       provas_sociais: paraListaPorLinha(String(form.get("provas_sociais") ?? "")),
+      ...Object.fromEntries(
+        CAMPOS_LISTA_INTELIGENCIA_OFERTA.map(([campo]) => [campo, paraListaPorLinha(String(form.get(campo) ?? ""))]),
+      ),
+      categoria: String(form.get("categoria") ?? "").trim() || null,
+      modelo_precificacao: String(form.get("modelo_precificacao") ?? "").trim() || null,
+      ticket_medio: numeroOuNulo(form.get("ticket_medio")),
+      margem_media: numeroOuNulo(form.get("margem_media")),
+      playbook: String(form.get("playbook") ?? "").trim() || null,
+      disponivel_para_venda: form.get("disponivel_para_venda") === "on",
     };
     setSalvandoOferta(true);
     setErro(null);
@@ -746,6 +787,62 @@ export function Configuracao() {
               placeholder={"+40 clientes atendidos\nCertificação X (auditada anualmente)"}
             />
           </div>
+          <details className="rounded-lg border border-border px-3 py-2">
+            <summary className="cursor-pointer text-[11px] text-cyan">
+              Inteligência da oferta (opcional — usada nas recomendações do negócio)
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <label className="flex items-center gap-2 text-[11px] text-muted">
+                <input
+                  type="checkbox"
+                  name="disponivel_para_venda"
+                  defaultChecked={ofertaEmEdicao?.disponivel_para_venda ?? true}
+                />
+                Disponível para venda (entra nas recomendações de oferta)
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <Input name="categoria" label="Categoria" defaultValue={ofertaEmEdicao?.categoria ?? ""} />
+                <Input
+                  name="modelo_precificacao"
+                  label="Modelo de precificação"
+                  defaultValue={ofertaEmEdicao?.modelo_precificacao ?? ""}
+                  placeholder="Assinatura mensal"
+                />
+                <Input
+                  name="ticket_medio"
+                  label="Ticket médio (R$)"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  defaultValue={ofertaEmEdicao?.ticket_medio ?? ""}
+                />
+                <Input
+                  name="margem_media"
+                  label="Margem média (%)"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.1"
+                  defaultValue={ofertaEmEdicao?.margem_media ?? ""}
+                />
+              </div>
+              {CAMPOS_LISTA_INTELIGENCIA_OFERTA.map(([campo, rotulo, exemplo]) => (
+                <div key={campo}>
+                  <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">{rotulo} (um por linha)</div>
+                  <Textarea
+                    name={campo}
+                    rows={2}
+                    defaultValue={((ofertaEmEdicao?.[campo] as string[] | null | undefined) ?? []).join("\n")}
+                    placeholder={exemplo}
+                  />
+                </div>
+              ))}
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Playbook de vendas</div>
+                <Textarea name="playbook" rows={3} defaultValue={(ofertaEmEdicao?.playbook as string | null) ?? ""} />
+              </div>
+            </div>
+          </details>
           <Button type="submit" disabled={salvandoOferta} className="w-full justify-center">
             {salvandoOferta
               ? "Salvando..."

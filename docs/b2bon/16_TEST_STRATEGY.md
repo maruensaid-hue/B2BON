@@ -20,10 +20,11 @@
 | Aprovação humana: não aprovado não envia (§81) | `tests/integration/test_aprovacoes.py`, `test_envios.py` | pré-Fase 0 |
 | Barreira Buy/Sell (§80) | — | Fase 10 |
 | Nenhuma chamada de IA fora do gateway (§82) | `tests/unit/test_gateway_ia_unico_caminho.py` | Fase 4 |
-| Nenhuma chamada de IA sem custo/créditos (§82, 14 features) | `tests/unit/test_finops.py` | Fase 5 |
+| Nenhuma chamada de IA sem custo/créditos (§82, todas as features registradas) | `tests/unit/test_finops.py` | Fase 5 |
 | Isolamento do Corporate Brain / prompt real (§79) | `tests/integration/test_inteligencia_brain.py` | Fase 4 |
 | Contrato da API de produto (OpenAPI, auth, isolamento, idempotência) | `tests/integration/test_api_produto.py` | Fase 3 |
 | Webhooks de saída + Integration Hub | `tests/integration/test_webhooks_saida_e_hub.py` | Fase 3 |
+| Recomendações explicáveis + INSUFFICIENT_INFORMATION (GATE Fase 6) | `tests/integration/test_opportunity_intelligence.py` | Fase 6 |
 
 ## Regras
 
@@ -46,3 +47,4 @@
 | 4 | 1.648 passed | lint OK (25 warnings), build OK | 4/4 |
 | merge | 1.681 passed | build OK | — |
 | 5 | 1.711 passed | lint OK (25 warnings), build OK | 4/4 |
+| 6 | 1.761 passed | lint OK (25 warnings), build OK | 4/4 (criar-negocio cobre o card de inteligência) |

@@ -161,3 +161,28 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Decisão**: o custo do provedor é dado interno da B2B ON. O tenant vê
   chamadas e créditos, e define limites por número de chamadas.
 - **Status**: ACEITA.
+
+## D-021 · 2026-09-25 · Fase 6 · Portfólio (`disponivel_para_venda`) separado da oferta "ativa" da cadência
+- **Contexto**: `Oferta.ativo` significa "a oferta que entra no prompt de
+  cadência" e só uma por tenant fica ativa. Usar isso no Next Best Offer
+  reduziria o portfólio a uma oferta.
+- **Decisão**: coluna nova `disponivel_para_venda` (padrão verdadeiro)
+  define o portfólio do NBO/White Space. `ativo` mantém o significado.
+- **Status**: ACEITA.
+
+## D-022 · 2026-09-25 · Fase 6 · Recomendações de oportunidade são determinísticas (C0); IA só extrai necessidades
+- **Decisão**: NBO, NBA, Discovery Gap, White Space e o card são regras
+  explicáveis sobre dados do tenant, sem chamada de IA (custo zero,
+  reprodutível, testável). A IA só propõe necessidades com citação
+  literal, e elas não contam como confirmadas até revisão humana.
+- **Consequência**: explicabilidade garantida por construção
+  (`explicavel.recomendacao` recusa item sem evidência). Qualidade do
+  casamento depende de Offer Intelligence bem preenchida.
+- **Status**: ACEITA.
+
+## D-023 · 2026-09-25 · Fase 6 · C7: riscos de pipeline e expansão com gate CRM ou PREDATOR
+- **Decisão**: `/inteligencia-rede/riscos-pipeline` e `/sugestoes-expansao`
+  leem só dado de CRM e passam para gate CRM-ou-PREDATOR (mesmos paths).
+  `/atribuicao-receita` (sinais da rede) e o Agente Corporativo continuam
+  PREDATOR até a Fase 7 definir o módulo da Business Network.
+- **Status**: ACEITA.

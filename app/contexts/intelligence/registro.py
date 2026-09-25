@@ -83,6 +83,9 @@ FEATURES: dict[str, Feature] = {
         Feature("network.explicar_match", "network", "intent_agent", ClasseModelo.C1, Gatilho.USUARIO, "Explica o match entre uma necessidade e um fornecedor."),
         Feature("predator.sugerir_regra", "predator", "learning_agent", ClasseModelo.C1, Gatilho.USUARIO, "Sugere regra a partir de uma correção humana."),
         Feature("plataforma.amostra_comunicacao", "plataforma", "cadence_agent", ClasseModelo.C1, Gatilho.USUARIO, "Prévia do tom de comunicação."),
+        Feature("opportunity.extracao_necessidades", "crm", "opportunity_agent", ClasseModelo.C2, Gatilho.USUARIO,
+                "Sugere necessidades do cliente a partir de reunião/nota, com citação literal (vai para revisão).",
+                conteudo_externo=True),
         Feature("plataforma.faq", "plataforma", "help_agent", ClasseModelo.C1, Gatilho.USUARIO, "Ajuda sobre como usar a plataforma."),
     ]
 }
@@ -115,10 +118,10 @@ AGENTES: dict[str, Agente] = {
         Agente("intent_agent", "Intent Agent", "network", StatusAgente.ATIVO),
         Agente("learning_agent", "Learning Agent", "intelligence", StatusAgente.ATIVO),
         Agente("help_agent", "Help Agent", "plataforma", StatusAgente.ATIVO),
-        # §19 — planejados (fases 6, 9, 10, 12)
+        Agente("opportunity_agent", "Opportunity Agent", "intelligence", StatusAgente.ATIVO),
+        # §19 — planejados (fases 9, 10, 12)
         Agente("icp_agent", "ICP Agent", "predator", StatusAgente.PLANEJADO),
         Agente("stakeholder_agent", "Stakeholder Agent", "intelligence", StatusAgente.PLANEJADO),
-        Agente("opportunity_agent", "Opportunity Agent", "intelligence", StatusAgente.PLANEJADO),
         Agente("pipeline_agent", "Pipeline Agent", "crm", StatusAgente.PLANEJADO),
         Agente("revenue_agent", "Revenue Agent", "map", StatusAgente.PLANEJADO),
         Agente("churn_intelligence_agent", "Churn Intelligence Agent", "map", StatusAgente.PLANEJADO),

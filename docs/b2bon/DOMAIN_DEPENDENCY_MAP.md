@@ -81,7 +81,7 @@ propriedade do CRM.
 | C4 | ✅ resolvido | `leads`, `contas`, `decisores` sob `_exige_organizacao` (CRM **ou** PREDATOR) |
 | C5 | ✅ resolvido | `ofertas` sob CRM ou PREDATOR |
 | C6 | ✅ resolvido | `nps` sob MAP ou PREDATOR |
-| C7 | ⏸ adiado | `inteligencia_rede`/`agente_corporativo` continuam PREDATOR; revisão na Fase 6 (Opportunity Intelligence), que cria o contexto dono dessas features |
+| C7 | ✅ Fase 6 (D-023) | riscos de pipeline e sugestões de expansão com gate CRM-ou-PREDATOR; atribuição da rede e Agente Corporativo seguem PREDATOR até a Fase 7 |
 
 Evidência: `tests/integration/test_matriz_entitlements.py`. Contra o
 código da Fase 0 a matriz falha 23 casos; na Fase 1 passam os 61.

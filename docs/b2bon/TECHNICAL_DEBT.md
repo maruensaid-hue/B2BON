@@ -10,7 +10,7 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-001 | `conta_service.py` (1.683 linhas, 53 funções) mistura CRM, PREDATOR e Intelligence | `DOMAIN_DEPENDENCY_MAP.md` §5 | Impede separar os contextos | 1 | IN_PROGRESS: prospecção (≈570 linhas) foi para `contexts/predator/prospeccao.py`; helpers de Organization para o Shared Kernel. Restam CRUD de conta/lead (Shared Kernel de escrita) e `sugerir_estrategia_venda` (Intelligence, Fase 6) |
 | TD-002 | `crm_service.py` (1.022 linhas) contém LTV/CAC/ROI (MAP) e meeting brief (Intelligence) | idem | MAP depende do CRM | 1 | IN_PROGRESS: economia e vendedores-com-contas movidos para o MAP (shims no CRM). Meeting brief fica para a Fase 6 |
 | TD-003 | Algoritmo de risco de churn duplicado (`motor_service` e `saude_conta_service`) | `MAP_CURRENT_STATE.md` §2 | Divergência silenciosa | 1 | PAID (Fase 1: `contexts/map/risk.py`) |
-| TD-004 | Gates de módulo aplicados por router inteiro, com routers que misturam módulos | `router.py`, `contas.py` | 403 ou concessão indevida (C1–C7) | 1 | PAID para C1–C6 (Fase 1); C7 adiado para a Fase 6 |
+| TD-004 | Gates de módulo aplicados por router inteiro, com routers que misturam módulos | `router.py`, `contas.py` | 403 ou concessão indevida (C1–C7) | 1 | PAID para C1–C6 (Fase 1) e C7 (Fase 6, D-023); Agente Corporativo e atribuição da rede aguardam o módulo da Business Network (Fase 7) |
 | TD-005 | Sem camada de contrato entre módulos. Serviços acessam ORM de outros módulos | `DOMAIN_DEPENDENCY_MAP.md` §2–3 | Acoplamento; dificulta API-first | 1–3 | IN_PROGRESS: contratos CRM/MAP/PREDATOR + fitness function. Ainda leem ORM de outro módulo: `sinal_oportunidade_service` (Negocio, Shoal), `reuniao_service` (Atividade), `cadencia_service` (Conta/Decisor) |
 | TD-006 | Modelos com nomes de domínio em PT e sem mapeamento canônico (`Conta`, `Decisor`, `Negocio`) | — | Integração com CRMs externos | 2 | OPEN |
 | TD-007 | `CrmProvider` é porta para o CRM **interno**, com nome que sugere conector externo | `app/providers/crm/` | Confusão na Fase 13 | 2/3 | OPEN |
@@ -56,6 +56,9 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-048 | Custo de APIs externas (Brave, Lusha, BrasilAPI) e de compute não entra no ledger de IA | `09_AI_FINOPS.md` §1 | Custo por feature subestimado quando há enriquecimento | 16/17 | OPEN |
 | TD-049 | Sem alerta automático para `LEDGER_IA_FALHOU` e orçamento em alerta | logs | Perda de ledger passaria despercebida | 17 | OPEN |
 | TD-050 | Carteira usa `SELECT … FOR UPDATE` (no-op em SQLite); concorrência real só testada em Postgres na Fase 17 | `finops/creditos.py` | Débito concorrente em SQLite dev | 17 | OPEN |
+| TD-051 | Casamento necessidade × oferta é lexical (sem sinônimos/embeddings) | `opportunity/texto.py` | Recomendação perdida quando o cliente usa outras palavras | 17 | OPEN |
+| TD-052 | Pesos do NBO e limiares do NBA (14 dias, 60%) sem calibração com resultado real | `opportunity/nbo.py`, `nba.py` | Ordem de recomendação subótima | 17 | OPEN |
+| TD-053 | Tela de riscos de pipeline fica no menu da Rede (PREDATOR); cliente só CRM tem a API mas não a tela | `InteligenciaRede.tsx` | CRM-only vê riscos só no card do negócio | 7 | OPEN |
 | TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher com gatilho por cron desde a Fase 3 | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
 | TD-042 | `B2BOnCrmAdapter.list_*` sem paginação para pipelines/estágios/ofertas e `CanonicalMapDataSource` carrega tudo em memória | `adapters/b2bon_crm.py`, `map/data_source.py` | Custo em tenants grandes | 17 | OPEN |
 | TD-037 | `starlette.testclient` com `httpx` deprecated (warning) | saída do pytest | Quebra futura na atualização | oportunista | OPEN |

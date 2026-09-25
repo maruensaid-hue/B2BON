@@ -42,6 +42,18 @@ ROTAS = [
     ("post", "/api/v1/leads/contas", {"nome": "Conta da Matriz"}, {"crm", "predator"}),
     ("get", "/api/v1/ofertas", None, {"crm", "predator"}),
     ("get", "/api/v1/nps/configuracao", None, {"map", "predator"}),
+    # C7 (Fase 6): dado de CRM, não mais preso ao PREDATOR
+    ("get", "/api/v1/inteligencia-rede/riscos-pipeline", None, {"crm", "predator"}),
+    ("get", "/api/v1/inteligencia-rede/sugestoes-expansao", None, {"crm", "predator"}),
+    ("get", "/api/v1/inteligencia-rede/atribuicao-receita", None, {"predator"}),
+]
+
+# Opportunity Intelligence (Fase 6): rotas sobre um negócio inexistente
+# passam do gate (404) quando o plano tem CRM, e param nele (403) quando não.
+ROTAS_OPORTUNIDADE = [
+    ("get", "/api/v1/inteligencia/oportunidades/999/card", None),
+    ("post", "/api/v1/inteligencia/oportunidades/999/necessidades", {"categoria": "dor", "descricao": "abc"}),
+    ("get", "/api/v1/inteligencia/oportunidades/contas/999/white-space", None),
 ]
 
 
@@ -62,6 +74,19 @@ def test_rota_respeita_modulos_do_plano(client, monkeypatch, perfil, metodo, pat
         assert resposta.status_code in (200, 201), (perfil, path, resposta.status_code, resposta.text)
     else:
         assert resposta.status_code == 403, (perfil, path, resposta.status_code, resposta.text)
+
+
+@pytest.mark.parametrize("perfil", PERFIS)
+@pytest.mark.parametrize(("metodo", "path", "corpo"), ROTAS_OPORTUNIDADE, ids=[p for _, p, _ in ROTAS_OPORTUNIDADE])
+def test_opportunity_intelligence_exige_crm(client, monkeypatch, perfil, metodo, path, corpo):
+    bloqueados = PERFIS[perfil]
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_plan_limits_provider,
+        lambda: StubPlanLimitsProvider(modulos_bloqueados={TENANT_ID: bloqueados}),
+    )
+    resposta = getattr(client, metodo)(path, **({"json": corpo} if corpo is not None else {}))
+    assert resposta.status_code == (403 if "crm" in bloqueados else 404), (perfil, path, resposta.text)
 
 
 def test_painel_do_map_devolve_o_mesmo_payload_que_o_dashboard_do_crm(client):

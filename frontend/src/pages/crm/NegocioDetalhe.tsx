@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { InteligenciaOportunidade } from "@/components/InteligenciaOportunidade";
 import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
 import { PropostasNegocio } from "@/components/PropostasNegocio";
 import { Badge } from "@/components/ui/Badge";
@@ -295,6 +296,10 @@ export function NegocioDetalhe() {
 
         <Card>
           <ListaAtividades atividades={atividades} aoRegistrar={registrarAtividade} />
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <InteligenciaOportunidade negocioId={negocio.id} />
         </Card>
 
         <Card className="lg:col-span-2">

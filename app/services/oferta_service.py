@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.material_oferta import MaterialOferta
 from app.models.oferta import Oferta
-from app.schemas.oferta import OfertaCreateSchema
+from app.schemas.oferta import CAMPOS_INTELIGENCIA_OFERTA, OfertaCreateSchema
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
@@ -67,6 +67,7 @@ def criar(db: Session, tenant_id: str, ator_id: str | None, dados: OfertaCreateS
         faixa_preco_min=dados.faixa_preco_min,
         faixa_preco_max=dados.faixa_preco_max,
         ativo=True,
+        **{campo: getattr(dados, campo) for campo in CAMPOS_INTELIGENCIA_OFERTA},
     )
     db.add(oferta)
     db.flush()
@@ -91,6 +92,9 @@ def atualizar(db: Session, tenant_id: str, ator_id: str | None, oferta_id: int, 
     oferta.provas_sociais = dados.provas_sociais
     oferta.faixa_preco_min = dados.faixa_preco_min
     oferta.faixa_preco_max = dados.faixa_preco_max
+    for campo in CAMPOS_INTELIGENCIA_OFERTA:
+        if campo in dados.model_fields_set:
+            setattr(oferta, campo, getattr(dados, campo))
 
     auditoria_service.registrar(db, tenant_id, "oferta_atualizada", "oferta", oferta.id, ator_id, {"nome": oferta.nome})
     db.commit()

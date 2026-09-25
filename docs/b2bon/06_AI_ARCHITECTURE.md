@@ -16,7 +16,7 @@ Contexto: `app/contexts/intelligence/` (contrato: `contract.py`).
 
 ## 1. Gateway único (§52, §82)
 
-- 14 de 14 call sites passam pelo gateway (eram 3 medidos na Fase 0).
+- 15 de 15 call sites passam pelo gateway (eram 3 medidos na Fase 0; o 15º, extração de necessidades, é da Fase 6).
 - Fitness function `tests/unit/test_gateway_ia_unico_caminho.py`:
   ninguém chama `.generate(` fora de `app/llm/`; `llm_helpers.gerar` só no
   gateway; SDK `anthropic` só em `claude_provider.py`; toda feature usada
@@ -43,8 +43,8 @@ repassa amostragem a modelos que aceitam (OI-010).
 
 ## 3. Registro de features, agentes e ferramentas (§19, §72)
 
-`registro.py`: 14 features (cada uma → módulo, agente, classe, gatilho),
-27 agentes (12 ATIVOS, 15 PLANEJADOS do §19, marcados como tal na UI),
+`registro.py`: 15 features (cada uma → módulo, agente, classe, gatilho),
+27 agentes (13 ATIVOS, 14 PLANEJADOS do §19, marcados como tal na UI),
 6 ferramentas com sensibilidade READ / WRITE / EXTERNAL_ACTION /
 SENSITIVE_ACTION. `agente_pode_usar(agente, ferramenta)` é a checagem
 que o orquestrador da Fase 12 usa.

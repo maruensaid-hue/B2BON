@@ -44,6 +44,7 @@ from app.models.lista_prospeccao import ListaProspeccao
 from app.models.material_oferta import MaterialOferta
 from app.models.mensagem import Mensagem
 from app.models.mensagem_rede_social import MensagemRedeSocial
+from app.models.necessidade_oportunidade import NecessidadeOportunidade
 from app.models.negocio import Negocio
 from app.models.notificacao_rede_social import NotificacaoRedeSocial
 from app.models.notificacao_vendedor import NotificacaoVendedor
@@ -110,6 +111,7 @@ __all__ = [
     "ICP",
     "Oferta",
     "MaterialOferta",
+    "NecessidadeOportunidade",
     "ConfiguracaoComunicacao",
     "ConfiguracaoEnvio",
     "ConfiguracaoWhatsApp",

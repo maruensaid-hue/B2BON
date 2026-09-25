@@ -1,5 +1,14 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 6 — Opportunity Intelligence (2026-09-25)
+
+- Contexto `app/contexts/opportunity/`: Discovery Gap, Next Best Offer, Next Best Action, White Space, sinais de compra, riscos e stakeholders faltantes, todos determinísticos e explicáveis.
+- Need Extraction por IA (`opportunity.extracao_necessidades`) com citação literal obrigatória e revisão humana; Opportunity Agent ativo.
+- Offer Intelligence (§25) na oferta; campos novos no formulário de ofertas.
+- Card "Inteligência da oportunidade" na tela do negócio. API `/api/v1/inteligencia/oportunidades/*`.
+- C7: riscos de pipeline e sugestões de expansão liberados para CRM (D-023).
+- Migração `a8390a098f04`. Nenhum preço ou plano alterado.
+
 ## Fase 5 — AI FinOps & Credits (2026-09-25)
 
 - Custo do provedor por chamada (tabela `preco_modelo_ia` versionada, 6 modelos).
