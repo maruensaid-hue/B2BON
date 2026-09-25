@@ -31,7 +31,9 @@ def test_vincular_e_obter_negocio_via_api(client, criar_usuario_autenticado):
 
     visto_pelo_comprador = client.get(f"/api/v1/rede-social/salas/{sala['id']}/negocio", headers=headers_b).json()
     assert visto_pelo_comprador is not None
-    assert visto_pelo_comprador["negocio_nome"] == "Negócio via API"
+    # Fase 11: o comprador não vê o nome interno do negócio, só o título compartilhado.
+    assert visto_pelo_comprador["negocio_nome"] is None and visto_pelo_comprador["estagio_nome"] is None
+    assert visto_pelo_comprador["titulo_compartilhado"] == "Proposta em andamento"
 
 
 def test_canal_interno_via_api_nao_aparece_pro_outro_lado(client, criar_usuario_autenticado):

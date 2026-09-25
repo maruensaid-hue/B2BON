@@ -30,6 +30,7 @@ from app.models.email_direto import EmailDireto
 from app.models.email_recebido import EmailRecebido
 from app.models.descarte_conta import DescarteConta
 from app.models.empresa_rede import EmpresaRede
+from app.models.sala_extras import DocumentoSala, ParticipanteSala, ReuniaoSala, StakeholderSala, TarefaSala
 from app.models.orgao_publico import OrgaoPublico
 from app.models.unidade_compras import UnidadeCompras
 from app.models.plano_contratacao import PlanoContratacao
@@ -132,6 +133,11 @@ __all__ = [
     "MaterialOferta",
     "NecessidadeOportunidade",
     "EmpresaRede",
+    "DocumentoSala",
+    "ParticipanteSala",
+    "ReuniaoSala",
+    "StakeholderSala",
+    "TarefaSala",
     "OrgaoPublico",
     "UnidadeCompras",
     "PlanoContratacao",

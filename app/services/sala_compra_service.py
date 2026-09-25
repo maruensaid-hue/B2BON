@@ -46,6 +46,20 @@ def vincular_negocio(
 
 
 def _serializar(db: Session, tenant_id: str, vinculo: SalaCompra) -> dict:
+    if vinculo.tenant_id_vendedor != tenant_id:
+        # Fase 11: o comprador vê só o que o vendedor compartilhou (título e
+        # fase), nunca o nome interno do negócio nem o estágio do funil.
+        return {
+            "sala_corporativa_id": vinculo.sala_corporativa_id,
+            "negocio_id": None,
+            "negocio_nome": None,
+            "estagio_nome": None,
+            "estagio_tipo": None,
+            "visivel_para_comprador": vinculo.visivel_para_comprador,
+            "e_vendedor": False,
+            "titulo_compartilhado": vinculo.titulo_compartilhado or "Proposta em andamento",
+            "fase_compartilhada": vinculo.fase_compartilhada,
+        }
     negocio = db.query(Negocio).filter_by(id=vinculo.negocio_id).one_or_none()
     estagio = db.query(EstagioFunil).filter_by(id=negocio.estagio_id).one_or_none() if negocio else None
     return {
@@ -55,7 +69,9 @@ def _serializar(db: Session, tenant_id: str, vinculo: SalaCompra) -> dict:
         "estagio_nome": estagio.nome if estagio else None,
         "estagio_tipo": estagio.tipo if estagio else None,
         "visivel_para_comprador": vinculo.visivel_para_comprador,
-        "e_vendedor": vinculo.tenant_id_vendedor == tenant_id,
+        "e_vendedor": True,
+        "titulo_compartilhado": vinculo.titulo_compartilhado,
+        "fase_compartilhada": vinculo.fase_compartilhada,
     }
 
 

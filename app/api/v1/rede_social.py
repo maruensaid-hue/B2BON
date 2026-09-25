@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
+from datetime import date, datetime
+from typing import Literal
+
+from fastapi import APIRouter, Body, Depends, File, Form, Response, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_email_provider, get_tenant_id, get_usuario_atual
-from app.contexts.network.contract import grafo, identidade, membership
+from app.contexts.network.contract import grafo, identidade, membership, salas
 from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
 from app.schemas.rede_social import (
@@ -574,8 +578,10 @@ def listar_salas(
 def listar_canais_sala(
     sala_id: int,
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[CanalSalaSchema]:
+    salas.acesso(db, sala_id, usuario)
     return sala_corporativa_service.listar_canais(db, tenant_id, sala_id)
 
 
@@ -585,8 +591,10 @@ def criar_canal_sala(
     dados: CriarCanalRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> CanalSalaSchema:
+    salas.acesso(db, sala_id, usuario, escrita=True)
     return sala_corporativa_service.criar_canal(db, tenant_id, ator_id, sala_id, dados.tipo, dados.nome, dados.escopo)
 
 
@@ -594,8 +602,10 @@ def criar_canal_sala(
 def listar_mensagens_canal(
     canal_id: int,
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[MensagemSalaSchema]:
+    salas.acesso_pelo_canal(db, canal_id, usuario)
     return sala_corporativa_service.listar_mensagens(db, tenant_id, canal_id)
 
 
@@ -605,9 +615,11 @@ def enviar_mensagem_canal(
     dados: EnviarMensagemSalaRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
     email: EmailProvider = Depends(get_email_provider),
 ) -> MensagemSalaSchema:
+    salas.acesso_pelo_canal(db, canal_id, usuario, escrita=True)
     return sala_corporativa_service.enviar_mensagem_sala(
         db, tenant_id, ator_id, canal_id, dados.texto, dados.documento_url, email
     )
@@ -619,8 +631,10 @@ def vincular_negocio_sala(
     dados: VincularNegocioRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> SalaCompraSchema:
+    salas.acesso(db, sala_id, usuario, escrita=True)
     """Buying Room (master prompt §55, Fase 5A)."""
     return sala_compra_service.vincular_negocio(
         db, tenant_id, ator_id, sala_id, dados.negocio_id, dados.visivel_para_comprador
@@ -631,6 +645,121 @@ def vincular_negocio_sala(
 def obter_negocio_sala(
     sala_id: int,
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> SalaCompraSchema | None:
+    salas.acesso(db, sala_id, usuario)
     return sala_compra_service.obter_para_sala(db, tenant_id, sala_id)
+
+
+# --- Corporate Rooms & Buying Rooms (Fase 11) -------------------------------------
+
+
+class ParticipanteEntrada(BaseModel):
+    usuario_id: int
+    papel: Literal["EDITOR", "LEITOR"] = "EDITOR"
+
+
+class TarefaEntrada(BaseModel):
+    titulo: str = Field(min_length=2, max_length=300)
+    descricao: str | None = None
+    escopo: Literal["compartilhado", "interno"] = "compartilhado"
+    responsavel_tenant_id: str | None = None
+    responsavel_usuario_id: int | None = None
+    prazo: date | None = None
+
+
+class ReuniaoEntrada(BaseModel):
+    titulo: str = Field(min_length=2, max_length=300)
+    inicio: datetime
+    fim: datetime | None = None
+    link: str | None = None
+    pauta: str | None = None
+    escopo: Literal["compartilhado", "interno"] = "compartilhado"
+
+
+class StakeholderEntrada(BaseModel):
+    nome: str = Field(min_length=2)
+    cargo: str | None = None
+    lado: Literal["VENDEDOR", "COMPRADOR"]
+    papel: str = "UNKNOWN"
+    notas: str | None = None
+    escopo: Literal["compartilhado", "interno"] = "interno"
+
+
+class CompartilharNegocioEntrada(BaseModel):
+    titulo_compartilhado: str | None = Field(default=None, max_length=200)
+    fase_compartilhada: str | None = None
+
+
+@router.get("/salas/{sala_id}/workspace")
+def workspace_sala(sala_id: int, usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> dict:
+    """Corporate/Buying Room (Fase 11): tudo que ESTA empresa pode ver na sala."""
+    return salas.workspace(db, sala_id, usuario)
+
+
+@router.get("/salas/{sala_id}/participantes")
+def participantes_sala(sala_id: int, usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> list[dict]:
+    return salas.listar_participantes(db, sala_id, usuario)
+
+
+@router.put("/salas/{sala_id}/participantes")
+def definir_participantes_sala(sala_id: int, dados: list[ParticipanteEntrada], usuario: Usuario = Depends(get_usuario_atual),
+                               db: Session = Depends(get_db)) -> list[dict]:
+    return salas.definir_participantes(db, sala_id, usuario, [d.model_dump() for d in dados])
+
+
+@router.post("/salas/{sala_id}/documentos", status_code=201)
+async def enviar_documento_sala(
+    sala_id: int,
+    escopo: Literal["compartilhado", "interno"] = Form("compartilhado"),
+    canal_id: int | None = Form(None),
+    arquivo: UploadFile = File(...),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> dict:
+    documento = salas.adicionar_documento(db, sala_id, usuario, arquivo.filename or "documento", arquivo.content_type or "",
+                                          await arquivo.read(), escopo, canal_id)
+    return {"id": documento.id, "nome_arquivo": documento.nome_arquivo, "escopo": documento.escopo, "sha256": documento.sha256}
+
+
+@router.get("/salas/documentos/{documento_id}/arquivo")
+def baixar_documento_sala(documento_id: int, usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> Response:
+    documento = salas.obter_documento(db, documento_id, usuario)
+    return Response(content=documento.conteudo, media_type=documento.tipo_mime,
+                    headers={"Content-Disposition": f'attachment; filename="documento-{documento.id}"', "X-Content-SHA256": documento.sha256})
+
+
+@router.post("/salas/{sala_id}/tarefas", status_code=201)
+def criar_tarefa_sala(sala_id: int, dados: TarefaEntrada, usuario: Usuario = Depends(get_usuario_atual),
+                      db: Session = Depends(get_db)) -> dict:
+    tarefa = salas.criar_tarefa(db, sala_id, usuario, dados.model_dump())
+    return {"id": tarefa.id, "titulo": tarefa.titulo, "escopo": tarefa.escopo, "status": tarefa.status}
+
+
+@router.patch("/salas/tarefas/{tarefa_id}")
+def atualizar_tarefa_sala(tarefa_id: int, status: Literal["ABERTA", "CONCLUIDA", "CANCELADA"] = Body(..., embed=True),
+                          usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> dict:
+    tarefa = salas.atualizar_tarefa(db, tarefa_id, usuario, status)
+    return {"id": tarefa.id, "status": tarefa.status}
+
+
+@router.post("/salas/{sala_id}/reunioes", status_code=201)
+def agendar_reuniao_sala(sala_id: int, dados: ReuniaoEntrada, usuario: Usuario = Depends(get_usuario_atual),
+                         db: Session = Depends(get_db)) -> dict:
+    reuniao = salas.agendar_reuniao(db, sala_id, usuario, dados.model_dump())
+    return {"id": reuniao.id, "titulo": reuniao.titulo, "escopo": reuniao.escopo, "inicio": reuniao.inicio}
+
+
+@router.post("/salas/{sala_id}/stakeholders", status_code=201)
+def adicionar_stakeholder_sala(sala_id: int, dados: StakeholderEntrada, usuario: Usuario = Depends(get_usuario_atual),
+                               db: Session = Depends(get_db)) -> dict:
+    s = salas.adicionar_stakeholder(db, sala_id, usuario, dados.model_dump())
+    return {"id": s.id, "nome": s.nome, "papel": s.papel, "lado": s.lado, "escopo": s.escopo}
+
+
+@router.put("/salas/{sala_id}/negocio/compartilhado")
+def compartilhar_negocio_sala(sala_id: int, dados: CompartilharNegocioEntrada, usuario: Usuario = Depends(get_usuario_atual),
+                              db: Session = Depends(get_db)) -> dict | None:
+    """Buying Room: o que o comprador vê (título e fase), separado do CRM."""
+    return salas.compartilhar_negocio(db, sala_id, usuario, dados.titulo_compartilhado, dados.fase_compartilhada)

@@ -136,3 +136,37 @@ intent. Antes, os "sinais" do match revelavam a terceiros a conexão e
 relacionamentos (inclusive privados) entre o autor e o candidato. Agora a
 conexão só aparece para as partes e o relacionamento só se o consultante
 puder ver a aresta.
+
+---
+
+# Fase 11 — CORPORATE ROOMS & BUYING ROOMS
+
+Módulo `app/contexts/network/salas.py`; rotas em `/rede-social/salas/*`;
+UI: painel da sala (tarefas, reuniões, documentos, comitê) no modal da Sala Corporativa.
+
+| §84 Fase 11 | Entrega |
+|---|---|
+| Corporate Rooms, channels, messages | existentes (Fase 4A/5A) + permissão por usuário em todas as rotas |
+| permissions | `participante_sala`: se a empresa definir participantes, só eles (EDITOR/LEITOR) e os admins dela entram; LEITOR não escreve; cada empresa define e vê só o próprio lado |
+| documents | `documento_sala` com hash; documento em canal herda o escopo do canal |
+| tasks | `tarefa_sala`; tarefa interna não pode ter a outra empresa como responsável |
+| meetings | `reuniao_sala` |
+| Buying Rooms | `sala_compra` + título e fase **compartilhados** (DESCOBERTA…IMPLANTACAO) |
+| stakeholders | `stakeholder_sala` (lado, BuyingRole, notas), **interno por padrão**; notas nunca vão para a outra empresa, mesmo em item compartilhado |
+| shared/internal boundaries | regra única `salas.visivel(escopo, dono, consultante)` |
+
+## GATE — nenhum dado interno exposto indevidamente
+
+- Canal, mensagem, documento, tarefa, reunião e stakeholder **internos** não
+  aparecem no workspace nem por id para a outra empresa (404).
+- **Correção**: antes, o comprador via o nome interno do negócio e o estágio
+  do funil do vendedor na sala de compra. Agora vê só o título e a fase que o
+  vendedor compartilhou (padrão "Proposta em andamento"); valor, probabilidade,
+  nome e estágio ficam no CRM do vendedor.
+- Participantes: usuário fora da lista é barrado (403); o comprador não vê
+  quem participa pelo vendedor.
+- Empresa de fora da sala: 403 em todas as rotas.
+
+Testes: `tests/integration/test_salas_corporativas.py` (4) + testes das
+Fases 4A/5A/8 ajustados (o de sala de compra agora exige que o comprador
+**não** veja o nome do negócio).

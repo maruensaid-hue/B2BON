@@ -292,9 +292,11 @@ class VincularNegocioRequestSchema(BaseModel):
 
 class SalaCompraSchema(BaseModel):
     sala_corporativa_id: int
-    negocio_id: int
+    negocio_id: int | None
     negocio_nome: str | None
     estagio_nome: str | None
     estagio_tipo: str | None
     visivel_para_comprador: bool
     e_vendedor: bool
+    titulo_compartilhado: str | None = None
+    fase_compartilhada: str | None = None

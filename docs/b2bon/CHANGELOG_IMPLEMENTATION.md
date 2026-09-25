@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 11 — Corporate Rooms & Buying Rooms (2026-09-25)
+
+- Participantes por usuário (EDITOR/LEITOR), documentos com hash, tarefas, reuniões e comitê de compra na sala, cada um com escopo compartilhado/interno.
+- Correção de exposição: o comprador deixa de ver o nome interno e o estágio do negócio do vendedor; vê título e fase compartilhados.
+- Painel da sala no modal. Migração `855accb19354`.
+
 ## Fase 10 — Public Procurement / Buy Side (2026-09-25)
 
 - Contexto `app/contexts/procurement/` e API `/api/v1/procurement/*` (módulo `procurement`, preço PENDING_DEFINITION, fora de todos os planos).

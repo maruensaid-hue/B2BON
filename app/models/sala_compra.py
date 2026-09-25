@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -22,4 +22,8 @@ class SalaCompra(Base):
     tenant_id_vendedor: Mapped[str] = mapped_column(ForeignKey("tenant.id"))
     negocio_id: Mapped[int] = mapped_column(ForeignKey("negocio.id"))
     visivel_para_comprador: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Fase 11: o que o comprador vê. Nunca o nome interno do negócio nem o
+    # estágio do funil do vendedor.
+    titulo_compartilhado: Mapped[str | None] = mapped_column(String, nullable=True)
+    fase_compartilhada: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

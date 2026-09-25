@@ -2,10 +2,10 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **PHASE 11 — CORPORATE ROOMS & BUYING ROOMS** |
-| Última fase concluída | PHASE 10 — PUBLIC PROCUREMENT / BUY SIDE (2026-09-25) |
+| **CURRENT PHASE** | **PHASE 12 — ADVANCED AGENT ORCHESTRATION** |
+| Última fase concluída | PHASE 11 — CORPORATE ROOMS & BUYING ROOMS (2026-09-25) |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/PHASE_10_COMPLETION.md` |
+| Relatório da última fase | `phases/PHASE_11_COMPLETION.md` |
 
 ## Autorizações
 
@@ -24,8 +24,8 @@
 - **OI-010** (alta): verificar em produção se as features de IA falhavam por `temperature` com `claude-sonnet-5` (corrigido no código).
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
 
-## Baseline de qualidade (após a Fase 10)
+## Baseline de qualidade (após a Fase 11)
 
-- Backend: 1.840 passed. Migrações validadas também em Postgres 16.
+- Backend: 1.844 passed. Migrações validadas também em Postgres 16.
 - Frontend: lint OK (25 warnings), build OK.
 - E2E: 4/4.

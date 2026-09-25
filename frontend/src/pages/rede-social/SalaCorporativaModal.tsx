@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { SalaWorkspacePainel } from "@/pages/rede-social/SalaWorkspacePainel";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -16,12 +17,15 @@ interface Canal {
 
 interface SalaCompra {
   sala_corporativa_id: number;
-  negocio_id: number;
+  negocio_id: number | null;
   negocio_nome: string | null;
   estagio_nome: string | null;
   estagio_tipo: string | null;
   visivel_para_comprador: boolean;
   e_vendedor: boolean;
+  /** Fase 11: o que o comprador vê (nunca o nome interno nem o estágio). */
+  titulo_compartilhado: string | null;
+  fase_compartilhada: string | null;
 }
 
 interface NegocioResumo {
@@ -201,12 +205,22 @@ export function SalaCorporativaModal({ salaId, nomeExibicao, onClose }: Props) {
           {negocioVinculado ? (
             <div className="flex items-center justify-between">
               <span className="text-text">
-                💼 <strong>{negocioVinculado.negocio_nome}</strong>
-                {negocioVinculado.estagio_nome && <span className="text-muted"> · {negocioVinculado.estagio_nome}</span>}
+                💼{" "}
+                <strong>
+                  {negocioVinculado.e_vendedor ? negocioVinculado.negocio_nome : negocioVinculado.titulo_compartilhado}
+                </strong>
+                {negocioVinculado.e_vendedor && negocioVinculado.estagio_nome && (
+                  <span className="text-muted"> · {negocioVinculado.estagio_nome} (interno)</span>
+                )}
+                {negocioVinculado.fase_compartilhada && (
+                  <span className="text-muted"> · fase compartilhada: {negocioVinculado.fase_compartilhada}</span>
+                )}
               </span>
               {negocioVinculado.e_vendedor && (
                 <span className="text-muted">
-                  {negocioVinculado.visivel_para_comprador ? "Visível pro comprador" : "Só você vê o estágio"}
+                  {negocioVinculado.visivel_para_comprador
+                    ? `Comprador vê: "${negocioVinculado.titulo_compartilhado ?? "Proposta em andamento"}"`
+                    : "Só você vê"}
                 </span>
               )}
             </div>
@@ -243,6 +257,8 @@ export function SalaCorporativaModal({ salaId, nomeExibicao, onClose }: Props) {
             </form>
           )}
         </div>
+
+        <SalaWorkspacePainel salaId={salaId} />
 
         <div className="flex items-center gap-1.5 border-b border-border px-3 py-2 overflow-x-auto">
           {canais.map((canal) => (

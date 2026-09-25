@@ -278,3 +278,17 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   prazos de alerta) vêm de `orgao_publico.parametros`; sem parâmetro, o
   sinal não é avaliado e isso é declarado.
 - **Status**: ACEITA.
+
+## D-037 · 2026-09-25 · Fase 11 · Comprador vê só o que o vendedor compartilha na sala de compra
+- **Contexto**: a sala de compra mostrava ao comprador o nome interno do
+  negócio e o estágio do funil do vendedor.
+- **Decisão**: título e fase compartilhados, escolhidos pelo vendedor; o
+  resto fica no CRM dele. Stakeholders são internos por padrão e as notas
+  nunca atravessam.
+- **Status**: ACEITA.
+
+## D-038 · 2026-09-25 · Fase 11 · Permissão por usuário opcional por lado da sala
+- **Decisão**: sem participantes definidos, todos os usuários da empresa
+  acessam (comportamento anterior); com participantes, só eles e os admins.
+  Cada empresa governa só o próprio lado.
+- **Status**: ACEITA.
