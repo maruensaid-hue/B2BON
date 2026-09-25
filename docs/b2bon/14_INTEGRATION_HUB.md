@@ -5,7 +5,7 @@
 | Componente | Código | Estado |
 |---|---|---|
 | Contrato de adapter (canônico) | `app/contexts/integrations/contract.py` | Fase 2 (ver `ADAPTER_CONTRACT.md`) |
-| Registro de conectores | `app/contexts/integrations/registry.py` | `b2bon_crm` AVAILABLE; Salesforce e HubSpot BETA; Pipedrive, RD Station COMING_SOON (Fase 13, um por vez) |
+| Registro de conectores | `app/contexts/integrations/registry.py` | `b2bon_crm` AVAILABLE; Salesforce, HubSpot e Pipedrive BETA; RD Station COMING_SOON (Fase 13, um por vez) |
 | Base HTTP dos conectores | `adapters/http_base.py` | Fase 13: 429/5xx → retry, 401/403 → `ErroCredencial` (sem retry), hosts fixos por conector (anti-SSRF) |
 | Conexões por tenant | tabela `conexao_integracao` (credenciais Fernet, nunca devolvidas pela API) | Fase 3 |
 | Framework de sync | `app/contexts/integrations/sync.py` + tabela `execucao_sync` | Fase 3 |
@@ -110,3 +110,23 @@ recusada (401/403) marca a conexão como `erro` até reconectar.
 | engajamento com empresa | Interaction `contato` | lido uma vez por execução (o MAP pergunta conta a conta) |
 | Product | Offer | nome, descrição |
 | — | CSMetric | feedback/NPS do Service Hub: TD-071 |
+
+## Pipedrive (conector 3/4 · BETA)
+
+- **Auth**: `api_token` no header `x-api-token` (nunca na URL, que vai para
+  log). Host fixo `api.pipedrive.com`. OAuth do Marketplace: TD-068.
+- **Configuração**: `campo_cnpj` = chave (hash) do campo personalizado da
+  organização.
+- **Leitura**: API v1, paginação `start`/`limit` (`next_start`);
+  incremental por `/recents?items=…&since_timestamp=` (UTC).
+
+| Pipedrive | Canônico | Regra |
+|---|---|---|
+| Organization | Organization + Account | sem ciclo de vida no Pipedrive: `won_deals_count` > 0 → CUSTOMER, senão PROSPECT; sem domínio padrão (None); região = `address_admin_area_level_1` |
+| 1º Deal ganho da organização | Customer | `customer_since` = `won_time`; churn desconhecido |
+| Person | Person + Contact | e-mail/telefone principal; `marketing_status` unsubscribed → `suppressed_at` |
+| Pipeline / Stage | Pipeline / PipelineStage | todo estágio é OPEN (ganho/perda é status do negócio) |
+| Deal | Opportunity | `status` won/lost/open (deleted descartado); `closed_at` = `won_time`/`lost_time`; `lost_reason`; moeda do negócio; sem organização = descartado |
+| Activity | Activity | call/email/meeting/task/deadline; demais tipos OTHER com o tipo original preservado |
+| Activity concluída com organização | Interaction `contato` | lida uma vez por execução |
+| Product | Offer | nome, categoria, descrição, ativo |

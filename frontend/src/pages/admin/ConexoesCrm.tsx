@@ -94,6 +94,19 @@ const CAMPOS: Record<string, Campo[]> = {
       configuracao: true,
     },
   ],
+  pipedrive: [
+    {
+      nome: "api_token",
+      rotulo: "API token (Configurações pessoais → API)",
+      segredo: true,
+      obrigatorio: true,
+    },
+    {
+      nome: "campo_cnpj",
+      rotulo: "Chave do campo de CNPJ da organização",
+      configuracao: true,
+    },
+  ],
 };
 
 const ENTIDADES = [

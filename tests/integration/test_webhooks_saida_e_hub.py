@@ -141,9 +141,9 @@ def test_conectores_futuros_aparecem_como_coming_soon_e_nao_conectam(client):
     conectores = {c["sistema"]: c["status"] for c in client.get("/api/v1/hub-integracoes/conectores").json()}
     assert conectores["b2bon_crm"] == "AVAILABLE"
     # Fase 13: implementados entram BETA e conectam só se o operador habilitar
-    assert {conectores[s] for s in ("salesforce", "hubspot")} == {"BETA"}
-    assert {conectores[s] for s in ("pipedrive", "rd_station")} == {"COMING_SOON"}
-    assert client.post("/api/v1/hub-integracoes/conexoes", json={"sistema": "pipedrive", "nome": "x"}).status_code == 422
+    assert {conectores[s] for s in ("salesforce", "hubspot", "pipedrive")} == {"BETA"}
+    assert conectores["rd_station"] == "COMING_SOON"
+    assert client.post("/api/v1/hub-integracoes/conexoes", json={"sistema": "rd_station", "nome": "x"}).status_code == 422
 
 
 def test_sync_do_crm_interno_registra_execucao_e_depois_e_incremental(client, db_session):

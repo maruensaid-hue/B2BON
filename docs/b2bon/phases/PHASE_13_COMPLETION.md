@@ -9,7 +9,7 @@
 |---|---|---|---|
 | Salesforce | ✅ BETA (desligado por padrão, D-041) | `test_conector_salesforce.py` (23) | conector 1/4 |
 | HubSpot | ✅ BETA (desligado por padrão) | `test_conector_hubspot.py` (14) | conector 2/4 |
-| Pipedrive | ⏳ | — | — |
+| Pipedrive | ✅ BETA (desligado por padrão) | `test_conector_pipedrive.py` (11) | conector 3/4 |
 | RD Station CRM | ⏳ | — | — |
 
 ## Base comum (entregue com o Salesforce)
@@ -56,3 +56,19 @@ PO inalteradas.
 | E2E | ✅ 4/4 |
 
 Dívida nova: TD-071 (NPS de CRM externo). Sem migração.
+
+## GATE — Pipedrive
+
+| Evidência | Resultado |
+|---|---|
+| Suíte de conformidade compartilhada (paginação `start`/`next_start`, tenant, proveniência, referências, isolamento); só `api.pipedrive.com` | ✅ |
+| Token só no header `x-api-token`, nunca na URL; token malformado/extra recusado; cursor forjado recusado | ✅ |
+| Mapeamento (organizações, CNPJ por campo personalizado, cliente por negócio ganho, pessoas com e-mail principal e descadastro, negócios won/lost/open com data e motivo, atividades, produtos) | ✅ |
+| Incremental por `/recents` a partir da última execução com sucesso | ✅ |
+| 429 retentado; 401 não retentado, conexão `erro`, token fora da mensagem | ✅ |
+| Hub (BETA só habilitado, credencial nunca volta) e MAP via conexão = payload canônico | ✅ |
+| Suite completa | ✅ **1.905 passed** |
+| Frontend lint (25) + typecheck | ✅ |
+| E2E | ✅ 4/4 |
+
+Sem migração, sem dívida nova.

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **PHASE 13 — EXTERNAL CRM CONNECTORS** (Salesforce ✅ · HubSpot ✅ · Pipedrive ⏳ · RD Station ⏳) |
+| **CURRENT PHASE** | **PHASE 13 — EXTERNAL CRM CONNECTORS** (Salesforce ✅ · HubSpot ✅ · Pipedrive ✅ · RD Station ⏳) |
 | Última fase concluída | PHASE 12 — ADVANCED AGENT ORCHESTRATION (2026-09-25) |
 | Branch de trabalho | `staging` |
 | Relatório da última fase | `phases/PHASE_12_COMPLETION.md` |
@@ -24,8 +24,8 @@
 - **OI-010** (alta): verificar em produção se as features de IA falhavam por `temperature` com `claude-sonnet-5` (corrigido no código).
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
 
-## Baseline de qualidade (Fase 13, após o conector HubSpot)
+## Baseline de qualidade (Fase 13, após o conector Pipedrive)
 
-- Backend: 1.894 passed. Migrações validadas também em Postgres 16.
+- Backend: 1.905 passed. Migrações validadas também em Postgres 16.
 - Frontend: lint OK (25 warnings), build OK.
 - E2E: 4/4.
