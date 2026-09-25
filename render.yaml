@@ -26,3 +26,19 @@ services:
         sync: false # lista JSON, ex.: ["https://b2bon.pages.dev"]
       - key: CRON_SECRET
         sync: false # mesmo valor do repo secret CRON_SECRET no GitHub Actions (Onda I)
+
+  # Nome igual ao do Static Site ja existente (criado direto pelo dashboard,
+  # nunca antes declarado aqui) -- Render aplica esta config nele em vez de
+  # criar um servico novo (raio-X: "If you add the name of an existing
+  # service to your Blueprint file, Render attempts to apply the Blueprint's
+  # configuration to that existing service", docs/blueprint-spec). So preciso
+  # da `routes` (fallback de SPA); build/publish ja estao certos no servico.
+  - type: web
+    name: B2BON
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
