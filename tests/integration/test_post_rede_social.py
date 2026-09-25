@@ -1,6 +1,7 @@
 import io
 
 from PIL import Image
+from tests.markers import requer_ffmpeg
 
 TENANT_B = "tenant-outro"
 
@@ -62,6 +63,7 @@ def test_criar_post_com_carrossel_de_fotos_via_api(client):
     assert all(midia["tipo"] == "imagem" for midia in corpo["midias"])
 
 
+@requer_ffmpeg
 def test_criar_post_com_video_e_foto_juntos_retorna_erro(client):
     arquivos = [
         ("arquivos", ("foto.jpg", _imagem_jpeg_bytes(), "image/jpeg")),

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.graph.client import Neo4jClient
+from app.contexts.shared.entitlements import NOMES_MODULO, Entitlements
 from app.core.config import settings
 from app.core.rate_limit import limitador_ia, limitador_parceiros
 from app.integrations.brasilapi_client import BrasilApiClient, consultar_cnpj_brasilapi
@@ -384,9 +385,6 @@ def exigir_plano_permite_api_parceiros(
     return usuario
 
 
-_NOMES_MODULO = {"map": "MAP", "predator": "PREDATOR", "crm": "CRM"}
-
-
 def exigir_modulo(modulo: str):
     """Dependency factory pra contratação avulsa por módulo (raio-X
     2026-09-24) — mesmo padrão de `exigir_plano_permite_api_parceiros`,
@@ -399,9 +397,26 @@ def exigir_modulo(modulo: str):
         tenant_id: str = Depends(get_tenant_id),
         plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
     ) -> None:
-        if not plan_limits.permite_modulo(tenant_id, modulo):
-            nome = _NOMES_MODULO.get(modulo, modulo)
+        if not Entitlements(plan_limits, tenant_id).has_module(modulo):
+            nome = NOMES_MODULO.get(modulo, modulo)
             raise NaoAutorizado(f"Este recurso é exclusivo de quem contratou o módulo {nome}.")
+
+    return _dependencia
+
+
+def exigir_algum_modulo(*modulos: str):
+    """Rotas legitimamente compartilhadas entre módulos (Fase 1, D-007):
+    Organization/Person (Conta/Decisor) são Shared Kernel, então um
+    tenant só-CRM e um só-PREDATOR precisam das duas. Libera se o plano
+    tiver QUALQUER um dos módulos listados."""
+
+    def _dependencia(
+        tenant_id: str = Depends(get_tenant_id),
+        plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+    ) -> None:
+        if not Entitlements(plan_limits, tenant_id).has_any_module(*modulos):
+            nomes = " ou ".join(NOMES_MODULO.get(modulo, modulo) for modulo in modulos)
+            raise NaoAutorizado(f"Este recurso exige o módulo {nomes}.")
 
     return _dependencia
 

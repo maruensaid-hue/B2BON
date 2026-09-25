@@ -1,30 +1,19 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.contexts.map import contract as map_contract
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.conta import Conta
 from app.models.decisor import Decisor
-from app.models.estagio_funil import EstagioFunil
 from app.models.interacao_conta import InteracaoConta
-from app.models.negocio import Negocio
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
-from app.services import auditoria_service, llm_helpers, metricas_service, tenant_service
+from app.services import auditoria_service, llm_helpers, tenant_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
-_TIPOS_VALIDOS = {
-    "contato",
-    "ticket_suporte",
-    "reclamacao",
-    "feedback_positivo",
-    "reuniao_remarcada",
-    "mencionou_concorrente",
-}
-_TIPOS_CONTATO = {"contato", "feedback_positivo"}
-_JANELA_SINAIS_DIAS = 30
+_TIPOS_VALIDOS = map_contract.TIPOS_INTERACAO_VALIDOS
 
 
 def _obter_conta(db: Session, usuario: Usuario, conta_id: int) -> Conta:
@@ -66,20 +55,7 @@ def listar_interacoes_da_conta(db: Session, usuario: Usuario, conta_id: int) -> 
 
 
 def listar_interacoes(db: Session, tenant_id: str, conta_id: int) -> list[InteracaoConta]:
-    return (
-        db.query(InteracaoConta)
-        .filter_by(tenant_id=tenant_id, conta_id=conta_id)
-        .order_by(InteracaoConta.criado_em.desc())
-        .all()
-    )
-
-
-def _classificar(score: float) -> str:
-    if score >= settings.limiar_risco_critico_conta:
-        return "critico"
-    if score >= settings.limiar_risco_atencao_conta:
-        return "atencao"
-    return "saudavel"
+    return map_contract.listar_interacoes(db, tenant_id, conta_id)
 
 
 def calcular_score_risco(db: Session, usuario: Usuario, conta_id: int) -> dict:
@@ -90,63 +66,9 @@ def calcular_score_risco(db: Session, usuario: Usuario, conta_id: int) -> dict:
 
 
 def calcular_score_risco_da_conta(db: Session, conta: Conta) -> dict:
-    """Núcleo do cálculo, separado de `calcular_score_risco` pra
-    `ranking_saude_contas` não repetir a checagem de escopo (e a busca da
-    subárvore de tenants) uma vez por conta já visível na listagem."""
-    conta_id = conta.id
-    interacoes = listar_interacoes(db, conta.tenant_id, conta_id)
-    agora = datetime.now(UTC)
-
-    ultimo_contato_em = next((i.criado_em for i in interacoes if i.tipo in _TIPOS_CONTATO), None)
-    if ultimo_contato_em is None:
-        ultimo_contato_em = conta.criado_em
-
-    dias_sem_contato = (agora - ultimo_contato_em.replace(tzinfo=UTC)).days
-
-    score = 10.0
-    sinais: dict[str, int] = {}
-
-    if dias_sem_contato > 30:
-        score += 30
-        sinais["dias_sem_contato"] = 30
-    elif dias_sem_contato > 14:
-        score += 20
-        sinais["dias_sem_contato"] = 20
-    elif dias_sem_contato > 7:
-        score += 10
-        sinais["dias_sem_contato"] = 10
-
-    corte = agora - timedelta(days=_JANELA_SINAIS_DIAS)
-
-    reclamacoes_recentes = sum(
-        1 for i in interacoes if i.tipo == "reclamacao" and i.criado_em.replace(tzinfo=UTC) >= corte
-    )
-    if reclamacoes_recentes:
-        pontos = min(reclamacoes_recentes * 15, 45)
-        score += pontos
-        sinais["reclamacoes"] = pontos
-
-    if any(i.tipo == "mencionou_concorrente" and i.criado_em.replace(tzinfo=UTC) >= corte for i in interacoes):
-        score += 20
-        sinais["mencionou_concorrente"] = 20
-
-    if any(i.tipo == "reuniao_remarcada" and i.criado_em.replace(tzinfo=UTC) >= corte for i in interacoes):
-        score += 15
-        sinais["reuniao_remarcada"] = 15
-
-    if any(i.tipo == "feedback_positivo" and i.criado_em.replace(tzinfo=UTC) >= corte for i in interacoes):
-        score -= 20
-        sinais["feedback_positivo"] = -20
-
-    score = max(0.0, min(100.0, score))
-
-    return {
-        "conta_id": conta_id,
-        "score": score,
-        "classificacao": _classificar(score),
-        "dias_sem_contato": dias_sem_contato,
-        "sinais": sinais,
-    }
+    """Núcleo do cálculo — no contexto MAP desde a Fase 1
+    (`app/contexts/map/saude.py`)."""
+    return map_contract.score_risco_conta(db, conta)
 
 
 def _contas_visiveis(
@@ -212,13 +134,7 @@ def ranking_saude_contas(
 
 
 def _valor_pipeline_aberto(db: Session, tenant_id: str, conta_id: int) -> float:
-    negocios = (
-        db.query(Negocio)
-        .join(EstagioFunil, Negocio.estagio_id == EstagioFunil.id)
-        .filter(Negocio.tenant_id == tenant_id, Negocio.conta_id == conta_id, EstagioFunil.tipo == "aberto")
-        .all()
-    )
-    return sum(n.valor for n in negocios)
+    return map_contract.valor_pipeline_aberto(db, tenant_id, conta_id)
 
 
 def dashboard_saude_contas(
@@ -231,28 +147,21 @@ def dashboard_saude_contas(
     total = len(ranking)
 
     # CS Score/ROI ficam escopados a um único tenant (o selecionado, ou o
-    # do próprio usuário sem seleção) — `metricas_service.calcular_cs_score`
-    # e `crm_service.dashboard_economia` são inerentemente de um tenant só
+    # do próprio usuário sem seleção) — `map_contract.cs_score`
+    # e a economia do MAP são inerentemente de um tenant só
     # (NPS e negócios não têm por que ser somados entre tenants
     # diferentes da hierarquia); só as contagens de `ranking` acima é que
     # de fato agregam a subárvore inteira.
     tenant_id_metricas = tenant_id_selecionado or usuario.tenant_id
-    cs = metricas_service.calcular_cs_score(
+    cs = map_contract.cs_score(
         db,
         tenant_id_metricas,
         conta_ids=[item["conta_id"] for item in ranking if item["tenant_id"] == tenant_id_metricas],
         scores_risco=[item["score"] for item in ranking if item["tenant_id"] == tenant_id_metricas],
     )
 
-    # Import local (não no topo do arquivo) pra evitar dependência
-    # circular: `crm_service` também importa este módulo (pro CS do
-    # Dashboard) — por enquanto do ponto de vista de import, os dois só
-    # se enxergam dentro da chamada de função, nunca no carregamento do
-    # módulo em si.
-    from app.services import crm_service
-
     periodo_atual = datetime.now(UTC).strftime("%Y-%m")
-    roi = crm_service.dashboard_economia(db, tenant_id_metricas, periodo_atual).get("roi")
+    roi = map_contract.economia(db, tenant_id_metricas, periodo_atual).get("roi")
 
     return {
         "score_medio": (sum(item["score"] for item in ranking) / total) if total else None,

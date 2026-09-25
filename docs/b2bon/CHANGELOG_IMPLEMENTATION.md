@@ -1,5 +1,24 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 1 — Domain Separation (2026-09-25)
+
+- Novo pacote `app/contexts/` com `shared` (entitlements, Organization/Person),
+  `crm`, `map` e `predator`, cada um com `contract.py`.
+- MAP: algoritmo de risco único; economia (LTV/CAC/churn/ROI/CS) movida
+  do CRM; porta `MapDataSource`; painel próprio (`/saude-contas/desempenho/*`,
+  `/saude-contas/vendedores-com-contas`).
+- PREDATOR: prospecção extraída de `conta_service` para
+  `contexts/predator/prospeccao.py`; rotas movidas para `prospeccao_contas.py`
+  (mesmos paths, gate PREDATOR).
+- Gates: `exigir_algum_modulo`; contas/decisores/leads/ofertas → CRM ou
+  PREDATOR; nps → MAP ou PREDATOR.
+- Frontend: `PainelDesempenho` com `origem`; `MapContas` usa as rotas do MAP.
+- Testes: matriz de entitlement (61), fitness function de fronteiras (4),
+  skip de ffmpeg.
+- CI: roda também em `staging`.
+- Docs: aviso nos docs de raiz; 02/03 escritos; estado atualizado.
+- **Sem migração, sem mudança de preço ou plano.**
+
 ## Fase 0 — Complete Discovery & Audit (2026-09-25)
 
 **Código de produção alterado: nenhum.** Preços, planos e entitlements

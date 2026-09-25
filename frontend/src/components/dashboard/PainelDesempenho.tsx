@@ -49,12 +49,22 @@ export function formatarPercentual(valor: number | null): string {
   return `${(valor * 100).toFixed(1)}%`;
 }
 
+/** De onde vêm funil/economia (Fase 1, acoplamento C1): o Dashboard do
+ * CRM usa as rotas do CRM; o MAP usa as dele, pra um tenant só-MAP não
+ * receber 403. Os payloads são idênticos. */
+export type OrigemPainel = "crm" | "map";
+
+const BASE_POR_ORIGEM: Record<OrigemPainel, string> = {
+  crm: "/crm/dashboard",
+  map: "/saude-contas/desempenho",
+};
+
 /** Busca as 3 seções do Dashboard (raio-X 2026-09-24, MAP por
  * vendedor) — extraído de `Dashboard.tsx` pra ser reaproveitado pelo
  * MAP, escopado por `vendedorUsuarioId` quando informado. Sem o
  * parâmetro, comportamento idêntico ao Dashboard de sempre (visão
  * global). */
-export function usePainelDesempenho(vendedorUsuarioId?: number) {
+export function usePainelDesempenho(vendedorUsuarioId?: number, origem: OrigemPainel = "crm") {
   const [metricaNorte, setMetricaNorte] = useState<MetricaNorte | null>(null);
   const [funil, setFunil] = useState<DashboardFunil | null>(null);
   const [economia, setEconomia] = useState<DashboardEconomia | null>(null);
@@ -70,8 +80,8 @@ export function usePainelDesempenho(vendedorUsuarioId?: number) {
     setErro(null);
     Promise.all([
       api.get<MetricaNorte>(`/painel/metrica-norte${filtroVendedorSolo}`),
-      api.get<DashboardFunil>(`/crm/dashboard/funil${filtroVendedorSolo}`),
-      api.get<DashboardEconomia>(`/crm/dashboard/economia?periodo=${periodoAtual}${filtroVendedor}`),
+      api.get<DashboardFunil>(`${BASE_POR_ORIGEM[origem]}/funil${filtroVendedorSolo}`),
+      api.get<DashboardEconomia>(`${BASE_POR_ORIGEM[origem]}/economia?periodo=${periodoAtual}${filtroVendedor}`),
     ])
       .then(([metricaNorteResp, funilResp, economiaResp]) => {
         setMetricaNorte(metricaNorteResp);
@@ -79,7 +89,7 @@ export function usePainelDesempenho(vendedorUsuarioId?: number) {
         setEconomia(economiaResp);
       })
       .catch(() => setErro("Não foi possível carregar os dados de desempenho."));
-  }, [vendedorUsuarioId]);
+  }, [vendedorUsuarioId, origem]);
 
   return { metricaNorte, funil, economia, erro };
 }
@@ -174,8 +184,14 @@ export function EconomiaSecao({ economia }: { economia: DashboardEconomia | null
  * no MAP pra ver o desempenho de 1 vendedor (`Dashboard.tsx` usa os
  * blocos soltos acima direto, pra preservar reordenar/ocultar por
  * seção que já existia antes desta extração). */
-export function PainelDesempenho({ vendedorUsuarioId }: { vendedorUsuarioId?: number }) {
-  const { metricaNorte, funil, economia, erro } = usePainelDesempenho(vendedorUsuarioId);
+export function PainelDesempenho({
+  vendedorUsuarioId,
+  origem = "crm",
+}: {
+  vendedorUsuarioId?: number;
+  origem?: OrigemPainel;
+}) {
+  const { metricaNorte, funil, economia, erro } = usePainelDesempenho(vendedorUsuarioId, origem);
   return (
     <div>
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}

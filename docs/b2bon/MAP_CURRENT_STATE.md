@@ -54,3 +54,18 @@ com o mesmo nome**, e parte das métricas vive no código do CRM.
    tipo de sujeito.
 4. Endpoints `/api/v1/map/*` (Fase 3) sobre essa interface.
 5. Medir a IA de remediação (Fases 4/5).
+
+## 5. Mudanças da Fase 1 (2026-09-25)
+
+- Algoritmo de risco único em `app/contexts/map/risk.py`, usado pelo
+  MAP de contas e pelo motor interno de tenants (TD-003 pago).
+- Saúde de conta em `app/contexts/map/saude.py`. LTV/CAC/churn/ROI/CS
+  em `app/contexts/map/economics.py` (C2).
+- Porta `MapDataSource` (`app/contexts/map/data_source.py`), com
+  `CrmInternoMapDataSource` sobre `crm.contract`. É a fundação do MAP
+  API e do MAP sobre CRM externo.
+- Painel de desempenho do MAP servido pelo próprio MAP
+  (`/saude-contas/desempenho/*`, `/saude-contas/vendedores-com-contas`) (C1).
+- `crm_service.dashboard_economia`/`listar_vendedores_com_contas` e
+  `metricas_service.calcular_roi/calcular_cs_score` viraram shims para
+  `map.contract` (TD-039).

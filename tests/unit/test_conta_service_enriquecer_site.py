@@ -5,6 +5,7 @@ from app.integrations.site_fetcher import HostNaoPublico
 from app.models.conta import Conta
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.providers.web_search.base import ResultadoBusca
+from app.contexts.predator import prospeccao
 from app.services import conta_service
 from app.services.errors import RegraNegocioViolada
 from tests.fakes import FakeLLMProvider, FakeWebSearchProvider
@@ -86,7 +87,7 @@ def test_descobrir_dominio_ignora_dominio_bloqueado_e_pega_o_proximo(db_session)
         ]
     )
 
-    dominio = conta_service._descobrir_dominio("Alpha Tech", web_search)
+    dominio = prospeccao._descobrir_dominio("Alpha Tech", web_search)
 
     assert dominio == "alphatech.com.br"
 
@@ -101,7 +102,7 @@ def test_descobrir_dominio_ignora_portal_de_agendamento_terceiro(db_session):
         ]
     )
 
-    dominio = conta_service._descobrir_dominio("Santorius Medicina Cirurgica E Diagnostica Ltda", web_search)
+    dominio = prospeccao._descobrir_dominio("Santorius Medicina Cirurgica E Diagnostica Ltda", web_search)
 
     assert dominio == "santoriusmedicina.com.br"
 
@@ -119,7 +120,7 @@ def test_descobrir_dominio_ignora_portal_de_vagas_mesmo_com_similaridade_perfeit
         ]
     )
 
-    dominio = conta_service._descobrir_dominio("J&F S.A.", web_search)
+    dominio = prospeccao._descobrir_dominio("J&F S.A.", web_search)
 
     assert dominio == "jfsa.com.br"
 
@@ -133,7 +134,7 @@ def test_descobrir_dominio_rejeita_diretorio_desconhecido_por_similaridade(db_se
         [ResultadoBusca(titulo="Total Life na DNB", url="https://www.exemplo-diretorio-desconhecido.com/perfil", descricao="")]
     )
 
-    dominio = conta_service._descobrir_dominio("Total Life Clinica Medica Ltda 416 - SCP", web_search)
+    dominio = prospeccao._descobrir_dominio("Total Life Clinica Medica Ltda 416 - SCP", web_search)
 
     assert dominio is None
 
@@ -146,7 +147,7 @@ def test_descobrir_dominio_prefere_o_mais_parecido_entre_varios_candidatos(db_se
         ]
     )
 
-    dominio = conta_service._descobrir_dominio("Total Life Clinica Medica Ltda", web_search)
+    dominio = prospeccao._descobrir_dominio("Total Life Clinica Medica Ltda", web_search)
 
     assert dominio == "www.totallifeclinica.com.br"
 
@@ -158,7 +159,7 @@ def test_descobrir_dominio_aceita_marca_diferente_da_razao_social(db_session):
         [ResultadoBusca(titulo="Padaria do Silva", url="https://www.padariadosilva.com.br/", descricao="")]
     )
 
-    dominio = conta_service._descobrir_dominio("Comercio De Alimentos Silva Ltda", web_search)
+    dominio = prospeccao._descobrir_dominio("Comercio De Alimentos Silva Ltda", web_search)
 
     assert dominio == "www.padariadosilva.com.br"
 
@@ -178,13 +179,13 @@ def test_descobrir_dominio_aceita_marca_diferente_da_razao_social(db_session):
     ],
 )
 def test_nome_para_busca_remove_sufixo_de_natureza_juridica(razao_social, esperado):
-    assert conta_service._nome_para_busca(razao_social) == esperado
+    assert prospeccao._nome_para_busca(razao_social) == esperado
 
 
 def test_descobrir_dominio_busca_com_nome_limpo_de_sufixo_juridico(db_session):
     web_search = FakeWebSearchProvider([ResultadoBusca(titulo="Alpha Tech", url="https://alphatech.com.br/", descricao="")])
 
-    conta_service._descobrir_dominio("Alpha Tech Ltda ME", web_search)
+    prospeccao._descobrir_dominio("Alpha Tech Ltda ME", web_search)
 
     assert web_search.buscas == ["Alpha Tech site oficial"]
 

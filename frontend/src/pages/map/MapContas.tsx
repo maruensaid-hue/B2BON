@@ -192,7 +192,7 @@ export function MapContas() {
   useEffect(() => {
     if (isGestor && !tenantSelecionadoId) {
       api
-        .get<VendedorComContas[]>("/crm/vendedores-com-contas")
+        .get<VendedorComContas[]>("/saude-contas/vendedores-com-contas")
         .then(setVendedoresComContas)
         .catch(() => setVendedoresComContas([]));
     } else {
@@ -556,7 +556,7 @@ export function MapContas() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              <PainelDesempenho vendedorUsuarioId={vendedorDesempenhoId} />
+              <PainelDesempenho vendedorUsuarioId={vendedorDesempenhoId} origem="map" />
             </div>
           </div>
         </div>

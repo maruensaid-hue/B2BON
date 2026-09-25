@@ -5,10 +5,12 @@ name: CI
 # PR/push com teste quebrado ou erro de TypeScript sem depender de memória.
 
 on:
+  # `staging` incluído na Fase 1 do Master Prompt v4 (OI-005): é o branch
+  # de desenvolvimento, e até então nenhum teste rodava nele.
   push:
-    branches: [master]
+    branches: [master, staging]
   pull_request:
-    branches: [master]
+    branches: [master, staging]
 
 jobs:
   backend:

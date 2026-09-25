@@ -40,7 +40,7 @@ _PESO_PORTE = 0.2
 
 def calcular_fit_icp(icp: ICP, perfil_candidato: PerfilEmpresa) -> dict:
     """ICP Agent (master prompt §25, §60 ICP+Network, Fase 3B) — mesmos
-    pesos de `conta_service._score_aderencia` (CNAE 0.5 + UF 0.3 +
+    pesos de `predator.prospeccao._score_aderencia` (CNAE 0.5 + UF 0.3 +
     porte 0.2), aplicados contra o perfil de outro tenant da Rede
     Social em vez de uma `ContaCandidata` raspada. Nunca devolve um
     score isolado (§48) — sempre com `reasons`/`missing_data`."""

@@ -1,4 +1,4 @@
-# DOMAIN DEPENDENCY MAP — Fase 0 (2026-09-25)
+# DOMAIN DEPENDENCY MAP — Fase 0 (2026-09-25), status atualizado na Fase 1
 
 Como CRM, MAP, PREDATOR e Shoal dependem uns dos outros **hoje**.
 Extraído dos imports (`from app.services…`, `from app.models…`) de
@@ -71,6 +71,21 @@ propriedade do CRM.
 | C6 | `nps` sob `_exige_predator`, mas NPS alimenta CS Score (MAP) | `metricas_service.calcular_cs_score` | Tenant só-MAP não registra NPS |
 | C7 | `inteligencia_rede` (riscos de pipeline = dado de CRM) e `agente_corporativo` sob `_exige_predator` | `router.py` | Recursos de CRM/Intelligence presos ao PREDATOR |
 
+### Status após a Fase 1
+
+| # | Status | Como |
+|---|---|---|
+| C1 | ✅ resolvido | Rotas `/saude-contas/desempenho/{funil,economia}` e `/saude-contas/vendedores-com-contas` (MAP); `PainelDesempenho` recebe `origem="map"` |
+| C2 | ✅ resolvido | LTV/CAC/ROI/CS em `app/contexts/map/economics.py`; `saude_conta_service` e `metricas_service` usam só `map.contract`; o CRM consome o MAP pelo contrato |
+| C3 | ✅ resolvido | Rotas de prospecção em `app/api/v1/prospeccao_contas.py` sob `_exige_predator` (mesmos paths) |
+| C4 | ✅ resolvido | `leads`, `contas`, `decisores` sob `_exige_organizacao` (CRM **ou** PREDATOR) |
+| C5 | ✅ resolvido | `ofertas` sob CRM ou PREDATOR |
+| C6 | ✅ resolvido | `nps` sob MAP ou PREDATOR |
+| C7 | ⏸ adiado | `inteligencia_rede`/`agente_corporativo` continuam PREDATOR; revisão na Fase 6 (Opportunity Intelligence), que cria o contexto dono dessas features |
+
+Evidência: `tests/integration/test_matriz_entitlements.py`. Contra o
+código da Fase 0 a matriz falha 23 casos; na Fase 1 passam os 61.
+
 Separadamente, os limites dos planos avulsos PREDATOR são todos 0
 (ver `PRICING_CURRENT_STATE.md` §4). Isso é um defeito de dados, não de
 acoplamento.
@@ -84,9 +99,9 @@ acoplamento.
   É o maior ponto de acoplamento do sistema.
 - `crm_service.py` (1.022 linhas) mistura funil (CRM), economia/LTV/CAC
   (MAP), `gerar_meeting_brief` (Intelligence) e `dashboard_flywheel`.
-- `motor_service.calcular_score_risco` e
-  `saude_conta_service.calcular_score_risco_da_conta` são o **mesmo
-  algoritmo duplicado** (tenant vs conta).
+- ~~`motor_service.calcular_score_risco` e
+  `saude_conta_service.calcular_score_risco_da_conta` são o mesmo
+  algoritmo duplicado~~ → unificado em `app/contexts/map/risk.py` (Fase 1).
 - `sinal_oportunidade_service` (PREDATOR) lê diretamente 8 modelos do
   Shoal. É o embrião de Opportunity Intelligence, mas sem contrato.
 

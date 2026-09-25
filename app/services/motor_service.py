@@ -1,10 +1,11 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
+from app.contexts.map import contract as map_contract
 from app.models.interacao_tenant import InteracaoTenant
 from app.models.licenca import Licenca
 from app.models.plano import Plano
@@ -12,16 +13,7 @@ from app.models.tenant import Tenant
 from app.services import auditoria_service, llm_helpers, rede_social_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
-_TIPOS_VALIDOS = {
-    "contato",
-    "ticket_suporte",
-    "reclamacao",
-    "feedback_positivo",
-    "reuniao_remarcada",
-    "mencionou_concorrente",
-}
-_TIPOS_CONTATO = {"contato", "feedback_positivo"}
-_JANELA_SINAIS_DIAS = 30
+_TIPOS_VALIDOS = map_contract.TIPOS_INTERACAO_VALIDOS
 
 
 def registrar_interacao(
@@ -59,11 +51,7 @@ def listar_interacoes(db: Session, tenant_id: str) -> list[InteracaoTenant]:
 
 
 def _classificar(score: float) -> str:
-    if score >= settings.limiar_risco_critico_tenant:
-        return "critico"
-    if score >= settings.limiar_risco_atencao_tenant:
-        return "atencao"
-    return "saudavel"
+    return map_contract.classificar(score, settings.limiar_risco_critico_tenant, settings.limiar_risco_atencao_tenant)
 
 
 def calcular_score_risco(db: Session, tenant_id: str) -> dict:
@@ -76,53 +64,10 @@ def calcular_score_risco(db: Session, tenant_id: str) -> dict:
         raise NaoEncontrado(f"Tenant {tenant_id} não encontrado")
 
     interacoes = listar_interacoes(db, tenant_id)
-    agora = datetime.now(UTC)
-
-    ultimo_contato_em = next(
-        (i.criado_em for i in interacoes if i.tipo in _TIPOS_CONTATO), None
-    )
-    if ultimo_contato_em is None:
-        licenca = db.query(Licenca).filter_by(tenant_id=tenant_id).one_or_none()
-        ultimo_contato_em = licenca.data_inicio if licenca else tenant.criado_em
-
-    dias_sem_contato = (agora - ultimo_contato_em.replace(tzinfo=UTC)).days
-
-    score = 10.0
-    sinais: dict[str, int] = {}
-
-    if dias_sem_contato > 30:
-        score += 30
-        sinais["dias_sem_contato"] = 30
-    elif dias_sem_contato > 14:
-        score += 20
-        sinais["dias_sem_contato"] = 20
-    elif dias_sem_contato > 7:
-        score += 10
-        sinais["dias_sem_contato"] = 10
-
-    corte = agora - timedelta(days=_JANELA_SINAIS_DIAS)
-
-    reclamacoes_recentes = sum(
-        1 for i in interacoes if i.tipo == "reclamacao" and i.criado_em.replace(tzinfo=UTC) >= corte
-    )
-    if reclamacoes_recentes:
-        pontos = min(reclamacoes_recentes * 15, 45)
-        score += pontos
-        sinais["reclamacoes"] = pontos
-
-    if any(i.tipo == "mencionou_concorrente" and i.criado_em.replace(tzinfo=UTC) >= corte for i in interacoes):
-        score += 20
-        sinais["mencionou_concorrente"] = 20
-
-    if any(i.tipo == "reuniao_remarcada" and i.criado_em.replace(tzinfo=UTC) >= corte for i in interacoes):
-        score += 15
-        sinais["reuniao_remarcada"] = 15
-
-    if any(i.tipo == "feedback_positivo" and i.criado_em.replace(tzinfo=UTC) >= corte for i in interacoes):
-        score -= 20
-        sinais["feedback_positivo"] = -20
-
-    score = max(0.0, min(100.0, score))
+    licenca = db.query(Licenca).filter_by(tenant_id=tenant_id).one_or_none()
+    fallback = licenca.data_inicio if licenca else tenant.criado_em
+    resultado = map_contract.calcular_score(interacoes, fallback)
+    score, dias_sem_contato, sinais = resultado["score"], resultado["dias_sem_contato"], resultado["sinais"]
 
     return {
         "tenant_id": tenant_id,

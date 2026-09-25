@@ -16,7 +16,7 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   do mesmo processo** (pacotes, contratos, eventos internos), conforme §10.
 - **Consequência**: extração futura continua possível se os contratos
   forem respeitados.
-- **Status**: PROPOSTA (confirmação implícita ao autorizar a Fase 1).
+- **Status**: ACEITA (PO autorizou a Fase 1 e as seguintes em 2026-09-25).
 
 ## D-003 · 2026-09-25 · Fase 0 · `docs/b2bon/` é a fonte canônica. Docs de raiz ficam como histórico
 - **Contexto**: já existiam `CURRENT_ARCHITECTURE.md`,
@@ -45,4 +45,33 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   afeta clientes pagantes.
 - **Decisão**: registrar como OPEN ISSUE crítica e pedir autorização
   explícita do PO para um hotfix isolado, fora do fluxo de fases.
+- **Status**: ACEITA.
+
+## D-007 · 2026-09-25 · Fase 1 · Conta/Decisor/lead são Shared Kernel: rotas aceitam CRM **ou** PREDATOR
+- **Contexto**: OI-004. O Kanban do CRM cria conta por `/leads/contas`
+  (gate PREDATOR); a geração de lista e o enriquecimento estavam sob o
+  gate do CRM.
+- **Decisão**: `contas`, `decisores` e `leads` usam `_exige_organizacao`
+  (CRM ou PREDATOR). Prospecção (gerar lista, enriquecer, mapear
+  decisores, franquia, limite de enriquecimento) vai para o router
+  `prospeccao_contas` sob `_exige_predator`. `ofertas` aceita CRM ou
+  PREDATOR; `nps` aceita MAP ou PREDATOR.
+- **Consequência**: tenants só-CRM deixam de ver rotas de prospecção.
+  Na prática já não conseguiam usá-las: os limites dos planos CRM
+  avulsos são 0. Tenants só-PREDATOR passam a gerar lista e enriquecer
+  (os limites continuam dependendo de OI-001).
+- **Status**: ACEITA (tomada sob a autorização geral do PO; reversível).
+
+## D-008 · 2026-09-25 · Fase 1 · Contratos por contexto + porta de dados do MAP; fitness function obrigatória
+- **Decisão**: cada contexto expõe `contract.py`. O MAP lê dados
+  comerciais só por `MapDataSource`. A regra é verificada por
+  `tests/unit/test_fronteiras_contexto.py` (falha o CI).
+- **Consequência**: o MAP pode receber dados de CRM externo trocando só
+  a implementação da porta (fundação para as Fases 3 e 13).
+- **Status**: ACEITA.
+
+## D-009 · 2026-09-25 · Fase 1 · CI roda também em `staging`
+- **Contexto**: OI-005. Todo o trabalho do Master Prompt é empurrado
+  para `staging`, onde nenhum teste rodava.
+- **Decisão**: `ci.yml` dispara em push/PR para `master` e `staging`.
 - **Status**: ACEITA.

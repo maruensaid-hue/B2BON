@@ -6,6 +6,7 @@ from PIL import Image
 from app.models.usuario import Usuario
 from app.services import post_rede_social_service
 from app.services.errors import NaoAutorizado, NaoEncontrado, ValidacaoFalhou
+from tests.markers import requer_ffmpeg
 
 TENANT_A = "tenant-teste"
 TENANT_B = "tenant-outro"
@@ -246,6 +247,7 @@ def test_criar_post_com_carrossel_de_fotos_preserva_ordem(db_session):
     assert ids_em_ordem == sorted(ids_em_ordem)
 
 
+@requer_ffmpeg
 def test_criar_post_carrossel_rejeita_video_misturado_com_foto(db_session):
     autor = _criar_usuario(db_session, TENANT_A)
 

@@ -67,3 +67,17 @@ na migração diz que esses zeros deveriam valer só para MAP/CRM. Com
    interface de leitura/escrita. O PREDATOR escreve via contrato.
 3. Endpoints `/api/v1/predator/*` (Fase 3) sobre esses serviços.
 4. Medir todas as chamadas de IA (Fases 4/5).
+
+## 6. Mudanças da Fase 1 (2026-09-25)
+
+- Prospecção (gerar lista, enriquecimento de site/BrasilAPI/lote,
+  mapeamento de decisores, descoberta de domínio) extraída para
+  `app/contexts/predator/prospeccao.py`, com contrato em
+  `app/contexts/predator/contract.py`.
+- Rotas correspondentes em `app/api/v1/prospeccao_contas.py`, sob o
+  gate do PREDATOR, com os mesmos paths (C3).
+- `leads`, `contas`, `decisores`: CRM **ou** PREDATOR (C4, D-007).
+  `ofertas`: CRM ou PREDATOR (C5). `nps`: MAP ou PREDATOR (C6).
+- Os limites 0 dos planos PREDATOR avulsos (OI-001) **continuam**: o
+  tenant só-PREDATOR agora alcança as rotas, mas a franquia continua
+  bloqueando o uso.
