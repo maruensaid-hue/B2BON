@@ -13,11 +13,11 @@ abaixo do limiar, o sistema cria o pedido e avisa; o pagamento é
 concluído pelo cliente (TD-076).
 """
 
+import calendar
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from dateutil.relativedelta import relativedelta
 from sqlalchemy.orm import Session
 
 from app.contexts.finops import carteira, catalogos
@@ -29,6 +29,13 @@ from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 logger = logging.getLogger("b2bon.creditos")
 PREFIXO_REFERENCIA = "creditos:"
+
+
+def somar_meses(data: datetime, meses: int) -> datetime:
+    """Mesmo dia `meses` depois; dia inexistente no mês de destino vira o último (31/01 + 1 → 28/02)."""
+    indice = data.month - 1 + meses
+    ano, mes = data.year + indice // 12, indice % 12 + 1
+    return data.replace(year=ano, month=mes, day=min(data.day, calendar.monthrange(ano, mes)[1]))
 
 
 def compra_dict(compra: CompraCreditos) -> dict:
@@ -111,7 +118,7 @@ def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagame
         agora = carteira.agora_utc()
         lote = carteira.conceder(
             db, compra.tenant_id, TipoLote.TOPUP, compra.creditos, f"PACOTE:{compra.pacote_codigo}", referencia=str(compra.id),
-            expira_em=agora + relativedelta(months=compra.validade_meses) if compra.validade_meses else None,
+            expira_em=somar_meses(agora, compra.validade_meses) if compra.validade_meses else None,
             receita_por_credito=Decimal(str(compra.preco)) / compra.creditos, idempotency_key=f"compra:{compra.id}",
             descricao=f"Compra {compra.pacote_codigo} v{compra.pacote_versao}",
         )

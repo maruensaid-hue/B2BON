@@ -159,7 +159,7 @@ A página pública nova "Como funcionam os AI Credits" (`/como-funcionam-ai-cred
 
 | Evidência | Resultado |
 |---|---|
-| Suíte completa (SQLite) | ✅ **1.995 passed** (+2 skipped: Postgres) |
+| Suíte completa (SQLite) | ✅ **1.996 passed** (+2 skipped: Postgres) |
 | Concorrência em Postgres 16 | ✅ 2/2 (3 rodadas em banco novo) |
 | Migração em SQLite e Postgres 16 | ✅ `PG_MIGRACOES_OK e7b3c1a9f5d2` |
 | Frontend: typecheck + build; oxlint | ✅ 25 warnings (baseline) |

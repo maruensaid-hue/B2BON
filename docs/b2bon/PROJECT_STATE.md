@@ -30,6 +30,6 @@
 
 ## Baseline de qualidade (após a Fase 15)
 
-- Backend: 1.995 passed, 2 skipped (+2 testes de concorrência que rodam com `B2BON_TESTE_PG_URL`, 2/2 em Postgres 16). Migrações validadas também em Postgres 16 (head `e7b3c1a9f5d2`).
+- Backend: 1.996 passed, 2 skipped (+2 testes de concorrência que rodam com `B2BON_TESTE_PG_URL`, 2/2 em Postgres 16). Migrações validadas também em Postgres 16 (head `e7b3c1a9f5d2`).
 - Ruff: 40 (sem novos). Frontend: lint OK (25 warnings), build OK.
 - E2E: 6/6.

@@ -183,3 +183,14 @@ def test_modo_measure_nao_bloqueia_e_registra_excedente_nao_faturavel(db_session
     assert float(liquidada.creditos_excedente) == 1
     excedente = db_session.query(MovimentoCredito).filter_by(execucao_id=execucao.id, tipo="CREDIT_OVERAGE").one()
     assert excedente.faturavel is False
+
+
+def test_validade_do_topup_em_meses_de_calendario():
+    from datetime import datetime
+
+    from app.contexts.finops.compras import somar_meses
+
+    assert somar_meses(datetime(2026, 9, 25, 10), 12) == datetime(2027, 9, 25, 10)
+    assert somar_meses(datetime(2026, 1, 31), 1) == datetime(2026, 2, 28)
+    assert somar_meses(datetime(2027, 12, 15), 1) == datetime(2028, 1, 15)
+    assert somar_meses(datetime(2028, 2, 29), 12) == datetime(2029, 2, 28)
