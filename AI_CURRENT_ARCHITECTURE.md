@@ -1,3 +1,7 @@
+> **Histórico (2026-09-17).** A referência atual de arquitetura está em
+> [`docs/b2bon/`](docs/b2bon/00_MASTER_ARCHITECTURE.md) (Master Prompt v4, D-003).
+> Este arquivo tem trechos desatualizados; em caso de divergência, vale `docs/b2bon/`.
+
 # AI_CURRENT_ARCHITECTURE.md — B2B ON (auditoria factual, 2026-09-17)
 
 O que existe hoje na camada de IA. Sem aspiração — cada afirmação abaixo

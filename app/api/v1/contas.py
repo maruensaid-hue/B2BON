@@ -2,43 +2,24 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    get_account_data_provider,
     get_ator_id,
-    get_brasilapi_client,
-    get_contact_enrichment_provider,
     get_db,
     get_graph_client,
     get_llm_provider,
-    get_plan_limits_provider,
-    get_site_fetcher,
     get_tenant_id,
-    get_web_search_provider,
     limitar_ia_por_tenant,
 )
 from app.graph.client import Neo4jClient
-from app.integrations.brasilapi_client import BrasilApiClient
-from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
 from app.models.decisor import Decisor
-from app.providers.account_data.base import AccountDataProvider
-from app.providers.contact_enrichment.base import ContactEnrichmentProvider
-from app.providers.plan_limits.base import PlanLimitsProvider
-from app.providers.web_search.base import WebSearchProvider
 from app.schemas.conta import (
     AtualizarContaRequestSchema,
     ContaSchema,
     CriarContaManualRequestSchema,
     DefinirProximoPassoRequestSchema,
     DescartarContaRequestSchema,
-    EnriquecerContaResponseSchema,
-    EnriquecerEmLoteRequestSchema,
-    EnriquecerEmLoteResponseSchema,
     EstrategiaVendaSchema,
-    FranquiaSchema,
-    GerarListaRequestSchema,
-    GerarListaResponseSchema,
     GrafoContaResponseSchema,
-    LimiteEnriquecimentoResponseSchema,
 )
 from app.schemas.crm import AtividadeSchema
 from app.schemas.decisor import (
@@ -51,8 +32,6 @@ from app.services import (
     atividade_service,
     conta_service,
     descarte_service,
-    enriquecimento_limite_service,
-    franquia_service,
     linkedin_conexao_service,
     optout_service,
 )
@@ -78,20 +57,6 @@ def _serializar_decisores_com_linkedin(
         dados["papel_sugerido"] = conta_service.sugerir_papel_comite_compra(decisor.cargo)
         resultado.append(DecisorSchema(**dados))
     return resultado
-
-
-@router.post("/icp/{icp_id}/contas/gerar", response_model=GerarListaResponseSchema, status_code=201)
-def gerar_lista(
-    icp_id: int,
-    dados: GerarListaRequestSchema,
-    tenant_id: str = Depends(get_tenant_id),
-    ator_id: str | None = Depends(get_ator_id),
-    db: Session = Depends(get_db),
-    account_data: AccountDataProvider = Depends(get_account_data_provider),
-    graph: Neo4jClient = Depends(get_graph_client),
-) -> GerarListaResponseSchema:
-    contas = conta_service.gerar_lista(db, tenant_id, ator_id, icp_id, dados.quantidade, account_data, graph)
-    return GerarListaResponseSchema(contas=contas)
 
 
 @router.post("/icp/{icp_id}/contas", response_model=ContaSchema, status_code=201)
@@ -124,44 +89,6 @@ def listar_todas_as_contas(
     """Toda conta do tenant, com ou sem ICP — usado pelo seletor "conta
     existente" ao criar um negócio no Kanban."""
     return conta_service.listar_todas(db, tenant_id)
-
-
-@router.get("/contas/franquia", response_model=FranquiaSchema)
-def franquia_atual(
-    tenant_id: str = Depends(get_tenant_id),
-    db: Session = Depends(get_db),
-    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
-) -> FranquiaSchema:
-    return FranquiaSchema(**franquia_service.obter_franquia(db, tenant_id, plan_limits))
-
-
-@router.get("/contas/limite-enriquecimento", response_model=LimiteEnriquecimentoResponseSchema)
-def limite_enriquecimento_atual(
-    tenant_id: str = Depends(get_tenant_id),
-    db: Session = Depends(get_db),
-    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
-) -> LimiteEnriquecimentoResponseSchema:
-    """Limite semanal de pesquisas de enriquecimento — todo plano tem
-    limite configurado, proporcional à franquia mensal (raio-X
-    2026-08-28); `limite: null` fica reservado pra um plano futuro sem
-    teto."""
-    return LimiteEnriquecimentoResponseSchema(**enriquecimento_limite_service.obter_limites(db, tenant_id, plan_limits))
-
-
-@router.post("/contas/enriquecer-em-lote", response_model=EnriquecerEmLoteResponseSchema)
-def enriquecer_contas_em_lote(
-    dados: EnriquecerEmLoteRequestSchema,
-    tenant_id: str = Depends(get_tenant_id),
-    db: Session = Depends(get_db),
-) -> EnriquecerEmLoteResponseSchema:
-    """Enfileira as contas selecionadas pra enriquecimento em lote (site +
-    decisores) — processado aos poucos pelo cron a cada 15min, mesma fila
-    usada pela importação de planilha de evento. Não roda na hora (cada
-    conta passa por LLM + busca web + Lusha), pra não estourar o timeout
-    do proxy do Render."""
-    return EnriquecerEmLoteResponseSchema(
-        **conta_service.enfileirar_enriquecimento_em_lote(db, tenant_id, dados.conta_ids)
-    )
 
 
 @router.get("/contas/{conta_id}", response_model=ContaSchema)
@@ -257,25 +184,6 @@ def suprimir_decisor(
 
 
 @router.post(
-    "/contas/{conta_id}/enriquecer",
-    response_model=EnriquecerContaResponseSchema,
-    dependencies=[Depends(limitar_ia_por_tenant())],
-)
-def enriquecer_conta(
-    conta_id: int,
-    tenant_id: str = Depends(get_tenant_id),
-    ator_id: str | None = Depends(get_ator_id),
-    db: Session = Depends(get_db),
-    llm: LLMProvider = Depends(get_llm_provider),
-    site_fetcher: SiteFetcher = Depends(get_site_fetcher),
-    web_search: WebSearchProvider = Depends(get_web_search_provider),
-    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
-) -> EnriquecerContaResponseSchema:
-    campos = conta_service.enriquecer(db, tenant_id, ator_id, conta_id, llm, site_fetcher, web_search, plan_limits)
-    return EnriquecerContaResponseSchema(campos=campos)
-
-
-@router.post(
     "/contas/{conta_id}/estrategia-venda",
     response_model=EstrategiaVendaSchema,
     dependencies=[Depends(limitar_ia_por_tenant())],
@@ -288,35 +196,6 @@ def sugerir_estrategia_venda(
 ) -> EstrategiaVendaSchema:
     """Sales Strategy Agent (master prompt §29, Fase 6C)."""
     return EstrategiaVendaSchema(**conta_service.sugerir_estrategia_venda(db, tenant_id, conta_id, llm))
-
-
-@router.post("/contas/{conta_id}/enriquecer-brasilapi", response_model=EnriquecerContaResponseSchema)
-def enriquecer_conta_via_brasilapi(
-    conta_id: int,
-    tenant_id: str = Depends(get_tenant_id),
-    ator_id: str | None = Depends(get_ator_id),
-    db: Session = Depends(get_db),
-    brasilapi_client: BrasilApiClient = Depends(get_brasilapi_client),
-) -> EnriquecerContaResponseSchema:
-    campos = conta_service.enriquecer_via_brasilapi(db, tenant_id, ator_id, conta_id, brasilapi_client)
-    return EnriquecerContaResponseSchema(campos=campos)
-
-
-@router.post("/contas/{conta_id}/decisores/mapear", response_model=list[DecisorSchema])
-def mapear_decisores(
-    conta_id: int,
-    tenant_id: str = Depends(get_tenant_id),
-    ator_id: str | None = Depends(get_ator_id),
-    db: Session = Depends(get_db),
-    account_data: AccountDataProvider = Depends(get_account_data_provider),
-    contact_enrichment: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider),
-    graph: Neo4jClient = Depends(get_graph_client),
-    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
-) -> list[DecisorSchema]:
-    decisores = conta_service.mapear_decisores(
-        db, tenant_id, ator_id, conta_id, account_data, contact_enrichment, graph, plan_limits
-    )
-    return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, decisores)
 
 
 @router.post("/contas/{conta_id}/decisores", response_model=DecisorSchema, status_code=201)

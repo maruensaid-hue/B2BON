@@ -296,3 +296,20 @@ def test_listar_fila_filtra_por_decisor(client, db_session, cadencia_e_decisor):
     assert len(itens) == 1
     assert itens[0]["decisor_id"] == decisor.id
     assert itens[0]["mensagem_status"] == "aguardando_aprovacao"
+
+
+def test_aprovar_publica_message_approved_e_rejeitar_nao(client, db_session, cadencia_e_decisor):
+    """Fase 2 (§77): só aprovação humana gera `MessageApproved`."""
+    from app.models.evento_dominio import EventoDominio
+
+    cadencia, decisor, _ = cadencia_e_decisor
+    _propor_mensagem(db_session, cadencia, decisor)
+    _propor_mensagem(db_session, cadencia, decisor)
+    ids = [item["aprovacao_id"] for item in client.get("/api/v1/aprovacoes").json()]
+
+    client.post(f"/api/v1/aprovacoes/{ids[0]}/rejeitar", json={"motivo": "não"})
+    assert db_session.query(EventoDominio).filter_by(tipo="MessageApproved").count() == 0
+
+    client.post(f"/api/v1/aprovacoes/{ids[1]}/aprovar")
+    eventos = db_session.query(EventoDominio).filter_by(tipo="MessageApproved").all()
+    assert len(eventos) == 1 and eventos[0].ator_id == ATOR_ID

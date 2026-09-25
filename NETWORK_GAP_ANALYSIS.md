@@ -1,3 +1,7 @@
+> **Histórico (2026-09-17).** A referência atual de arquitetura está em
+> [`docs/b2bon/`](docs/b2bon/00_MASTER_ARCHITECTURE.md) (Master Prompt v4, D-003).
+> Este arquivo tem trechos desatualizados; em caso de divergência, vale `docs/b2bon/`.
+
 # NETWORK_GAP_ANALYSIS.md — B2B ON (2026-09-17)
 
 Comparação honesta entre o que o master prompt "B2B ON Business

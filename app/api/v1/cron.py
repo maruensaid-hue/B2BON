@@ -19,6 +19,8 @@ from app.api.deps import (
     resolver_email_provider,
     resolver_whatsapp_provider,
 )
+from app.contexts.platform.contract import webhooks
+from app.contexts.shared import events
 from app.core.config import settings
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
@@ -293,3 +295,13 @@ def repassar_comissoes(
     `payout` é sempre um stub que não move dinheiro de verdade, mesmo com
     credencial real configurada. Roda 1x/mês."""
     return cron_repasse_comissoes_service.repassar_pendentes(db, payout, email)
+
+
+@router.post("/processar-eventos", dependencies=[Depends(_exigir_segredo_cron)])
+def processar_eventos(db: Session = Depends(get_db)) -> dict:
+    """Fase 3: entrega o outbox de eventos de domínio aos consumidores
+    (hoje, webhooks de saída do tenant) e despacha as entregas devidas."""
+    webhooks.garantir_inscricao()
+    eventos = events.processar_pendentes(db)
+    entregas = webhooks.despachar_entregas(db)
+    return {"eventos": eventos, "webhooks": entregas}

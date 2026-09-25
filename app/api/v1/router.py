@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.api.deps import exigir_licenca_ativa, exigir_modulo
+from app.api.deps import exigir_algum_modulo, exigir_licenca_ativa, exigir_modulo
 from app.api.v1.admin_tenants import router as admin_tenants_router
 from app.api.v1.agente_corporativo import router as agente_corporativo_router
 from app.api.v1.aprovacoes import router as aprovacoes_router
@@ -41,6 +41,10 @@ from app.api.v1.optout import router as optout_router
 from app.api.v1.painel import router as painel_router
 from app.api.v1.parceiros import router as parceiros_router
 from app.api.v1.planos import router as planos_router
+from app.api.v1.plataforma_api import router as plataforma_api_router
+from app.api.v1.produto.map_api import router as map_api_router
+from app.api.v1.produto.predator_api import router as predator_api_router
+from app.api.v1.prospeccao_contas import router as prospeccao_contas_router
 from app.api.v1.regras_aprendidas import router as regras_aprendidas_router
 from app.api.v1.relatorios import router as relatorios_router
 from app.api.v1.representantes import router as representantes_router
@@ -78,12 +82,23 @@ _exige_licenca = [Depends(exigir_licenca_ativa)]
 _exige_map = [Depends(exigir_licenca_ativa), Depends(exigir_modulo("map"))]
 _exige_predator = [Depends(exigir_licenca_ativa), Depends(exigir_modulo("predator"))]
 _exige_crm = [Depends(exigir_licenca_ativa), Depends(exigir_modulo("crm"))]
+# Fase 1 (D-007): rotas legitimamente compartilhadas entre módulos.
+# Organization/Person (Conta/Decisor/lead) é Shared Kernel — CRM e
+# PREDATOR precisam das duas (o Kanban do CRM cria conta por
+# `/leads/contas`, acoplamento C4). Oferta é referenciada por
+# `Negocio.oferta_id` (C5). NPS alimenta o CS Score do MAP (C6).
+_exige_organizacao = [Depends(exigir_licenca_ativa), Depends(exigir_algum_modulo("crm", "predator"))]
+_exige_oferta = [Depends(exigir_licenca_ativa), Depends(exigir_algum_modulo("crm", "predator"))]
+_exige_nps = [Depends(exigir_licenca_ativa), Depends(exigir_algum_modulo("map", "predator"))]
 
 router.include_router(icp_router, dependencies=_exige_predator)
-router.include_router(oferta_router, dependencies=_exige_predator)
+router.include_router(oferta_router, dependencies=_exige_oferta)
 router.include_router(comunicacao_router, dependencies=_exige_licenca)
 router.include_router(onboarding_router, dependencies=_exige_licenca)
-router.include_router(contas_router, dependencies=_exige_crm)
+# Prospecção (C3) ANTES de `contas`: `/contas/franquia` não pode cair em
+# `/contas/{conta_id}`.
+router.include_router(prospeccao_contas_router, dependencies=_exige_predator)
+router.include_router(contas_router, dependencies=_exige_organizacao)
 router.include_router(listas_prospeccao_router, dependencies=_exige_predator)
 router.include_router(aprovacoes_router, dependencies=_exige_predator)
 router.include_router(auditoria_router)
@@ -112,14 +127,14 @@ router.include_router(relatorio_entrega_router, dependencies=_exige_predator)
 router.include_router(qualificacao_router, dependencies=_exige_predator)
 router.include_router(conversas_router, dependencies=_exige_predator)
 router.include_router(notificacoes_router, dependencies=_exige_licenca)
-router.include_router(decisores_router, dependencies=_exige_crm)
+router.include_router(decisores_router, dependencies=_exige_organizacao)
 router.include_router(reunioes_router, dependencies=_exige_predator)
 router.include_router(titulares_router, dependencies=_exige_licenca)
 router.include_router(faq_router, dependencies=_exige_licenca)
 router.include_router(painel_router, dependencies=_exige_licenca)
-router.include_router(nps_router, dependencies=_exige_predator)
+router.include_router(nps_router, dependencies=_exige_nps)
 router.include_router(indicacoes_router, dependencies=_exige_licenca)
-router.include_router(leads_router, dependencies=_exige_predator)
+router.include_router(leads_router, dependencies=_exige_organizacao)
 router.include_router(auth_router)
 router.include_router(convites_router)
 router.include_router(planos_router)
@@ -151,3 +166,9 @@ router.include_router(saude_conta_router, dependencies=_exige_map)
 router.include_router(registro_oportunidade_router, dependencies=_exige_predator)
 router.include_router(usuarios_router, dependencies=_exige_licenca)
 router.include_router(template_proposta_router, dependencies=_exige_crm)
+# Fase 3 — plataforma de API. Gestão (JWT, admin) exige licença ativa;
+# a API de produto autentica por chave de API (`autenticar_api` faz
+# licença + módulo + escopo por conta própria, sem JWT).
+router.include_router(plataforma_api_router, dependencies=_exige_licenca)
+router.include_router(map_api_router)
+router.include_router(predator_api_router)

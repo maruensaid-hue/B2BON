@@ -8,6 +8,7 @@ from PIL import Image
 
 from app.services import midia_service
 from app.services.errors import ValidacaoFalhou
+from tests.markers import requer_ffmpeg
 
 
 def _gerar_imagem_bytes(largura: int, altura: int, formato: str = "PNG") -> bytes:
@@ -66,6 +67,7 @@ def test_comprimir_imagem_rejeita_maior_que_limite(monkeypatch):
         midia_service.comprimir_imagem(_gerar_imagem_bytes(50, 50))
 
 
+@requer_ffmpeg
 def test_comprimir_video_reencoda_para_mp4_valido():
     original = _gerar_video_bytes(duracao_segundos=1.0)
 
@@ -75,11 +77,13 @@ def test_comprimir_video_reencoda_para_mp4_valido():
     assert b"ftyp" in comprimido[:32]
 
 
+@requer_ffmpeg
 def test_comprimir_video_rejeita_arquivo_invalido():
     with pytest.raises(ValidacaoFalhou):
         midia_service.comprimir_video(b"isto claramente nao e um video")
 
 
+@requer_ffmpeg
 def test_comprimir_video_rejeita_maior_que_limite(monkeypatch):
     monkeypatch.setattr(midia_service, "TAMANHO_MAXIMO_VIDEO_ENTRADA_BYTES", 10)
 
@@ -87,6 +91,7 @@ def test_comprimir_video_rejeita_maior_que_limite(monkeypatch):
         midia_service.comprimir_video(_gerar_video_bytes())
 
 
+@requer_ffmpeg
 def test_comprimir_video_rejeita_duracao_maior_que_limite(monkeypatch):
     monkeypatch.setattr(midia_service, "_DURACAO_MAXIMA_VIDEO_SEGUNDOS", 0.5)
     video_de_2_segundos = _gerar_video_bytes(duracao_segundos=2.0)

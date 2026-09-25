@@ -46,6 +46,9 @@ limitador_parceiros = LimitadorEmMemoria()
 # vezes um tenant (autenticado, não anônimo) podia disparar IA.
 limitador_ia = LimitadorEmMemoria()
 
+# API de produto por chave de tenant (Fase 3) — bucket próprio por chave.
+limitador_api = LimitadorEmMemoria()
+
 
 def limitar_por_ip(max_tentativas: int = 5, janela_segundos: int = 300):
     """Dependency factory — protege rotas públicas de autenticação contra

@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_usuario_atual
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual
+from app.contexts.map import contract as map_contract
 from app.llm.base import LLMProvider
 from app.models.usuario import Usuario
 from app.schemas.auth import UsuarioSchema
 from app.schemas.conta import ContaSchema
+from app.schemas.crm import DashboardEconomiaSchema, DashboardFunilSchema, VendedorComContasSchema
 from app.schemas.saude_conta import (
     AtribuirVendedorRequestSchema,
     DashboardSaudeContasSchema,
@@ -115,3 +117,34 @@ def atribuir_vendedor(
     db: Session = Depends(get_db),
 ) -> ContaSchema:
     return saude_conta_service.atribuir_vendedor(db, usuario, ator_id, conta_id, dados.vendedor_usuario_id)
+
+
+# Painel de desempenho do MAP (Fase 1, acoplamento C1): antes a tela do
+# MAP chamava `/crm/dashboard/*` e `/crm/vendedores-com-contas`, e um
+# tenant só-MAP recebia 403. Mesmos payloads, agora servidos pelo MAP
+# através do contrato dele (o funil vem do CRM interno via `MapDataSource`).
+@router.get("/desempenho/funil", response_model=DashboardFunilSchema)
+def desempenho_funil(
+    vendedor_usuario_id: int | None = None,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> DashboardFunilSchema:
+    return DashboardFunilSchema(**map_contract.funil(db, tenant_id, vendedor_usuario_id))
+
+
+@router.get("/desempenho/economia", response_model=DashboardEconomiaSchema)
+def desempenho_economia(
+    periodo: str,
+    vendedor_usuario_id: int | None = None,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> DashboardEconomiaSchema:
+    return DashboardEconomiaSchema(**map_contract.economia(db, tenant_id, periodo, vendedor_usuario_id))
+
+
+@router.get("/vendedores-com-contas", response_model=list[VendedorComContasSchema])
+def vendedores_com_contas(
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[VendedorComContasSchema]:
+    return [VendedorComContasSchema(**item) for item in map_contract.vendedores_com_contas(db, tenant_id)]

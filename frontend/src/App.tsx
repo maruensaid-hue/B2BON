@@ -28,6 +28,7 @@ const AdminVerificacoesEmpresa = lazy(() =>
   import("@/pages/admin/AdminVerificacoesEmpresa").then((m) => ({ default: m.AdminVerificacoesEmpresa })),
 );
 const AdminTenants = lazy(() => import("@/pages/admin/AdminTenants").then((m) => ({ default: m.AdminTenants })));
+const ApiPlataforma = lazy(() => import("@/pages/admin/ApiPlataforma").then((m) => ({ default: m.ApiPlataforma })));
 const Integracoes = lazy(() => import("@/pages/admin/Integracoes").then((m) => ({ default: m.Integracoes })));
 const Relatorios = lazy(() => import("@/pages/admin/Relatorios").then((m) => ({ default: m.Relatorios })));
 const Aprovacoes = lazy(() => import("@/pages/aprovacoes/Aprovacoes").then((m) => ({ default: m.Aprovacoes })));
@@ -304,6 +305,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <AdminLicencas />
+              </Suspense>
+            }
+          />
+          <Route
+            path="admin/api"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <ApiPlataforma />
               </Suspense>
             }
           />

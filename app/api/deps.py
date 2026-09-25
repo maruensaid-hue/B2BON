@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.graph.client import Neo4jClient
+from app.contexts.platform.contract import api_keys
+from app.contexts.shared.entitlements import NOMES_MODULO, Entitlements
 from app.core.config import settings
-from app.core.rate_limit import limitador_ia, limitador_parceiros
+from app.core.rate_limit import limitador_api, limitador_ia, limitador_parceiros
 from app.integrations.brasilapi_client import BrasilApiClient, consultar_cnpj_brasilapi
 from app.integrations.central_negocios_client import (
     MercadoClient,
@@ -306,6 +308,10 @@ def exigir_licenca_ativa(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> None:
+    verificar_licenca_ativa(db, tenant_id)
+
+
+def verificar_licenca_ativa(db: Session, tenant_id: str) -> None:
     """Trava os módulos pagos (PREDATOR/CRM/MAP) para tenants sem licença
     ativa — é o que distingue um cliente de uma empresa que só entrou pela
     Rede Social via convite (Onda H). `/rede-social/*` fica de fora
@@ -399,9 +405,6 @@ def exigir_plano_permite_api_parceiros(
     return usuario
 
 
-_NOMES_MODULO = {"map": "MAP", "predator": "PREDATOR", "crm": "CRM"}
-
-
 def exigir_modulo(modulo: str):
     """Dependency factory pra contratação avulsa por módulo (raio-X
     2026-09-24) — mesmo padrão de `exigir_plano_permite_api_parceiros`,
@@ -414,9 +417,26 @@ def exigir_modulo(modulo: str):
         tenant_id: str = Depends(get_tenant_id),
         plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
     ) -> None:
-        if not plan_limits.permite_modulo(tenant_id, modulo):
-            nome = _NOMES_MODULO.get(modulo, modulo)
+        if not Entitlements(plan_limits, tenant_id).has_module(modulo):
+            nome = NOMES_MODULO.get(modulo, modulo)
             raise NaoAutorizado(f"Este recurso é exclusivo de quem contratou o módulo {nome}.")
+
+    return _dependencia
+
+
+def exigir_algum_modulo(*modulos: str):
+    """Rotas legitimamente compartilhadas entre módulos (Fase 1, D-007):
+    Organization/Person (Conta/Decisor) são Shared Kernel, então um
+    tenant só-CRM e um só-PREDATOR precisam das duas. Libera se o plano
+    tiver QUALQUER um dos módulos listados."""
+
+    def _dependencia(
+        tenant_id: str = Depends(get_tenant_id),
+        plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+    ) -> None:
+        if not Entitlements(plan_limits, tenant_id).has_any_module(*modulos):
+            nomes = " ou ".join(NOMES_MODULO.get(modulo, modulo) for modulo in modulos)
+            raise NaoAutorizado(f"Este recurso exige o módulo {nomes}.")
 
     return _dependencia
 
@@ -461,5 +481,45 @@ def limitar_ia_por_tenant(max_tentativas: int = 20, janela_segundos: int = 300):
 
     def _dependencia(tenant_id: str = Depends(get_tenant_id)) -> None:
         limitador_ia.checar(f"ia:{tenant_id}", max_tentativas, janela_segundos)
+
+    return _dependencia
+
+
+API_LIMITE_POR_MINUTO = 120
+
+
+class ContextoApi:
+    """Quem está chamando a API de produto (Fase 3)."""
+
+    def __init__(self, tenant_id: str, chave_id: int, escopos: list[str]) -> None:
+        self.tenant_id = tenant_id
+        self.chave_id = chave_id
+        self.escopos = escopos
+
+
+def autenticar_api(escopo: str, modulo: str):
+    """Auth da API de produto (`/api/v1/map/*`, `/api/v1/predator/*`).
+
+    Ordem: chave válida e não revogada → rate limit por chave → escopo →
+    licença ativa → módulo contratado (`tenant.hasApiAccess(modulo)` =
+    módulo no plano + escopo na chave, §74). Tudo no backend."""
+
+    def _dependencia(
+        x_api_key: str | None = Header(None, alias="X-API-Key"),
+        authorization: str | None = Header(None, alias="Authorization"),
+        db: Session = Depends(get_db),
+        plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+    ) -> ContextoApi:
+        segredo = x_api_key
+        if segredo is None and authorization and authorization.startswith("Bearer "):
+            segredo = authorization[len("Bearer "):]
+        chave = api_keys.autenticar(db, segredo)
+        limitador_api.checar(f"chave-api:{chave.id}", API_LIMITE_POR_MINUTO, 60)
+        if escopo not in (chave.escopos or []):
+            raise NaoAutorizado(f"A chave de API não tem o escopo '{escopo}'.")
+        verificar_licenca_ativa(db, chave.tenant_id)
+        if not Entitlements(plan_limits, chave.tenant_id).has_module(modulo):
+            raise NaoAutorizado(f"A API do {NOMES_MODULO.get(modulo, modulo)} exige o módulo contratado.")
+        return ContextoApi(chave.tenant_id, chave.id, list(chave.escopos))
 
     return _dependencia
