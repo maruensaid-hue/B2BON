@@ -2,11 +2,11 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **PHASE 17 — SCALE, SECURITY & HARDENING** |
-| Última fase concluída | PHASE 16 — ANALYTICS & REVENUE INTELLIGENCE (2026-09-25) |
+| **CURRENT PHASE** | **CONCLUÍDO (Fases 0–14, 16, 17). Aguardando o PO para a Fase 15** |
+| Última fase concluída | PHASE 17 — SCALE, SECURITY & HARDENING (2026-09-25) |
 | Fase bloqueada | **PHASE 15 — PUBLIC PROCUREMENT PRICING: não executada, aguarda valores do PO (D-045)** |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/PHASE_16_COMPLETION.md` (Fase 15: `phases/PHASE_15_BLOCKED.md`) |
+| Relatório da última fase | `phases/PHASE_17_COMPLETION.md` (Fase 15: `phases/PHASE_15_BLOCKED.md`) |
 
 ## Autorizações
 
@@ -23,11 +23,12 @@
 - **OI-014** (produto): visibilidade padrão de empresas novas no diretório da rede.
 - **OI-013** (comercial): taxa de conversão custo → créditos de IA.
 - **OI-010** (alta): verificar em produção se as features de IA falhavam por `temperature` com `claude-sonnet-5` (corrigido no código).
+- **OI-016** (operação): metas de RPO/RTO.
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
 - Conectores de CRM (Fase 13) estão BETA e desligados: habilitar em produção só após validar contra contas reais (TD-069).
 
-## Baseline de qualidade (após a Fase 16)
+## Baseline de qualidade (após a Fase 17)
 
-- Backend: 1.933 passed. Migrações validadas também em Postgres 16.
+- Backend: 1.953 passed. Migrações validadas também em Postgres 16.
 - Frontend: lint OK (25 warnings), build OK.
 - E2E: 5/5.

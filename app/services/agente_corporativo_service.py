@@ -119,7 +119,8 @@ def _gerar_resposta(db: Session, tenant_id: str, pergunta: str, evidencias: list
     if not evidencias:
         return _RESPOSTA_SEM_EVIDENCIA
 
-    trechos = "\n".join(f"- {evidencia['trecho']}" for evidencia in evidencias)
+    trechos = intel.prompt_seguro.neutralizar("\n".join(f"- {evidencia['trecho']}" for evidencia in evidencias))
+    pergunta = intel.prompt_seguro.neutralizar(pergunta)
     resposta = intel.gerar(
         db,
         llm,

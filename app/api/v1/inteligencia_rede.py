@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_llm_provider, get_plan_limits_provider, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_llm_provider, get_plan_limits_provider, get_tenant_id, limitar_ia_por_tenant
 from app.contexts.shared.entitlements import Entitlements
 from app.llm.base import LLMProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
@@ -49,7 +49,7 @@ def listar_matches_intent(
     return sinal_oportunidade_service.sugerir_fornecedores_para_intent(db, tenant_id, intent_id)
 
 
-@router.post("/intents/{intent_id}/matches/{tenant_id_candidato}/explicar-com-ia", response_model=ExplicacaoMatchSchema)
+@router.post("/intents/{intent_id}/matches/{tenant_id_candidato}/explicar-com-ia", response_model=ExplicacaoMatchSchema, dependencies=[Depends(limitar_ia_por_tenant())])
 def explicar_match_com_ia(
     intent_id: int,
     tenant_id_candidato: str,

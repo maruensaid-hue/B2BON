@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # para conexão (lista separada por vírgula, ex.: "salesforce,hubspot").
     # Vazio = aparecem no hub, mas ninguém conecta.
     conectores_crm_habilitados: str = ""
+    # Fase 17: requisição acima disto (ms) é logada como WARNING `slow=1`.
+    log_requisicao_lenta_ms: int = 1500
 
     # Fallback de desenvolvimento apenas — franquia real é decisão comercial
     # pendente e vem do núcleo via PlanLimitsProvider (Seção 11 da especificação).

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
+    limitar_ia_por_tenant,
     get_ator_id,
     get_calendar_provider,
     get_crm_provider,
@@ -132,7 +133,7 @@ def confirmar_qualificacao(
     )
 
 
-@router.post("/{reuniao_id}/reprocessar-transcricao", response_model=ReuniaoSchema)
+@router.post("/{reuniao_id}/reprocessar-transcricao", response_model=ReuniaoSchema, dependencies=[Depends(limitar_ia_por_tenant())])
 def reprocessar_transcricao(
     reuniao_id: int,
     tenant_id: str = Depends(get_tenant_id),

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
+    limitar_ia_por_tenant,
     get_ator_id,
     get_calendar_provider,
     get_db,
@@ -38,7 +39,7 @@ def propor_horarios(
     )
 
 
-@router.post("/{decisor_id}/devolver")
+@router.post("/{decisor_id}/devolver", dependencies=[Depends(limitar_ia_por_tenant())])
 def devolver_lead(
     decisor_id: int,
     dados: DevolverLeadRequestSchema,

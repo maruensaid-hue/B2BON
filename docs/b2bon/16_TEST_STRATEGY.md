@@ -30,6 +30,14 @@
 | Privacidade e fronteiras de tenant na Business Network (GATE Fase 7) | `tests/integration/test_privacidade_rede.py` | Fase 7 |
 | Sinal → oportunidade sem duplicação + privacidade do matching (GATE Fase 8) | `tests/integration/test_network_intelligence.py` | Fase 8 |
 | Proveniência de documento de licitação (GATE Fase 9) | `tests/integration/test_bid_intelligence.py` | Fase 9 |
+| Conformidade dos conectores de CRM (suíte compartilhada) | `tests/conectores_crm.py` + `tests/integration/test_conector_*.py` | Fase 13 |
+| Preços preservados nas três cópias | `tests/unit/test_precos_preservados.py` | Fase 14 |
+| Métricas de receita e de compras com valor exato + barreira | `tests/integration/test_revenue_intelligence.py` | Fase 16 |
+| **Varredura de isolamento**: toda rota GET, tenant × tenant e Buy × Sell, com controle positivo e sem 5xx | `tests/integration/test_varredura_isolamento.py` | Fase 17 |
+| Prompt injection ponta a ponta (delimitação, contrato de saída, sensibilidade, ancoragem) | `tests/integration/test_seguranca_ia.py` | Fase 17 |
+| Toda rota com IA tem teto de uso (fitness) | `tests/unit/test_limite_ia_nas_rotas.py` | Fase 17 |
+| Toda FK tem índice, exceto autoria (fitness) | `tests/unit/test_indices_fk.py` | Fase 17 |
+| Orçamento de consultas (sem N+1 na carteira) | `tests/integration/test_desempenho_consultas.py` | Fase 17 |
 
 ## Regras
 
@@ -58,4 +66,9 @@
 | 9 | 1.825 passed | lint OK (25 warnings), build OK | 4/4 |
 | 10 | 1.840 passed | lint OK (25 warnings), build OK | 4/4 |
 | 11 | 1.844 passed | lint OK (25 warnings), build OK | 4/4 |
+| 12 | 1.857 passed | lint OK (25 warnings), build OK | 4/4 |
+| 13 | 1.917 passed | lint OK (25 warnings), build OK | 4/4 |
+| 14 | 1.926 passed | lint OK (25 warnings), build OK | 5/5 (+ página pública de planos) |
+| 16 | 1.933 passed | lint OK (25 warnings), build OK | 5/5 |
+| 17 | 1.953 passed (+ carga e restore em Postgres 16) | lint OK (25 warnings), build OK, 0 vulnerabilidades | 5/5 |
 | 12 | 1.857 passed | lint OK (25 warnings), build OK | 4/4 |

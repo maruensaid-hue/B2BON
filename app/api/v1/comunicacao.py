@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
 from app.llm.base import LLMProvider
 from app.models.icp import ICP
 from app.models.oferta import Oferta
@@ -48,7 +48,7 @@ def validar_texto(
     return ValidarTextoResponseSchema(valido=not violacoes, violacoes=violacoes)
 
 
-@router.post("/amostra", response_model=AmostraResponseSchema)
+@router.post("/amostra", response_model=AmostraResponseSchema, dependencies=[Depends(limitar_ia_por_tenant())])
 def gerar_amostra(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),

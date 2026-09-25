@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_usuario_atual
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_usuario_atual, limitar_ia_por_tenant
 from app.llm.base import LLMProvider
 from app.models.usuario import Usuario
 from app.schemas.motor import (
@@ -46,7 +46,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardMotorSchema:
     return motor_service.dashboard_motor(db)
 
 
-@router.get("/tenants/{tenant_id}/script-resgate", response_model=ScriptResgateSchema)
+@router.get("/tenants/{tenant_id}/script-resgate", response_model=ScriptResgateSchema, dependencies=[Depends(limitar_ia_por_tenant())])
 def script_resgate(
     tenant_id: str,
     db: Session = Depends(get_db),

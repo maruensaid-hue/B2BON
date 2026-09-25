@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_llm_provider, get_plan_limits_provider, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_llm_provider, get_plan_limits_provider, get_tenant_id, limitar_ia_por_tenant
 from app.llm.base import LLMProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.cadencia import (
@@ -172,7 +172,7 @@ def cancelar_cadencia(
     return CancelarCadenciaResponseSchema(**cadencia_service.cancelar(db, tenant_id, ator_id, cadencia_id))
 
 
-@router.post("/{cadencia_id}/gerar", response_model=GerarCadenciaResponseSchema)
+@router.post("/{cadencia_id}/gerar", response_model=GerarCadenciaResponseSchema, dependencies=[Depends(limitar_ia_por_tenant())])
 def gerar_cadencia_para_lote(
     cadencia_id: int,
     dados: GerarCadenciaRequestSchema,

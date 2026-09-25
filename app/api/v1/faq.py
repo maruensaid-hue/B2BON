@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_llm_provider, get_tenant_id, get_usuario_atual
+from app.api.deps import get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
 from app.llm.base import LLMProvider
 from app.models.usuario import Usuario
 from app.schemas.faq import FaqItemCreateSchema, FaqItemSchema, FaqPerguntarRequestSchema, FaqPerguntarResponseSchema
@@ -28,7 +28,7 @@ def listar_faq(
     return faq_service.listar(db, tenant_id)
 
 
-@router.post("/perguntar", response_model=FaqPerguntarResponseSchema)
+@router.post("/perguntar", response_model=FaqPerguntarResponseSchema, dependencies=[Depends(limitar_ia_por_tenant())])
 def perguntar_faq(
     dados: FaqPerguntarRequestSchema,
     llm: LLMProvider = Depends(get_llm_provider),

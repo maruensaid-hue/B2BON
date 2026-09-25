@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
 from app.contexts.map import contract as map_contract
 from app.llm.base import LLMProvider
 from app.models.usuario import Usuario
@@ -74,7 +74,7 @@ def registrar_interacao(
     )
 
 
-@router.get("/contas/{conta_id}/script-resgate", response_model=ScriptResgateContaSchema)
+@router.get("/contas/{conta_id}/script-resgate", response_model=ScriptResgateContaSchema, dependencies=[Depends(limitar_ia_por_tenant())])
 def script_resgate(
     conta_id: int,
     usuario: Usuario = Depends(get_usuario_atual),

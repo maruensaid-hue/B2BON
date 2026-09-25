@@ -263,3 +263,9 @@ __all__ = [
     "Representante",
     "ComissaoRepresentante",
 ]
+
+# Fase 17: índices das chaves estrangeiras (depois de todos os modelos carregados).
+from app.db.base import Base as _Base  # noqa: E402
+from app.models import indices_fk as _indices_fk  # noqa: E402
+
+_indices_fk.aplicar(_Base.metadata)

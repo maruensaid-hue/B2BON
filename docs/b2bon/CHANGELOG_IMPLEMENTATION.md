@@ -1,5 +1,15 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 17 — Scale, Security & Hardening (2026-09-25)
+
+- Varredura de isolamento sobre todas as rotas GET (tenant × tenant e Buy × Sell).
+- Prompt injection: tag antiga neutralizada, mensagem de lead e atividades delimitadas; suíte ponta a ponta.
+- Teto de IA em 9 rotas que não tinham; fitness function para todas.
+- 92 índices de FK (migração `c4f1a9e7d2b3`) + fitness function.
+- Teste de carga (script) e correção de N+1 no MAP (p95 geral 1.464 → 507 ms).
+- Verificação de backup/restore (script) e runbook de DR. Log de requisição lenta; cache no catálogo público.
+- Dependências: 0 vulnerabilidades (fast-uri atualizado no lockfile).
+
 ## Fase 16 — Analytics & Revenue Intelligence (2026-09-25)
 
 - Contexto `analytics`: 9 métricas de receita do lado vendedor + risco de renovação de contratos públicos (com Bid Intelligence). `GET /inteligencia/receita/metricas`.

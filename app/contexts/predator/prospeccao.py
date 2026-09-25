@@ -354,7 +354,7 @@ def enriquecer(
                 "Se um desses pontos não aparecer no texto, não invente — simplesmente não escreva "
                 "uma linha para ele. Termine com uma linha 'possivel_dor: ' resumindo, em uma "
                 "frase, qual dor ou necessidade de negócio os sinais encontrados sugerem.\n\n"
-                f"<CONTEUDO_EXTERNO_NAO_CONFIAVEL>\n{texto_site}\n</CONTEUDO_EXTERNO_NAO_CONFIAVEL>"
+                f"<CONTEUDO_EXTERNO_NAO_CONFIAVEL>\n{intel.prompt_seguro.neutralizar(texto_site)}\n</CONTEUDO_EXTERNO_NAO_CONFIAVEL>"
             )
         )
     )

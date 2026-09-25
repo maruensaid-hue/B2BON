@@ -114,7 +114,7 @@ def processar_mensagem_recebida(
                 f"'{_PREFIXO_TRANSFERIR}' seguido do motivo, caso a mensagem do lead esteja fora do "
                 "roteiro e fora da base de perguntas frequentes — nunca invente informação fora do "
                 f"roteiro ou da base.{bloco_faq}\n\n"
-                f"Mensagem do lead: {texto}"
+                "Mensagem do lead:\n" + intel.prompt_seguro.bloco_dados_externos("mensagem_do_lead", texto)
             )
         )
     )

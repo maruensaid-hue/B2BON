@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
 from app.llm.base import LLMProvider
 from app.schemas.regra_aprendida import (
     CorrecaoRecenteSchema,
@@ -45,7 +45,7 @@ def calcular_padroes_observados(
     return PadroesObservadosSchema(**metricas_service.calcular_padroes_observados(db, tenant_id))
 
 
-@router.post("/correcoes-recentes/{log_id}/sugerir-regra", response_model=SugestaoRegraSchema)
+@router.post("/correcoes-recentes/{log_id}/sugerir-regra", response_model=SugestaoRegraSchema, dependencies=[Depends(limitar_ia_por_tenant())])
 def sugerir_regra_com_ia(
     log_id: int,
     tenant_id: str = Depends(get_tenant_id),

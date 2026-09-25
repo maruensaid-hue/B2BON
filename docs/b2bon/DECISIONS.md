@@ -355,3 +355,17 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   lado comprador ficam no contexto `procurement` e nunca aparecem nas de
   receita (mesma fitness function da Fase 10).
 - **Status**: ACEITA.
+
+## D-047 · 2026-09-25 · Fase 17 · Toda FK indexada, exceto colunas de autoria
+- **Contexto**: 121 FKs sem índice (o Postgres não cria sozinho): joins por
+  conta/negócio e o `ON DELETE` de uma conta varriam as tabelas filhas.
+- **Decisão**: indexar as 92 FKs usadas em filtro/join; ficam de fora as
+  colunas de autoria (criado/aprovado/revisado/enviado por), que só custam
+  escrita. Fitness function impede FK nova sem índice.
+- **Status**: ACEITA.
+
+## D-048 · 2026-09-25 · Fase 17 · Toda rota com IA tem teto
+- **Decisão**: rota autenticada com IA usa `limitar_ia_por_tenant`; gatilhos
+  sem usuário (webhook, cron, link público) usam o teto por hora do gateway.
+  Verificado por fitness function sobre a árvore de dependências.
+- **Status**: ACEITA.

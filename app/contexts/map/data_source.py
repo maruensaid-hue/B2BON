@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.contexts.crm import contract as crm
 from app.contexts.integrations.contract import CrmAdapter, iterar_todos
-from app.contexts.map.interacoes import listar_interacoes
+from app.contexts.map.interacoes import listar_interacoes, listar_interacoes_do_tenant
 from app.contexts.shared.canonical.commercial import OpportunityStatus, StageType
 from app.contexts.shared.organizations import OrganizationRef, listar_organizacoes
 from app.models.pesquisa_nps import PesquisaNps
@@ -53,6 +53,11 @@ class MapDataSource(ABC):
 class CrmInternoMapDataSource(MapDataSource):
     def __init__(self, db: Session) -> None:
         self._db = db
+        # Fase 17 (carga): economia e ranking pedem as interações conta a
+        # conta (N+1: 1 consulta por conta). A partir da 2ª conta distinta
+        # na mesma instância (uma requisição), carrega o tenant de uma vez.
+        self._interacoes_por_conta: tuple[str, dict[int, list]] | None = None
+        self._primeira_conta_consultada: tuple[str, int] | None = None
 
     def contas(
         self, tenant_id: str, vendedor_usuario_id: int | None = None, apenas_com_vendedor: bool = False
@@ -86,7 +91,17 @@ class CrmInternoMapDataSource(MapDataSource):
         return crm.funil(self._db, tenant_id, vendedor_usuario_id)
 
     def interacoes(self, tenant_id: str, conta_id: int | str) -> list:
-        return listar_interacoes(self._db, tenant_id, int(conta_id))
+        conta_id = int(conta_id)
+        if self._interacoes_por_conta and self._interacoes_por_conta[0] == tenant_id:
+            return self._interacoes_por_conta[1].get(conta_id, [])
+        if self._primeira_conta_consultada in (None, (tenant_id, conta_id)):
+            self._primeira_conta_consultada = (tenant_id, conta_id)
+            return listar_interacoes(self._db, tenant_id, conta_id)
+        por_conta: dict[int, list] = {}
+        for interacao in listar_interacoes_do_tenant(self._db, tenant_id):
+            por_conta.setdefault(interacao.conta_id, []).append(interacao)
+        self._interacoes_por_conta = (tenant_id, por_conta)
+        return por_conta.get(conta_id, [])
 
 
 @dataclass(frozen=True)

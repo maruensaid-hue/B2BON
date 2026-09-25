@@ -6,7 +6,7 @@ e o comparativo dos planos self-service com preços da tabela `plano`.
 suspenso também precisa ver o próprio plano e o uso.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_plan_limits_provider, get_usuario_atual
@@ -18,7 +18,9 @@ router = APIRouter(tags=["catalogo"])
 
 
 @router.get("/catalogo")
-def ver_catalogo(db: Session = Depends(get_db)) -> dict:
+def ver_catalogo(response: Response, db: Session = Depends(get_db)) -> dict:
+    # Público e igual para todos: cache curto no navegador/CDN (Fase 17).
+    response.headers["Cache-Control"] = "public, max-age=300"
     return catalogo.catalogo(db)
 
 

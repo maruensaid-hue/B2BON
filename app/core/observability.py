@@ -17,6 +17,8 @@ from contextvars import ContextVar
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from app.core.config import settings
+
 CABECALHO = "X-Request-ID"
 _ID_SEGURO = re.compile(r"^[A-Za-z0-9._-]{8,128}$")
 
@@ -51,8 +53,11 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             return resposta
         finally:
             latencia_ms = int((time.monotonic() - inicio) * 1000)
-            logger_acesso.info(
-                "method=%s path=%s status=%s latency_ms=%s request_id=%s",
-                request.method, request.url.path, status, latencia_ms, correlation_id,
+            # Fase 17: requisição lenta sobe para WARNING (alerta sem precisar varrer INFO).
+            lenta = latencia_ms >= settings.log_requisicao_lenta_ms
+            logger_acesso.log(
+                logging.WARNING if lenta else logging.INFO,
+                "method=%s path=%s status=%s latency_ms=%s request_id=%s%s",
+                request.method, request.url.path, status, latencia_ms, correlation_id, " slow=1" if lenta else "",
             )
             _correlation_id.reset(token)
