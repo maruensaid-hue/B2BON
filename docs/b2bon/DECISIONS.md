@@ -347,3 +347,11 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   para a Fase 16; a Fase 15 é executada quando o PO enviar modelo, preços,
   usuários, créditos, limites, add-ons e regras de excedente.
 - **Status**: ACEITA.
+
+## D-046 · 2026-09-25 · Fase 16 · Métricas com metodologia, sem estimativa, divididas pela barreira
+- **Decisão**: toda métrica devolve metodologia e amostra; taxa sem
+  denominador é nula. "Assistido por IA" e "influenciado pela rede" são
+  toque registrado, não causalidade, e a interface diz isso. Métricas do
+  lado comprador ficam no contexto `procurement` e nunca aparecem nas de
+  receita (mesma fitness function da Fase 10).
+- **Status**: ACEITA.

@@ -33,6 +33,27 @@ interface Sinal {
   mensagem: string;
 }
 
+interface Indicador {
+  valor: number | null;
+  unidade: string;
+  metodologia: string;
+  amostra: number;
+}
+
+const ROTULO_INDICADOR: Record<string, string> = {
+  procurement_cycle_time: "Ciclo de contratação (mediana, dias)",
+  pca_execution: "Execução do PCA (contratado / planejado)",
+  supplier_performance: "Nota média dos fornecedores",
+  contract_renewal_risk: "Contratos com risco de renovação",
+};
+
+function formatarIndicador(i: Indicador): string {
+  if (i.valor === null) return "—";
+  return i.unidade === "taxa"
+    ? `${Math.round(i.valor * 100)}%`
+    : i.valor.toLocaleString("pt-BR");
+}
+
 interface Acao {
   acao: string;
   motivo: string;
@@ -64,11 +85,15 @@ export function ComprasPublicas() {
     nao_avaliados: string[];
   } | null>(null);
   const [acoes, setAcoes] = useState<Acao[]>([]);
+  const [indicadores, setIndicadores] = useState<Record<
+    string,
+    Indicador
+  > | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     try {
-      const [o, p, pr, d, s, a] = await Promise.all([
+      const [o, p, pr, d, s, a, ind] = await Promise.all([
         api.get<Registro[]>("/procurement/orgaos"),
         api.get<Registro[]>("/procurement/planos"),
         api.get<Registro[]>("/procurement/processos"),
@@ -77,6 +102,7 @@ export function ComprasPublicas() {
           "/procurement/riscos",
         ),
         api.get<Acao[]>("/procurement/proximas-acoes"),
+        api.get<Record<string, Indicador>>("/procurement/metricas"),
       ]);
       setOrgaos(o);
       setPlanos(p);
@@ -84,6 +110,7 @@ export function ComprasPublicas() {
       setDemandas(d);
       setSinais(s);
       setAcoes(a);
+      setIndicadores(ind);
       setPlanoId((atual) => atual ?? (p[0]?.id as number | undefined) ?? null);
     } catch (error) {
       setErro(
@@ -175,6 +202,28 @@ export function ComprasPublicas() {
         </div>
       </div>
       {erro && <div className="text-[12px] text-red">{erro}</div>}
+
+      {indicadores && (
+        <div
+          className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+          data-testid="indicadores-compras"
+        >
+          {Object.keys(ROTULO_INDICADOR).map((chave) => (
+            <Card key={chave}>
+              <SectionLabel>{ROTULO_INDICADOR[chave]}</SectionLabel>
+              <div
+                className="font-head text-xl font-bold text-text"
+                title={indicadores[chave].metodologia}
+              >
+                {formatarIndicador(indicadores[chave])}
+              </div>
+              <div className="text-[10px] text-muted">
+                Amostra: {indicadores[chave].amostra}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
         <Card className="lg:col-span-2">

@@ -84,6 +84,13 @@ def riscos(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db
     return compras.riscos.sinais(db, tenant_id)
 
 
+@router.get("/metricas")
+def metricas(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    """Indicadores do lado comprador (Fase 16): ciclo, execução do PCA,
+    fornecedores e risco de renovação. Nunca misturados com receita."""
+    return compras.metricas.metricas(db, tenant_id)
+
+
 @router.get("/proximas-acoes")
 def proximas_acoes(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
     return compras.nba.acoes(db, tenant_id, compras.riscos.sinais(db, tenant_id))

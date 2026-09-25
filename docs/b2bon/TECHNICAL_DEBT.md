@@ -78,6 +78,7 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-070 | Conectores somente leitura: sem upsert no CRM interno, sem webhooks de entrada, sem resolução de conflitos | `integrations/` | CRM externo é consultado ao vivo (MAP) | 17 | OPEN |
 | TD-071 | NPS/CS de CRMs externos não lido (HubSpot Service Hub feedback; Salesforce sem objeto padrão) | `adapters/hubspot.py` | Sinal de NPS do MAP fica vazio em conexões externas | 17 | OPEN |
 | TD-072 | Troca de plano/módulo de tenant existente não é self-service (vai ao comercial ou ao super_admin) | `Assinatura.tsx` | Upgrade depende de atendimento | 15 (billing com o PO) | OPEN |
+| TD-073 | Métricas calculadas na hora, sem série histórica nem snapshot; carregam os negócios do tenant em memória | `analytics/receita.py`, `procurement/metricas.py` | Sem tendência mês a mês; custo em tenants grandes | 17 | OPEN |
 | TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher com gatilho por cron desde a Fase 3 | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
 | TD-042 | `B2BOnCrmAdapter.list_*` sem paginação para pipelines/estágios/ofertas e `CanonicalMapDataSource` carrega tudo em memória | `adapters/b2bon_crm.py`, `map/data_source.py` | Custo em tenants grandes | 17 | OPEN |
 | TD-037 | `starlette.testclient` com `httpx` deprecated (warning) | saída do pytest | Quebra futura na atualização | oportunista | OPEN |

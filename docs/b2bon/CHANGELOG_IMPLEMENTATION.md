@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 16 — Analytics & Revenue Intelligence (2026-09-25)
+
+- Contexto `analytics`: 9 métricas de receita do lado vendedor + risco de renovação de contratos públicos (com Bid Intelligence). `GET /inteligencia/receita/metricas`.
+- Procurement: ciclo de contratação, execução do PCA, desempenho de fornecedores, risco de renovação. `GET /procurement/metricas`.
+- Toda métrica com metodologia e amostra; nada estimado. UI: CRM → Revenue Intelligence; indicadores em Compras públicas. Sem migração.
+
 ## Fase 15 — Public Procurement Pricing (NÃO EXECUTADA)
 
 - Bloqueada por regra do Master Prompt até o PO fornecer os valores (D-045). Estrutura pronta no catálogo.

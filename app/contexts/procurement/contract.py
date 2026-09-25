@@ -5,10 +5,23 @@ contrato. Sell Side, Business Network, CRM, PREDATOR, MAP, Opportunity e
 Intelligence não o importam (barreira Buy/Sell, fitness function).
 """
 
-from app.contexts.procurement import cadastros, contratos, demandas, documentos, fornecedores, nba, planejamento, precos, riscos, tipos, workspace
+from app.contexts.procurement import (
+    cadastros,
+    contratos,
+    demandas,
+    documentos,
+    fornecedores,
+    metricas,
+    nba,
+    planejamento,
+    precos,
+    riscos,
+    tipos,
+    workspace,
+)
 
 __all__ = [
-    "cadastros", "contratos", "demandas", "documentos", "fornecedores", "nba", "planejamento", "precos", "riscos", "tipos",
+    "cadastros", "contratos", "demandas", "documentos", "fornecedores", "metricas", "nba", "planejamento", "precos", "riscos", "tipos",
     "workspace",
 ]
 

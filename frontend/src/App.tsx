@@ -18,6 +18,9 @@ import { Termos } from "@/pages/Termos";
 // Rotas fora do bundle principal — cada uma vira seu próprio chunk, buscado
 // só quando o usuário realmente navega até ali (ex.: Admin, que só existe
 // pra super_admin, nunca precisa baixar pro resto dos usuários).
+const RevenueIntelligence = lazy(() =>
+  import("@/pages/crm/RevenueIntelligence").then((m) => ({ default: m.RevenueIntelligence })),
+);
 const AdminConvites = lazy(() => import("@/pages/admin/AdminConvites").then((m) => ({ default: m.AdminConvites })));
 const AdminLicencas = lazy(() => import("@/pages/admin/AdminLicencas").then((m) => ({ default: m.AdminLicencas })));
 const AdminPlanos = lazy(() => import("@/pages/admin/AdminPlanos").then((m) => ({ default: m.AdminPlanos })));
@@ -126,6 +129,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <Kanban />
+              </Suspense>
+            }
+          />
+          <Route
+            path="crm/receita"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <RevenueIntelligence />
               </Suspense>
             }
           />

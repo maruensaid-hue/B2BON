@@ -44,6 +44,7 @@ const NAV_ITEMS_PAGOS: NavItem[] = [
 const CRM_ITEM: NavItem = { path: "/crm", label: "CRM", icon: "◈", end: true, descricao: "Pipeline de negócios" };
 const CRM_SUBITENS: NavItem[] = [
   { path: "/crm/propostas/nova", label: "Criar Proposta", icon: "📄", descricao: "Gerar proposta comercial" },
+  { path: "/crm/receita", label: "Revenue Intelligence", icon: "📈", descricao: "Métricas de receita" },
 ];
 
 // PREDATOR — motor de prospecção/cadências/campanhas. Sem rota própria
