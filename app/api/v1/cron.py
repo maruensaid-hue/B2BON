@@ -19,6 +19,7 @@ from app.api.deps import (
     resolver_email_provider,
     resolver_whatsapp_provider,
 )
+from app.contexts.finops import contract as finops
 from app.contexts.platform.contract import webhooks
 from app.contexts.shared import events
 from app.core.config import settings
@@ -305,3 +306,11 @@ def processar_eventos(db: Session = Depends(get_db)) -> dict:
     eventos = events.processar_pendentes(db)
     entregas = webhooks.despachar_entregas(db)
     return {"eventos": eventos, "webhooks": entregas}
+
+
+@router.post("/creditos-ia", dependencies=[Depends(_exigir_segredo_cron)])
+def creditos_ia(db: Session = Depends(get_db)) -> dict:
+    """Fase 15 — roda de hora em hora: expira lotes vencidos, concede a
+    franquia do mês, libera reservas órfãs, registra alertas de uso
+    (80/95/100%), anomalias de consumo e alertas de margem."""
+    return finops.creditos_ia_rotina(db)

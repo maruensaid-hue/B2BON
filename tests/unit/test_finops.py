@@ -1,5 +1,5 @@
-"""AI FinOps & Credits (Fase 5): custo, créditos, carteira, orçamentos e o
-GATE §82 — nenhuma chamada de IA sem contabilização."""
+"""AI FinOps & Credits (Fases 5 e 15): custo, créditos pelo peso do workload,
+carteira, orçamentos e o GATE — nenhuma chamada de IA sem contabilização."""
 
 import importlib.util
 from decimal import Decimal
@@ -7,13 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from app.contexts.finops import creditos, orcamentos, precos
+from app.contexts.finops import carteira, orcamentos, precos
+from app.contexts.finops.comercial import TipoLote
 from app.contexts.intelligence.gateway import ContextoIA, gerar, limitador_automatico
-from app.contexts.intelligence.registro import FEATURES
+from app.contexts.intelligence.registro import FEATURES, WORKLOAD_POR_FEATURE
 from app.llm.schemas import LLMRequest, LLMResponse
 from app.models.carteira_creditos import MovimentoCredito
+from app.models.creditos_ia import ExecucaoIa
 from app.models.registro_uso_ia import RegistroUsoIa
-from app.services.errors import RegraNegocioViolada
+from app.services.errors import CreditosInsuficientes, RegraNegocioViolada
 from tests.fakes import FakeLLMProvider
 
 TENANT = "tenant-finops"
@@ -34,10 +36,6 @@ class LLMComModelo(FakeLLMProvider):
 def _precos(db_session):
     precos.garantir_precos_referencia(db_session)
     limitador_automatico.resetar()
-
-
-def _ativar_politica(db, creditos_por_usd=100.0, **kw):
-    return creditos.definir_politica(db, None, creditos_por_usd, kw.get("permite_excedente", False), kw.get("exige_saldo", False), None)
 
 
 def _chamar(db, llm, feature="crm.meeting_brief", tenant=TENANT):
@@ -64,40 +62,45 @@ def test_semente_da_migracao_bate_com_a_referencia_do_codigo():
     assert modulo._PRECOS == precos.PRECOS_REFERENCIA
 
 
-def test_politica_pendente_mede_custo_mas_nao_debita(db_session):
-    assert creditos.politica_vigente(db_session) is None or creditos.politica_vigente(db_session).status != "ATIVA"
+def _saldo(db, quantidade):
+    carteira.conceder(db, TENANT, TipoLote.ADJUSTMENT, quantidade, "teste")
+    db.commit()
+
+
+def test_custo_medido_e_credito_pelo_peso_do_workload_nao_pelo_custo(db_session, cobranca_ativa):
+    """Fase 15: crédito vem do peso do workload (meeting_intelligence = 10),
+    o custo do provedor é medido à parte e vira margem."""
+    _saldo(db_session, 100)
     _chamar(db_session, LLMComModelo())
     linha = db_session.query(RegistroUsoIa).one()
-    assert Decimal(str(linha.custo_usd)) == Decimal("0.0095") and linha.creditos_consumidos is None
-    assert db_session.query(MovimentoCredito).count() == 0
+    assert Decimal(str(linha.custo_usd)) == Decimal("0.0095") and linha.workload_codigo == "meeting_intelligence"
+    execucao = db_session.get(ExecucaoIa, linha.execucao_id)
+    assert (execucao.status, float(execucao.creditos_liquidados), float(execucao.custo_total_usd)) == ("LIQUIDADA", 10, 0.0095)
+    assert float(execucao.economia_cache_usd) > 0  # 10.000 tokens lidos do cache
+    db_session.expire_all()
+    assert carteira.disponivel(db_session, TENANT) == 90
 
 
-def test_politica_ativa_debita_a_carteira_atomicamente_com_o_ledger(db_session):
-    _ativar_politica(db_session, 100.0)
-    creditos.alocar(db_session, TENANT, 10, None, "teste")
-    _chamar(db_session, LLMComModelo())
-
-    linha = db_session.query(RegistroUsoIa).one()
-    assert Decimal(str(linha.creditos_consumidos)) == Decimal("0.9500")
-    consumo = db_session.query(MovimentoCredito).filter_by(tipo="CONSUMO").one()
-    assert consumo.registro_uso_ia_id == linha.id and Decimal(str(consumo.quantidade)) == Decimal("-0.95")
-    assert creditos.saldo(db_session, TENANT) == Decimal("9.05")
-
-
-def test_exige_saldo_bloqueia_antes_do_provedor(db_session):
-    _ativar_politica(db_session, 100.0, exige_saldo=True)
+def test_sem_saldo_bloqueia_antes_do_provedor(db_session, cobranca_ativa):
     llm = LLMComModelo()
-    with pytest.raises(RegraNegocioViolada):
+    with pytest.raises(CreditosInsuficientes):
         _chamar(db_session, llm)
     assert llm.chamadas == []
     assert db_session.query(RegistroUsoIa).one().status == "bloqueado"
 
 
-def test_excedente_permitido_deixa_saldo_negativo_e_registra_excedente(db_session):
-    _ativar_politica(db_session, 100.0, exige_saldo=True, permite_excedente=True)
+def test_excedente_enterprise_aprovado_vira_consumo_faturavel(db_session, cobranca_ativa):
+    config = carteira.configuracao(db_session, TENANT)
+    config.excedente_ativo, config.excedente_aprovado_por, config.excedente_limite_rigido = True, "super", 50
+    db_session.commit()
     _chamar(db_session, LLMComModelo())
-    assert db_session.query(MovimentoCredito).one().tipo == "EXCEDENTE"
-    assert creditos.saldo(db_session, TENANT) < 0
+    excedente = db_session.query(MovimentoCredito).filter_by(tipo="CREDIT_OVERAGE").one()
+    assert excedente.faturavel and float(excedente.quantidade) == -10
+    assert carteira.excedente_no_mes(db_session, TENANT) == 10
+    for _ in range(4):
+        _chamar(db_session, LLMComModelo())
+    with pytest.raises(CreditosInsuficientes):  # limite rígido do excedente (50)
+        _chamar(db_session, LLMComModelo())
 
 
 def test_orcamento_bloquear_por_feature_nao_afeta_outra_feature(db_session):
@@ -129,17 +132,21 @@ def test_orcamento_de_um_tenant_nao_bloqueia_outro(db_session):
 
 
 @pytest.mark.parametrize("feature", sorted(FEATURES))
-def test_gate_nenhuma_chamada_de_ia_sem_contabilizacao(db_session, feature):
-    """GATE da Fase 5 (§82): toda feature registrada, ao passar pelo
-    gateway, gera ledger com custo, créditos e movimento na carteira."""
-    _ativar_politica(db_session, 100.0)
-    creditos.alocar(db_session, TENANT, 1000, None, "gate")
+def test_gate_nenhuma_chamada_de_ia_sem_contabilizacao(db_session, feature, cobranca_ativa):
+    """GATE §82 (Fase 5) + §63 (Fase 15): toda feature registrada, ao passar
+    pelo gateway, gera evento de uso com custo, execução liquidada com o
+    peso do workload e consumo no extrato da carteira."""
+    _saldo(db_session, 1000)
     llm = LLMComModelo()
-    _chamar(db_session, llm, feature=feature)
+    gerar(db_session, llm, ContextoIA(tenant_id=TENANT, feature=feature, confirmado=True), LLMRequest(prompt="p"))
 
     linhas = db_session.query(RegistroUsoIa).all()
     assert len(linhas) == len(llm.chamadas) == 1
     linha = linhas[0]
-    assert linha.feature == feature and linha.status == "sucesso"
-    assert linha.custo_usd is not None and linha.creditos_consumidos is not None
-    assert db_session.query(MovimentoCredito).filter_by(registro_uso_ia_id=linha.id).count() == 1
+    assert linha.feature == feature and linha.status == "sucesso" and linha.custo_usd is not None
+    assert linha.workload_codigo == WORKLOAD_POR_FEATURE[feature] and linha.catalogo_versao == "CREDIT_CATALOG_V1"
+    execucao = db_session.get(ExecucaoIa, linha.execucao_id)
+    assert execucao.status == "LIQUIDADA" and execucao.creditos_liquidados > 0
+    assert float(execucao.custo_total_usd) == float(linha.custo_usd)
+    assert db_session.query(MovimentoCredito).filter_by(execucao_id=execucao.id, tipo="CREDIT_CONSUMED").count() >= 1
+    assert carteira.reconciliar(db_session, TENANT)["consistente"]

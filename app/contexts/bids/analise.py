@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.contexts.bids.tipos import CATEGORIAS_REQUISITO
-from app.contexts.intelligence.contract import ContextoIA, aprendizado, gerar, prompt_seguro
+from app.contexts.intelligence.contract import ContextoIA, aprendizado, execucao, gerar, prompt_seguro
 from app.contexts.shared import grounding, texto
 from app.core.observability import correlation_id_atual
 from app.llm.base import LLMProvider
@@ -41,7 +41,8 @@ _SISTEMA = (
 )
 
 
-def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | None, documento: DocumentoLicitacao) -> dict:
+def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | None, documento: DocumentoLicitacao,
+             confirmado: bool = False) -> dict:
     if documento.status_analise == "SEM_TEXTO":
         raise RegraNegocioViolada(
             "Este documento não tem texto extraível (provavelmente digitalizado). Sem OCR, a análise não é feita."
@@ -58,18 +59,23 @@ def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | No
     }
     criados: list[RequisitoLicitacao] = []
     sem_evidencia = 0
-    for bloco in blocos:
-        corpo = grounding.corpo_do_bloco(paginas, bloco)
-        resposta = gerar(
-            db, llm,
-            ContextoIA(tenant_id=tenant_id, feature=feature, usuario_id=usuario_id,
-                       entidade_tipo="documento_licitacao", entidade_id=documento.id),
-            LLMRequest(
-                system=_SISTEMA,
-                prompt=prompt_seguro.bloco_dados_externos(f"{documento.tipo} {documento.nome_arquivo}", corpo),
-                max_tokens=8000,
-            ),
-        )
+    base = ContextoIA(tenant_id=tenant_id, feature=feature, usuario_id=usuario_id, entidade_tipo="documento_licitacao",
+                      entidade_id=documento.id)
+    # Fase 15: um documento = uma execução de crédito, por mais blocos que tenha.
+    with execucao(db, base, parametros={"paginas": len(paginas)}, confirmado=confirmado) as ctx:
+        respostas = [
+            (bloco, gerar(
+                db, llm, ctx,
+                LLMRequest(
+                    system=_SISTEMA,
+                    prompt=prompt_seguro.bloco_dados_externos(f"{documento.tipo} {documento.nome_arquivo}",
+                                                              grounding.corpo_do_bloco(paginas, bloco)),
+                    max_tokens=8000,
+                ),
+            ))
+            for bloco in blocos
+        ]
+    for bloco, resposta in respostas:
         for item in grounding.itens_json(resposta.content)[:MAXIMO_ITENS_POR_BLOCO]:
             descricao = str(item.get("descricao") or "").strip()[:500]
             citacao = str(item.get("citacao") or "").strip()[:2000]

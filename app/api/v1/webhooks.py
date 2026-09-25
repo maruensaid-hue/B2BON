@@ -12,6 +12,7 @@ from app.api.deps import (
     resolver_email_provider,
     resolver_whatsapp_provider,
 )
+from app.contexts.finops import contract as finops
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
@@ -297,4 +298,5 @@ def webhook_mercadopago(
 
     if payment_id:
         pagamento_licenca_service.confirmar_via_webhook(db, payment_provider, payment_id, email)
+        finops.compras.confirmar_via_webhook(db, payment_provider, payment_id)  # top-up de AI Credits
     return {"recebido": True}

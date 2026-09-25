@@ -16,9 +16,17 @@
 - Procurement: ciclo de contratação, execução do PCA, desempenho de fornecedores, risco de renovação. `GET /procurement/metricas`.
 - Toda métrica com metodologia e amostra; nada estimado. UI: CRM → Revenue Intelligence; indicadores em Compras públicas. Sem migração.
 
-## Fase 15 — Public Procurement Pricing (NÃO EXECUTADA)
+## Fase 15 — Pricing, AI Credits & Commercial Monetization (2026-09-25)
 
-- Bloqueada por regra do Master Prompt até o PO fornecer os valores (D-045). Estrutura pronta no catálogo.
+- Desbloqueada pelo PO com o prompt da Fase 15 (antes: bloqueada, D-045).
+- Catálogo versionado de pacotes (AI Start … AI 1M, Enterprise sob consulta) e de workloads (`CREDIT_CATALOG_V1`, classes C0–C3, pesos do PO).
+- Carteira por lotes com validade e FEFO; extrato `CREDIT_*` idempotente; reserva → liquidação/liberação/estorno; franquia mensal sem rollover.
+- AI Gateway: execução por workload, confirmação acima de 100 créditos, budget guard, cost guard, cache de resposta, evento de uso com workload/versão/cache.
+- Compra de créditos pelo checkout existente + webhook assinado (valor conferido, idempotente); recarga automática com consentimento; excedente Enterprise.
+- Economia: receita, custo, margem (alvo 80%, alerta 75%, crítico 65%), alertas por janela e amostra, matriz de rentabilidade, recomendações de peso (nunca aplicadas sozinhas), economia unitária, valor de negócio, relatório de calibração 7/30/90.
+- UI: página AI Credits do cliente, AI FinOps (super_admin), seção de vendas e página "Como funcionam os AI Credits"; confirmação de consumo na análise de edital.
+- Migração `e7b3c1a9f5d2`: saldos da Fase 5 viram lote ADJUSTMENT com reconciliação. Cron `/cron/creditos-ia`.
+- Preço-base do Public Procurement e franquias Procurement/Full Suite seguem pendentes (OI-017).
 
 ## Fase 14 — Product Catalog, Plans & Sales Page (2026-09-25)
 

@@ -14,6 +14,8 @@ from app.core.observability import CorrelationIdMiddleware
 from app.db.base import Base
 from app.db.session import engine
 from app.services.errors import (
+    ConfirmacaoNecessaria,
+    CreditosInsuficientes,
     LimiteDeTaxaExcedido,
     NaoAutenticado,
     NaoAutorizado,
@@ -88,6 +90,16 @@ async def handle_nao_encontrado(request: Request, exc: NaoEncontrado) -> JSONRes
 @app.exception_handler(RegraNegocioViolada)
 async def handle_regra_negocio_violada(request: Request, exc: RegraNegocioViolada) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detalhe": str(exc)})
+
+
+@app.exception_handler(CreditosInsuficientes)
+async def handle_creditos_insuficientes(request: Request, exc: CreditosInsuficientes) -> JSONResponse:
+    return JSONResponse(status_code=402, content={"detalhe": str(exc), **exc.detalhe})
+
+
+@app.exception_handler(ConfirmacaoNecessaria)
+async def handle_confirmacao_necessaria(request: Request, exc: ConfirmacaoNecessaria) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detalhe": str(exc), "requer_confirmacao": True, **exc.detalhe})
 
 
 @app.exception_handler(ValidacaoFalhou)

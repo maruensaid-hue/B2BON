@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.contexts.intelligence.contract import ContextoIA, gerar, prompt_seguro
+from app.contexts.intelligence.contract import ContextoIA, execucao, gerar, prompt_seguro
 from app.contexts.procurement.tipos import CLASSIFICACOES
 from app.contexts.shared import grounding
 from app.contexts.shared.documentos import extrair_paginas, sha256, validar
@@ -57,7 +57,8 @@ def registrar(
     return documento
 
 
-def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | None, documento: DocumentoCompras) -> dict:
+def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | None, documento: DocumentoCompras,
+             confirmado: bool = False) -> dict:
     if documento.classificacao == "RESTRICTED":
         raise RegraNegocioViolada("Documento RESTRICTED não é enviado para IA.")
     if documento.status_analise == "SEM_TEXTO":
@@ -67,14 +68,17 @@ def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | No
     blocos = todos[:MAXIMO_BLOCOS]
     achados: list[dict] = []
     sem_evidencia = 0
-    for bloco in blocos:
-        resposta = gerar(
-            db, llm,
-            ContextoIA(tenant_id=tenant_id, feature=FEATURE, usuario_id=usuario_id,
-                       entidade_tipo="documento_compras", entidade_id=documento.id),
-            LLMRequest(system=_SISTEMA, prompt=prompt_seguro.bloco_dados_externos(
-                f"{documento.tipo} {documento.nome_arquivo}", grounding.corpo_do_bloco(paginas, bloco)), max_tokens=6000),
-        )
+    base = ContextoIA(tenant_id=tenant_id, feature=FEATURE, usuario_id=usuario_id, entidade_tipo="documento_compras",
+                      entidade_id=documento.id)
+    # Fase 15: documento inteiro = uma execução (crédito variável por página,
+    # estimado e confirmado antes; ações determinísticas de compras não usam IA).
+    with execucao(db, base, parametros={"paginas": len(paginas)}, confirmado=confirmado) as ctx:
+        respostas = [
+            (bloco, gerar(db, llm, ctx, LLMRequest(system=_SISTEMA, prompt=prompt_seguro.bloco_dados_externos(
+                f"{documento.tipo} {documento.nome_arquivo}", grounding.corpo_do_bloco(paginas, bloco)), max_tokens=6000)))
+            for bloco in blocos
+        ]
+    for bloco, resposta in respostas:
         for item in grounding.itens_json(resposta.content)[:60]:
             categoria = str(item.get("categoria") or "").upper()
             descricao = str(item.get("descricao") or "").strip()[:500]

@@ -24,3 +24,23 @@ class NaoAutorizado(ErroServico):
 
 class LimiteDeTaxaExcedido(ErroServico):
     """Mapeado para 429 — proteção contra força bruta em rotas públicas de autenticação."""
+
+
+class CreditosInsuficientes(RegraNegocioViolada):
+    """Mapeado para 402 — sem AI Credits disponíveis para a operação (Fase 15)."""
+
+    def __init__(self, mensagem: str, detalhe: dict | None = None) -> None:
+        super().__init__(mensagem)
+        self.detalhe = detalhe or {}
+
+
+class ConfirmacaoNecessaria(RegraNegocioViolada):
+    """Mapeado para 409 com a estimativa — operação cara precisa de "continuar"."""
+
+    def __init__(self, mensagem: str, detalhe: dict | None = None) -> None:
+        super().__init__(mensagem)
+        self.detalhe = detalhe or {}
+
+
+class OrcamentoIaExcedido(RegraNegocioViolada):
+    """Mapeado para 409 — budget guard do tenant (hard stop) atingido."""

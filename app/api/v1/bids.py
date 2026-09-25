@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
 from app.contexts.bids import contract as bids
+from app.contexts.intelligence import contract as intel
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.models.documento_cofre import DocumentoCofre
@@ -196,11 +197,22 @@ def baixar_documento(documento_id: int, tenant_id: str = Depends(get_tenant_id),
                     headers={"Content-Disposition": f'attachment; filename="documento-{documento.id}"', "X-Content-SHA256": documento.sha256})
 
 
-@router.post("/documentos/{documento_id}/analisar", dependencies=[Depends(limitar_ia_por_tenant())])
-def analisar_documento(documento_id: int, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
-                       llm: LLMProvider = Depends(get_llm_provider), db: Session = Depends(get_db)) -> dict:
+@router.get("/documentos/{documento_id}/estimativa")
+def estimar_analise(documento_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    """AI Credits estimados antes de analisar (Fase 15)."""
     documento = _documento(db, tenant_id, documento_id)
-    resultado = bids.analise.analisar(db, llm, tenant_id, _usuario_id(ator_id), documento)
+    feature = bids.analise.FEATURE_TR if documento.tipo == "TR" else bids.analise.FEATURE_EDITAL
+    return intel.estimar(db, feature, {"paginas": len(documento.paginas_texto or [])})
+
+
+@router.post("/documentos/{documento_id}/analisar", dependencies=[Depends(limitar_ia_por_tenant())])
+def analisar_documento(documento_id: int, confirmar: bool = False, tenant_id: str = Depends(get_tenant_id),
+                       ator_id: str | None = Depends(get_ator_id), llm: LLMProvider = Depends(get_llm_provider),
+                       db: Session = Depends(get_db)) -> dict:
+    """`confirmar=true` depois de ver a estimativa, quando a operação passa do
+    limiar de confirmação (resposta 409 com `requer_confirmacao`)."""
+    documento = _documento(db, tenant_id, documento_id)
+    resultado = bids.analise.analisar(db, llm, tenant_id, _usuario_id(ator_id), documento, confirmado=confirmar)
     auditoria_service.registrar(db, tenant_id, "documento_licitacao_analisado", "documento_licitacao", documento.id, ator_id, resultado)
     db.commit()
     return resultado

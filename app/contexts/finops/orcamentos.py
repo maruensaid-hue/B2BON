@@ -1,9 +1,8 @@
 """Budgets e quotas de IA por tenant/módulo/feature (Fase 5).
 
 Janela: mês corrente (UTC). `BLOQUEAR` faz o gateway recusar a chamada
-antes de chamar o provedor; `ALERTAR` só sinaliza (dashboard). Também
-bloqueia quando a política exige saldo e a carteira está zerada sem
-permissão de excedente.
+antes de chamar o provedor; `ALERTAR` só sinaliza (dashboard). Budget em
+créditos (Fase 15) fica em `limites.verificar_orcamento`.
 """
 
 from dataclasses import dataclass
@@ -13,7 +12,6 @@ from decimal import Decimal
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.contexts.finops import creditos
 from app.models.orcamento_ia import OrcamentoIa
 from app.models.registro_uso_ia import RegistroUsoIa
 from app.services.errors import ValidacaoFalhou
@@ -98,8 +96,6 @@ def motivo_de_bloqueio(db: Session, tenant_id: str, modulo: str, feature: str) -
         aplica = estado.escopo == "tenant" or (estado.escopo == "modulo" and estado.alvo == modulo) or (estado.escopo == "feature" and estado.alvo == feature)
         if aplica and estado.acao == "BLOQUEAR" and estado.estourado:
             return f"orçamento de IA ({estado.escopo}{':' + estado.alvo if estado.alvo else ''}) atingido no mês"
-    politica = creditos.politica_vigente(db)
-    if politica and politica.status == creditos.STATUS_ATIVA and politica.exige_saldo and not politica.permite_excedente:
-        if creditos.saldo(db, tenant_id) <= 0:
-            return "saldo de créditos de IA esgotado"
+    # Saldo de créditos: desde a Fase 15 é checado na reserva da execução
+    # (`execucoes.abrir`), não aqui.
     return None

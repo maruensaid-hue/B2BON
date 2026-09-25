@@ -22,6 +22,7 @@ from app.api.v1.listas_prospeccao import router as listas_prospeccao_router
 from app.api.v1.convites import router as convites_router
 from app.api.v1.crm import router as crm_router
 from app.api.v1.conversas import router as conversas_router
+from app.api.v1.ai_credits import router as ai_credits_router
 from app.api.v1.cron import router as cron_router
 from app.api.v1.decisores import router as decisores_router
 from app.api.v1.email_direto import router as email_direto_router
@@ -123,6 +124,8 @@ router.include_router(whatsapp_router, dependencies=_exige_predator)
 router.include_router(webhooks_router)
 router.include_router(optout_router)
 router.include_router(cron_router)
+# AI Credits (Fase 15): pacotes/workloads públicos; carteira do tenant exige login.
+router.include_router(ai_credits_router)
 # Endpoint público sem licença (link de captura de lead por CTA de
 # anúncio/site) + um endpoint autenticado (`/config`) só pra gerar/exibir
 # o link do próprio tenant — mesmo raciocínio de `webhooks_router`/

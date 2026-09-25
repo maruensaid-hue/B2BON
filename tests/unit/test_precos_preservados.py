@@ -39,3 +39,25 @@ def test_seed_e_migracao_cobram_os_mesmos_precos():
     avulsos = {nome: float(preco) for nome, preco in re.findall(r'\("([A-Z]+ \w+)", ([\d.]+), \d+, "\w+"\)', migracao)}
     cobrados = {k: v for k, v in {**suites, **avulsos}.items() if k in PRECOS}
     assert cobrados == PRECOS
+
+
+# Fase 15: pacotes de AI Credits definidos pelo PO (créditos, R$). A única
+# cópia é a semente do catálogo versionado; o frontend lê da API.
+PACOTES_AI_CREDITS = {
+    "AI_START": (5_000, 99), "AI_15K": (15_000, 249), "AI_30K": (30_000, 449), "AI_75K": (75_000, 899),
+    "AI_150K": (150_000, 1499), "AI_350K": (350_000, 2999), "AI_1M": (1_000_000, 6990), "ENTERPRISE": (None, None),
+}
+
+
+def test_pacotes_de_ai_credits_sao_os_do_po():
+    from app.contexts.finops.catalogos import SEMENTE_PACOTES
+
+    semente = {codigo: (creditos, int(preco) if preco is not None else None) for codigo, _, creditos, preco, _ in SEMENTE_PACOTES}
+    assert semente == PACOTES_AI_CREDITS
+
+
+def test_frontend_nao_tem_preco_de_pacote_fixo_no_codigo():
+    """Preço duplicado no frontend diverge do catálogo na primeira mudança."""
+    padrao = re.compile(r"R\$\s?(99|249|449|899|1\.499|2\.999|6\.990)(,00)?\b")
+    for arquivo in (RAIZ / "frontend/src").rglob("*.tsx"):
+        assert not padrao.search(arquivo.read_text(encoding="utf-8")), f"preço de pacote fixo em {arquivo}"

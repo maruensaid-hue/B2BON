@@ -2,33 +2,34 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **CONCLUÍDO (Fases 0–14, 16, 17). Aguardando o PO para a Fase 15** |
-| Última fase concluída | PHASE 17 — SCALE, SECURITY & HARDENING (2026-09-25) |
-| Fase bloqueada | **PHASE 15 — PUBLIC PROCUREMENT PRICING: não executada, aguarda valores do PO (D-045)** |
+| **CURRENT PHASE** | **NENHUMA** — Fases 0–17 concluídas; aguardando instrução do Product Owner |
+| Última fase concluída | PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION (2026-09-25) |
+| Fase 15 | Desbloqueada pelo PO em 2026-09-25 com o prompt "PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION" (substitui o escopo "Public Procurement Pricing") e concluída no mesmo dia. Preço-base do Public Procurement e franquias do Procurement/Full Suite continuam PENDING_FINAL_DEFINITION por decisão do PO |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/PHASE_17_COMPLETION.md` (Fase 15: `phases/PHASE_15_BLOCKED.md`) |
+| Relatório da última fase | `phases/PHASE_15_COMPLETION.md` |
 
 ## Autorizações
 
 | Fase | Autorizada por | Data | Observações |
 |---|---|---|---|
 | 0 | Product Owner ("COMEÇAR AGORA PELA PHASE 0") | 2026-09-25 | — |
+| 15 | Product Owner ("pode prosseguir e concluir a fase") | 2026-09-25 | Franquias do Public Procurement e da Full Suite: decisão futura do PO |
 | 1–17 | Product Owner ("Siga para a Fase 1 […] seguir para a Fase 2 e assim sucessivamente até o final do projeto, fica previamente autorizado o commit e subir todas as fases seguintes") | 2026-09-25 | **Exceções que continuam valendo, por regra do próprio Master Prompt:** Fase 15 só com valores de preço fornecidos pelo PO; nenhum preço ou valor de plano é alterado ou inventado (inclui OI-001) |
 
 ## Pendências abertas relevantes
 
 - **OI-001** (crítica): limites 0 nos planos PREDATOR avulsos. Depende de valores do PO.
-- **Public Procurement**: módulo criado, preço PENDING_DEFINITION; Fase 15 só com valores do PO.
+- **OI-017** (comercial): franquias de AI Credits do Public Procurement (50–100K) e da Full Suite (75–100K) e preço-base do Public Procurement — decisão futura do PO; hoje nada concedido por elas.
+- **OI-018** (financeiro): câmbio USD→BRL para a margem de IA (sem ele a margem aparece indisponível).
 - **OI-015** (comercial): empacotamento e preço do módulo Bid Intelligence (B2B ON Public Sector). Módulo existe, nenhum plano o inclui.
 - **OI-014** (produto): visibilidade padrão de empresas novas no diretório da rede.
-- **OI-013** (comercial): taxa de conversão custo → créditos de IA.
 - **OI-010** (alta): verificar em produção se as features de IA falhavam por `temperature` com `claude-sonnet-5` (corrigido no código).
 - **OI-016** (operação): metas de RPO/RTO.
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
 - Conectores de CRM (Fase 13) estão BETA e desligados: habilitar em produção só após validar contra contas reais (TD-069).
 
-## Baseline de qualidade (após a Fase 17)
+## Baseline de qualidade (após a Fase 15)
 
-- Backend: 1.953 passed. Migrações validadas também em Postgres 16.
-- Frontend: lint OK (25 warnings), build OK.
-- E2E: 5/5.
+- Backend: 1.995 passed, 2 skipped (+2 testes de concorrência que rodam com `B2BON_TESTE_PG_URL`, 2/2 em Postgres 16). Migrações validadas também em Postgres 16 (head `e7b3c1a9f5d2`).
+- Ruff: 40 (sem novos). Frontend: lint OK (25 warnings), build OK.
+- E2E: 6/6.

@@ -54,7 +54,8 @@ def test_nada_nao_lancado_aparece_como_disponivel(client, monkeypatch):
     assert all(c["disponibilidade"] == "BETA" and not c["liberado_para_conexao"]
                for s, c in conectores.items() if s != "b2bon_crm")
     assert produtos["connectors"]["disponibilidade"] == "BETA"
-    assert produtos["ai_credits"]["disponibilidade"] == "EM_DEFINICAO"  # política de créditos pendente (OI-013)
+    assert produtos["ai_credits"]["disponibilidade"] == "DISPONIVEL"  # Fase 15: pacotes do catálogo versionado
+    assert {p["codigo"] for p in produtos["ai_credits"]["pacotes"]} >= {"AI_START", "AI_1M", "ENTERPRISE"}
 
     monkeypatch.setattr(settings, "conectores_crm_habilitados", "hubspot")
     conectores = {c["sistema"]: c for c in _produtos(client)["connectors"]["conectores"]}

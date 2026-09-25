@@ -4,6 +4,7 @@ custo em USD, política de créditos e alocação."""
 from app.contexts.finops import precos
 from app.contexts.intelligence.gateway import ContextoIA, gerar
 from app.llm.schemas import LLMRequest, LLMResponse
+from app.models.auditoria import AuditLog
 from tests.fakes import FakeLLMProvider
 
 TENANT = "tenant-teste"
@@ -27,7 +28,8 @@ def test_dashboard_da_plataforma_agrega_por_tenant_modulo_e_modelo(client, db_se
     assert resumo["totais"]["chamadas"] == 2 and resumo["totais"]["custo_usd"] > 0
     assert {t["chave"] for t in resumo["por_tenant"]} == {TENANT, "outro-tenant"}
     assert resumo["por_modelo"][0]["chave"] == "claude-sonnet-5"
-    assert resumo["receita_ia"] is None and "preço do crédito" in resumo["indisponivel"]["receita_ia"]
+    assert resumo["receita_ia"] > 0  # Fase 15: créditos da franquia × receita de referência
+    assert resumo["margem_bruta_ia"] is None and "FINOPS_CAMBIO_USD_BRL" in resumo["indisponivel"]["margem_bruta_ia"]
     assert resumo["unitarios"]["custo_por_bid_usd"] is None
 
 
@@ -54,13 +56,19 @@ def test_tenant_nao_define_orcamento_em_usd_mas_define_por_chamadas(client, cria
     assert estados[0]["limite_chamadas"] == 100 and estados[0]["custo_usd"] is None
 
 
-def test_super_admin_define_politica_e_aloca_creditos(client):
-    politica = client.post("/api/v1/finops/politica-creditos", json={"creditos_por_usd": 250}).json()
-    assert politica["status"] == "ATIVA" and politica["creditos_por_usd"] == 250
-    alocacao = client.post(f"/api/v1/finops/tenants/{TENANT}/creditos", json={"quantidade": 500, "descricao": "bônus"}).json()
-    assert alocacao["saldo"] == 500
-    extrato = client.get("/api/v1/finops/extrato").json()
-    assert extrato[0]["tipo"] == "ALOCACAO"
+def test_super_admin_ajusta_creditos_com_motivo_e_auditoria(client, db_session):
+    """Fase 15: a conversão custo→créditos saiu; ajuste administrativo é lote
+    auditado (valor anterior e novo)."""
+    assert client.post("/api/v1/finops/politica-creditos", json={"creditos_por_usd": 250}).status_code == 405
+    sem_motivo = client.post(f"/api/v1/finops/tenants/{TENANT}/creditos", json={"quantidade": 500})
+    assert sem_motivo.status_code == 422
+    ajuste = client.post(f"/api/v1/finops/tenants/{TENANT}/creditos", json={"quantidade": 500, "motivo": "bônus de lançamento",
+                                                                             "tipo": "PROMOTIONAL", "validade_dias": 30}).json()
+    assert ajuste["disponivel"] - ajuste["disponivel_anterior"] == 500
+    extrato = client.get("/api/v1/ai-credits/extrato").json()
+    assert extrato[0]["tipo"] == "CREDIT_PROMOTIONAL" and extrato[0]["quantidade"] == 500
+    auditoria = db_session.query(AuditLog).filter_by(tenant_id=TENANT, evento_tipo="creditos_ia_ajustados").one()
+    assert auditoria.detalhes["valor_novo"] - auditoria.detalhes["valor_anterior"] == 500 and auditoria.ator_id == "1"
 
 
 def test_precos_listam_fonte(client, db_session):

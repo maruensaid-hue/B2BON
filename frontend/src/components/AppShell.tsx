@@ -117,7 +117,8 @@ const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
 // de admin de tenant tipo="distribuidor" (decisão validada com o usuário).
 const ADMIN_NAV_ITEM_INTEGRACOES: NavItem = { path: "/admin/integracoes", label: "Integrações", icon: "🔌" };
 const ADMIN_NAV_ITEM_API: NavItem = { path: "/admin/api", label: "API & Webhooks", icon: "🧩" };
-const ADMIN_NAV_ITEM_IA: NavItem = { path: "/admin/ia", label: "IA & Créditos", icon: "💠" };
+const ADMIN_NAV_ITEM_IA: NavItem = { path: "/admin/ia", label: "FinOps IA", icon: "📈" };
+const NAV_ITEM_AI_CREDITS: NavItem = { path: "/ai-credits", label: "AI Credits", icon: "💠" };
 const ADMIN_NAV_ITEM_ASSINATURA: NavItem = { path: "/assinatura", label: "Assinatura", icon: "🧾" };
 
 const CLASSE_ITEM_BASE =
@@ -797,7 +798,8 @@ export function AppShell() {
                 ))}
               {ehAdminDistribuidor && <NavButton {...ADMIN_NAV_ITEM_INTEGRACOES} collapsed={collapsed} />}
               {(isAdmin || isSuperAdmin) && <NavButton {...ADMIN_NAV_ITEM_API} collapsed={collapsed} />}
-              {(isAdmin || isSuperAdmin) && <NavButton {...ADMIN_NAV_ITEM_IA} collapsed={collapsed} />}
+              {(isAdmin || isSuperAdmin) && <NavButton {...NAV_ITEM_AI_CREDITS} collapsed={collapsed} />}
+              {isSuperAdmin && <NavButton {...ADMIN_NAV_ITEM_IA} collapsed={collapsed} />}
               {(isAdmin || isSuperAdmin) && <NavButton {...ADMIN_NAV_ITEM_ASSINATURA} collapsed={collapsed} />}
               <NavButton {...ADMIN_NAV_ITEM_CONVITES} collapsed={collapsed} />
               {isSuperAdmin &&

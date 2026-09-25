@@ -135,20 +135,22 @@ def _conectores() -> dict:
 
 
 def _creditos_ia(db: Session) -> dict:
-    politica = finops.creditos.politica_vigente(db)
-    status = politica.status if politica else finops.creditos.STATUS_PENDENTE
+    """Fase 15: AI Credits à venda. Preços vêm do catálogo versionado de
+    pacotes do FinOps (fonte única); aqui só se referencia."""
+    pacotes = [finops.catalogos.pacote_dict(p) for p in finops.catalogos.pacotes_vigentes(db)]
     return {
-        "id": "ai_credits", "nome": "Créditos de IA",
-        "descricao": "Todo uso de IA é medido por chamada. A conversão de consumo em créditos e a franquia por plano estão em definição.",
-        "disponibilidade": Disponibilidade.DISPONIVEL if status == finops.creditos.STATUS_ATIVA else Disponibilidade.EM_DEFINICAO,
-        "status_preco": StatusPreco.DEFINIDO if status == finops.creditos.STATUS_ATIVA else StatusPreco.PENDING_DEFINITION,
-        "politica": status,
+        "id": "ai_credits", "nome": "B2B ON AI Credits",
+        "descricao": "Cada plano inclui AI Credits mensais; pacotes adicionais valem por 12 meses. "
+                     "Uma carteira compartilhada por empresa, consumida pelo que vence primeiro.",
+        "disponibilidade": Disponibilidade.DISPONIVEL, "status_preco": StatusPreco.DEFINIDO,
+        "pacotes": pacotes, "franquias": finops.comercial.franquias_publicas(),
     }
 
 
 def _plano_publico(plano: Plano) -> dict:
     return {
         "id": plano.id, "nome": plano.nome, "categoria": plano.categoria, "preco_mensal": plano.preco_mensal,
+        "ai_credits_mensais": finops.comercial.franquia_mensal(list(plano.modulos_contratados or []))[0],
         "max_usuarios": plano.max_usuarios, "modulos": list(plano.modulos_contratados or []),
         "limites": {
             "franquia_contas_mes": plano.franquia_contas_mes, "cadencias_mes": plano.limite_cadencias_mes,
@@ -223,7 +225,8 @@ def assinatura(db: Session, tenant_id: str, plan_limits: PlanLimitsProvider) -> 
         },
         "ia": {
             "chamadas_no_mes": ia["totais"]["chamadas"], "creditos_consumidos": ia["totais"]["creditos_consumidos"],
-            "saldo_creditos": float(finops.creditos.saldo(db, tenant_id)), "politica": ia["politica_creditos"],
+            "saldo_creditos": float(finops.carteira.disponivel(db, tenant_id)),
+            "franquia_mensal": finops.carteira.franquia_do_tenant(db, tenant_id)[0],
         },
         "conectores": next(p for p in catalogo_atual["produtos"] if p["id"] == "connectors")["conectores"],
     }

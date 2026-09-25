@@ -121,8 +121,8 @@ def confirmar_via_webhook(
     rota. Idempotente: um webhook duplicado (o Mercado Pago reenvia em
     caso de timeout na resposta) não reprocessa nem re-estende a licença."""
     detalhe = payment_provider.buscar_pagamento(pagamento_id_externo)
-    if not detalhe.referencia_externa:
-        return
+    if not detalhe.referencia_externa or not detalhe.referencia_externa.isdigit():
+        return  # "creditos:<id>" é compra de AI Credits (finops.compras)
 
     pagamento = db.query(PagamentoLicenca).filter_by(id=int(detalhe.referencia_externa)).one_or_none()
     if pagamento is None:

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { CatalogoProdutos } from "@/components/CatalogoProdutos";
+import { SecaoAiCredits } from "@/components/SecaoAiCredits";
 
 interface Modulo {
   nome: string;
@@ -370,6 +371,8 @@ export function Planos() {
           <strong className="text-text">Acima de 100 usuários</strong> — condições negociadas com o time comercial da
           B2B ON.
         </div>
+
+        <SecaoAiCredits />
 
         <CatalogoProdutos />
 

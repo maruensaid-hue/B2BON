@@ -34,6 +34,26 @@ class Settings(BaseSettings):
     # para conexão (lista separada por vírgula, ex.: "salesforce,hubspot").
     # Vazio = aparecem no hub, mas ninguém conecta.
     conectores_crm_habilitados: str = ""
+    # Fase 15 — B2B ON AI Credits. Regras comerciais configuráveis por ambiente;
+    # lidas SÓ por `app/contexts/finops/comercial.py` (fonte única).
+    ai_margem_alvo: float = 0.80
+    ai_margem_alerta: float = 0.75
+    ai_margem_critica: float = 0.65
+    # ENFORCE = sem saldo bloqueia (salvo excedente/recarga); MEASURE = mede e registra excedente sem bloquear.
+    ai_creditos_modo: str = "ENFORCE"
+    # Estimativa acima disto (créditos) pede confirmação antes de executar.
+    ai_creditos_limiar_confirmacao: int = 100
+    # Reservas abertas simultâneas por tenant (proteção contra loop/integração defeituosa).
+    ai_creditos_max_reservas_abertas: int = 20
+    # Validade padrão de créditos comprados (meses).
+    ai_creditos_validade_topup_meses: int = 12
+    # Receita de referência por crédito de franquia de assinatura (R$ por 1.000 créditos)
+    # para medir margem; default = preço efetivo do maior pacote (conservador).
+    ai_creditos_receita_ref_assinatura_1k_brl: float = 6.99
+    # Receita por 1.000 créditos de excedente pós-pago (Enterprise), até contrato próprio.
+    ai_creditos_receita_ref_excedente_1k_brl: float = 6.99
+    # Cache de resposta (features marcadas como cacheáveis), em horas.
+    ai_cache_resposta_horas: int = 24
     # Fase 17: requisição acima disto (ms) é logada como WARNING `slow=1`.
     log_requisicao_lenta_ms: int = 1500
 

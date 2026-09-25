@@ -369,3 +369,56 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   sem usuário (webhook, cron, link público) usam o teto por hora do gateway.
   Verificado por fitness function sobre a árvore de dependências.
 - **Status**: ACEITA.
+
+## D-049 · 2026-09-25 · Fase 15 · Crédito vem do peso do workload, não do custo
+- **Contexto**: a Fase 5 converteria custo em créditos (`creditos_por_usd`,
+  OI-013). O PO definiu na Fase 15 um catálogo de workloads com pesos (§14).
+- **Decisão**: cada feature do gateway mapeia para um workload de um catálogo
+  versionado; o crédito cobrado é o peso (fixo ou variável por páginas/
+  documentos). O custo real é medido à parte e só alimenta margem. A política
+  `politica_creditos_ia` vira legado só leitura.
+- **Consequência**: preço previsível para o cliente; margem monitorada e
+  recalibrada por nova versão do catálogo, nunca automaticamente.
+- **Status**: ACEITA.
+
+## D-050 · 2026-09-25 · Fase 15 · Carteira por lotes com FEFO e reserva antes do provedor
+- **Decisão**: créditos vivem em lotes (SUBSCRIPTION, TOPUP, PROMOTIONAL,
+  ADJUSTMENT, ENTERPRISE_OVERAGE) com validade; consumo FEFO com desempate
+  PROMOTIONAL < ADJUSTMENT < SUBSCRIPTION < TOPUP. Toda execução reserva
+  antes da chamada (carteira travada com `SELECT … FOR UPDATE`), liquida no
+  sucesso e libera na falha. Operação de N chamadas = uma cobrança.
+  Idempotência por `(tenant, idempotency_key)` em execução, lote e movimento.
+- **Status**: ACEITA.
+
+## D-051 · 2026-09-25 · Fase 15 · Receita de referência dos créditos da assinatura
+- **Contexto**: o preço do plano não é separado entre software e IA.
+- **Decisão**: para margem, crédito de franquia vale R$ 6,99/1.000 (o menor
+  preço efetivo da tabela de pacotes, AI 1M) — referência conservadora,
+  configurável (`AI_CREDITOS_RECEITA_REF_ASSINATURA_1K_BRL`). Top-up usa o
+  preço pago ÷ créditos; promocional e ajuste, zero.
+- **Status**: ACEITA (revisável pelo PO).
+
+## D-052 · 2026-09-25 · Fase 15 · Modos ENFORCE e MEASURE
+- **Decisão**: produção roda ENFORCE (sem saldo, sem chamada, salvo excedente
+  Enterprise aprovado). MEASURE mede tudo e registra excedente não faturável —
+  usado para rollout gradual e pela suíte de testes (fixture `cobranca_ativa`
+  liga ENFORCE nos testes de cobrança).
+- **Status**: ACEITA.
+
+## D-053 · 2026-09-25 · Fase 15 · Recarga automática cria pedido, não cobra fora de sessão
+- **Contexto**: a integração de pagamento (preferência avulsa do Mercado Pago)
+  não guarda meio de pagamento para cobrança sem o cliente presente.
+- **Decisão**: com consentimento explícito (quem e quando), saldo abaixo do
+  limiar cria um pedido pendente do pacote escolhido (um por vez) e o admin
+  conclui o pagamento. Créditos só entram pelo webhook assinado, com valor
+  conferido. Cobrança fora de sessão fica em TD-076.
+- **Status**: ACEITA.
+
+## D-054 · 2026-09-25 · Fase 15 · Franquias pendentes não concedem nada
+- **Decisão**: franquias do Public Procurement (faixa 50–100K) e da Full Suite
+  (75–100K) ficam PENDING_FINAL_DEFINITION por decisão do PO; nada é concedido
+  por elas e as páginas mostram "Em definição". Até lá, plano de suíte recebe
+  a soma das franquias dos módulos que contém. Opportunity Intelligence e
+  Business Network (+10K) são add-ons não vendidos hoje: não concedem.
+  O preço-base do Public Procurement segue PENDING_DEFINITION.
+- **Status**: ACEITA.

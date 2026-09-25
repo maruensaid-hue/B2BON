@@ -2,9 +2,11 @@
 
 Tudo calculado do ledger (`registro_uso_ia`). Métricas sem base honesta
 voltam `None` com o motivo em `indisponivel` — nunca um número inventado:
-- AI Revenue / Gross Profit / Gross Margin: dependem do preço do crédito
-  ao cliente (política pendente e preços da Fase 14/15);
-- AI Cost / Bid e / Procurement Process: módulos das Fases 9–10;
+- AI Revenue / Gross Profit / Gross Margin: desde a Fase 15 vêm das
+  execuções liquidadas (créditos × receita por crédito do lote); lucro e
+  margem exigem câmbio configurado. Detalhe em `economia.py`;
+- AI Cost / Bid e / Procurement Process: ver `economia.economia_unitaria`
+  (procurement fica no painel do comprador — barreira Buy/Sell);
 - AI Cost / Revenue Generated: custo em USD × receita em BRL exige
   câmbio configurado (`FINOPS_CAMBIO_USD_BRL`).
 """
@@ -78,6 +80,9 @@ def resumo(db: Session, inicio: datetime, fim: datetime, tenant_id: str | None =
     )
     cambio = settings.finops_cambio_usd_brl
     politica = creditos.politica_vigente(db)
+    from app.contexts.finops import economia  # import local: economia também lê o ledger
+
+    financeiro = economia.kpis(db, inicio, fim, tenant_id)
 
     return {
         "periodo": {"inicio": inicio.isoformat(), "fim": fim.isoformat()},
@@ -103,13 +108,13 @@ def resumo(db: Session, inicio: datetime, fim: datetime, tenant_id: str | None =
             "custo_por_processo_compra_usd": None,
             "custo_ia_sobre_receita_ganha": round(custo_total * cambio / receita_ganha, 6) if cambio and receita_ganha else None,
         },
-        "receita_ia": None,
-        "lucro_bruto_ia": None,
-        "margem_bruta_ia": None,
+        "receita_ia": financeiro["ai_revenue_brl"],
+        "lucro_bruto_ia": financeiro["ai_gross_profit_brl"],
+        "margem_bruta_ia": financeiro["ai_gross_margin"],
         "indisponivel": {
-            "receita_ia": "preço do crédito ao cliente ainda não definido (política de créditos e Fases 14/15)",
-            "custo_por_bid_usd": "módulo Bid Intelligence ainda não existe (Fase 9)",
-            "custo_por_processo_compra_usd": "módulo Public Procurement ainda não existe (Fase 10)",
+            "margem_bruta_ia": financeiro["motivo_indisponivel"],
+            "custo_por_bid_usd": "ver /finops/economia-unitaria (ai_cost_per_bid, em BRL)",
+            "custo_por_processo_compra_usd": "exibido no painel de Compras públicas (barreira Buy/Sell)",
             "custo_ia_sobre_receita_ganha": None if cambio else "defina FINOPS_CAMBIO_USD_BRL (custo em USD, receita em BRL)",
         },
         "por_tenant": _agrupar(db, RegistroUsoIa.tenant_id, filtros) if tenant_id is None else [],

@@ -10,6 +10,7 @@ import { EsqueciSenha } from "@/pages/EsqueciSenha";
 import { Login } from "@/pages/Login";
 import { PagamentoRetorno } from "@/pages/PagamentoRetorno";
 import { Planos } from "@/pages/Planos";
+import { ComoFuncionamAiCredits } from "@/pages/ComoFuncionamAiCredits";
 import { RedefinirSenha } from "@/pages/RedefinirSenha";
 import { RegistrarConvite } from "@/pages/RegistrarConvite";
 import { Privacidade } from "@/pages/Privacidade";
@@ -43,6 +44,7 @@ const CerebroCorporativo = lazy(() =>
   import("@/pages/inteligencia/CerebroCorporativo").then((m) => ({ default: m.CerebroCorporativo })),
 );
 const Assinatura = lazy(() => import("@/pages/Assinatura").then((m) => ({ default: m.Assinatura })));
+const AiCredits = lazy(() => import("@/pages/AiCredits").then((m) => ({ default: m.AiCredits })));
 const FinOpsIa = lazy(() => import("@/pages/admin/FinOpsIa").then((m) => ({ default: m.FinOpsIa })));
 const ApiPlataforma = lazy(() => import("@/pages/admin/ApiPlataforma").then((m) => ({ default: m.ApiPlataforma })));
 const Integracoes = lazy(() => import("@/pages/admin/Integracoes").then((m) => ({ default: m.Integracoes })));
@@ -101,6 +103,7 @@ export default function App() {
       <Route path="/captura-lead/:codigo" element={<CapturaLead />} />
       <Route path="/criar-conta" element={<CriarConta />} />
       <Route path="/planos" element={<Planos />} />
+      <Route path="/como-funcionam-ai-credits" element={<ComoFuncionamAiCredits />} />
       <Route
         path="/central-de-negocios"
         element={
@@ -377,6 +380,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <Assinatura />
+              </Suspense>
+            }
+          />
+          <Route
+            path="ai-credits"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <AiCredits />
               </Suspense>
             }
           />

@@ -90,6 +90,23 @@ def _garantir_licenca_ativa(db_session: Session, tenant_id: str) -> None:
 ATOR_ID = "1"
 
 
+@pytest.fixture(autouse=True)
+def _modo_creditos_medicao(monkeypatch):
+    """Fase 15: a suíte mede créditos sem bloquear (MEASURE), para que
+    testes de prompt/CRM não dependam de saldo. Testes de AI Credits usam
+    a fixture `cobranca_ativa` (modo de produção, ENFORCE)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ai_creditos_modo", "MEASURE")
+
+
+@pytest.fixture()
+def cobranca_ativa(monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ai_creditos_modo", "ENFORCE")
+
+
 @pytest.fixture()
 def db_session() -> Generator[Session, None, None]:
     # StaticPool: o TestClient roda os endpoints em outra thread (via

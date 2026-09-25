@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
 from app.contexts.procurement import contract as compras
+from app.contexts.intelligence import contract as intel
 from app.llm.base import LLMProvider
 from app.models.documento_compras import DocumentoCompras
 from app.models.usuario import Usuario
@@ -179,11 +180,21 @@ def baixar_documento(documento_id: int, tenant_id: str = Depends(get_tenant_id),
                     headers={"Content-Disposition": f'attachment; filename="documento-{documento.id}"', "X-Content-SHA256": documento.sha256})
 
 
-@router.post("/documentos/{documento_id}/analisar", dependencies=[Depends(limitar_ia_por_tenant())])
-def analisar_documento(documento_id: int, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
-                       llm: LLMProvider = Depends(get_llm_provider), db: Session = Depends(get_db)) -> dict:
+@router.get("/documentos/{documento_id}/estimativa")
+def estimar_analise(documento_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    """AI Credits estimados antes de analisar (Fase 15)."""
     documento = _documento(db, tenant_id, documento_id)
-    resultado = compras.documentos.analisar(db, llm, tenant_id, _usuario_id(ator_id), documento)
+    return intel.estimar(db, compras.documentos.FEATURE, {"paginas": len(documento.paginas_texto or [])})
+
+
+@router.post("/documentos/{documento_id}/analisar", dependencies=[Depends(limitar_ia_por_tenant())])
+def analisar_documento(documento_id: int, confirmar: bool = False, tenant_id: str = Depends(get_tenant_id),
+                       ator_id: str | None = Depends(get_ator_id), llm: LLMProvider = Depends(get_llm_provider),
+                       db: Session = Depends(get_db)) -> dict:
+    """Documento longo passa do limiar: a primeira chamada devolve 409 com a
+    estimativa (`requer_confirmacao`); com `confirmar=true`, executa."""
+    documento = _documento(db, tenant_id, documento_id)
+    resultado = compras.documentos.analisar(db, llm, tenant_id, _usuario_id(ator_id), documento, confirmado=confirmar)
     db.commit()
     return resultado
 

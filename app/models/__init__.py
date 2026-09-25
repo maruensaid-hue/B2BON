@@ -81,6 +81,17 @@ from app.models.politica_creditos_ia import PoliticaCreditosIa
 from app.models.carteira_creditos import CarteiraCreditos
 from app.models.carteira_creditos import MovimentoCredito
 from app.models.orcamento_ia import OrcamentoIa
+from app.models.creditos_ia import (
+    AlertaCreditos,
+    CacheRespostaIa,
+    CatalogoCreditos,
+    CompraCreditos,
+    ConfiguracaoCreditosTenant,
+    ExecucaoIa,
+    LoteCreditos,
+    PacoteCreditos,
+    WorkloadIa,
+)
 from app.models.conhecimento_corporativo import ConhecimentoCorporativo
 from app.models.perfil_inteligencia import PerfilInteligencia
 from app.models.evento_aprendizado import EventoAprendizado
@@ -262,6 +273,15 @@ __all__ = [
     "LinkCapturaLead",
     "Representante",
     "ComissaoRepresentante",
+    "AlertaCreditos",
+    "CacheRespostaIa",
+    "CatalogoCreditos",
+    "CompraCreditos",
+    "ConfiguracaoCreditosTenant",
+    "ExecucaoIa",
+    "LoteCreditos",
+    "PacoteCreditos",
+    "WorkloadIa",
 ]
 
 # Fase 17: índices das chaves estrangeiras (depois de todos os modelos carregados).

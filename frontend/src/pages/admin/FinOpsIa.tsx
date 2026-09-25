@@ -1,101 +1,300 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Navigate } from "react-router-dom";
 
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
+import { brl, type Pacote } from "@/lib/aiCredits";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
-/** AI FinOps & Credits (Fase 5 do Master Prompt v4).
- * super_admin: custo real da plataforma (USD), política de créditos e alocação.
- * admin do tenant: consumo próprio em chamadas/créditos, saldo, orçamentos. */
+/** AI FinOps — painel da plataforma (Fases 5 e 15, só super_admin).
+ * Receita dos AI Credits × custo real de IA, margens por dimensão com
+ * alertas por janela e amostra mínima, matriz de rentabilidade,
+ * recomendações de peso (nunca aplicadas sozinhas), catálogos versionados
+ * e ajustes auditados. O admin do tenant usa a página AI Credits. */
 
-interface Agrupado {
+interface Kpis {
+  ai_revenue_brl: number;
+  ai_variable_cost_brl: number | null;
+  ai_variable_cost_usd: number;
+  ai_gross_profit_brl: number | null;
+  ai_gross_margin: number | null;
+  nivel_margem: string | null;
+  margem_alvo: number;
+  motivo_indisponivel: string | null;
+  execucoes: number;
+  credits_sold: number;
+  credits_sold_revenue_brl: number;
+  credits_consumed: number;
+  credits_expired: number;
+  unused_credit_liability: { creditos: number; valor_brl: number };
+  overage: { creditos: number; receita_brl: number };
+  avg_cost_per_1k_credits_brl: number | null;
+  avg_revenue_per_1k_credits_brl: number | null;
+  cache_savings_usd: number;
+  cache_hit_rate: number | null;
+}
+
+interface LinhaMargem {
   chave: string | null;
-  chamadas: number;
-  custo_usd: number;
-  tokens_entrada: number;
-  tokens_saida: number;
+  execucoes: number;
   creditos: number;
+  receita_brl: number;
+  custo_usd: number;
+  custo_brl: number | null;
+  margem_bruta: number | null;
+  nivel: string | null;
+  amostra_suficiente: boolean;
+  modulo?: string;
+  economicamente_inadequado?: boolean;
 }
 
-interface ResumoPlataforma {
-  politica_creditos: string | null;
-  totais: {
-    chamadas: number;
-    custo_usd: number;
-    chamadas_sem_preco: number;
-    cache_ratio: number | null;
-    creditos_consumidos: number;
-    tokens_entrada: number;
-    tokens_saida: number;
-  };
-  unitarios: Record<string, number | null>;
-  indisponivel: Record<string, string | null>;
-  por_tenant: Agrupado[];
-  por_modulo: Agrupado[];
-  por_feature: Agrupado[];
-  por_modelo: Agrupado[];
+interface AlertaMargem {
+  alerta: string;
+  janela_dias: number;
+  dimensao: string;
+  chave: string;
+  margem_bruta: number;
+  execucoes: number;
 }
 
-interface MeuUso {
-  politica_creditos: string | null;
-  chamadas: number;
-  creditos_consumidos: number;
-  saldo_creditos: number;
-  por_feature: { feature: string; chamadas: number; creditos: number }[];
+interface Recomendacao {
+  workload: string;
+  mensagem: string | null;
+  direcao: string;
+  peso_atual: number;
+  peso_sugerido_min: number;
+  peso_sugerido_max: number;
 }
 
-interface Orcamento {
-  orcamento_id: number;
-  escopo: string;
-  alvo: string | null;
-  acao: string;
-  chamadas: number;
-  limite_chamadas: number | null;
-  percentual: number | null;
-  estourado: boolean;
-  em_alerta: boolean;
+interface Catalogo {
+  ativo: string;
+  versoes: {
+    versao: string;
+    status: string;
+    motivo: string | null;
+    vigente_desde: string | null;
+  }[];
+  workloads: {
+    codigo: string;
+    nome: string;
+    modulo: string;
+    classe: string;
+    creditos_base: number;
+    custo_max_usd: number | null;
+  }[];
 }
 
-const usd = (valor: number) => `US$ ${valor.toFixed(4)}`;
-const ROTULO_POLITICA: Record<string, string> = {
-  PENDING_DEFINITION: "Conversão em créditos a definir (custo já medido)",
-  ATIVA: "Ativa",
+interface Reconciliacao {
+  tenant_id: string;
+  disponivel: number;
+  reservado: number;
+  consistente: boolean;
+  diferenca: number;
+}
+
+const DIMENSOES = [
+  "modulo",
+  "workload",
+  "tenant",
+  "plano",
+  "pacote",
+  "agente",
+  "provider",
+  "modelo",
+];
+const pct = (valor: number | null) =>
+  valor === null ? "—" : `${(valor * 100).toFixed(1)}%`;
+const TOM_NIVEL: Record<string, "green" | "amber" | "red" | "muted"> = {
+  OK: "green",
+  ABAIXO_DO_ALVO: "amber",
+  MARGIN_WARNING: "amber",
+  MARGIN_CRITICAL: "red",
 };
 
-function TabelaAgrupada({ titulo, linhas }: { titulo: string; linhas: Agrupado[] }) {
+function useCarregar<T>(caminho: string) {
+  const [dados, setDados] = useState<T | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const recarregar = useCallback(() => {
+    api
+      .get<T>(caminho)
+      .then((r) => {
+        setDados(r);
+        setErro(null);
+      })
+      .catch((e) =>
+        setErro(e instanceof ApiError ? e.message : "Falha ao carregar."),
+      );
+  }, [caminho]);
+  useEffect(() => {
+    recarregar();
+  }, [recarregar]);
+  return { dados, erro, recarregar };
+}
+
+function Nivel({ nivel }: { nivel: string | null }) {
+  if (!nivel) return <span className="text-muted">—</span>;
+  return <Badge tone={TOM_NIVEL[nivel] ?? "muted"}>{nivel}</Badge>;
+}
+
+function Resumo({ dias }: { dias: number }) {
+  const { dados: k, erro } = useCarregar<Kpis>(`/finops/economia?dias=${dias}`);
+  if (!k)
+    return (
+      <div className="mb-4 text-[12px] text-muted">{erro ?? "Carregando…"}</div>
+    );
+  return (
+    <>
+      <div className="mb-2 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <KpiCard
+          label="Receita de IA"
+          value={brl(k.ai_revenue_brl)}
+          sub={`${k.execucoes} execuções`}
+          colorClassName="text-green"
+        />
+        <KpiCard
+          label="Custo de IA"
+          value={
+            k.ai_variable_cost_brl === null
+              ? `US$ ${k.ai_variable_cost_usd.toFixed(2)}`
+              : brl(k.ai_variable_cost_brl)
+          }
+          colorClassName="text-red"
+        />
+        <KpiCard
+          label="Lucro bruto"
+          value={
+            k.ai_gross_profit_brl === null ? "—" : brl(k.ai_gross_profit_brl)
+          }
+        />
+        <KpiCard
+          label="Margem bruta"
+          value={pct(k.ai_gross_margin)}
+          sub={`alvo ${pct(k.margem_alvo)}`}
+          colorClassName="text-amber"
+        />
+      </div>
+      {k.motivo_indisponivel && (
+        <div className="mb-2 text-[11px] text-amber">
+          {k.motivo_indisponivel}
+        </div>
+      )}
+      <Card className="mb-4 text-[12px]">
+        <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
+          <div>
+            Créditos vendidos: <b>{k.credits_sold.toLocaleString("pt-BR")}</b> (
+            {brl(k.credits_sold_revenue_brl)})
+          </div>
+          <div>
+            Créditos consumidos:{" "}
+            <b>{k.credits_consumed.toLocaleString("pt-BR")}</b>
+          </div>
+          <div>
+            Créditos expirados:{" "}
+            <b>{k.credits_expired.toLocaleString("pt-BR")}</b>
+          </div>
+          <div>
+            Passivo de créditos não usados:{" "}
+            <b>{k.unused_credit_liability.creditos.toLocaleString("pt-BR")}</b>{" "}
+            ({brl(k.unused_credit_liability.valor_brl)})
+          </div>
+          <div>
+            Excedente faturável:{" "}
+            <b>{k.overage.creditos.toLocaleString("pt-BR")}</b> (
+            {brl(k.overage.receita_brl)})
+          </div>
+          <div>
+            Receita / custo por 1.000 créditos:{" "}
+            <b>
+              {k.avg_revenue_per_1k_credits_brl === null
+                ? "—"
+                : brl(k.avg_revenue_per_1k_credits_brl)}
+            </b>{" "}
+            /{" "}
+            <b>
+              {k.avg_cost_per_1k_credits_brl === null
+                ? "—"
+                : brl(k.avg_cost_per_1k_credits_brl)}
+            </b>
+          </div>
+          <div>
+            Economia com cache: <b>US$ {k.cache_savings_usd.toFixed(4)}</b>
+          </div>
+          <div>
+            Cache hit rate: <b>{pct(k.cache_hit_rate)}</b>
+          </div>
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function Margens({ dias }: { dias: number }) {
+  const [dimensao, setDimensao] = useState("modulo");
+  const { dados } = useCarregar<LinhaMargem[]>(
+    `/finops/margens?dimensao=${dimensao}&dias=${dias}`,
+  );
   return (
     <Card className="mb-4">
-      <SectionLabel>{titulo}</SectionLabel>
+      <div className="mb-2 flex items-center justify-between">
+        <SectionLabel>Margem por dimensão</SectionLabel>
+        <select
+          value={dimensao}
+          onChange={(e) => setDimensao(e.target.value)}
+          className="rounded-md border border-border bg-transparent px-2 py-1 text-[12px]"
+        >
+          {DIMENSOES.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+      </div>
       <table className="w-full border-collapse text-[12px]">
         <thead>
           <tr className="border-b border-border text-[9.5px] tracking-wide text-muted uppercase">
             <th className="p-2 text-left">Item</th>
-            <th className="p-2 text-right">Chamadas</th>
-            <th className="p-2 text-right">Tokens (entrada/saída)</th>
-            <th className="p-2 text-right">Custo</th>
+            <th className="p-2 text-right">Execuções</th>
             <th className="p-2 text-right">Créditos</th>
+            <th className="p-2 text-right">Receita</th>
+            <th className="p-2 text-right">Custo</th>
+            <th className="p-2 text-right">Margem</th>
+            <th className="p-2 text-right">Situação</th>
           </tr>
         </thead>
         <tbody>
-          {linhas.map((linha) => (
+          {(dados ?? []).map((linha) => (
             <tr key={linha.chave ?? "—"} className="border-b border-border">
               <td className="p-2">{linha.chave ?? "—"}</td>
-              <td className="p-2 text-right">{linha.chamadas}</td>
-              <td className="p-2 text-right text-muted">
-                {linha.tokens_entrada.toLocaleString("pt-BR")} / {linha.tokens_saida.toLocaleString("pt-BR")}
+              <td className="p-2 text-right">{linha.execucoes}</td>
+              <td className="p-2 text-right">
+                {linha.creditos.toLocaleString("pt-BR")}
               </td>
-              <td className="p-2 text-right">{usd(linha.custo_usd)}</td>
-              <td className="p-2 text-right">{linha.creditos.toFixed(2)}</td>
+              <td className="p-2 text-right">{brl(linha.receita_brl)}</td>
+              <td className="p-2 text-right">
+                {linha.custo_brl === null
+                  ? `US$ ${linha.custo_usd.toFixed(4)}`
+                  : brl(linha.custo_brl)}
+              </td>
+              <td className="p-2 text-right">{pct(linha.margem_bruta)}</td>
+              <td className="p-2 text-right">
+                <Nivel nivel={linha.nivel} />
+                {!linha.amostra_suficiente && (
+                  <span className="ml-1 text-[10px] text-muted">
+                    amostra pequena
+                  </span>
+                )}
+              </td>
             </tr>
           ))}
-          {linhas.length === 0 && (
+          {dados?.length === 0 && (
             <tr>
-              <td colSpan={5} className="p-3 text-center text-muted">
-                Sem uso no período.
+              <td colSpan={7} className="p-3 text-center text-muted">
+                Sem execuções no período.
               </td>
             </tr>
           )}
@@ -105,226 +304,472 @@ function TabelaAgrupada({ titulo, linhas }: { titulo: string; linhas: Agrupado[]
   );
 }
 
-function VisaoPlataforma() {
-  const [resumo, setResumo] = useState<ResumoPlataforma | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+function AlertasERecomendacoes({ dias }: { dias: number }) {
+  const alertas = useCarregar<AlertaMargem[]>("/finops/alertas-margem");
+  const recomendacoes = useCarregar<Recomendacao[]>(
+    `/finops/recomendacoes-peso?dias=${dias}`,
+  );
+  const matriz = useCarregar<LinhaMargem[]>(
+    `/finops/matriz-rentabilidade?dias=${dias}`,
+  );
+  const inadequados = (matriz.dados ?? []).filter(
+    (l) => l.economicamente_inadequado,
+  );
+  return (
+    <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-3">
+      <Card>
+        <SectionLabel>Alertas de margem</SectionLabel>
+        <div className="mb-1 text-[10.5px] text-muted">
+          Janelas de 7 e 30 dias, só com amostra mínima.
+        </div>
+        {(alertas.dados ?? []).map((a) => (
+          <div
+            key={`${a.janela_dias}-${a.dimensao}-${a.chave}`}
+            className="flex justify-between py-1 text-[12px]"
+          >
+            <span>
+              {a.dimensao}: {a.chave} ({a.janela_dias}d)
+            </span>
+            <span>
+              {pct(a.margem_bruta)} <Nivel nivel={a.alerta} />
+            </span>
+          </div>
+        ))}
+        {alertas.dados?.length === 0 && (
+          <div className="text-[12px] text-muted">Nenhum alerta.</div>
+        )}
+      </Card>
+      <Card>
+        <SectionLabel>Workloads economicamente inadequados</SectionLabel>
+        {inadequados.map((l) => (
+          <div key={l.chave} className="flex justify-between py-1 text-[12px]">
+            <span>
+              {l.modulo} · {l.chave}
+            </span>
+            <span>{pct(l.margem_bruta)}</span>
+          </div>
+        ))}
+        {inadequados.length === 0 && (
+          <div className="text-[12px] text-muted">Nenhum no período.</div>
+        )}
+      </Card>
+      <Card>
+        <SectionLabel>Recomendações de peso</SectionLabel>
+        <div className="mb-1 text-[10.5px] text-muted">
+          Nunca aplicadas automaticamente: crie um rascunho do catálogo e
+          aprove.
+        </div>
+        {(recomendacoes.dados ?? []).map((r) => (
+          <div
+            key={r.workload}
+            className="border-b border-border py-1 text-[12px]"
+          >
+            <Badge tone={r.direcao === "AUMENTAR" ? "red" : "muted"}>
+              {r.direcao}
+            </Badge>{" "}
+            {r.mensagem}
+          </div>
+        ))}
+        {recomendacoes.dados?.length === 0 && (
+          <div className="text-[12px] text-muted">Sem amostra suficiente.</div>
+        )}
+      </Card>
+    </div>
+  );
+}
 
-  async function carregar() {
-    try {
-      setResumo(await api.get<ResumoPlataforma>("/finops/resumo"));
-    } catch {
-      setErro("Não foi possível carregar o FinOps.");
-    }
-  }
+function CatalogoVersionado() {
+  const { dados, recarregar } = useCarregar<Catalogo>("/finops/catalogo");
+  const [mensagem, setMensagem] = useState<string | null>(null);
 
-  useEffect(() => {
-    carregar();
-  }, []);
-
-  async function definirPolitica(event: FormEvent<HTMLFormElement>) {
+  async function criarRascunho(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     try {
-      await api.post("/finops/politica-creditos", {
-        creditos_por_usd: Number(form.get("creditos_por_usd")),
-        permite_excedente: form.get("permite_excedente") === "on",
-        exige_saldo: form.get("exige_saldo") === "on",
-      });
-      await carregar();
+      const r = await api.post<{ versao: string }>(
+        "/finops/catalogo/rascunhos",
+        {
+          mudancas: {
+            [String(form.get("workload"))]: {
+              creditos_base: Number(form.get("creditos_base")),
+            },
+          },
+          motivo: String(form.get("motivo")),
+        },
+      );
+      setMensagem(`Rascunho ${r.versao} criado. Ative para valer.`);
+      recarregar();
     } catch (error) {
-      setErro(error instanceof ApiError ? error.message : "Não foi possível definir a política.");
+      setMensagem(
+        error instanceof ApiError ? error.message : "Falha ao criar rascunho.",
+      );
     }
   }
 
-  async function alocar(event: FormEvent<HTMLFormElement>) {
+  async function ativar(versao: string) {
+    const motivo = window.prompt(`Motivo para ativar ${versao}:`);
+    if (!motivo) return;
+    try {
+      await api.post(`/finops/catalogo/${versao}/ativar`, { motivo });
+      setMensagem(`${versao} ativo.`);
+      recarregar();
+    } catch (error) {
+      setMensagem(
+        error instanceof ApiError ? error.message : "Falha ao ativar.",
+      );
+    }
+  }
+
+  if (!dados) return null;
+  return (
+    <Card className="mb-4">
+      <SectionLabel>Catálogo de workloads (ativo: {dados.ativo})</SectionLabel>
+      <div className="mb-2 flex flex-wrap gap-1.5 text-[11px]">
+        {dados.versoes.map((v) => (
+          <span
+            key={v.versao}
+            className="flex items-center gap-1 rounded border border-border px-2 py-0.5"
+          >
+            {v.versao}{" "}
+            <Badge tone={v.status === "ATIVO" ? "green" : "muted"}>
+              {v.status}
+            </Badge>
+            {v.status === "RASCUNHO" && (
+              <button
+                type="button"
+                className="text-cyan"
+                onClick={() => ativar(v.versao)}
+              >
+                ativar
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+      <form
+        onSubmit={criarRascunho}
+        className="flex flex-wrap gap-2 text-[12px]"
+      >
+        <select
+          name="workload"
+          className="rounded-md border border-border bg-transparent px-2 py-1.5"
+        >
+          {dados.workloads.map((w) => (
+            <option key={w.codigo} value={w.codigo}>
+              {w.codigo} ({w.creditos_base})
+            </option>
+          ))}
+        </select>
+        <Input
+          name="creditos_base"
+          type="number"
+          min="0"
+          step="0.5"
+          required
+          placeholder="Novo peso"
+        />
+        <Input
+          name="motivo"
+          required
+          minLength={3}
+          placeholder="Motivo (auditado)"
+        />
+        <Button size="sm" type="submit">
+          Criar rascunho
+        </Button>
+      </form>
+      {mensagem && (
+        <div className="mt-1 text-[11px] text-muted">{mensagem}</div>
+      )}
+    </Card>
+  );
+}
+
+function Pacotes() {
+  const { dados, recarregar } =
+    useCarregar<(Pacote & { valido_ate: string | null })[]>("/finops/pacotes");
+  const [mensagem, setMensagem] = useState<string | null>(null);
+
+  async function novaVersao(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      await api.post(`/finops/pacotes/${String(form.get("codigo"))}/versoes`, {
+        preco: Number(form.get("preco")),
+        creditos: Number(form.get("creditos")),
+        validade_meses: 12,
+        motivo: String(form.get("motivo")),
+      });
+      setMensagem(
+        "Nova versão publicada. Compras anteriores mantêm a versão paga.",
+      );
+      recarregar();
+    } catch (error) {
+      setMensagem(
+        error instanceof ApiError ? error.message : "Falha ao criar versão.",
+      );
+    }
+  }
+
+  if (!dados) return null;
+  return (
+    <Card className="mb-4">
+      <SectionLabel>Pacotes (versões)</SectionLabel>
+      {dados.map((p) => (
+        <div
+          key={`${p.codigo}-${p.versao}`}
+          className="flex justify-between border-b border-border py-1 text-[12px]"
+        >
+          <span>
+            {p.nome} v{p.versao}{" "}
+            {p.valido_ate ? (
+              <span className="text-muted">(encerrada)</span>
+            ) : null}
+          </span>
+          <span className="text-muted">
+            {p.creditos?.toLocaleString("pt-BR") ?? "—"} ·{" "}
+            {p.preco === null ? p.status : brl(p.preco)}
+          </span>
+        </div>
+      ))}
+      <div className="mt-2 text-[10.5px] text-muted">
+        Mudança de preço só com decisão do PO: cria nova versão auditada.
+      </div>
+      <form
+        onSubmit={novaVersao}
+        className="mt-1 flex flex-wrap gap-2 text-[12px]"
+      >
+        <Input name="codigo" required placeholder="Código (ex.: AI_START)" />
+        <Input
+          name="creditos"
+          type="number"
+          min="1"
+          required
+          placeholder="Créditos"
+        />
+        <Input
+          name="preco"
+          type="number"
+          min="0.01"
+          step="0.01"
+          required
+          placeholder="Preço (R$)"
+        />
+        <Input
+          name="motivo"
+          required
+          minLength={3}
+          placeholder="Motivo / aprovação"
+        />
+        <Button size="sm" type="submit">
+          Nova versão
+        </Button>
+      </form>
+      {mensagem && (
+        <div className="mt-1 text-[11px] text-muted">{mensagem}</div>
+      )}
+    </Card>
+  );
+}
+
+function AjustesEConciliacao() {
+  const { dados, recarregar } = useCarregar<Reconciliacao[]>(
+    "/finops/reconciliacao",
+  );
+  const [mensagem, setMensagem] = useState<string | null>(null);
+
+  async function ajustar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formulario = event.currentTarget;
     const form = new FormData(formulario);
     try {
-      await api.post(`/finops/tenants/${String(form.get("tenant_id"))}/creditos`, {
-        quantidade: Number(form.get("quantidade")),
-        descricao: String(form.get("descricao") || "") || null,
-      });
+      await api.post(
+        `/finops/tenants/${String(form.get("tenant_id"))}/creditos`,
+        {
+          quantidade: Number(form.get("quantidade")),
+          tipo: String(form.get("tipo")),
+          motivo: String(form.get("motivo")),
+          validade_dias: form.get("validade_dias")
+            ? Number(form.get("validade_dias"))
+            : null,
+        },
+      );
       formulario.reset();
+      setMensagem("Ajuste registrado e auditado.");
+      recarregar();
     } catch (error) {
-      setErro(error instanceof ApiError ? error.message : "Não foi possível alocar créditos.");
+      setMensagem(
+        error instanceof ApiError ? error.message : "Falha no ajuste.",
+      );
     }
   }
 
-  if (!resumo) return <div className="text-[12px] text-muted">{erro ?? "Carregando…"}</div>;
-  const { totais } = resumo;
-
-  return (
-    <>
-      {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
-      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        <KpiCard label="Custo de IA (mês)" value={usd(totais.custo_usd)} sub="custo do provedor" colorClassName="text-red" />
-        <KpiCard label="Chamadas" value={totais.chamadas} sub={`${totais.chamadas_sem_preco} sem preço cadastrado`} />
-        <KpiCard
-          label="Cache ratio"
-          value={totais.cache_ratio === null ? "—" : `${(totais.cache_ratio * 100).toFixed(1)}%`}
-          colorClassName="text-green"
-        />
-        <KpiCard label="Créditos consumidos" value={totais.creditos_consumidos.toFixed(2)} colorClassName="text-amber" />
-      </div>
-
-      <Card className="mb-4 text-[12px]">
-        <SectionLabel>Unitários</SectionLabel>
-        <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-          {Object.entries(resumo.unitarios).map(([chave, valor]) => (
-            <div key={chave}>
-              <span className="text-muted">{chave.replaceAll("_", " ")}: </span>
-              {valor === null ? <span className="text-muted">{resumo.indisponivel[chave] ?? "sem dados no período"}</span> : usd(valor)}
-            </div>
-          ))}
-          <div>
-            <span className="text-muted">receita / margem de IA: </span>
-            <span className="text-muted">{resumo.indisponivel.receita_ia}</span>
-          </div>
-        </div>
-      </Card>
-
-      <TabelaAgrupada titulo="Por tenant" linhas={resumo.por_tenant} />
-      <TabelaAgrupada titulo="Por módulo" linhas={resumo.por_modulo} />
-      <TabelaAgrupada titulo="Por feature" linhas={resumo.por_feature} />
-      <TabelaAgrupada titulo="Por modelo" linhas={resumo.por_modelo} />
-
-      <Card className="mb-4">
-        <SectionLabel>Política de créditos</SectionLabel>
-        <div className="mb-2 text-[12px]">
-          Situação: <b>{ROTULO_POLITICA[resumo.politica_creditos ?? ""] ?? resumo.politica_creditos ?? "—"}</b>
-        </div>
-        <div className="mb-2 text-[11px] text-muted">
-          A conversão custo → créditos é decisão comercial. Nunca é exibida ao cliente como “tokens por crédito”.
-        </div>
-        <form onSubmit={definirPolitica} className="flex flex-wrap items-center gap-2 text-[12px]">
-          <Input name="creditos_por_usd" type="number" step="0.01" min="0.01" required placeholder="Créditos por US$ de custo" />
-          <label className="flex items-center gap-1">
-            <input type="checkbox" name="exige_saldo" /> exige saldo
-          </label>
-          <label className="flex items-center gap-1">
-            <input type="checkbox" name="permite_excedente" /> permite excedente
-          </label>
-          <Button type="submit">Definir</Button>
-        </form>
-      </Card>
-
-      <Card>
-        <SectionLabel>Alocar créditos a um tenant</SectionLabel>
-        <form onSubmit={alocar} className="flex flex-wrap gap-2">
-          <Input name="tenant_id" required placeholder="tenant_id" />
-          <Input name="quantidade" type="number" step="0.01" min="0.01" required placeholder="Quantidade" />
-          <Input name="descricao" placeholder="Descrição" />
-          <Button type="submit">Alocar</Button>
-        </form>
-      </Card>
-    </>
-  );
-}
-
-function VisaoTenant() {
-  const [uso, setUso] = useState<MeuUso | null>(null);
-  const [orcamentosAtivos, setOrcamentos] = useState<Orcamento[]>([]);
-  const [erro, setErro] = useState<string | null>(null);
-
-  async function carregar() {
-    try {
-      const [usoResp, orcamentosResp] = await Promise.all([
-        api.get<MeuUso>("/finops/meu-uso"),
-        api.get<Orcamento[]>("/finops/orcamentos"),
-      ]);
-      setUso(usoResp);
-      setOrcamentos(orcamentosResp);
-    } catch {
-      setErro("Não foi possível carregar o consumo de IA.");
-    }
-  }
-
-  useEffect(() => {
-    carregar();
-  }, []);
-
-  async function criarOrcamento(event: FormEvent<HTMLFormElement>) {
+  async function excedente(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const numero = (campo: string) =>
+      form.get(campo) ? Number(form.get(campo)) : null;
     try {
-      await api.post("/finops/orcamentos", {
-        limite_chamadas: Number(form.get("limite_chamadas")),
-        acao: String(form.get("acao")),
-      });
-      await carregar();
+      await api.put(
+        `/finops/tenants/${String(form.get("tenant_id"))}/excedente`,
+        {
+          ativo: form.get("ativo") === "on",
+          orcamento_mensal: numero("orcamento_mensal"),
+          limite_suave: numero("limite_suave"),
+          limite_rigido: numero("limite_rigido"),
+          franquia_personalizada: numero("franquia_personalizada"),
+          motivo: String(form.get("motivo")),
+        },
+      );
+      setMensagem("Contrato Enterprise atualizado.");
     } catch (error) {
-      setErro(error instanceof ApiError ? error.message : "Não foi possível criar o limite.");
+      setMensagem(
+        error instanceof ApiError
+          ? error.message
+          : "Falha ao salvar excedente.",
+      );
     }
   }
 
-  if (!uso) return <div className="text-[12px] text-muted">{erro ?? "Carregando…"}</div>;
-
   return (
-    <>
-      {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
-      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-        <KpiCard label="Chamadas de IA no mês" value={uso.chamadas} />
-        <KpiCard label="Créditos consumidos" value={uso.creditos_consumidos.toFixed(2)} colorClassName="text-amber" />
-        <KpiCard
-          label="Saldo de créditos"
-          value={uso.politica_creditos === "ATIVA" ? uso.saldo_creditos.toFixed(2) : "—"}
-          sub={uso.politica_creditos === "ATIVA" ? undefined : "Créditos de IA em breve"}
-          colorClassName="text-green"
-        />
-      </div>
-
-      <Card className="mb-4">
-        <SectionLabel>Uso por recurso</SectionLabel>
-        {uso.por_feature.map((item) => (
-          <div key={item.feature} className="flex justify-between border-b border-border py-1.5 text-[12px]">
-            <span>{item.feature}</span>
-            <span className="text-muted">
-              {item.chamadas} chamadas · {item.creditos.toFixed(2)} créditos
+    <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
+      <Card>
+        <SectionLabel>Ajuste / promoção de créditos</SectionLabel>
+        <form onSubmit={ajustar} className="flex flex-wrap gap-2 text-[12px]">
+          <Input name="tenant_id" required placeholder="tenant_id" />
+          <Input
+            name="quantidade"
+            type="number"
+            step="1"
+            required
+            placeholder="Quantidade (negativo debita)"
+          />
+          <select
+            name="tipo"
+            className="rounded-md border border-border bg-transparent px-2 py-1.5"
+          >
+            <option value="ADJUSTMENT">Ajuste</option>
+            <option value="PROMOTIONAL">Promocional</option>
+          </select>
+          <Input
+            name="validade_dias"
+            type="number"
+            min="1"
+            placeholder="Validade (dias)"
+          />
+          <Input
+            name="motivo"
+            required
+            minLength={3}
+            placeholder="Motivo (auditado)"
+          />
+          <Button size="sm" type="submit">
+            Registrar
+          </Button>
+        </form>
+        <SectionLabel className="mt-4">
+          Enterprise: pool e excedente pós-pago
+        </SectionLabel>
+        <form onSubmit={excedente} className="flex flex-wrap gap-2 text-[12px]">
+          <Input name="tenant_id" required placeholder="tenant_id" />
+          <Input
+            name="franquia_personalizada"
+            type="number"
+            min="0"
+            placeholder="Pool mensal"
+          />
+          <Input
+            name="orcamento_mensal"
+            type="number"
+            min="1"
+            placeholder="Orçamento de excedente"
+          />
+          <Input
+            name="limite_suave"
+            type="number"
+            min="1"
+            placeholder="Limite suave"
+          />
+          <Input
+            name="limite_rigido"
+            type="number"
+            min="1"
+            placeholder="Limite rígido"
+          />
+          <label className="flex items-center gap-1">
+            <input type="checkbox" name="ativo" /> excedente ativo
+          </label>
+          <Input
+            name="motivo"
+            required
+            minLength={3}
+            placeholder="Contrato / motivo"
+          />
+          <Button size="sm" type="submit">
+            Salvar
+          </Button>
+        </form>
+        {mensagem && (
+          <div className="mt-1 text-[11px] text-muted">{mensagem}</div>
+        )}
+      </Card>
+      <Card>
+        <SectionLabel>Reconciliação (extrato × lotes × reservas)</SectionLabel>
+        {(dados ?? []).map((r) => (
+          <div
+            key={r.tenant_id}
+            className="flex justify-between border-b border-border py-1 text-[12px]"
+          >
+            <span>{r.tenant_id}</span>
+            <span>
+              {r.disponivel.toLocaleString("pt-BR")} disp.{" "}
+              {r.consistente ? (
+                <Badge tone="green">OK</Badge>
+              ) : (
+                <Badge tone="red">Diferença {r.diferenca}</Badge>
+              )}
             </span>
           </div>
         ))}
-        {uso.por_feature.length === 0 && <div className="text-[12px] text-muted">Sem uso no mês.</div>}
+        {dados?.length === 0 && (
+          <div className="text-[12px] text-muted">Sem carteiras.</div>
+        )}
       </Card>
-
-      <Card>
-        <SectionLabel>Limites mensais de IA</SectionLabel>
-        {orcamentosAtivos.map((orcamento) => (
-          <div key={orcamento.orcamento_id} className="border-b border-border py-1.5 text-[12px]">
-            {orcamento.escopo}
-            {orcamento.alvo ? `: ${orcamento.alvo}` : ""} — {orcamento.chamadas}/{orcamento.limite_chamadas ?? "∞"} chamadas (
-            {orcamento.acao === "BLOQUEAR" ? "bloqueia" : "só alerta"})
-            {orcamento.estourado && <span className="ml-2 text-red">limite atingido</span>}
-            {!orcamento.estourado && orcamento.em_alerta && <span className="ml-2 text-amber">perto do limite</span>}
-          </div>
-        ))}
-        <form onSubmit={criarOrcamento} className="mt-2 flex flex-wrap gap-2 text-[12px]">
-          <Input name="limite_chamadas" type="number" min="1" required placeholder="Máximo de chamadas por mês" />
-          <select name="acao" className="rounded-md border border-border bg-transparent px-2 py-1.5">
-            <option value="ALERTAR">Só alertar</option>
-            <option value="BLOQUEAR">Bloquear ao atingir</option>
-          </select>
-          <Button type="submit">Criar limite</Button>
-        </form>
-      </Card>
-    </>
+    </div>
   );
 }
 
 export function FinOpsIa() {
   const { usuario } = useAuth();
-  if (usuario?.papel !== "admin" && usuario?.papel !== "super_admin") return <AcessoRestrito />;
+  const [dias, setDias] = useState(30);
+  if (usuario?.papel === "admin") return <Navigate to="/ai-credits" replace />;
+  if (usuario?.papel !== "super_admin") return <AcessoRestrito />;
   return (
     <div className="p-5.5">
-      <div className="mb-5">
-        <div className="font-head text-xl font-bold">IA &amp; Créditos</div>
-        <div className="mt-0.5 text-[11px] text-muted">
-          {usuario.papel === "super_admin"
-            ? "Custo real de IA da plataforma, por tenant, módulo, feature e modelo."
-            : "Consumo de IA da sua empresa e limites mensais."}
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <div className="font-head text-xl font-bold">AI FinOps</div>
+          <div className="mt-0.5 text-[11px] text-muted">
+            Receita dos AI Credits, custo real de IA e margens. Nada aqui muda
+            preço ou peso sem aprovação.
+          </div>
         </div>
+        <select
+          value={dias}
+          onChange={(e) => setDias(Number(e.target.value))}
+          className="rounded-md border border-border bg-transparent px-2 py-1 text-[12px]"
+        >
+          <option value={7}>7 dias</option>
+          <option value={30}>30 dias</option>
+          <option value={90}>90 dias</option>
+        </select>
       </div>
-      {usuario.papel === "super_admin" ? <VisaoPlataforma /> : <VisaoTenant />}
+      <Resumo dias={dias} />
+      <AlertasERecomendacoes dias={dias} />
+      <Margens dias={dias} />
+      <CatalogoVersionado />
+      <Pacotes />
+      <AjustesEConciliacao />
     </div>
   );
 }

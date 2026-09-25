@@ -38,7 +38,7 @@ interface AssinaturaResposta {
     chamadas_no_mes: number;
     creditos_consumidos: number | null;
     saldo_creditos: number;
-    politica: string | null;
+    franquia_mensal: number;
   };
   conectores: {
     sistema: string;
@@ -219,29 +219,30 @@ export function Assinatura() {
                 {dados.ia.chamadas_no_mes.toLocaleString("pt-BR")}
               </span>
             </div>
-            {dados.ia.politica === "ATIVA" ? (
-              <>
-                <div className="flex justify-between">
-                  <span className="text-muted">Créditos consumidos</span>
-                  <span className="font-semibold text-text">
-                    {(dados.ia.creditos_consumidos ?? 0).toLocaleString(
-                      "pt-BR",
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted">Saldo</span>
-                  <span className="font-semibold text-text">
-                    {dados.ia.saldo_creditos.toLocaleString("pt-BR")}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className="text-[11px] text-muted">
-                Todo uso é medido. A conversão em créditos e a franquia por
-                plano estão em definição.
-              </div>
-            )}
+            <div className="flex justify-between">
+              <span className="text-muted">AI Credits consumidos</span>
+              <span className="font-semibold text-text">
+                {(dados.ia.creditos_consumidos ?? 0).toLocaleString("pt-BR")}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted">AI Credits disponíveis</span>
+              <span className="font-semibold text-text">
+                {dados.ia.saldo_creditos.toLocaleString("pt-BR")}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted">Incluídos no plano (mês)</span>
+              <span className="font-semibold text-text">
+                {dados.ia.franquia_mensal.toLocaleString("pt-BR")}
+              </span>
+            </div>
+            <Link
+              to="/ai-credits"
+              className="mt-1 text-[11px] font-semibold text-cyan hover:underline"
+            >
+              Ver carteira e comprar AI Credits
+            </Link>
           </div>
         </Card>
 

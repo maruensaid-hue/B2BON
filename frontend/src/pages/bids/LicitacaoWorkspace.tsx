@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
+import { confirmarConsumo } from "@/lib/aiCredits";
 import { api, ApiError, postFile } from "@/lib/api";
 import { MODALIDADES, type Licitacao } from "@/pages/bids/tipos";
 
@@ -222,7 +223,16 @@ export function LicitacaoWorkspace() {
                     className="text-cyan"
                     onClick={() =>
                       executar(
-                        () => api.post(`/bids/documentos/${d.id}/analisar`),
+                        async () => {
+                          const confirmar = await confirmarConsumo(
+                            `/bids/documentos/${d.id}/estimativa`,
+                          );
+                          if (confirmar === null)
+                            throw new ApiError(0, "Análise cancelada.");
+                          return api.post(
+                            `/bids/documentos/${d.id}/analisar?confirmar=${confirmar}`,
+                          );
+                        },
                         (r) => {
                           const res = r as {
                             sugeridos: number;

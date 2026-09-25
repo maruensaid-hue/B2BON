@@ -21,7 +21,7 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 |---|---|---|---|---|---|
 | TD-010 | Preço em 3 lugares (DB, `Planos.tsx`, `bootstrap_tenant.py`) | `PRICING_CURRENT_STATE.md` §1 | Cobrança diferente do anunciado | 14 | OPEN |
 | TD-011 | `preco_mensal` é `NOT NULL Float`, sem `price_status` nem moeda. Float para dinheiro | `app/models/plano.py` | Não representa "preço a definir" (§71); arredondamento | 14 | OPEN |
-| TD-012 | Entitlements como colunas booleanas em `Plano` (1 migração por flag nova) | `plano.py`, `PlanLimitsProvider` | Não escala para feature/add-on/crédito | 14 (fundação na 1/5) | OPEN |
+| TD-012 | Entitlements como colunas booleanas em `Plano` (1 migração por flag nova) | `plano.py`, `PlanLimitsProvider` | Não escala para feature/add-on/crédito | 14 (fundação na 1/5) | IN_PROGRESS: créditos de IA saíram do plano (franquia por módulo em `finops/comercial.py`, pacotes versionados em `pacote_credito`, Fase 15); limites operacionais continuam colunas |
 | TD-013 | 1 licença por tenant, sem add-ons | `licenca.py` (unique `tenant_id`) | Não suporta "base + módulos + créditos" (§73) | 14 | OPEN |
 
 ## IA
@@ -81,6 +81,11 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-073 | Métricas calculadas na hora, sem série histórica nem snapshot; carregam os negócios do tenant em memória | `analytics/receita.py`, `procurement/metricas.py` | Sem tendência mês a mês; custo em tenants grandes | 17 | OPEN |
 | TD-074 | Teste de carga medido em container de desenvolvimento; falta rodada no staging real e em CI noturno | `scripts/carga/carga_api.py` | Dimensionamento de produção sem número próprio | ops | OPEN |
 | TD-075 | Otimização de custo de IA sem dados de produção: prompt caching não compensa hoje (system prompts abaixo do prefixo mínimo; conteúdo grande é único por chamada) | `llm/claude_provider.py` | Reavaliar com o ledger de produção (features de maior custo) | ops | OPEN |
+| TD-076 | Recarga automática não cobra fora de sessão: cria pedido pendente e depende do admin pagar (Mercado Pago sem cartão salvo/assinatura) | `finops/compras.py`, D-053 | Recarga não é instantânea | billing | OPEN |
+| TD-077 | Excedente Enterprise é medido e marcado faturável, mas não gera fatura: faturamento pós-pago é manual a partir do extrato | `movimento_credito` (CREDIT_OVERAGE, `faturavel`) | Operação manual no fechamento | billing | OPEN |
+| TD-078 | Teste de concorrência real (Postgres) só roda com `B2BON_TESTE_PG_URL`; o CI não tem serviço Postgres | `test_ai_credits_concorrencia_pg.py` | Regressão de trava pode passar no CI | ops | OPEN |
+| TD-079 | Receita da franquia usa referência fixa (D-051), não a parte de IA do preço do plano | `comercial.receita_por_credito_assinatura` | Margem de assinatura é estimativa conservadora | PO | OPEN |
+| TD-080 | Custo de dados/enriquecimento (`custo_dados_usd`) e tokens de embedding/ferramentas têm coluna, mas nenhum provedor os preenche ainda | `registro_uso_ia`, `execucao_ia` | Custo total subestimado para workloads com dados pagos | Premium Data | OPEN |
 | TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher com gatilho por cron desde a Fase 3 | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
 | TD-042 | `B2BOnCrmAdapter.list_*` sem paginação para pipelines/estágios/ofertas e `CanonicalMapDataSource` carrega tudo em memória | `adapters/b2bon_crm.py`, `map/data_source.py` | Custo em tenants grandes | 17 | OPEN |
 | TD-037 | `starlette.testclient` com `httpx` deprecated (warning) | saída do pytest | Quebra futura na atualização | oportunista | OPEN |

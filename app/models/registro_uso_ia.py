@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -41,3 +41,13 @@ class RegistroUsoIa(Base):
     custo_usd: Mapped[float | None] = mapped_column(Numeric(18, 8), nullable=True)  # None = modelo sem preço cadastrado
     preco_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     creditos_consumidos: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)  # None = política pendente
+    # --- Fase 15 (AI Credits) ---------------------------------------------------
+    execucao_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    workload_codigo: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    catalogo_versao: Mapped[str | None] = mapped_column(String, nullable=True)
+    cache_hit: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    economia_cache_usd: Mapped[float | None] = mapped_column(Numeric(14, 6), nullable=True)
+    custo_dados_usd: Mapped[float | None] = mapped_column(Numeric(14, 6), nullable=True)
+    tokens_embedding: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    chamadas_ferramenta: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    decisao_roteamento: Mapped[str | None] = mapped_column(String, nullable=True)

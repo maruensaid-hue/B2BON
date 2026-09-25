@@ -99,6 +99,38 @@ FEATURES: dict[str, Feature] = {
     ]
 }
 
+# Fase 15: cada feature cobra o peso de um workload do catálogo de AI Credits
+# (`finops.catalogos`). O peso é dado versionado no banco; aqui só o vínculo.
+WORKLOAD_POR_FEATURE: dict[str, str] = {
+    "network.agente_corporativo": "commercial_response",
+    "crm.meeting_brief": "meeting_intelligence",
+    "intelligence.estrategia_venda": "decision_maker_analysis",
+    "predator.enriquecimento_site": "website_analysis",
+    "predator.mensagem_cadencia": "prospecting_message",
+    "predator.mensagem_indicacao": "prospecting_message",
+    "predator.qualificacao": "commercial_response",
+    "predator.resumo_reuniao": "meeting_summary",
+    "map.script_resgate_conta": "churn_remediation",
+    "map.script_resgate_tenant": "churn_remediation",
+    "network.explicar_match": "icp_fit",
+    "predator.sugerir_regra": "classification_simple",
+    "plataforma.amostra_comunicacao": "prospect_personalization",
+    "opportunity.extracao_necessidades": "opportunity_intelligence",
+    "bids.analise_edital": "tender_analysis",
+    "bids.analise_tr": "tender_terms_of_reference",
+    "procurement.analise_documento": "procurement_document_intelligence",
+    "intelligence.orquestrador": "classification_simple",
+    "plataforma.faq": "short_summary",
+}
+# Respostas que podem vir do cache (mesmo tenant, mesmo prompt): a economia
+# vira margem; o crédito continua cobrado (política comercial da Fase 15).
+FEATURES_CACHEAVEIS = frozenset({"plataforma.faq", "intelligence.orquestrador"})
+
+
+def workload_da_feature(nome: str) -> str:
+    return WORKLOAD_POR_FEATURE[nome]
+
+
 FERRAMENTAS: dict[str, Ferramenta] = {
     f.nome: f
     for f in [
