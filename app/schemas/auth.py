@@ -100,7 +100,12 @@ class RegistrarPublicoRequestSchema(BaseModel):
     """Cadastro público sem convite (raio-X 2026-09-21, página de
     boas-vindas) — `plano_id` é obrigatório aqui (sem convite não há
     plano padrão pra cair de volta); o plano Teste nunca é aceito
-    (validado em `tenant_service.criar_tenant_publico`)."""
+    (validado em `tenant_service.criar_tenant_publico`).
+
+    `representante_id` obrigatório (raio-X: comissão de vendas) — todo
+    cadastro self-service precisa ter um vendedor humano associado, pra
+    permitir o cálculo automático de comissão em
+    `pagamento_licenca_service.confirmar_via_webhook`."""
 
     razao_social: str
     cnpj: str | None = None
@@ -109,6 +114,7 @@ class RegistrarPublicoRequestSchema(BaseModel):
     senha_admin: str = Field(min_length=8, max_length=72)
     aceite_termos: bool
     plano_id: int
+    representante_id: int
 
 
 class TokenResponseSchema(BaseModel):

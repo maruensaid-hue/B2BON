@@ -237,6 +237,7 @@ def registrar_publico(
         dados.aceite_termos,
         dados.plano_id,
         payment_provider,
+        dados.representante_id,
         dados.cnpj,
     )
     return _resposta_token(usuario, db, checkout_url, primeiro_login=True, email_provider=email)

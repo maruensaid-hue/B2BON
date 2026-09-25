@@ -1,5 +1,11 @@
 from app.models.usuario import Usuario
-from app.services import notificacao_rede_social_service, post_rede_social_service, rede_social_service
+from app.services import (
+    notificacao_rede_social_service,
+    post_rede_social_service,
+    rede_social_service,
+    sala_corporativa_service,
+)
+from tests.fakes import FakeEmailProvider
 
 TENANT_A = "tenant-teste"
 TENANT_B = "tenant-outro"
@@ -133,3 +139,135 @@ def test_enviar_mensagem_notifica_destinatario(db_session):
 
     notificacoes = notificacao_rede_social_service.listar(db_session, TENANT_B)
     assert any(n["tipo"] == "new_message" for n in notificacoes)
+
+
+def test_solicitar_conexao_envia_email_pro_destino(db_session):
+    _criar_usuario(db_session, TENANT_B, email="destino@tenant-outro.com.br")
+    email = FakeEmailProvider()
+
+    rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B, email)
+
+    assert len(email.envios) == 1
+    assert email.envios[0]["destinatario"] == "destino@tenant-outro.com.br"
+
+
+def test_aceitar_conexao_envia_email_pra_quem_pediu(db_session):
+    _criar_usuario(db_session, TENANT_A, email="pediu@tenant-teste.com.br")
+    conexao = rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B)
+    email = FakeEmailProvider()
+
+    rede_social_service.responder_conexao(db_session, TENANT_B, None, conexao.id, aceitar=True, email_provider=email)
+
+    assert len(email.envios) == 1
+    assert email.envios[0]["destinatario"] == "pediu@tenant-teste.com.br"
+
+
+def test_recusar_conexao_nao_envia_email(db_session):
+    _criar_usuario(db_session, TENANT_A)
+    conexao = rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B)
+    email = FakeEmailProvider()
+
+    rede_social_service.responder_conexao(db_session, TENANT_B, None, conexao.id, aceitar=False, email_provider=email)
+
+    assert email.envios == []
+
+
+def test_enviar_mensagem_envia_email_pro_destinatario(db_session):
+    _criar_usuario(db_session, TENANT_B, email="destino@tenant-outro.com.br")
+    conexao = rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B)
+    rede_social_service.responder_conexao(db_session, TENANT_B, None, conexao.id, aceitar=True)
+    email = FakeEmailProvider()
+
+    rede_social_service.enviar_mensagem(db_session, TENANT_A, None, TENANT_B, "Olá!", email)
+
+    assert len(email.envios) == 1
+    assert email.envios[0]["destinatario"] == "destino@tenant-outro.com.br"
+
+
+def test_comentar_envia_email_pro_autor_do_post(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A, email="autor@tenant-teste.com.br")
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post", None, None)
+    email = FakeEmailProvider()
+
+    post_rede_social_service.comentar(db_session, TENANT_B, str(autor_b.id), post["id"], "Comentário", email)
+
+    assert len(email.envios) == 1
+    assert email.envios[0]["destinatario"] == "autor@tenant-teste.com.br"
+
+
+def test_comentar_no_proprio_post_nao_envia_email(db_session):
+    autor = _criar_usuario(db_session, TENANT_A)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor.id), "Post", None, None)
+    email = FakeEmailProvider()
+
+    post_rede_social_service.comentar(db_session, TENANT_A, str(autor.id), post["id"], "Comentário próprio", email)
+
+    assert email.envios == []
+
+
+def test_reagir_envia_email_pro_autor_do_post(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A, email="autor@tenant-teste.com.br")
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post", None, None)
+    email = FakeEmailProvider()
+
+    post_rede_social_service.reagir(db_session, TENANT_B, str(autor_b.id), post["id"], email_provider=email)
+
+    assert len(email.envios) == 1
+    assert email.envios[0]["destinatario"] == "autor@tenant-teste.com.br"
+
+
+def test_compartilhar_envia_email_pro_autor_do_post(db_session):
+    autor_a = _criar_usuario(db_session, TENANT_A, email="autor@tenant-teste.com.br")
+    autor_b = _criar_usuario(db_session, TENANT_B)
+    post = post_rede_social_service.criar(db_session, TENANT_A, str(autor_a.id), "Post", None, None)
+    email = FakeEmailProvider()
+
+    post_rede_social_service.compartilhar(db_session, TENANT_B, str(autor_b.id), post["id"], email)
+
+    assert len(email.envios) == 1
+    assert email.envios[0]["destinatario"] == "autor@tenant-teste.com.br"
+
+
+def test_mensagem_sala_envia_email_pro_outro_tenant(db_session):
+    from app.models.canal_sala import CanalSala
+    from app.models.sala_corporativa import SalaCorporativa
+
+    _criar_usuario(db_session, TENANT_B, email="destino@tenant-outro.com.br")
+    tenant_a, tenant_b = sorted((TENANT_A, TENANT_B))
+    sala = SalaCorporativa(tenant_id_a=tenant_a, tenant_id_b=tenant_b)
+    db_session.add(sala)
+    db_session.flush()
+    canal = CanalSala(sala_id=sala.id, tipo="GENERAL", criado_por=TENANT_A)
+    db_session.add(canal)
+    db_session.commit()
+    email = FakeEmailProvider()
+
+    sala_corporativa_service.enviar_mensagem_sala(db_session, TENANT_A, None, canal.id, "Olá!", None, email)
+
+    assert len(email.envios) == 1
+    assert email.envios[0]["destinatario"] == "destino@tenant-outro.com.br"
+
+
+def test_email_de_notificacao_ignora_usuario_inativo(db_session):
+    _criar_usuario(db_session, TENANT_B, email="ativo@tenant-outro.com.br", ativo=True)
+    _criar_usuario(db_session, TENANT_B, email="inativo@tenant-outro.com.br", ativo=False)
+    email = FakeEmailProvider()
+
+    rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B, email)
+
+    destinatarios = [envio["destinatario"] for envio in email.envios]
+    assert destinatarios == ["ativo@tenant-outro.com.br"]
+
+
+def test_falha_no_envio_de_email_nao_quebra_a_acao(db_session):
+    _criar_usuario(db_session, TENANT_B)
+    email = FakeEmailProvider()
+    email.falhar_proximos = 1
+
+    conexao = rede_social_service.solicitar_conexao(db_session, TENANT_A, None, TENANT_B, email)
+
+    assert conexao.id is not None
+    notificacoes = notificacao_rede_social_service.listar(db_session, TENANT_B)
+    assert len(notificacoes) == 1

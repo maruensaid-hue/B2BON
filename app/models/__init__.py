@@ -6,6 +6,7 @@ from app.models.cache_mercado_externo import CacheMercadoExterno
 from app.models.cadencia import Cadencia
 from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.campo_enriquecido import CampoEnriquecido
+from app.models.comissao_representante import ComissaoRepresentante
 from app.models.conexao_empresa import ConexaoEmpresa
 from app.models.conexao_linkedin import ConexaoLinkedin
 from app.models.conta import Conta
@@ -38,6 +39,7 @@ from app.models.intent import Intent
 from app.models.interacao_conta import InteracaoConta
 from app.models.interacao_tenant import InteracaoTenant
 from app.models.licenca import Licenca
+from app.models.link_captura_lead import LinkCapturaLead
 from app.models.lista_prospeccao import ListaProspeccao
 from app.models.material_oferta import MaterialOferta
 from app.models.mensagem import Mensagem
@@ -64,6 +66,7 @@ from app.models.conexao_integracao import ConexaoIntegracao
 from app.models.execucao_sync import ExecucaoSync
 from app.models.plano import Plano
 from app.models.proposta_negocio import PropostaNegocio
+from app.models.representante import Representante
 from app.models.template_proposta import ItemTemplateProposta, TemplateProposta
 from app.models.qualificacao import QualificacaoScore
 from app.models.recorte_cnpj_estado import RecorteCnpjEstado
@@ -200,4 +203,7 @@ __all__ = [
     "CacheMercadoExterno",
     "EmailDireto",
     "EmailRecebido",
+    "LinkCapturaLead",
+    "Representante",
+    "ComissaoRepresentante",
 ]

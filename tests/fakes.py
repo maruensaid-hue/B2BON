@@ -11,6 +11,7 @@ from app.providers.channels.email.base import ResultadoEnvio as ResultadoEnvioEm
 from app.providers.channels.whatsapp.base import ResultadoEnvio as ResultadoEnvioWhatsApp
 from app.providers.channels.whatsapp.base import TemplateInfo, WhatsAppProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
+from app.providers.payout.base import PayoutProvider, ResultadoPayout
 from app.providers.web_search.base import ResultadoBusca, WebSearchProvider
 
 
@@ -240,3 +241,21 @@ class FakeEmailProvider(EmailProvider):
             self.falhar_proximos -= 1
             return ResultadoEnvioEmail(sucesso=False, motivo_falha="falha simulada")
         return ResultadoEnvioEmail(sucesso=True, id_externo=f"fake-{len(self.envios)}")
+
+
+class FakePayoutProvider(PayoutProvider):
+    """Duplo de teste — registra chamadas, permite simular falha. Nunca
+    move dinheiro de verdade (mesmo raciocínio de `FakeEmailProvider`)."""
+
+    def __init__(self) -> None:
+        self.envios: list[dict] = []
+        self.falhar_proximos = 0
+
+    def enviar_pix(self, chave_pix: str, valor: float, referencia_externa: str, descricao: str) -> ResultadoPayout:
+        self.envios.append(
+            {"chave_pix": chave_pix, "valor": valor, "referencia_externa": referencia_externa, "descricao": descricao}
+        )
+        if self.falhar_proximos > 0:
+            self.falhar_proximos -= 1
+            return ResultadoPayout(sucesso=False, motivo_falha="falha simulada")
+        return ResultadoPayout(sucesso=True, id_externo=f"fake-{len(self.envios)}")

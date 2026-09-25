@@ -4,6 +4,7 @@ from app.models.canal_sala import CanalSala
 from app.models.mensagem_sala import MensagemSala
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.sala_corporativa import SalaCorporativa
+from app.providers.channels.email.base import EmailProvider
 from app.services import auditoria_service, notificacao_rede_social_service
 from app.services.errors import NaoAutorizado, NaoEncontrado, RegraNegocioViolada
 from app.services.rede_social_service import conexao_aceita_entre
@@ -151,7 +152,13 @@ def _serializar_mensagem(db: Session, mensagem: MensagemSala) -> dict:
 
 
 def enviar_mensagem_sala(
-    db: Session, tenant_id: str, ator_id: str | None, canal_id: int, texto: str, documento_url: str | None
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    canal_id: int,
+    texto: str,
+    documento_url: str | None,
+    email_provider: EmailProvider | None = None,
 ) -> dict:
     canal, sala = _obter_canal(db, tenant_id, canal_id)
     mensagem = MensagemSala(
@@ -167,12 +174,13 @@ def enviar_mensagem_sala(
     auditoria_service.registrar(db, tenant_id, "mensagem_sala_enviada", "mensagem_sala", mensagem.id, ator_id, {})
     outro = _outro_tenant(sala, tenant_id)
     rotulo_canal = canal.nome if canal.tipo == "CUSTOM" and canal.nome else canal.tipo
+    mensagem_notificacao = f"Nova mensagem de {_nome_empresa(db, tenant_id)} na sala corporativa (canal {rotulo_canal})."
     notificacao_rede_social_service.criar(
-        db, outro, "sala_mensagem", "mensagem_sala", mensagem.id,
-        f"Nova mensagem de {_nome_empresa(db, tenant_id)} na sala corporativa (canal {rotulo_canal}).",
+        db, outro, "sala_mensagem", "mensagem_sala", mensagem.id, mensagem_notificacao
     )
     db.commit()
     db.refresh(mensagem)
+    notificacao_rede_social_service.enviar_email_para_tenant(db, email_provider, outro, mensagem_notificacao)
     return _serializar_mensagem(db, mensagem)
 
 

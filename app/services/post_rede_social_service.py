@@ -7,6 +7,7 @@ from app.models.perfil_empresa import PerfilEmpresa
 from app.models.post_rede_social import PostRedeSocial
 from app.models.reacao_post import ReacaoPost
 from app.models.usuario import Usuario
+from app.providers.channels.email.base import EmailProvider
 from app.services import auditoria_service, midia_service, notificacao_rede_social_service
 from app.services.errors import NaoAutorizado, NaoEncontrado, ValidacaoFalhou
 
@@ -204,7 +205,9 @@ def _serializar_comentario(db: Session, comentario: ComentarioPost) -> dict:
     }
 
 
-def comentar(db: Session, tenant_id: str, ator_id: str, post_id: int, texto: str) -> dict:
+def comentar(
+    db: Session, tenant_id: str, ator_id: str, post_id: int, texto: str, email_provider: EmailProvider | None = None
+) -> dict:
     post = _obter(db, post_id)
     comentario = ComentarioPost(post_id=post_id, tenant_id=tenant_id, usuario_id=int(ator_id), texto=texto)
     db.add(comentario)
@@ -213,14 +216,19 @@ def comentar(db: Session, tenant_id: str, ator_id: str, post_id: int, texto: str
     auditoria_service.registrar(
         db, tenant_id, "post_rede_social_comentado", "comentario_post", comentario.id, ator_id, {"post_id": post_id}
     )
-    if post.tenant_id != tenant_id:
+    notificar_dono = post.tenant_id != tenant_id
+    mensagem_notificacao = None
+    if notificar_dono:
         perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
         nome = perfil.nome_exibicao if perfil is not None else tenant_id
+        mensagem_notificacao = f"{nome} comentou no seu post."
         notificacao_rede_social_service.criar(
-            db, post.tenant_id, "new_comment", "post_rede_social", post.id, f"{nome} comentou no seu post."
+            db, post.tenant_id, "new_comment", "post_rede_social", post.id, mensagem_notificacao
         )
     db.commit()
     db.refresh(comentario)
+    if notificar_dono:
+        notificacao_rede_social_service.enviar_email_para_tenant(db, email_provider, post.tenant_id, mensagem_notificacao)
     return _serializar_comentario(db, comentario)
 
 
@@ -236,7 +244,14 @@ def listar_comentarios(db: Session, post_id: int, limite: int = _LIMITE_COMENTAR
     return [_serializar_comentario(db, comentario) for comentario in comentarios]
 
 
-def reagir(db: Session, tenant_id: str, ator_id: str, post_id: int, tipo: str = "curtir") -> dict:
+def reagir(
+    db: Session,
+    tenant_id: str,
+    ator_id: str,
+    post_id: int,
+    tipo: str = "curtir",
+    email_provider: EmailProvider | None = None,
+) -> dict:
     """Reação exclusiva por tenant/post (master prompt §45, estendido
     2026-09-20 pra 9 tipos — curtir + 8 emojis, ver
     `TIPOS_REACAO_VALIDOS`): clicar de novo no mesmo tipo remove a
@@ -246,6 +261,8 @@ def reagir(db: Session, tenant_id: str, ator_id: str, post_id: int, tipo: str = 
         raise ValidacaoFalhou(f"Tipo de reação inválido: {tipo}.")
 
     post = _obter(db, post_id)
+    notificar_dono = False
+    mensagem_notificacao = None
     reacao = db.query(ReacaoPost).filter_by(post_id=post_id, tenant_id=tenant_id).one_or_none()
     if reacao is None:
         reacao = ReacaoPost(post_id=post_id, tenant_id=tenant_id, usuario_id=int(ator_id), tipo=tipo)
@@ -255,10 +272,12 @@ def reagir(db: Session, tenant_id: str, ator_id: str, post_id: int, tipo: str = 
             db, tenant_id, "post_rede_social_reagido", "reacao_post", reacao.id, ator_id, {"post_id": post_id, "tipo": tipo}
         )
         if post.tenant_id != tenant_id:
+            notificar_dono = True
             perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
             nome = perfil.nome_exibicao if perfil is not None else tenant_id
+            mensagem_notificacao = f"{nome} reagiu ao seu post."
             notificacao_rede_social_service.criar(
-                db, post.tenant_id, "new_reaction", "post_rede_social", post.id, f"{nome} reagiu ao seu post."
+                db, post.tenant_id, "new_reaction", "post_rede_social", post.id, mensagem_notificacao
             )
         minha_reacao = tipo
     elif reacao.tipo == tipo:
@@ -283,12 +302,16 @@ def reagir(db: Session, tenant_id: str, ator_id: str, post_id: int, tipo: str = 
         )
         minha_reacao = tipo
     db.commit()
+    if notificar_dono:
+        notificacao_rede_social_service.enviar_email_para_tenant(db, email_provider, post.tenant_id, mensagem_notificacao)
 
     reacoes_por_tipo = _contagem_reacoes_por_tipo(db, post_id)
     return {"minha_reacao": minha_reacao, "total": sum(reacoes_por_tipo.values()), "reacoes_por_tipo": reacoes_por_tipo}
 
 
-def compartilhar(db: Session, tenant_id: str, ator_id: str | None, post_id: int) -> dict:
+def compartilhar(
+    db: Session, tenant_id: str, ator_id: str | None, post_id: int, email_provider: EmailProvider | None = None
+) -> dict:
     """Repost simples (sem comentário próprio) — sempre aponta pra
     RAIZ (`post.post_original_id or post.id`), então compartilhar um
     repost na prática compartilha o post original, nunca encadeia.
@@ -322,12 +345,19 @@ def compartilhar(db: Session, tenant_id: str, ator_id: str | None, post_id: int)
         ator_id,
         {"post_original_id": post_original_id},
     )
-    if original.tenant_id != tenant_id:
+    notificar_dono = original.tenant_id != tenant_id
+    mensagem_notificacao = None
+    if notificar_dono:
         perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
         nome = perfil.nome_exibicao if perfil is not None else tenant_id
+        mensagem_notificacao = f"{nome} compartilhou seu post."
         notificacao_rede_social_service.criar(
-            db, original.tenant_id, "new_share", "post_rede_social", original.id, f"{nome} compartilhou seu post."
+            db, original.tenant_id, "new_share", "post_rede_social", original.id, mensagem_notificacao
         )
     db.commit()
     db.refresh(repost)
+    if notificar_dono:
+        notificacao_rede_social_service.enviar_email_para_tenant(
+            db, email_provider, original.tenant_id, mensagem_notificacao
+        )
     return _serializar(db, repost, tenant_id_atual=tenant_id)

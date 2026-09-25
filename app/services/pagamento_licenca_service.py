@@ -6,9 +6,11 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.models.comissao_representante import ComissaoRepresentante
 from app.models.licenca import Licenca
 from app.models.pagamento_licenca import PagamentoLicenca
 from app.models.plano import Plano
+from app.models.representante import Representante
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
@@ -160,7 +162,34 @@ def confirmar_via_webhook(
             {"tenant_id": pagamento.tenant_id, "plano_id": pagamento.plano_id, "valor": pagamento.valor},
         )
         _enviar_email_agradecimento(db, email_provider, pagamento, licenca)
+        _calcular_comissao_representante(db, pagamento)
     db.commit()
+
+
+def _calcular_comissao_representante(db: Session, pagamento: PagamentoLicenca) -> None:
+    """Uma linha de `ComissaoRepresentante` por pagamento aprovado, se o
+    tenant tiver um `representante_id` (raio-X: comissão de vendas) — o
+    repasse de verdade acontece depois, em lote, pelo cron de
+    `cron_repasse_comissoes_service`. `pagamento_licenca_id` é único
+    (`UniqueConstraint`), então um webhook duplicado nunca duplica a
+    comissão — mas essa checagem já nem chega a rodar de novo, porque
+    `confirmar_via_webhook` só entra aqui na primeira confirmação
+    (`if pagamento.confirmado_em is not None: return`, no topo da
+    função)."""
+    tenant = db.query(Tenant).filter_by(id=pagamento.tenant_id).one_or_none()
+    if tenant is None or tenant.representante_id is None:
+        return
+    representante = db.query(Representante).filter_by(id=tenant.representante_id).one_or_none()
+    if representante is None:
+        return
+    db.add(
+        ComissaoRepresentante(
+            representante_id=representante.id,
+            tenant_id=tenant.id,
+            pagamento_licenca_id=pagamento.id,
+            valor_comissao=pagamento.valor * representante.percentual_comissao,
+        )
+    )
 
 
 def _destinatarios_admin(db: Session, tenant_id: str) -> list[Usuario]:

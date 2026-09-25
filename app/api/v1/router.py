@@ -10,6 +10,7 @@ from app.api.v1.busca import router as busca_router
 from app.api.v1.cadencias import router as cadencias_router
 from app.api.v1.campanhas import router as campanhas_router
 from app.api.v1.canais import router as canais_router
+from app.api.v1.captura_lead import router as captura_lead_router
 from app.api.v1.central_negocios import router as central_negocios_router
 from app.api.v1.comunicacao import router as comunicacao_router
 from app.api.v1.configuracao_envio import router as configuracao_envio_router
@@ -47,6 +48,7 @@ from app.api.v1.produto.predator_api import router as predator_api_router
 from app.api.v1.prospeccao_contas import router as prospeccao_contas_router
 from app.api.v1.regras_aprendidas import router as regras_aprendidas_router
 from app.api.v1.relatorios import router as relatorios_router
+from app.api.v1.representantes import router as representantes_router
 from app.api.v1.rotulos_hierarquia import router as rotulos_hierarquia_router
 from app.api.v1.qualificacao import router as qualificacao_router
 from app.api.v1.rede_social import router as rede_social_router
@@ -112,6 +114,11 @@ router.include_router(whatsapp_router, dependencies=_exige_predator)
 router.include_router(webhooks_router)
 router.include_router(optout_router)
 router.include_router(cron_router)
+# Endpoint público sem licença (link de captura de lead por CTA de
+# anúncio/site) + um endpoint autenticado (`/config`) só pra gerar/exibir
+# o link do próprio tenant — mesmo raciocínio de `webhooks_router`/
+# `optout_router` acima.
+router.include_router(captura_lead_router)
 router.include_router(configuracao_envio_router, dependencies=_exige_predator)
 router.include_router(configuracao_whatsapp_router, dependencies=_exige_predator)
 router.include_router(configuracao_email_smtp_router, dependencies=_exige_predator)
@@ -132,6 +139,7 @@ router.include_router(leads_router, dependencies=_exige_organizacao)
 router.include_router(auth_router)
 router.include_router(convites_router)
 router.include_router(planos_router)
+router.include_router(representantes_router)
 router.include_router(central_negocios_router)
 router.include_router(rotulos_hierarquia_router)
 router.include_router(admin_tenants_router)

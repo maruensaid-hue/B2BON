@@ -9,6 +9,7 @@ from app.models.mensagem_rede_social import MensagemRedeSocial
 from app.models.oferta import Oferta
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.seguidor_empresa import SeguidorEmpresa
+from app.providers.channels.email.base import EmailProvider
 from app.services import auditoria_service, notificacao_rede_social_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
@@ -196,7 +197,13 @@ def listar_empresas(
     return resultado
 
 
-def solicitar_conexao(db: Session, tenant_id_origem: str, ator_id: str | None, tenant_id_destino: str) -> ConexaoEmpresa:
+def solicitar_conexao(
+    db: Session,
+    tenant_id_origem: str,
+    ator_id: str | None,
+    tenant_id_destino: str,
+    email_provider: EmailProvider | None = None,
+) -> ConexaoEmpresa:
     if tenant_id_origem == tenant_id_destino:
         raise ValidacaoFalhou("Não é possível conectar com o próprio tenant.")
 
@@ -231,16 +238,24 @@ def solicitar_conexao(db: Session, tenant_id_origem: str, ator_id: str | None, t
     auditoria_service.registrar(
         db, tenant_id_origem, "conexao_solicitada", "conexao_empresa", conexao.id, ator_id, {"tenant_id_destino": tenant_id_destino}
     )
+    mensagem_notificacao = f"{_nome_empresa(db, tenant_id_origem)} quer se conectar com sua empresa."
     notificacao_rede_social_service.criar(
-        db, tenant_id_destino, "connection_request", "conexao_empresa", conexao.id,
-        f"{_nome_empresa(db, tenant_id_origem)} quer se conectar com sua empresa.",
+        db, tenant_id_destino, "connection_request", "conexao_empresa", conexao.id, mensagem_notificacao
     )
     db.commit()
     db.refresh(conexao)
+    notificacao_rede_social_service.enviar_email_para_tenant(db, email_provider, tenant_id_destino, mensagem_notificacao)
     return conexao
 
 
-def responder_conexao(db: Session, tenant_id: str, ator_id: str | None, conexao_id: int, aceitar: bool) -> ConexaoEmpresa:
+def responder_conexao(
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    conexao_id: int,
+    aceitar: bool,
+    email_provider: EmailProvider | None = None,
+) -> ConexaoEmpresa:
     conexao = db.query(ConexaoEmpresa).filter_by(id=conexao_id).one_or_none()
     if conexao is None or conexao.tenant_id_destino != tenant_id:
         raise NaoEncontrado(f"Conexão {conexao_id} não encontrada")
@@ -253,13 +268,17 @@ def responder_conexao(db: Session, tenant_id: str, ator_id: str | None, conexao_
     auditoria_service.registrar(
         db, tenant_id, "conexao_respondida", "conexao_empresa", conexao.id, ator_id, {"aceitar": aceitar}
     )
+    mensagem_notificacao = f"{_nome_empresa(db, tenant_id)} aceitou sua solicitação de conexão."
     if aceitar:
         notificacao_rede_social_service.criar(
-            db, conexao.tenant_id_origem, "connection_accepted", "conexao_empresa", conexao.id,
-            f"{_nome_empresa(db, tenant_id)} aceitou sua solicitação de conexão.",
+            db, conexao.tenant_id_origem, "connection_accepted", "conexao_empresa", conexao.id, mensagem_notificacao
         )
     db.commit()
     db.refresh(conexao)
+    if aceitar:
+        notificacao_rede_social_service.enviar_email_para_tenant(
+            db, email_provider, conexao.tenant_id_origem, mensagem_notificacao
+        )
     return conexao
 
 
@@ -355,7 +374,12 @@ def conexao_aceita_entre(db: Session, tenant_a: str, tenant_b: str) -> bool:
 
 
 def enviar_mensagem(
-    db: Session, tenant_id_remetente: str, ator_id: str | None, tenant_id_destinatario: str, texto: str
+    db: Session,
+    tenant_id_remetente: str,
+    ator_id: str | None,
+    tenant_id_destinatario: str,
+    texto: str,
+    email_provider: EmailProvider | None = None,
 ) -> MensagemRedeSocial:
     """Só é possível trocar mensagem entre empresas já conectadas — mesmo
     espírito do LinkedIn (Onda C)."""
@@ -375,12 +399,15 @@ def enviar_mensagem(
         db, tenant_id_remetente, "mensagem_rede_social_enviada", "mensagem_rede_social", mensagem.id, ator_id,
         {"tenant_id_destinatario": tenant_id_destinatario},
     )
+    mensagem_notificacao = f"Nova mensagem de {_nome_empresa(db, tenant_id_remetente)}."
     notificacao_rede_social_service.criar(
-        db, tenant_id_destinatario, "new_message", "mensagem_rede_social", mensagem.id,
-        f"Nova mensagem de {_nome_empresa(db, tenant_id_remetente)}.",
+        db, tenant_id_destinatario, "new_message", "mensagem_rede_social", mensagem.id, mensagem_notificacao
     )
     db.commit()
     db.refresh(mensagem)
+    notificacao_rede_social_service.enviar_email_para_tenant(
+        db, email_provider, tenant_id_destinatario, mensagem_notificacao
+    )
     return mensagem
 
 

@@ -12,6 +12,7 @@ from app.api.deps import (
     get_email_validation_provider,
     get_graph_client,
     get_llm_provider,
+    get_payout_provider,
     get_plan_limits_provider,
     get_site_fetcher,
     get_web_search_provider,
@@ -29,11 +30,13 @@ from app.providers.account_data.base import AccountDataProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.email_validation.base import EmailVerificationProvider
+from app.providers.payout.base import PayoutProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.services import (
     campanha_service,
     cnpj_recorte_service,
+    cron_repasse_comissoes_service,
     enriquecimento_fila_service,
     envio_service,
     nps_service,
@@ -279,6 +282,19 @@ def expirar_registros_oportunidade(db: Session = Depends(get_db)) -> dict:
     anterior passa da validade sem decisão (raio-X: deal registration).
     Roda 1x/dia."""
     return {"expirados": registro_oportunidade_service.expirar_registros_vencidos(db)}
+
+
+@router.post("/repassar-comissoes", dependencies=[Depends(_exigir_segredo_cron)])
+def repassar_comissoes(
+    db: Session = Depends(get_db),
+    payout: PayoutProvider = Depends(get_payout_provider),
+    email: EmailProvider = Depends(get_email_provider),
+) -> dict:
+    """Repasse mensal de comissão a Representante (raio-X: comissão de
+    vendas) — enquanto `settings.payout_modo_simulacao=True` (default),
+    `payout` é sempre um stub que não move dinheiro de verdade, mesmo com
+    credencial real configurada. Roda 1x/mês."""
+    return cron_repasse_comissoes_service.repassar_pendentes(db, payout, email)
 
 
 @router.post("/processar-eventos", dependencies=[Depends(_exigir_segredo_cron)])
