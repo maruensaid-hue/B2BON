@@ -278,6 +278,44 @@ def criar_negocio(
     return negocio
 
 
+def abrir_ou_reaproveitar_oportunidade(
+    db: Session, tenant_id: str, ator_id: str | None, conta_id: int, nome: str, origem: str
+) -> tuple[Negocio, bool]:
+    """Network → CRM (Fase 8): uma conta com negócio em aberto não ganha
+    outro. Sem negócio aberto, cria no primeiro estágio, sem contato
+    (mesmo caso do negócio que o PREDATOR cria sozinho); o vendedor
+    escolhe o decisor depois. Devolve (negócio, criado?). Sem commit."""
+    aberto = (
+        db.query(Negocio)
+        .join(EstagioFunil, EstagioFunil.id == Negocio.estagio_id)
+        .filter(Negocio.tenant_id == tenant_id, Negocio.conta_id == conta_id, EstagioFunil.tipo == "aberto")
+        .order_by(Negocio.id)
+        .first()
+    )
+    if aberto is not None:
+        return aberto, False
+    primeiro = next(e for e in garantir_estagios_padrao(db, tenant_id) if e.tipo == "aberto")
+    negocio = Negocio(
+        tenant_id=tenant_id, conta_id=conta_id, nome=nome, valor=0.0, probabilidade=10,
+        estagio_id=primeiro.id, origem=origem,
+    )
+    db.add(negocio)
+    db.flush()
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta_id, negocio_id=negocio.id, tipo="sistema",
+        descricao=f"Negócio '{nome}' criado a partir de sinal da rede", ator_id=ator_id,
+    )
+    auditoria_service.registrar(
+        db, tenant_id, "negocio_criado", "negocio", negocio.id, ator_id, {"conta_id": conta_id, "origem": origem},
+        conta_id=conta_id,
+    )
+    eventos.publicar(
+        db, eventos.TipoEvento.OPPORTUNITY_CREATED, tenant_id, "negocio", negocio.id,
+        {"conta_id": conta_id, "valor": 0.0, "estagio_id": negocio.estagio_id, "origem": origem}, ator_id=ator_id,
+    )
+    return negocio, True
+
+
 def atualizar_negocio(
     db: Session,
     tenant_id: str,

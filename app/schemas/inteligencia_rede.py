@@ -37,11 +37,18 @@ class SinalOportunidadeSchema(BaseModel):
     evidencias: list[str]
     status: str
     conta_id_gerada: int | None
+    negocio_id_gerado: int | None = None
+    destino_conversao: str | None = None
     criado_em: datetime
 
 
 class ConversaoSinalSchema(BaseModel):
     conta_id: int
+    negocio_id: int | None = None
+    destino: str = "crm"
+    conta_reaproveitada: bool = False
+    negocio_reaproveitado: bool = False
+    sinais_fechados: list[int] = []
 
 
 class SaudeRelacionamentoSchema(BaseModel):
@@ -51,6 +58,11 @@ class SaudeRelacionamentoSchema(BaseModel):
     tem_relacionamento_declarado: bool
     classificacao: str
     sugestoes: list[str]
+    # Relationship Intelligence (Fase 8)
+    forca: str = "NENHUMA"
+    motivos: list[str] = []
+    conectadas: bool = False
+    relacionamentos: list[dict] = []
 
 
 class RiscoPipelineSchema(BaseModel):

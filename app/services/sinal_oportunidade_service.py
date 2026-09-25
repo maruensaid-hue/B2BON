@@ -5,6 +5,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
+from app.contexts.network.contract import conversao, grafo, privacidade
+from app.contexts.network.contract import relacionamento as inteligencia_relacionamento
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.atividade import Atividade
@@ -96,7 +98,7 @@ def listar_fit_icp_rede(db: Session, tenant_id: str, icp_id: int) -> list[dict]:
     if icp is None:
         raise NaoEncontrado(f"ICP {icp_id} não encontrado")
 
-    perfis = db.query(PerfilEmpresa).filter(PerfilEmpresa.tenant_id != tenant_id).all()
+    perfis = privacidade.perfis_visiveis(db, tenant_id)  # Fase 8: sem bloqueadas/ocultas
     resultados = [calcular_fit_icp(icp, perfil) for perfil in perfis]
     resultados.sort(key=lambda resultado: resultado["fit_score"], reverse=True)
     return resultados
@@ -113,8 +115,12 @@ def _tokenizar(*textos: str | None) -> set[str]:
     return palavras
 
 
-def _relacionamento_entre(db: Session, tenant_id_a: str, tenant_id_b: str) -> RelacionamentoEmpresarial | None:
-    return (
+def _relacionamento_entre(
+    db: Session, tenant_id_a: str, tenant_id_b: str, consultante: str | None = None
+) -> RelacionamentoEmpresarial | None:
+    """Com `consultante`, só relacionamentos que ele pode ver (Fase 8: um
+    terceiro olhando matches não descobre aresta privada entre outras duas)."""
+    consulta = (
         db.query(RelacionamentoEmpresarial)
         .filter(
             (
@@ -126,8 +132,11 @@ def _relacionamento_entre(db: Session, tenant_id_a: str, tenant_id_b: str) -> Re
                 & (RelacionamentoEmpresarial.tenant_id_destino == tenant_id_a)
             )
         )
-        .first()
+        .order_by(RelacionamentoEmpresarial.id)
     )
+    consultante = consultante or tenant_id_a
+    cache: dict = {}
+    return next((r for r in consulta.all() if grafo.aresta_visivel(db, consultante, r, cache)), None)
 
 
 def _conexao_aceita_entre(db: Session, tenant_id_a: str, tenant_id_b: str) -> bool:
@@ -148,7 +157,9 @@ def _conexao_aceita_entre(db: Session, tenant_id_a: str, tenant_id_b: str) -> bo
     return conexao is not None and conexao.status == "aceita"
 
 
-def _calcular_match_intent(db: Session, intent: Intent, perfil_candidato: PerfilEmpresa) -> dict | None:
+def _calcular_match_intent(
+    db: Session, intent: Intent, perfil_candidato: PerfilEmpresa, consultante: str | None = None
+) -> dict | None:
     """Intent Agent + Match Engine (master prompt §26, §48-49, Fase 3C)
     — comparação determinística de palavras-chave (sem embeddings/
     vector search, fora de escopo desta fase) entre o que a Intent
@@ -171,11 +182,14 @@ def _calcular_match_intent(db: Session, intent: Intent, perfil_candidato: Perfil
     reasons = [f"Palavra-chave em comum: \"{termo}\"." for termo in termos_em_comum[:5]]
     signals: list[str] = []
 
-    if _conexao_aceita_entre(db, intent.tenant_id, perfil_candidato.tenant_id):
+    consultante = consultante or intent.tenant_id
+    # Conexão entre duas empresas só é sinal para uma delas (Fase 7/8: não é pública).
+    partes = (intent.tenant_id, perfil_candidato.tenant_id)
+    if consultante in partes and _conexao_aceita_entre(db, *partes):
         signals.append("Já existe conexão aceita entre as duas empresas na rede.")
         match_score = min(1.0, match_score + 0.2)
 
-    relacionamento = _relacionamento_entre(db, intent.tenant_id, perfil_candidato.tenant_id)
+    relacionamento = _relacionamento_entre(db, intent.tenant_id, perfil_candidato.tenant_id, consultante)
     if relacionamento is not None:
         signals.append(f"Relacionamento comercial declarado na rede: {relacionamento.tipo}.")
         match_score = min(1.0, match_score + 0.2)
@@ -208,8 +222,8 @@ def sugerir_fornecedores_para_intent(db: Session, tenant_id: str, intent_id: int
     if intent is None:
         raise NaoEncontrado(f"Intent {intent_id} não encontrada")
 
-    perfis = db.query(PerfilEmpresa).filter(PerfilEmpresa.tenant_id != intent.tenant_id).all()
-    resultados = [_calcular_match_intent(db, intent, perfil) for perfil in perfis]
+    perfis = [p for p in privacidade.perfis_visiveis(db, tenant_id) if p.tenant_id != intent.tenant_id]
+    resultados = [_calcular_match_intent(db, intent, perfil, tenant_id) for perfil in perfis]
     matches = [resultado for resultado in resultados if resultado is not None]
     matches.sort(key=lambda resultado: resultado["match_score"], reverse=True)
     return matches
@@ -229,10 +243,13 @@ def explicar_match_com_ia(
         raise NaoEncontrado(f"Intent {intent_id} não encontrada")
 
     perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id_candidato).one_or_none()
-    if perfil is None:
+    if perfil is None or (
+        tenant_id_solicitante is not None
+        and tenant_id_candidato not in {p.tenant_id for p in privacidade.perfis_visiveis(db, tenant_id_solicitante)}
+    ):
         raise NaoEncontrado(f"Empresa {tenant_id_candidato} não encontrada")
 
-    match = _calcular_match_intent(db, intent, perfil)
+    match = _calcular_match_intent(db, intent, perfil, tenant_id_solicitante)
     if match is None:
         raise NaoEncontrado("Esta empresa não tem nenhum critério ou sinal em comum com a necessidade.")
 
@@ -308,7 +325,10 @@ def gerar_sinais(db: Session, tenant_id: str) -> list[dict]:
         )
         .all()
     )
+    cache_visibilidade: dict = {}
     for relacionamento in relacionamentos:
+        if not grafo.aresta_visivel(db, tenant_id, relacionamento, cache_visibilidade):
+            continue  # aresta privada de outra empresa não vira sinal (nem revela que existe)
         chave = (relacionamento.tenant_id_origem, "relacionamento_declarado")
         dados_por_par[chave] = {
             "score": 0.5,
@@ -318,6 +338,32 @@ def gerar_sinais(db: Session, tenant_id: str) -> list[dict]:
             ),
             "evidencias": [relacionamento.tipo],
         }
+
+    # Intent Intelligence, lado vendedor (Fase 8): necessidades abertas de
+    # outras empresas, visíveis para este tenant, que o perfil dele atende.
+    meu_perfil = db.query(PerfilEmpresa).filter_by(tenant_id=tenant_id).one_or_none()
+    if meu_perfil is not None:
+        intents_abertas = db.query(Intent).filter(Intent.status == "aberta", Intent.tenant_id != tenant_id).all()
+        for intent in intents_abertas:
+            if not privacidade.pode_ver(db, tenant_id, intent.tenant_id, intent.visibilidade, cache=cache_visibilidade):
+                continue
+            match = _calcular_match_intent(db, intent, meu_perfil, tenant_id)
+            if match is None or not match["match_reasons"]:
+                continue
+            chave = (intent.tenant_id, "intent_compativel")
+            candidato = {
+                "score": match["match_score"],
+                "motivo": (
+                    f"{nome_empresa(db, intent.tenant_id)} procura \"{intent.titulo}\" e o seu perfil atende: "
+                    + "; ".join(match["match_reasons"] + match["signals"])
+                ),
+                "evidencias": [f"intent:{intent.id}", *match["match_reasons"], *match["signals"]],
+            }
+            if chave not in dados_por_par or candidato["score"] > dados_por_par[chave]["score"]:
+                dados_por_par[chave] = candidato
+
+    bloqueadas = privacidade.bloqueados(db, tenant_id)
+    dados_por_par = {chave: dados for chave, dados in dados_por_par.items() if chave[0] not in bloqueadas}
 
     # Lote (Fase 7B, hardening) — antes buscava um `SinalOportunidade`
     # existente por par dentro do loop de get-or-create.
@@ -329,12 +375,15 @@ def gerar_sinais(db: Session, tenant_id: str) -> list[dict]:
     sinais: list[SinalOportunidade] = []
     for (tenant_id_alvo, tipo_sinal), dados in dados_por_par.items():
         sinal = sinais_existentes.get((tenant_id_alvo, tipo_sinal))
-        if sinal is None:
+        novo = sinal is None
+        if novo:
             sinal = SinalOportunidade(
                 tenant_id=tenant_id, tenant_id_alvo=tenant_id_alvo, tipo_sinal=tipo_sinal, status="novo"
             )
+            with db.no_autoflush:
+                conversao.vincular_a_conversao_existente(db, tenant_id, sinal)  # Fase 8: sem duplicar
             db.add(sinal)
-        if sinal.status not in _STATUS_SINAL_IMUTAVEIS:
+        if novo or sinal.status not in _STATUS_SINAL_IMUTAVEIS:
             sinal.score = dados["score"]
             sinal.motivo = dados["motivo"]
             sinal.evidencias = dados["evidencias"]
@@ -357,6 +406,8 @@ def _serializar_sinal(db: Session, sinal: SinalOportunidade) -> dict:
         "evidencias": sinal.evidencias,
         "status": sinal.status,
         "conta_id_gerada": sinal.conta_id_gerada,
+        "negocio_id_gerado": sinal.negocio_id_gerado,
+        "destino_conversao": sinal.destino_conversao,
         "criado_em": sinal.criado_em,
     }
 
@@ -396,41 +447,12 @@ def descartar(db: Session, tenant_id: str, ator_id: str | None, sinal_id: int) -
     return _serializar_sinal(db, sinal)
 
 
-def converter_em_oportunidade(db: Session, tenant_id: str, ator_id: str | None, sinal_id: int) -> dict:
-    """Signal → CRM (master prompt §51, Fase 3D), até onde os dados
-    permitem sem inventar um decisor de outro tenant (ver decisão de
-    escopo 5 do plano): cria/reaproveita a `Conta` a partir do perfil
-    público do tenant-alvo (mesmo padrão de `conta_service.criar_lead`,
-    `origem="rede_social_signal"`) e devolve o `conta_id` — o humano
-    escolhe/cadastra o decisor real e fecha o `Negocio` pelo fluxo
-    manual já existente no CRM."""
-    sinal = _obter_sinal(db, tenant_id, sinal_id)
-    if sinal.status == "convertido":
-        raise RegraNegocioViolada("Este sinal já foi convertido em uma conta do CRM.")
-
-    tenant_alvo = db.query(Tenant).filter_by(id=sinal.tenant_id_alvo).one_or_none()
-    perfil_alvo = db.query(PerfilEmpresa).filter_by(tenant_id=sinal.tenant_id_alvo).one_or_none()
-
-    conta = conta_service.criar_lead(
-        db,
-        tenant_id,
-        ator_id,
-        nome=perfil_alvo.nome_exibicao if perfil_alvo is not None else sinal.tenant_id_alvo,
-        cnpj=tenant_alvo.cnpj if tenant_alvo is not None else None,
-        dominio=perfil_alvo.site if perfil_alvo is not None else None,
-        segmento=perfil_alvo.setor if perfil_alvo is not None else None,
-        porte=perfil_alvo.porte if perfil_alvo is not None else None,
-        regiao=perfil_alvo.sede_uf if perfil_alvo is not None else None,
-        origem="rede_social_signal",
-    )
-
-    sinal.status = "convertido"
-    sinal.conta_id_gerada = conta.id
-    auditoria_service.registrar(
-        db, tenant_id, "sinal_oportunidade_convertido", "sinal_oportunidade", sinal.id, ator_id, {"conta_id": conta.id}
-    )
-    db.commit()
-    return {"conta_id": conta.id}
+def converter_em_oportunidade(
+    db: Session, tenant_id: str, ator_id: str | None, sinal_id: int, destino: str = "crm"
+) -> dict:
+    """Signal → CRM/PREDATOR (master prompt §51). Desde a Fase 8 delega para
+    `network.conversao`, que reaproveita conta e negócio (GATE: sem duplicação)."""
+    return conversao.converter(db, tenant_id, ator_id, sinal_id, destino)
 
 
 _LIMITE_DIAS_ESFRIANDO = 30
@@ -644,6 +666,7 @@ def analisar_saude_relacionamento(db: Session, tenant_id: str, tenant_id_alvo: s
         "tem_relacionamento_declarado": tem_relacionamento,
         "classificacao": classificacao,
         "sugestoes": sugestoes,
+        **inteligencia_relacionamento.forca(db, tenant_id, tenant_id_alvo, dias_sem_interacao),
     }
 
 

@@ -62,6 +62,8 @@ O `SECURITY_BOUNDARIES.md` de raiz diz que o staging de CNPJ é a
 
 **Fase 7:** `empresa_rede`; `relacionamento_empresarial` + `empresa_origem_id`, `empresa_destino_id`, `fonte`, `valido_desde`, `valido_ate` (`tenant_id_destino` passa a aceitar nulo); `perfil_empresa.visivel_no_diretorio`. Total: 112 tabelas.
 
+**Fase 8:** `sinal_oportunidade` + `negocio_id_gerado`, `destino_conversao`.
+
 Nenhuma tabela de Procurement, Bid, Credit Wallet, Usage Ledger
 completo, Entitlement, Integration Registry ou vetores existe.
 

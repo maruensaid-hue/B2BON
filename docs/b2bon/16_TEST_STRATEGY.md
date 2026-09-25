@@ -26,6 +26,7 @@
 | Webhooks de saída + Integration Hub | `tests/integration/test_webhooks_saida_e_hub.py` | Fase 3 |
 | Recomendações explicáveis + INSUFFICIENT_INFORMATION (GATE Fase 6) | `tests/integration/test_opportunity_intelligence.py` | Fase 6 |
 | Privacidade e fronteiras de tenant na Business Network (GATE Fase 7) | `tests/integration/test_privacidade_rede.py` | Fase 7 |
+| Sinal → oportunidade sem duplicação + privacidade do matching (GATE Fase 8) | `tests/integration/test_network_intelligence.py` | Fase 8 |
 
 ## Regras
 
@@ -50,3 +51,4 @@
 | 5 | 1.711 passed | lint OK (25 warnings), build OK | 4/4 |
 | 6 | 1.761 passed | lint OK (25 warnings), build OK | 4/4 (criar-negocio cobre o card de inteligência) |
 | 7 | 1.795 passed | lint OK (25 warnings), build OK | 4/4 |
+| 8 | 1.805 passed | lint OK (25 warnings), build OK | 4/4 |

@@ -97,3 +97,42 @@ Business Matching, Relationship Intelligence, sinais → CRM/PREDATOR e
 Corporate Rooms (Fase 8). Nome oficial da empresa citada via BrasilAPI
 (TD-056). Disputa de claim com revisão humana (hoje a regra é CNPJ +
 verificação).
+
+---
+
+# Fase 8 — NETWORK INTELLIGENCE
+
+| Item | Onde | O que mudou |
+|---|---|---|
+| Business Matching | `sinal_oportunidade_service` (fit ICP, match de intent) | candidatos passam por `privacidade.perfis_visiveis` (sem bloqueadas, sem ocultas não conectadas); explicação por IA também |
+| Intent Intelligence | sinal `intent_compativel` | lado vendedor: intents abertas de outras empresas, **visíveis** para o tenant, que o perfil dele atende (evidência `intent:<id>`) |
+| Relationship Intelligence | `network/relacionamento.py` | `forca` FORTE/MODERADA/FRACA/NENHUMA com motivos: conexão (+2), relacionamento confirmado (+2) ou declarado (+1), interação ≤14 dias (+2) ou ≤30 (+1) |
+| Opportunity Signals | `sinal_oportunidade` | aresta privada não vira sinal; empresa bloqueada não gera sinal |
+| Network → CRM | `network/conversao.py` + `crm.contract.abrir_ou_reaproveitar_oportunidade` | conta + negócio (origem `rede_signal`, sem decisor inventado) |
+| Network → PREDATOR | idem, `destino=predator` | só a conta, como lead de prospecção |
+| Corporate Rooms foundation | `sala_corporativa_service` | só as duas empresas; sem conexão ativa (desconexão/bloqueio) a sala fica só leitura |
+
+## GATE — sinal vira oportunidade sem duplicação
+
+`POST /inteligencia-rede/sinais/{id}/converter?destino=crm|predator`
+(padrão: CRM se o plano tiver; destino sem o módulo = 403).
+
+1. **Conta**: reaproveita a do tenant para a mesma empresa: gerada por
+   outro sinal dela, mesmo CNPJ ou mesmo domínio. Só cria se não houver.
+2. **Negócio** (CRM): reaproveita o negócio aberto da conta; senão cria no
+   primeiro estágio e publica `OpportunityCreated` uma vez.
+3. **Sinais irmãos**: todos os sinais em aberto da mesma empresa-alvo são
+   fechados juntos com a mesma conta/negócio. Sinal novo de empresa já
+   convertida nasce convertido. Reconverter = 409.
+4. Empresa bloqueada: 409.
+
+Limite: dois cliques simultâneos em sinais diferentes da mesma empresa
+podem, em teoria, criar duas contas (sem lock; TD-057).
+
+## Privacidade adicional
+
+Os matches de uma intent podem ser vistos por qualquer empresa que vê a
+intent. Antes, os "sinais" do match revelavam a terceiros a conexão e
+relacionamentos (inclusive privados) entre o autor e o candidato. Agora a
+conexão só aparece para as partes e o relacionamento só se o consultante
+puder ver a aresta.

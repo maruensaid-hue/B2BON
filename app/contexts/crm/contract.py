@@ -48,3 +48,12 @@ def valor_pipeline_aberto(db: Session, tenant_id: str, conta_id: int) -> float:
 def custo_aquisicao(db: Session, tenant_id: str, periodo: str) -> float | None:
     custo = db.query(CustoAquisicao).filter_by(tenant_id=tenant_id, periodo=periodo).one_or_none()
     return custo.valor if custo else None
+
+
+def abrir_ou_reaproveitar_oportunidade(
+    db: Session, tenant_id: str, ator_id: str | None, conta_id: int, nome: str, origem: str
+) -> tuple[Negocio, bool]:
+    """Network → CRM (Fase 8): reaproveita o negócio aberto da conta ou cria um."""
+    from app.services import crm_service
+
+    return crm_service.abrir_ou_reaproveitar_oportunidade(db, tenant_id, ator_id, conta_id, nome, origem)

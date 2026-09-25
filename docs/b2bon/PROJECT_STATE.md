@@ -2,10 +2,10 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **PHASE 8 — NETWORK INTELLIGENCE** |
-| Última fase concluída | PHASE 7 — BUSINESS NETWORK FOUNDATION (2026-09-25) |
+| **CURRENT PHASE** | **PHASE 9 — BID INTELLIGENCE / SELL SIDE** |
+| Última fase concluída | PHASE 8 — NETWORK INTELLIGENCE (2026-09-25) |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/PHASE_7_COMPLETION.md` |
+| Relatório da última fase | `phases/PHASE_8_COMPLETION.md` |
 
 ## Autorizações
 
@@ -22,8 +22,8 @@
 - **OI-010** (alta): verificar em produção se as features de IA falhavam por `temperature` com `claude-sonnet-5` (corrigido no código).
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
 
-## Baseline de qualidade (após a Fase 7)
+## Baseline de qualidade (após a Fase 8)
 
-- Backend: 1.795 passed. Migrações validadas também em Postgres 16.
+- Backend: 1.805 passed. Migrações validadas também em Postgres 16.
 - Frontend: lint OK (25 warnings), build OK.
 - E2E: 4/4.

@@ -220,3 +220,16 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Decisão**: `privada` = só o autor; `conexoes` passa a funcionar
   (partes + conexões do autor); bloqueio esconde conteúdo nas duas direções.
 - **Status**: ACEITA.
+
+## D-028 · 2026-09-25 · Fase 8 · Conversão de sinal é idempotente por empresa-alvo
+- **Decisão**: a unidade de deduplicação é (tenant, empresa-alvo). Conta
+  reaproveitada por sinal anterior/CNPJ/domínio; negócio aberto
+  reaproveitado; todos os sinais da empresa fecham juntos.
+- **Consequência**: "Criar oportunidade" nunca gera segunda conta ou
+  segundo negócio aberto para a mesma empresa.
+- **Status**: ACEITA.
+
+## D-029 · 2026-09-25 · Fase 8 · Sala corporativa só leitura sem conexão ativa
+- **Decisão**: desconectar ou bloquear congela a sala (histórico mantido
+  para as duas empresas, sem novas mensagens).
+- **Status**: ACEITA.

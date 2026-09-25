@@ -64,3 +64,17 @@ def pode_ver(
             cache["conectados"] = conectados(db, consultante)
         return autor in cache["conectados"]
     return False
+
+
+def perfis_visiveis(db: Session, consultante: str) -> list:
+    """Empresas que o consultante pode encontrar/receber como match (Fase 8):
+    exclui a própria, as bloqueadas e as fora do diretório que não são conexão."""
+    from app.models.perfil_empresa import PerfilEmpresa
+
+    bloqueadas = bloqueados(db, consultante)
+    perfis = db.query(PerfilEmpresa).filter(PerfilEmpresa.tenant_id != consultante).all()
+    conectadas = conectados(db, consultante) if any(not p.visivel_no_diretorio for p in perfis) else set()
+    return [
+        p for p in perfis
+        if p.tenant_id not in bloqueadas and (p.visivel_no_diretorio or p.tenant_id in conectadas)
+    ]

@@ -265,11 +265,22 @@ export function InteligenciaRede() {
     setConvertendoId(sinalId);
     setAviso(null);
     try {
-      const resultado = await api.post<{ conta_id: number }>(`/inteligencia-rede/sinais/${sinalId}/converter`);
+      const resultado = await api.post<{
+        conta_id: number;
+        negocio_id: number | null;
+        conta_reaproveitada: boolean;
+        negocio_reaproveitado: boolean;
+      }>(`/inteligencia-rede/sinais/${sinalId}/converter`);
       setSinais(await api.get<SinalOportunidade[]>("/inteligencia-rede/sinais"));
-      setAviso(
-        `Conta #${resultado.conta_id} criada no CRM — abra o CRM pra escolher/cadastrar o decisor e fechar o negócio.`,
-      );
+      // Fase 8: a conversão reaproveita conta e negócio existentes (sem duplicar).
+      const conta = resultado.conta_reaproveitada ? `Conta #${resultado.conta_id} já existente` : `Conta #${resultado.conta_id} criada`;
+      const negocio =
+        resultado.negocio_id === null
+          ? " como lead de prospecção"
+          : resultado.negocio_reaproveitado
+            ? `, vinculada ao negócio aberto #${resultado.negocio_id}`
+            : ` e negócio #${resultado.negocio_id} aberto no CRM`;
+      setAviso(`${conta}${negocio} — escolha o decisor no CRM para seguir.`);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível converter este sinal em conta.");
     } finally {

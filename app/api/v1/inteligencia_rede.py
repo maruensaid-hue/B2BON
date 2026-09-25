@@ -1,8 +1,12 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_llm_provider, get_plan_limits_provider, get_tenant_id
+from app.contexts.shared.entitlements import Entitlements
 from app.llm.base import LLMProvider
+from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.inteligencia_rede import (
     AtribuicaoReceitaSchema,
     ConversaoSinalSchema,
@@ -15,6 +19,7 @@ from app.schemas.inteligencia_rede import (
     SugestaoExpansaoSchema,
 )
 from app.services import intent_service, sinal_oportunidade_service
+from app.services.errors import NaoAutorizado
 
 router = APIRouter(prefix="/inteligencia-rede", tags=["inteligencia-rede"])
 # C7 (Fase 6): riscos de pipeline e expansão leem só dado de CRM (negócio,
@@ -97,14 +102,21 @@ def descartar_sinal(
 @router.post("/sinais/{sinal_id}/converter", response_model=ConversaoSinalSchema)
 def converter_sinal_em_oportunidade(
     sinal_id: int,
+    destino: Literal["crm", "predator"] | None = None,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
     db: Session = Depends(get_db),
 ) -> ConversaoSinalSchema:
-    """Signal → CRM (master prompt §51, Fase 3D) — cria/reaproveita a
-    Conta a partir do sinal; o humano fecha o Negócio manualmente no
-    CRM (ver decisão de escopo 5 do plano — sem decisor inventado)."""
-    return sinal_oportunidade_service.converter_em_oportunidade(db, tenant_id, ator_id, sinal_id)
+    """Network → CRM (conta + negócio) ou → PREDATOR (conta como lead),
+    master prompt §51, Fase 8. Reaproveita conta e negócio existentes:
+    nenhum sinal gera duplicata. Sem decisor inventado: o vendedor escolhe
+    o contato depois. Padrão: CRM se o plano tiver CRM."""
+    entitlements = Entitlements(plan_limits, tenant_id)
+    destino = destino or ("crm" if entitlements.has_module("crm") else "predator")
+    if not entitlements.has_module(destino):
+        raise NaoAutorizado(f"Converter para {destino.upper()} exige o módulo {destino.upper()} no plano.")
+    return sinal_oportunidade_service.converter_em_oportunidade(db, tenant_id, ator_id, sinal_id, destino)
 
 
 @router.get("/saude-relacionamentos", response_model=list[SaudeRelacionamentoSchema])

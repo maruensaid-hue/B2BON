@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 8 — Network Intelligence (2026-09-25)
+
+- Sinal → CRM (conta + negócio) ou → PREDATOR (conta) sem duplicação: reaproveita conta/negócio, fecha os sinais irmãos, sinal novo de empresa convertida já nasce convertido.
+- Intent Intelligence do lado vendedor (`intent_compativel`), Relationship Intelligence (força com motivos).
+- Privacidade no matching: bloqueadas e ocultas fora; aresta privada não vira sinal; matches não revelam conexões/relacionamentos de terceiros.
+- Corporate Rooms: só leitura sem conexão ativa. Migração `6a6ea43222b8`.
+
 ## Fase 7 — Business Network Foundation (2026-09-25)
 
 - Contexto `app/contexts/network/`: Company Identity (`empresa_rede`), Company Claim, Membership, Business Graph com as propriedades do §28, regra única de privacidade.

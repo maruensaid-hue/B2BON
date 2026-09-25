@@ -232,9 +232,12 @@ def test_compartilhar_envia_email_pro_autor_do_post(db_session):
 
 def test_mensagem_sala_envia_email_pro_outro_tenant(db_session):
     from app.models.canal_sala import CanalSala
+    from app.models.conexao_empresa import ConexaoEmpresa
     from app.models.sala_corporativa import SalaCorporativa
 
     _criar_usuario(db_session, TENANT_B, email="destino@tenant-outro.com.br")
+    # Sala só existe entre empresas conectadas (e só aceita mensagem com a conexão ativa, Fase 8).
+    db_session.add(ConexaoEmpresa(tenant_id_origem=TENANT_A, tenant_id_destino=TENANT_B, status="aceita"))
     tenant_a, tenant_b = sorted((TENANT_A, TENANT_B))
     sala = SalaCorporativa(tenant_id_a=tenant_a, tenant_id_b=tenant_b)
     db_session.add(sala)

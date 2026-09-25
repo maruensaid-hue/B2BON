@@ -161,6 +161,11 @@ def enviar_mensagem_sala(
     email_provider: EmailProvider | None = None,
 ) -> dict:
     canal, sala = _obter_canal(db, tenant_id, canal_id)
+    # Corporate Rooms (Fase 8): sem conexão aceita (desconexão ou bloqueio)
+    # a sala fica só leitura; o histórico continua das duas empresas.
+    outro = sala.tenant_id_b if sala.tenant_id_a == tenant_id else sala.tenant_id_a
+    if not conexao_aceita_entre(db, tenant_id, outro):
+        raise RegraNegocioViolada("A conexão com esta empresa não está ativa; a sala está só para leitura.")
     mensagem = MensagemSala(
         canal_id=canal.id,
         tenant_id_remetente=tenant_id,

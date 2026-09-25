@@ -27,5 +27,8 @@ class SinalOportunidade(Base):
     evidencias: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String, default="novo")  # novo | visto | descartado | convertido
     conta_id_gerada: Mapped[int | None] = mapped_column(ForeignKey("conta.id"), nullable=True)
+    # Fase 8: Network → CRM cria (ou reaproveita) um negócio; → PREDATOR só a conta.
+    negocio_id_gerado: Mapped[int | None] = mapped_column(ForeignKey("negocio.id"), nullable=True)
+    destino_conversao: Mapped[str | None] = mapped_column(String, nullable=True)  # crm | predator
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     expira_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

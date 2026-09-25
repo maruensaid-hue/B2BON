@@ -62,6 +62,8 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-054 | Neo4j legado (`app/graph`) segue ativo para Conta/Decisor, paralelo ao Business Graph relacional | `app/graph/client.py` | Dois grafos; instância Aura pausa | 17 | OPEN |
 | TD-055 | Bloqueio não registra quem bloqueou (conexão reaproveitada); regra é simétrica | `rede_social_service.bloquear` | Ambos deixam de se ver | 8 | OPEN |
 | TD-056 | Nome de empresa não reivindicada é o informado por quem citou, não o oficial (BrasilAPI) | `network/identidade.por_cnpj` | Nome pode divergir da razão social | 8 | OPEN |
+| TD-057 | Conversão de sinal sem lock: cliques simultâneos em sinais diferentes da mesma empresa podem criar duas contas | `network/conversao.py` | Duplicata rara | 17 | OPEN |
+| TD-058 | Matching de intent/ICP ainda por palavra-chave do perfil; não usa Offer Intelligence (Fase 6) do vendedor | `sinal_oportunidade_service` | Matches perdidos | 17 | OPEN |
 | TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher com gatilho por cron desde a Fase 3 | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
 | TD-042 | `B2BOnCrmAdapter.list_*` sem paginação para pipelines/estágios/ofertas e `CanonicalMapDataSource` carrega tudo em memória | `adapters/b2bon_crm.py`, `map/data_source.py` | Custo em tenants grandes | 17 | OPEN |
 | TD-037 | `starlette.testclient` com `httpx` deprecated (warning) | saída do pytest | Quebra futura na atualização | oportunista | OPEN |
