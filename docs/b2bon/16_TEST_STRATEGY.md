@@ -27,6 +27,7 @@
 | Recomendações explicáveis + INSUFFICIENT_INFORMATION (GATE Fase 6) | `tests/integration/test_opportunity_intelligence.py` | Fase 6 |
 | Privacidade e fronteiras de tenant na Business Network (GATE Fase 7) | `tests/integration/test_privacidade_rede.py` | Fase 7 |
 | Sinal → oportunidade sem duplicação + privacidade do matching (GATE Fase 8) | `tests/integration/test_network_intelligence.py` | Fase 8 |
+| Proveniência de documento de licitação (GATE Fase 9) | `tests/integration/test_bid_intelligence.py` | Fase 9 |
 
 ## Regras
 
@@ -52,3 +53,4 @@
 | 6 | 1.761 passed | lint OK (25 warnings), build OK | 4/4 (criar-negocio cobre o card de inteligência) |
 | 7 | 1.795 passed | lint OK (25 warnings), build OK | 4/4 |
 | 8 | 1.805 passed | lint OK (25 warnings), build OK | 4/4 |
+| 9 | 1.825 passed | lint OK (25 warnings), build OK | 4/4 |

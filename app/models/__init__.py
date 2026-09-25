@@ -30,6 +30,12 @@ from app.models.email_direto import EmailDireto
 from app.models.email_recebido import EmailRecebido
 from app.models.descarte_conta import DescarteConta
 from app.models.empresa_rede import EmpresaRede
+from app.models.licitacao import Licitacao
+from app.models.documento_licitacao import DocumentoLicitacao
+from app.models.requisito_licitacao import RequisitoLicitacao
+from app.models.documento_cofre import DocumentoCofre
+from app.models.decisao_go_no_go import DecisaoGoNoGo
+from app.models.contrato_venda_publica import ContratoVendaPublica
 from app.models.enriquecimento_semanal_consumo import EnriquecimentoSemanalConsumo
 from app.models.estagio_funil import EstagioFunil
 from app.models.faq_item import FaqItem
@@ -114,6 +120,12 @@ __all__ = [
     "MaterialOferta",
     "NecessidadeOportunidade",
     "EmpresaRede",
+    "Licitacao",
+    "DocumentoLicitacao",
+    "RequisitoLicitacao",
+    "DocumentoCofre",
+    "DecisaoGoNoGo",
+    "ContratoVendaPublica",
     "ConfiguracaoComunicacao",
     "ConfiguracaoEnvio",
     "ConfiguracaoWhatsApp",

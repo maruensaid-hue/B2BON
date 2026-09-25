@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     # Câmbio USD→BRL para métricas de FinOps que cruzam custo (USD) com
     # receita (BRL). Vazio = essas métricas voltam `null` (não inventa câmbio).
     finops_cambio_usd_brl: float | None = None
+    # Fase 9: ingestão do PNCP (EXPERIMENTAL, não validada contra a API real).
+    pncp_habilitado: bool = False
 
     # Fallback de desenvolvimento apenas — franquia real é decisão comercial
     # pendente e vem do núcleo via PlanLimitsProvider (Seção 11 da especificação).

@@ -26,6 +26,8 @@ export interface RecursosPlano {
   modulo_map: boolean;
   modulo_predator: boolean;
   modulo_crm: boolean;
+  /** Fase 9: Bid Intelligence (B2B ON Public Sector). */
+  modulo_bids?: boolean;
 }
 
 export interface Usuario {

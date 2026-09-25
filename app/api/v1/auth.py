@@ -100,6 +100,7 @@ def _construir_usuario_schema(usuario: Usuario, db: Session) -> UsuarioSchema:
         modulo_map=plan_limits.permite_modulo(usuario.tenant_id, "map"),
         modulo_predator=plan_limits.permite_modulo(usuario.tenant_id, "predator"),
         modulo_crm=plan_limits.permite_modulo(usuario.tenant_id, "crm"),
+        modulo_bids=plan_limits.permite_modulo(usuario.tenant_id, "bids"),
     )
     tem_conta_atribuida = (
         db.query(Conta).filter_by(tenant_id=usuario.tenant_id, vendedor_usuario_id=usuario.id).first() is not None

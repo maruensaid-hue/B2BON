@@ -11,8 +11,12 @@ from collections.abc import Callable
 
 from app.providers.plan_limits.base import PlanLimitsProvider
 
-MODULOS = ("map", "predator", "crm")
-NOMES_MODULO = {"map": "MAP", "predator": "PREDATOR", "crm": "CRM"}
+# "bids" (Fase 9): Bid Intelligence, vendido na suíte B2B ON Public Sector
+# (§70). Não entra em nenhum plano existente sozinho: um plano só o libera
+# quando o super_admin inclui "bids" em `modulos_contratados` (sem preço
+# novo; catálogo na Fase 14).
+MODULOS = ("map", "predator", "crm", "bids")
+NOMES_MODULO = {"map": "MAP", "predator": "PREDATOR", "crm": "CRM", "bids": "Bid Intelligence"}
 
 _FEATURES: dict[str, Callable[[PlanLimitsProvider, str], bool]] = {
     "AB_TESTE_CADENCIA": lambda p, t: p.permite_ab_teste_cadencia(t),

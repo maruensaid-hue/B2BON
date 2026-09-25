@@ -1,5 +1,13 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 9 — Bid Intelligence / Sell Side (2026-09-25)
+
+- Contexto `app/contexts/bids/` e API `/api/v1/bids/*` (módulo `bids`, fora de todos os planos até decisão do PO).
+- Licitações, documentos com hash e texto por página, Tender/TR Analyzer (IA C3) com proveniência calculada pelo sistema.
+- Matriz de conformidade, Go/No-Go (decisão humana), cofre com validade, Deadline Engine, concorrência, contratos ganhos, grafo de procurement.
+- Fonte PNCP experimental e desligada. Dependência nova: `pypdf`.
+- UI: Licitações e Workspace. Migração `5ddf7b14a837`. Nenhum preço criado ou alterado.
+
 ## Fase 8 — Network Intelligence (2026-09-25)
 
 - Sinal → CRM (conta + negócio) ou → PREDATOR (conta) sem duplicação: reaproveita conta/negócio, fecha os sinais irmãos, sinal novo de empresa convertida já nasce convertido.

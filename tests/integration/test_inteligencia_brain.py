@@ -113,7 +113,8 @@ def test_consolidacao_de_perfil_nao_inventa_com_amostra_pequena(client, db_sessi
 def test_registro_de_agentes_mostra_planejados_como_planejados(client):
     agentes = {a["id"]: a["status"] for a in client.get("/api/v1/inteligencia/agentes").json()}
     assert agentes["meeting_agent"] == "ATIVO"
-    assert agentes["tender_analyzer"] == "PLANEJADO"
+    assert agentes["tender_analyzer"] == "ATIVO"  # Fase 9
+    assert agentes["procurement_risk_agent"] == "PLANEJADO"
 
 
 def test_uso_de_ia_aparece_na_auditoria_do_tenant(client):

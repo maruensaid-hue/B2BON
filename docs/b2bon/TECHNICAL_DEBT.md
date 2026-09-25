@@ -64,6 +64,10 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-056 | Nome de empresa não reivindicada é o informado por quem citou, não o oficial (BrasilAPI) | `network/identidade.por_cnpj` | Nome pode divergir da razão social | 8 | OPEN |
 | TD-057 | Conversão de sinal sem lock: cliques simultâneos em sinais diferentes da mesma empresa podem criar duas contas | `network/conversao.py` | Duplicata rara | 17 | OPEN |
 | TD-058 | Matching de intent/ICP ainda por palavra-chave do perfil; não usa Offer Intelligence (Fase 6) do vendedor | `sinal_oportunidade_service` | Matches perdidos | 17 | OPEN |
+| TD-059 | Sem OCR: PDF digitalizado fica SEM_TEXTO | `bids/documentos.py` | Edital escaneado exige leitura humana | 17 | OPEN |
+| TD-060 | Adapter PNCP não validado contra a API real (egress bloqueado no dev) | `bids/fontes/pncp.py` | Ingestão automática desligada | 17 | OPEN |
+| TD-061 | Arquivos de edital/cofre em `LargeBinary` no Postgres | `documento_licitacao`, `documento_cofre` | Crescimento do banco; mover para object storage | 17 | OPEN |
+| TD-062 | Casamento requisito × cofre/oferta é lexical | `bids/conformidade.py` | Requisito com outras palavras vira UNKNOWN | 17 | OPEN |
 | TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher com gatilho por cron desde a Fase 3 | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
 | TD-042 | `B2BOnCrmAdapter.list_*` sem paginação para pipelines/estágios/ofertas e `CanonicalMapDataSource` carrega tudo em memória | `adapters/b2bon_crm.py`, `map/data_source.py` | Custo em tenants grandes | 17 | OPEN |
 | TD-037 | `starlette.testclient` com `httpx` deprecated (warning) | saída do pytest | Quebra futura na atualização | oportunista | OPEN |

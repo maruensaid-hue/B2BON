@@ -86,6 +86,10 @@ FEATURES: dict[str, Feature] = {
         Feature("opportunity.extracao_necessidades", "crm", "opportunity_agent", ClasseModelo.C2, Gatilho.USUARIO,
                 "Sugere necessidades do cliente a partir de reunião/nota, com citação literal (vai para revisão).",
                 conteudo_externo=True),
+        Feature("bids.analise_edital", "bids", "tender_analyzer", ClasseModelo.C3, Gatilho.USUARIO,
+                "Extrai requisitos, prazos e riscos de edital com citação literal (vai para revisão).", conteudo_externo=True),
+        Feature("bids.analise_tr", "bids", "tr_analyzer", ClasseModelo.C3, Gatilho.USUARIO,
+                "Extrai requisitos de termo de referência com citação literal (vai para revisão).", conteudo_externo=True),
         Feature("plataforma.faq", "plataforma", "help_agent", ClasseModelo.C1, Gatilho.USUARIO, "Ajuda sobre como usar a plataforma."),
     ]
 }
@@ -119,15 +123,15 @@ AGENTES: dict[str, Agente] = {
         Agente("learning_agent", "Learning Agent", "intelligence", StatusAgente.ATIVO),
         Agente("help_agent", "Help Agent", "plataforma", StatusAgente.ATIVO),
         Agente("opportunity_agent", "Opportunity Agent", "intelligence", StatusAgente.ATIVO),
-        # §19 — planejados (fases 9, 10, 12)
+        Agente("tender_analyzer", "Tender Analyzer", "bids", StatusAgente.ATIVO),
+        Agente("tr_analyzer", "Term of Reference Analyzer", "bids", StatusAgente.ATIVO),
+        # §19 — planejados (fases 10, 12)
         Agente("icp_agent", "ICP Agent", "predator", StatusAgente.PLANEJADO),
         Agente("stakeholder_agent", "Stakeholder Agent", "intelligence", StatusAgente.PLANEJADO),
         Agente("pipeline_agent", "Pipeline Agent", "crm", StatusAgente.PLANEJADO),
         Agente("revenue_agent", "Revenue Agent", "map", StatusAgente.PLANEJADO),
         Agente("churn_intelligence_agent", "Churn Intelligence Agent", "map", StatusAgente.PLANEJADO),
         Agente("procurement_intelligence_agent", "Procurement Intelligence Agent", "procurement", StatusAgente.PLANEJADO),
-        Agente("tender_analyzer", "Tender Analyzer", "bids", StatusAgente.PLANEJADO),
-        Agente("tr_analyzer", "Term of Reference Analyzer", "bids", StatusAgente.PLANEJADO),
         Agente("bid_qualification_agent", "Bid Qualification Agent", "bids", StatusAgente.PLANEJADO),
         Agente("competitive_intelligence_agent", "Competitive Intelligence Agent", "bids", StatusAgente.PLANEJADO),
         Agente("contract_intelligence_agent", "Contract Intelligence Agent", "procurement", StatusAgente.PLANEJADO),

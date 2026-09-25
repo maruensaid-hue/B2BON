@@ -233,3 +233,28 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Decisão**: desconectar ou bloquear congela a sala (histórico mantido
   para as duas empresas, sem novas mensagens).
 - **Status**: ACEITA.
+
+## D-030 · 2026-09-25 · Fase 9 · Módulo `bids` sem entrar em plano existente
+- **Decisão**: `bids` é um módulo novo do catálogo de entitlements. Nenhum
+  plano o recebe automaticamente; o super_admin o inclui num plano.
+  Nenhum preço criado (§71 por analogia; catálogo na Fase 14).
+- **Status**: ACEITA.
+
+## D-031 · 2026-09-25 · Fase 9 · Proveniência calculada pelo sistema, não confiada à IA
+- **Decisão**: a IA propõe citação e cláusula; o sistema só grava o que
+  encontra literalmente no texto, calcula a página e descarta cláusula que
+  não aparece na página. Documento com hash e fonte.
+- **Status**: ACEITA.
+
+## D-032 · 2026-09-25 · Fase 9 · PNCP experimental e desligado
+- **Contexto**: o ambiente de desenvolvimento não alcança pncp.gov.br.
+- **Decisão**: adapter implementado e testado com transporte simulado,
+  exposto como EXPERIMENTAL e desligado (`PNCP_HABILITADO=false`) até
+  validação contra a API real.
+- **Status**: ACEITA.
+
+## D-033 · 2026-09-25 · Fase 9 · Go/No-Go e matriz de conformidade determinísticos (C0)
+- **Decisão**: IA só na extração de requisitos (C3). Matriz, Go/No-Go,
+  prazos e concorrência são regras explicáveis sem custo de IA. A decisão
+  Go/No-Go é humana, com justificativa quando diverge da recomendação.
+- **Status**: ACEITA.

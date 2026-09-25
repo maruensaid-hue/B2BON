@@ -31,6 +31,8 @@ dependencies = [
     "sentry-sdk[fastapi]>=2.0",
     "cryptography>=42",
     "Pillow>=10.4",
+    # Fase 9: texto de editais/TRs em PDF (puro Python), com página preservada.
+    "pypdf>=5.0",
 ]
 
 [project.optional-dependencies]

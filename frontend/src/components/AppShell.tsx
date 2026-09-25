@@ -77,6 +77,9 @@ const NAV_ITEM_REDE_SOCIAL: NavItem = { path: "/rede-social", label: "Shoal", ic
 // B2B ON Intelligence (Fase 4) — Corporate Brain do tenant, qualquer plano pago.
 const NAV_ITEM_CEREBRO: NavItem = { path: "/inteligencia/cerebro", label: "Cérebro Corporativo", icon: "🧬" };
 
+// Bid Intelligence (Fase 9) — só com o módulo "bids" (B2B ON Public Sector).
+const NAV_ITEM_BIDS: NavItem = { path: "/bids", label: "Licitações", icon: "🏛", end: false };
+
 // RO (Registro de Oportunidade) — deal registration: qualquer papel
 // registra/vê as próprias oportunidades; "Aprovar Descontos" é só de
 // quem decide desconto pra toda a rede (admin do tenant raiz/distribuidor,
@@ -596,12 +599,14 @@ export function AppShell() {
   const temModuloMap = temLicencaAtiva && (usuario?.recursos_plano.modulo_map ?? false);
   const temModuloPredator = temLicencaAtiva && (usuario?.recursos_plano.modulo_predator ?? false);
   const temModuloCrm = temLicencaAtiva && (usuario?.recursos_plano.modulo_crm ?? false);
+  const temModuloBids = temLicencaAtiva && (usuario?.recursos_plano.modulo_bids ?? false);
   const navItems = temLicencaAtiva
     ? [
         NAV_ITEMS_PAGOS[0],
         ...(temModuloCrm ? [CRM_ITEM, ...CRM_SUBITENS] : []),
         ...(temModuloMap ? [NAV_ITEMS_PAGOS[1]] : []),
         ...(temModuloPredator ? PREDATOR_NAV_ITEMS : []),
+        ...(temModuloBids ? [NAV_ITEM_BIDS] : []),
         NAV_ITEM_REDE_SOCIAL,
         NAV_ITEM_CEREBRO,
       ]

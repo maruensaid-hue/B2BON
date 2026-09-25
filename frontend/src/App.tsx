@@ -28,6 +28,10 @@ const AdminVerificacoesEmpresa = lazy(() =>
   import("@/pages/admin/AdminVerificacoesEmpresa").then((m) => ({ default: m.AdminVerificacoesEmpresa })),
 );
 const AdminTenants = lazy(() => import("@/pages/admin/AdminTenants").then((m) => ({ default: m.AdminTenants })));
+const Licitacoes = lazy(() => import("@/pages/bids/Licitacoes").then((m) => ({ default: m.Licitacoes })));
+const LicitacaoWorkspace = lazy(() =>
+  import("@/pages/bids/LicitacaoWorkspace").then((m) => ({ default: m.LicitacaoWorkspace })),
+);
 const CerebroCorporativo = lazy(() =>
   import("@/pages/inteligencia/CerebroCorporativo").then((m) => ({ default: m.CerebroCorporativo })),
 );
@@ -261,6 +265,22 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <RelatorioEntrega />
+              </Suspense>
+            }
+          />
+          <Route
+            path="bids"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Licitacoes />
+              </Suspense>
+            }
+          />
+          <Route
+            path="bids/:id"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <LicitacaoWorkspace />
               </Suspense>
             }
           />

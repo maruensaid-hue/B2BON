@@ -20,6 +20,7 @@ class RecursosPlanoSchema(BaseModel):
     modulo_map: bool = False
     modulo_predator: bool = False
     modulo_crm: bool = False
+    modulo_bids: bool = False
 
 
 class UsuarioSchema(BaseModel):

@@ -6,6 +6,7 @@ from app.api.v1.agente_corporativo import router as agente_corporativo_router
 from app.api.v1.aprovacoes import router as aprovacoes_router
 from app.api.v1.auditoria import router as auditoria_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.bids import router as bids_router
 from app.api.v1.busca import router as busca_router
 from app.api.v1.cadencias import router as cadencias_router
 from app.api.v1.campanhas import router as campanhas_router
@@ -86,6 +87,7 @@ _exige_licenca = [Depends(exigir_licenca_ativa)]
 _exige_map = [Depends(exigir_licenca_ativa), Depends(exigir_modulo("map"))]
 _exige_predator = [Depends(exigir_licenca_ativa), Depends(exigir_modulo("predator"))]
 _exige_crm = [Depends(exigir_licenca_ativa), Depends(exigir_modulo("crm"))]
+_exige_bids = [Depends(exigir_licenca_ativa), Depends(exigir_modulo("bids"))]
 # Fase 1 (D-007): rotas legitimamente compartilhadas entre módulos.
 # Organization/Person (Conta/Decisor/lead) é Shared Kernel — CRM e
 # PREDATOR precisam das duas (o Kanban do CRM cria conta por
@@ -156,6 +158,7 @@ router.include_router(parceiros_router)
 router.include_router(relatorios_router)
 router.include_router(crm_router, dependencies=_exige_crm)
 router.include_router(oportunidades_router, dependencies=_exige_crm)
+router.include_router(bids_router, dependencies=_exige_bids)
 router.include_router(rede_social_router)
 router.include_router(inteligencia_rede_router, dependencies=_exige_predator)
 router.include_router(inteligencia_rede_crm_router, dependencies=_exige_organizacao)
