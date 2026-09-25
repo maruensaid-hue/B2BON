@@ -66,6 +66,34 @@ const CAMPOS: Record<string, Campo[]> = {
       configuracao: true,
     },
   ],
+  hubspot: [
+    {
+      nome: "access_token",
+      rotulo: "Access token (Private App ou OAuth)",
+      segredo: true,
+    },
+    {
+      nome: "refresh_token",
+      rotulo: "Refresh token (app OAuth, opcional)",
+      segredo: true,
+    },
+    { nome: "client_id", rotulo: "Client ID (app OAuth)" },
+    {
+      nome: "client_secret",
+      rotulo: "Client secret (app OAuth)",
+      segredo: true,
+    },
+    {
+      nome: "campo_cnpj",
+      rotulo: "Propriedade de CNPJ da empresa (ex.: cnpj)",
+      configuracao: true,
+    },
+    {
+      nome: "moeda",
+      rotulo: "Moeda padrão (quando o negócio não informa)",
+      configuracao: true,
+    },
+  ],
 };
 
 const ENTIDADES = [

@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from app.contexts.integrations.adapters.http_base import ClienteHttp, ErroConector, host_permitido
+from app.contexts.integrations.adapters.http_base import AcessoBearer, host_permitido, persistidor
 from app.contexts.integrations.contract import AdapterCapabilities, CrmAdapter, ErroCredencial, Page
 from app.contexts.shared.canonical.base import SourceRef, canonical_id
 from app.contexts.shared.canonical.commercial import (
@@ -126,7 +126,9 @@ def _tipo_atividade(registro: dict) -> ActivityKind:
             "meeting": ActivityKind.MEETING}.get(subtipo, ActivityKind.TASK)
 
 
-class SalesforceAdapter(CrmAdapter):
+class SalesforceAdapter(AcessoBearer, CrmAdapter):
+    SISTEMA = SYSTEM
+
     def __init__(
         self,
         tenant_id: str,
@@ -138,47 +140,28 @@ class SalesforceAdapter(CrmAdapter):
         configuracao = configuracao or {}
         validar(credenciais, configuracao)
         self._tenant_id = tenant_id
-        self._credenciais = dict(credenciais)
         self._moeda = configuracao.get("moeda", "BRL")
         self._campo_cnpj = configuracao.get("campo_cnpj")
-        self._ao_renovar = ao_renovar_token
-        self._renovado = False
-        self._transport = transport
-        self._http = ClienteHttp(SYSTEM, credenciais["instance_url"], self._headers(), transport)
-
-    def _headers(self) -> dict[str, str]:
-        token = self._credenciais.get("access_token") or ""
-        return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        self._iniciar_acesso(credenciais, transport, ao_renovar_token)
 
     # --- HTTP + auth -------------------------------------------------------------
-    def _renovar(self) -> None:
+    def _base_url(self) -> str:
+        return self._credenciais["instance_url"]
+
+    def _pode_renovar(self) -> bool:
+        return bool(self._credenciais.get("refresh_token") and self._credenciais.get("client_id"))
+
+    def _renovar_token(self) -> dict:
         dados = {"grant_type": "refresh_token", "refresh_token": self._credenciais["refresh_token"],
                  "client_id": self._credenciais["client_id"]}
         if self._credenciais.get("client_secret"):
             dados["client_secret"] = self._credenciais["client_secret"]
         login = self._credenciais.get("login_url", "https://login.salesforce.com")
-        auth = ClienteHttp(SYSTEM, login, {"Accept": "application/json"}, self._transport)
-        try:
-            resposta = auth.post_form("/services/oauth2/token", dados)
-        except ErroConector as erro:  # 400 invalid_grant: refresh token revogado/expirado
-            raise ErroCredencial("salesforce: não foi possível renovar o acesso. Reconecte a integração.") from erro
+        resposta = self._cliente_auth(login).post_form("/services/oauth2/token", dados)
         nova_instancia = resposta.get("instance_url", self._credenciais["instance_url"])
-        if not host_permitido(nova_instancia, HOSTS_API) or not resposta.get("access_token"):
-            raise ErroCredencial("salesforce: renovação de token devolveu resposta inválida.")
-        self._credenciais.update(access_token=resposta["access_token"], instance_url=nova_instancia)
-        self._http = ClienteHttp(SYSTEM, nova_instancia, self._headers(), self._transport)
-        self._renovado = True
-        if self._ao_renovar:
-            self._ao_renovar(dict(self._credenciais))
-
-    def _get(self, caminho: str, params: dict | None = None) -> dict:
-        try:
-            return self._http.get(caminho, params)
-        except ErroCredencial:
-            if self._renovado or not self._credenciais.get("refresh_token"):
-                raise
-            self._renovar()
-            return self._http.get(caminho, params)
+        if not host_permitido(nova_instancia, HOSTS_API):
+            raise ErroCredencial("salesforce: renovação de token devolveu instância fora do Salesforce.")
+        return {"access_token": resposta.get("access_token"), "instance_url": nova_instancia}
 
     def _consulta(self, soql: str, cursor: str | None) -> tuple[list[dict], str | None]:
         if cursor:
@@ -401,9 +384,5 @@ class SalesforceAdapter(CrmAdapter):
 
 
 def fabrica(db, conexao) -> SalesforceAdapter:
-    def persistir(novas: dict) -> None:
-        conexao.credenciais = json.dumps(novas)
-        db.commit()
-
     return SalesforceAdapter(conexao.tenant_id, json.loads(conexao.credenciais or "{}"), conexao.configuracao or {},
-                             ao_renovar_token=persistir)
+                             ao_renovar_token=persistidor(db, conexao))

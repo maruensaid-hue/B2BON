@@ -10,6 +10,8 @@ cadastrada pelo tenant não consegue apontar o servidor da B2B ON para
 um endereço interno.
 """
 
+import json
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 import httpx
@@ -66,3 +68,73 @@ class ClienteHttp:
 
     def post_form(self, url: str, dados: dict) -> dict:
         return self._checar(self._cliente.post(url, data=dados)).json()
+
+
+class AcessoBearer:
+    """Acesso por token Bearer com no máximo UMA renovação por instância
+    (uma execução de sync). Subclasses dizem a URL base e como renovar
+    (`_renovar_token` devolve o que muda nas credenciais); a renovação é
+    entregue a `ao_renovar` para ser persistida criptografada."""
+
+    SISTEMA = ""
+
+    def _iniciar_acesso(self, credenciais: dict, transport: httpx.BaseTransport | None, ao_renovar: Callable[[dict], None] | None) -> None:
+        self._credenciais = dict(credenciais)
+        self._transport = transport
+        self._ao_renovar = ao_renovar
+        self._renovado = False
+        self._http = self._novo_cliente()
+
+    def _base_url(self) -> str:
+        raise NotImplementedError
+
+    def _renovar_token(self) -> dict:
+        raise NotImplementedError
+
+    def _pode_renovar(self) -> bool:
+        return bool(self._credenciais.get("refresh_token"))
+
+    def _novo_cliente(self) -> ClienteHttp:
+        token = self._credenciais.get("access_token") or ""
+        return ClienteHttp(self.SISTEMA, self._base_url(), {"Authorization": f"Bearer {token}", "Accept": "application/json"}, self._transport)
+
+    def _cliente_auth(self, base_url: str) -> ClienteHttp:
+        return ClienteHttp(self.SISTEMA, base_url, {"Accept": "application/json"}, self._transport)
+
+    def _renovar(self) -> None:
+        try:
+            mudancas = self._renovar_token()
+        except ErroConector as erro:  # 400 invalid_grant: refresh token revogado/expirado
+            raise ErroCredencial(f"{self.SISTEMA}: não foi possível renovar o acesso. Reconecte a integração.") from erro
+        if not mudancas.get("access_token"):
+            raise ErroCredencial(f"{self.SISTEMA}: renovação de token devolveu resposta inválida.")
+        self._credenciais.update(mudancas)
+        self._http = self._novo_cliente()
+        self._renovado = True
+        if self._ao_renovar:
+            self._ao_renovar(dict(self._credenciais))
+
+    def _com_renovacao(self, chamada: Callable[[], dict]) -> dict:
+        try:
+            return chamada()
+        except ErroCredencial:
+            if self._renovado or not self._pode_renovar():
+                raise
+            self._renovar()
+            return chamada()
+
+    def _get(self, caminho: str, params: dict | None = None) -> dict:
+        return self._com_renovacao(lambda: self._http.get(caminho, params))
+
+    def _post(self, caminho: str, corpo: dict) -> dict:
+        return self._com_renovacao(lambda: self._http.post(caminho, corpo))
+
+
+def persistidor(db, conexao) -> Callable[[dict], None]:
+    """Grava credenciais renovadas na conexão (coluna criptografada)."""
+
+    def persistir(novas: dict) -> None:
+        conexao.credenciais = json.dumps(novas)
+        db.commit()
+
+    return persistir

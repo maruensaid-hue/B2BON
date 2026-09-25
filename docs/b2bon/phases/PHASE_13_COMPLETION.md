@@ -8,7 +8,7 @@
 | Conector | Estado | Testes | Commit |
 |---|---|---|---|
 | Salesforce | ✅ BETA (desligado por padrão, D-041) | `test_conector_salesforce.py` (23) | conector 1/4 |
-| HubSpot | ⏳ | — | — |
+| HubSpot | ✅ BETA (desligado por padrão) | `test_conector_hubspot.py` (14) | conector 2/4 |
 | Pipedrive | ⏳ | — | — |
 | RD Station CRM | ⏳ | — | — |
 
@@ -38,3 +38,21 @@
 Decisões: D-041, D-042. Dívidas: TD-068 (OAuth pela UI), TD-069 (validação
 contra conta real), TD-070 (somente leitura). Sem migração. Pendências do
 PO inalteradas.
+
+## GATE — HubSpot
+
+| Evidência | Resultado |
+|---|---|
+| Suíte de conformidade compartilhada (paginação por `after`, tenant, proveniência, referências, isolamento); só `api.hubapi.com` é chamado | ✅ |
+| Mapeamento (empresas, CNPJ, ciclo de vida, cliente só com data, contatos e opt-out, estágios, negócios com empresa via Associations v4, moeda do negócio ou padrão, engajamentos, notas sem HTML, produtos) | ✅ |
+| Credenciais/configuração inválidas recusadas (inclui chave extra como `base_url`); cursor forjado recusado | ✅ |
+| Incremental pela Search API (epoch ms, propriedade certa por objeto) a partir da última execução com sucesso | ✅ |
+| 429 retentado; 401 não retentado e conexão `erro`; token OAuth renovado uma vez e persistido (inclui refresh token novo); refresh revogado = `ErroCredencial` | ✅ |
+| Interações lidas uma vez por execução (MAP conta a conta sem N chamadas) | ✅ |
+| Hub: BETA não conecta sem habilitação; credencial nunca volta; sync via API | ✅ |
+| MAP via conexão = MAP via payload canônico | ✅ |
+| Suite completa | ✅ **1.894 passed** |
+| Frontend lint (25) + typecheck | ✅ |
+| E2E | ✅ 4/4 |
+
+Dívida nova: TD-071 (NPS de CRM externo). Sem migração.

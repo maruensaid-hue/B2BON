@@ -5,14 +5,14 @@
 | Componente | Código | Estado |
 |---|---|---|
 | Contrato de adapter (canônico) | `app/contexts/integrations/contract.py` | Fase 2 (ver `ADAPTER_CONTRACT.md`) |
-| Registro de conectores | `app/contexts/integrations/registry.py` | `b2bon_crm` AVAILABLE; Salesforce BETA; HubSpot, Pipedrive, RD Station COMING_SOON (Fase 13, um por vez) |
+| Registro de conectores | `app/contexts/integrations/registry.py` | `b2bon_crm` AVAILABLE; Salesforce e HubSpot BETA; Pipedrive, RD Station COMING_SOON (Fase 13, um por vez) |
 | Base HTTP dos conectores | `adapters/http_base.py` | Fase 13: 429/5xx → retry, 401/403 → `ErroCredencial` (sem retry), hosts fixos por conector (anti-SSRF) |
 | Conexões por tenant | tabela `conexao_integracao` (credenciais Fernet, nunca devolvidas pela API) | Fase 3 |
 | Framework de sync | `app/contexts/integrations/sync.py` + tabela `execucao_sync` | Fase 3 |
 | Adapter de payload (dados enviados na requisição) | `adapters/payload.py` | Fase 3 (base do MAP API para CRM externo) |
 | Webhooks de saída (eventos de domínio) | `app/contexts/platform/webhooks.py` | Fase 3 |
 | Webhooks de entrada (por conector) | — | TD-070 |
-| OAuth / token refresh | Salesforce: refresh token (uma renovação por execução, persistida criptografada) | Fluxo de autorização OAuth pela UI: TD-068 |
+| OAuth / token refresh | `http_base.AcessoBearer`: refresh token, uma renovação por execução, persistida criptografada (Salesforce, HubSpot) | Fluxo de autorização OAuth pela UI: TD-068 |
 
 ## Checklist do §13 por conector (o que a fundação já dá)
 
@@ -84,3 +84,29 @@ recusada (401/403) marca a conexão como `erro` até reconectar.
 | Task / Event com conta | Interaction `contato` | reclamação/elogio não são inferidos |
 | Product2 | Offer | nome, família, descrição, ativo |
 | — | CSMetric | não há objeto padrão de NPS: vazio |
+
+
+## HubSpot (conector 2/4 · BETA)
+
+- **Auth**: `access_token` (Private App ou OAuth); opcional `refresh_token`
+  + `client_id` + `client_secret` (renova em `/oauth/v1/token`, guarda o
+  refresh token novo). Host fixo `api.hubapi.com`; chave desconhecida nas
+  credenciais é recusada.
+- **Configuração**: `moeda` (quando o negócio não tem `deal_currency_code`)
+  e `campo_cnpj` (propriedade interna da empresa).
+- **Leitura**: CRM API v3, paginação por `after` (validado); incremental
+  pela Search API (`GT` em epoch ms sobre `hs_lastmodifieddate`, ou
+  `lastmodifieddate` em contatos); empresa do negócio pela Associations API
+  v4 em lote (uma chamada por página).
+
+| HubSpot | Canônico | Regra |
+|---|---|---|
+| Company | Organization + Account | `domain` sem `www.`; `numberofemployees` → size; `state` → region; `lifecyclestage` customer/evangelist → CUSTOMER, subscriber/lead/MQL → LEAD, SQL/opportunity → QUALIFIED, resto PROSPECT |
+| Company cliente com `hs_lifecyclestage_customer_date` | Customer | sem a data, não vira Customer; `churned_at` desconhecido |
+| Contact | Person + Contact | nome = first + last (ou e-mail); `hs_email_optout` → `suppressed_at`; empresa por `associatedcompanyid` |
+| Deal pipeline / stage | Pipeline / PipelineStage | fechado com probabilidade 1.0 → WON, fechado → LOST, resto OPEN |
+| Deal | Opportunity | status por `hs_is_closed_won`/`hs_is_closed`; probabilidade × 100; sem empresa associada = descartado |
+| calls, emails, meetings, tasks, notes | Activity | tipo pelo objeto; HTML da nota removido; associação a empresa/negócio |
+| engajamento com empresa | Interaction `contato` | lido uma vez por execução (o MAP pergunta conta a conta) |
+| Product | Offer | nome, descrição |
+| — | CSMetric | feedback/NPS do Service Hub: TD-071 |
