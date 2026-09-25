@@ -332,3 +332,18 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   Onde a API permite, o segredo vai em header (Pipedrive `x-api-token`,
   Bearer nos demais).
 - **Status**: ACEITA.
+
+## D-044 · 2026-09-25 · Fase 14 · Catálogo sem preço; preço só na tabela `plano`
+- **Decisão**: o catálogo diz o que existe e em que estado; o preço vem do
+  plano que o checkout cobra. Produto sem plano self-service nunca aparece
+  como contratável; Public Procurement fica EM_DEFINICAO até a Fase 15,
+  com a estrutura de precificação vazia pronta para os valores do PO.
+- **Status**: ACEITA.
+
+## D-045 · 2026-09-25 · Fase 15 · Não executada
+- **Contexto**: o Master Prompt proíbe executar a Fase 15 sem os valores do
+  Product Owner ("Nunca estimar ou inventar esses valores").
+- **Decisão**: fase pulada e registrada como bloqueada. O projeto segue
+  para a Fase 16; a Fase 15 é executada quando o PO enviar modelo, preços,
+  usuários, créditos, limites, add-ons e regras de excedente.
+- **Status**: ACEITA.

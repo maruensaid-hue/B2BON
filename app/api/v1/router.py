@@ -45,6 +45,7 @@ from app.api.v1.onboarding import router as onboarding_router
 from app.api.v1.optout import router as optout_router
 from app.api.v1.painel import router as painel_router
 from app.api.v1.parceiros import router as parceiros_router
+from app.api.v1.catalogo import router as catalogo_router
 from app.api.v1.planos import router as planos_router
 from app.api.v1.plataforma_api import router as plataforma_api_router
 from app.api.v1.produto.map_api import router as map_api_router
@@ -146,6 +147,7 @@ router.include_router(leads_router, dependencies=_exige_organizacao)
 router.include_router(auth_router)
 router.include_router(convites_router)
 router.include_router(planos_router)
+router.include_router(catalogo_router)
 router.include_router(representantes_router)
 router.include_router(central_negocios_router)
 router.include_router(rotulos_hierarquia_router)

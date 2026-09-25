@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 
+import { CatalogoProdutos } from "@/components/CatalogoProdutos";
+
 interface Modulo {
   nome: string;
   descricao: string;
@@ -368,6 +370,8 @@ export function Planos() {
           <strong className="text-text">Acima de 100 usuários</strong> — condições negociadas com o time comercial da
           B2B ON.
         </div>
+
+        <CatalogoProdutos />
 
         <div className="mt-12 rounded-2xl border border-border2 bg-surf p-7 text-center shadow-[0_0_20px_rgba(0,194,255,0.06)]">
           <div className="font-head text-lg font-bold text-text">Pronto pra ver a diferença?</div>

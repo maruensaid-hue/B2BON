@@ -1,5 +1,16 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 15 — Public Procurement Pricing (NÃO EXECUTADA)
+
+- Bloqueada por regra do Master Prompt até o PO fornecer os valores (D-045). Estrutura pronta no catálogo.
+
+## Fase 14 — Product Catalog, Plans & Sales Page (2026-09-25)
+
+- Catálogo comercial (`platform/catalogo.py`) com os 10 produtos do escopo e estado de cada um; `GET /catalogo` público e `GET /assinatura` do tenant.
+- Página pública: catálogo com estado e comparativo de recursos por plano; preços existentes inalterados.
+- Área interna "Assinatura": plano, módulos, uso do mês, IA e conectores.
+- Public Procurement: PENDING_DEFINITION, sem botão de compra, estrutura de precificação vazia. Guarda de preços preservados. Sem migração.
+
 ## Fase 13 — External CRM Connectors (2026-09-25)
 
 - Conector 1/4 **Salesforce** (BETA, desligado por padrão): leitura de contas, contatos, estágios, oportunidades, clientes, tarefas/eventos e produtos; incremental; renovação de token; anti-SSRF.

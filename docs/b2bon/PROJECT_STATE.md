@@ -2,10 +2,11 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **PHASE 14 — PRODUCT CATALOG, PLANS & SALES PAGE** |
-| Última fase concluída | PHASE 13 — EXTERNAL CRM CONNECTORS (2026-09-25) |
+| **CURRENT PHASE** | **PHASE 16 — ANALYTICS & REVENUE INTELLIGENCE** |
+| Última fase concluída | PHASE 14 — PRODUCT CATALOG, PLANS & SALES PAGE (2026-09-25) |
+| Fase bloqueada | **PHASE 15 — PUBLIC PROCUREMENT PRICING: não executada, aguarda valores do PO (D-045)** |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/PHASE_13_COMPLETION.md` |
+| Relatório da última fase | `phases/PHASE_14_COMPLETION.md` (e `phases/PHASE_15_BLOCKED.md`) |
 
 ## Autorizações
 
@@ -25,8 +26,8 @@
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
 - Conectores de CRM (Fase 13) estão BETA e desligados: habilitar em produção só após validar contra contas reais (TD-069).
 
-## Baseline de qualidade (após a Fase 13)
+## Baseline de qualidade (após a Fase 14)
 
-- Backend: 1.917 passed. Migrações validadas também em Postgres 16.
+- Backend: 1.926 passed. Migrações validadas também em Postgres 16.
 - Frontend: lint OK (25 warnings), build OK.
-- E2E: 4/4.
+- E2E: 5/5.
