@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
+import { ConexoesCrm, type ConectorHub } from "@/pages/admin/ConexoesCrm";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -29,12 +30,7 @@ interface WebhookSaida {
   ativa: boolean;
 }
 
-interface Conector {
-  sistema: string;
-  nome: string;
-  status: "AVAILABLE" | "BETA" | "COMING_SOON";
-  descricao: string;
-}
+type Conector = ConectorHub;
 
 const ROTULO_STATUS: Record<Conector["status"], string> = {
   AVAILABLE: "Disponível",
@@ -282,9 +278,15 @@ export function ApiPlataforma() {
                 </span>
               </div>
               <div className="mt-1 text-muted">{conector.descricao}</div>
+              {conector.status === "BETA" && !conector.conectavel && (
+                <div className="mt-1 text-[11px] text-muted">
+                  Beta: ainda não liberado para conexão neste ambiente.
+                </div>
+              )}
             </div>
           ))}
         </div>
+        {conectores.length > 0 && <ConexoesCrm conectores={conectores} />}
       </Card>
     </div>
   );

@@ -23,6 +23,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.contexts.integrations import registry
+from app.contexts.integrations.contract import ErroCredencial, ErroTransitorio
 from app.models.conexao_integracao import ConexaoIntegracao
 from app.models.execucao_sync import ExecucaoSync
 
@@ -41,8 +42,7 @@ ENTIDADES = {
 _COM_UPDATED_SINCE = {"organizations", "accounts", "people", "opportunities"}
 
 
-class ErroTransitorio(Exception):
-    """Falha que vale tentar de novo (429, 5xx, timeout)."""
+__all__ = ["ENTIDADES", "ErroTransitorio", "com_retry", "sincronizar"]
 
 
 def com_retry(funcao: Callable, tentativas: int = 3, espera_base: float = 1.0, dormir: Callable[[float], None] = time.sleep):
@@ -103,10 +103,13 @@ def sincronizar(
         execucao.status = "sucesso"
         conexao.ultimo_sync_em = datetime.now(UTC)
         conexao.ultimo_erro = None
+        conexao.status = "ativa"
     except Exception as erro:  # noqa: BLE001 — registra e reporta, não derruba o cron
         execucao.status = "falha"
         execucao.erro = f"{type(erro).__name__}: {erro}"[:500]
         conexao.ultimo_erro = execucao.erro
+        if isinstance(erro, ErroCredencial):
+            conexao.status = "erro"  # precisa reconectar; o cron não insiste
         logger.exception("Falha no sync da conexão %s (%s)", conexao.id, entidade)
     execucao.finalizado_em = datetime.now(UTC)
     db.commit()

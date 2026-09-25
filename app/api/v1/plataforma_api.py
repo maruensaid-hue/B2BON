@@ -2,6 +2,7 @@
 API, webhooks de saída e conexões do Integration Hub. JWT, papel
 admin/super_admin, sempre escopado ao tenant do usuário logado."""
 
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Response
@@ -128,6 +129,13 @@ class CriarConexaoRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     sistema: str
     nome: str = Field(min_length=1, max_length=100)
+    credenciais: dict[str, str] = Field(default_factory=dict, description="Gravadas criptografadas; nunca devolvidas.")
+    configuracao: dict[str, str] = Field(default_factory=dict)
+
+
+class CredenciaisRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    credenciais: dict[str, str]
 
 
 class ConexaoSchema(BaseModel):
@@ -138,6 +146,7 @@ class ConexaoSchema(BaseModel):
     sistema: str
     nome: str
     status: str
+    configuracao: dict
     criado_em: datetime | None
     ultimo_sync_em: datetime | None
     ultimo_erro: str | None
@@ -158,7 +167,22 @@ class ExecucaoSyncSchema(BaseModel):
 
 @router.get("/hub-integracoes/conectores")
 def listar_conectores() -> list[dict]:
-    return [c.model_dump(mode="json") for c in integracoes.obter_registry().listar_conectores()]
+    registry = integracoes.obter_registry()
+    return [{**c.model_dump(mode="json"), "conectavel": registry.conectavel(c.sistema)} for c in registry.listar_conectores()]
+
+
+def _validar_conexao(sistema: str, credenciais: dict, configuracao: dict) -> None:
+    try:
+        integracoes.obter_registry().validar_conexao(sistema, credenciais, configuracao)
+    except ValueError as erro:
+        raise ValidacaoFalhou(str(erro)) from erro
+
+
+def _conexao_do_tenant(db: Session, tenant_id: str, conexao_id: int) -> ConexaoIntegracao:
+    conexao = db.query(ConexaoIntegracao).filter_by(id=conexao_id, tenant_id=tenant_id).one_or_none()
+    if conexao is None:
+        raise NaoEncontrado(f"Conexão {conexao_id} não encontrada")
+    return conexao
 
 
 @router.post("/hub-integracoes/conexoes", response_model=ConexaoSchema, status_code=201)
@@ -168,7 +192,11 @@ def criar_conexao(dados: CriarConexaoRequest, usuario: Usuario = Depends(get_usu
         raise ValidacaoFalhou(f"Conector desconhecido: {dados.sistema}")
     if not registry.conectavel(dados.sistema):
         raise ValidacaoFalhou(f"O conector {dados.sistema} ainda não está disponível.")
-    conexao = ConexaoIntegracao(tenant_id=usuario.tenant_id, sistema=dados.sistema, nome=dados.nome, status="ativa", configuracao={})
+    _validar_conexao(dados.sistema, dados.credenciais, dados.configuracao)
+    conexao = ConexaoIntegracao(
+        tenant_id=usuario.tenant_id, sistema=dados.sistema, nome=dados.nome, status="ativa", configuracao=dados.configuracao,
+        credenciais=json.dumps(dados.credenciais) if dados.credenciais else None,
+    )
     db.add(conexao)
     db.flush()
     auditoria_service.registrar(db, usuario.tenant_id, "conexao_integracao_criada", "conexao_integracao", conexao.id, ator_id, {"sistema": dados.sistema})
@@ -184,10 +212,25 @@ def listar_conexoes(usuario: Usuario = Depends(get_usuario_atual), db: Session =
 
 @router.post("/hub-integracoes/conexoes/{conexao_id}/sincronizar/{entidade}", response_model=ExecucaoSyncSchema)
 def sincronizar(conexao_id: int, entidade: str, usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> ExecucaoSyncSchema:
-    conexao = db.query(ConexaoIntegracao).filter_by(id=conexao_id, tenant_id=usuario.tenant_id).one_or_none()
-    if conexao is None:
-        raise NaoEncontrado(f"Conexão {conexao_id} não encontrada")
+    conexao = _conexao_do_tenant(db, usuario.tenant_id, conexao_id)
+    if not integracoes.obter_registry().conectavel(conexao.sistema):
+        raise ValidacaoFalhou(f"O conector {conexao.sistema} está desabilitado.")
     sync = integracoes.obter_sync()
     if entidade not in sync.ENTIDADES:
         raise ValidacaoFalhou(f"Entidade inválida. Válidas: {sorted(sync.ENTIDADES)}")
     return sync.sincronizar(db, conexao, entidade)
+
+
+@router.put("/hub-integracoes/conexoes/{conexao_id}/credenciais", response_model=ConexaoSchema)
+def trocar_credenciais(conexao_id: int, dados: CredenciaisRequest, usuario: Usuario = Depends(get_usuario_atual), ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> ConexaoSchema:
+    """Reconectar (token expirado/revogado). A credencial antiga é
+    substituída, não mesclada: nada de segredo velho sobrevivendo."""
+    conexao = _conexao_do_tenant(db, usuario.tenant_id, conexao_id)
+    _validar_conexao(conexao.sistema, dados.credenciais, conexao.configuracao or {})
+    conexao.credenciais = json.dumps(dados.credenciais)
+    conexao.status = "ativa"
+    conexao.ultimo_erro = None
+    auditoria_service.registrar(db, usuario.tenant_id, "conexao_integracao_credenciais", "conexao_integracao", conexao.id, ator_id, {"sistema": conexao.sistema})
+    db.commit()
+    db.refresh(conexao)
+    return conexao

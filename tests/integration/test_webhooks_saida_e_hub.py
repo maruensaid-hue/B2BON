@@ -140,7 +140,8 @@ def test_segredo_do_webhook_fica_criptografado_em_repouso(client, db_session):
 def test_conectores_futuros_aparecem_como_coming_soon_e_nao_conectam(client):
     conectores = {c["sistema"]: c["status"] for c in client.get("/api/v1/hub-integracoes/conectores").json()}
     assert conectores["b2bon_crm"] == "AVAILABLE"
-    assert {conectores[s] for s in ("salesforce", "hubspot", "pipedrive", "rd_station")} == {"COMING_SOON"}
+    assert conectores["salesforce"] == "BETA"  # Fase 13: implementado, conecta só se o operador habilitar
+    assert {conectores[s] for s in ("hubspot", "pipedrive", "rd_station")} == {"COMING_SOON"}
     assert client.post("/api/v1/hub-integracoes/conexoes", json={"sistema": "hubspot", "nome": "x"}).status_code == 422
 
 

@@ -26,13 +26,26 @@ from app.api.v1.produto.schemas import (
 )
 from app.contexts.integrations import contract as integracoes
 from app.contexts.map import contract as map_contract
+from app.models.conexao_integracao import ConexaoIntegracao
+from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 router = APIRouter(prefix="/map", tags=["api-map"])
 
 _auth = autenticar_api("map:read", "map")
 
 
-def _fonte(db: Session, tenant_id: str, dados: DadosCanonicosMap | None):
+def _fonte(db: Session, tenant_id: str, dados: DadosCanonicosMap | None, conexao_id: int | None = None):
+    if dados is not None and conexao_id is not None:
+        raise ValidacaoFalhou("Use `dados` ou `conexao_id`, não os dois.")
+    if conexao_id is not None:
+        conexao = db.query(ConexaoIntegracao).filter_by(id=conexao_id, tenant_id=tenant_id).one_or_none()
+        if conexao is None:
+            raise NaoEncontrado(f"Conexão {conexao_id} não encontrada")
+        registry = integracoes.obter_registry()
+        if not registry.conectavel(conexao.sistema):
+            raise ValidacaoFalhou(f"O conector {conexao.sistema} está desabilitado.")
+        # custo de aquisição não vem do CRM: fica desconhecido (None), não inventado
+        return f"conexao:{conexao.sistema}", map_contract.CanonicalMapDataSource(registry.obter_adapter(db, conexao))
     if dados is None:
         return "b2bon_crm", map_contract.CrmInternoMapDataSource(db)
     adapter = integracoes.adapter_de_payload(
@@ -64,23 +77,23 @@ def _riscos(fonte, tenant_id: str, conta_ids: list[str] | None) -> list[RiscoCon
 
 @router.post("/analyze", response_model=MapAnaliseResponse)
 def analisar(dados: MapRequest, ctx: ContextoApi = Depends(_auth), db: Session = Depends(get_db)) -> MapAnaliseResponse:
-    nome_fonte, fonte = _fonte(db, ctx.tenant_id, dados.dados)
+    nome_fonte, fonte = _fonte(db, ctx.tenant_id, dados.dados, dados.conexao_id)
     economia = map_contract.economia(db, ctx.tenant_id, dados.periodo, fonte=fonte)
     return MapAnaliseResponse(fonte=nome_fonte, periodo=dados.periodo, economia=economia, contas=_riscos(fonte, ctx.tenant_id, None))
 
 
 @router.post("/churn/predict", response_model=ChurnResponse)
 def prever_churn(dados: MapContasRequest, ctx: ContextoApi = Depends(_auth), db: Session = Depends(get_db)) -> ChurnResponse:
-    nome_fonte, fonte = _fonte(db, ctx.tenant_id, dados.dados)
+    nome_fonte, fonte = _fonte(db, ctx.tenant_id, dados.dados, dados.conexao_id)
     return ChurnResponse(fonte=nome_fonte, previsoes=_riscos(fonte, ctx.tenant_id, dados.conta_ids))
 
 
 @router.post("/customer-score", response_model=CustomerScoreResponse)
 def customer_score(dados: MapContasRequest, ctx: ContextoApi = Depends(_auth), db: Session = Depends(get_db)) -> CustomerScoreResponse:
-    nome_fonte, fonte = _fonte(db, ctx.tenant_id, dados.dados)
+    nome_fonte, fonte = _fonte(db, ctx.tenant_id, dados.dados, dados.conexao_id)
     itens = []
     for risco in _riscos(fonte, ctx.tenant_id, dados.conta_ids):
-        conta_id = risco.conta_id if nome_fonte == "api_payload" else int(risco.conta_id)
+        conta_id = int(risco.conta_id) if nome_fonte == "b2bon_crm" else risco.conta_id
         cs = map_contract.calcular_cs_score(fonte.notas_nps(ctx.tenant_id, [conta_id]), [risco.score])
         itens.append(CustomerScoreItem(conta_id=risco.conta_id, cs_score=cs["cs_score"], nps_medio=cs["nps_medio"], saude=100.0 - risco.score))
     return CustomerScoreResponse(fonte=nome_fonte, contas=itens)
@@ -88,7 +101,7 @@ def customer_score(dados: MapContasRequest, ctx: ContextoApi = Depends(_auth), d
 
 def _metrica(nome: str, chaves: list[str]):
     def _endpoint(dados: MapRequest, ctx: ContextoApi = Depends(_auth), db: Session = Depends(get_db)) -> MetricaResponse:
-        nome_fonte, fonte = _fonte(db, ctx.tenant_id, dados.dados)
+        nome_fonte, fonte = _fonte(db, ctx.tenant_id, dados.dados, dados.conexao_id)
         economia = map_contract.economia(db, ctx.tenant_id, dados.periodo, fonte=fonte)
         return MetricaResponse(fonte=nome_fonte, periodo=dados.periodo, valor=economia[chaves[0]], detalhe={c: economia[c] for c in chaves})
 

@@ -56,6 +56,15 @@ class OperacaoNaoSuportada(Exception):
     """O adapter não suporta esta operação (capacidade não declarada)."""
 
 
+class ErroTransitorio(Exception):
+    """Falha que vale tentar de novo (429, 5xx, timeout)."""
+
+
+class ErroCredencial(Exception):
+    """Credencial inválida, expirada ou sem permissão (401/403). Não é
+    transitória: tentar de novo só gasta cota e pode bloquear a conta."""
+
+
 class CrmAdapter(ABC):
     """Porta de leitura/escrita de um CRM qualquer, em termos canônicos.
 

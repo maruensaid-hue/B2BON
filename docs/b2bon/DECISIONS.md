@@ -306,3 +306,20 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   validada contra esse catálogo. Uma ferramenta por pergunta (sem cadeia
   multi-passo por enquanto); compra × venda ambíguo pede esclarecimento.
 - **Status**: ACEITA.
+
+## D-041 · 2026-09-25 · Fase 13 · Conectores externos: somente leitura, BETA e habilitados pelo operador
+- **Contexto**: os conectores são testados contra o formato documentado das
+  APIs, não contra contas reais (a rede de desenvolvimento não alcança os
+  provedores). §72 proíbe apresentar como disponível o que não foi validado.
+- **Decisão**: conector implementado entra como BETA e só conecta quando
+  listado em `CONECTORES_CRM_HABILITADOS`. Leitura apenas; os dados são
+  consumidos ao vivo pelo modelo canônico (MAP por `conexao_id`), sem upsert
+  no CRM interno e sem escrita no CRM externo.
+- **Status**: ACEITA.
+
+## D-042 · 2026-09-25 · Fase 13 · Hosts fixos por conector (anti-SSRF)
+- **Decisão**: URLs informadas pelo tenant (ex.: `instance_url` do
+  Salesforce) só são aceitas em HTTPS, porta padrão e domínio do provedor;
+  o cliente HTTP não segue redirects. Campos que entram em consultas
+  (ex.: `campo_cnpj`) são validados como identificadores.
+- **Status**: ACEITA.

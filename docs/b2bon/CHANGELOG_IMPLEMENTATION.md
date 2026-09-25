@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 13 — External CRM Connectors (em andamento)
+
+- Conector 1/4 **Salesforce** (BETA, desligado por padrão): leitura de contas, contatos, estágios, oportunidades, clientes, tarefas/eventos e produtos; incremental; renovação de token; anti-SSRF.
+- Hub: credenciais e configuração na conexão (criptografadas, nunca devolvidas), reconexão, `conectavel` por conector, conexão com credencial recusada fica `erro`.
+- MAP API aceita `conexao_id` (mesmo resultado que o payload canônico). Tela de conexões no admin de API. Sem migração.
+
 ## Fase 12 — Advanced Agent Orchestration (2026-09-25)
 
 - B2B ON Intelligence Agent: pergunta → agente especialista → ferramenta; 13 ferramentas registradas pelos contextos (Shared Kernel).

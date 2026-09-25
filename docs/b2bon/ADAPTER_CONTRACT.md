@@ -25,6 +25,9 @@ dados desse tenant.
 3. **Não inventar**: campo ausente na origem = `None`.
 4. **Classificação**: marcar PUBLIC só o que é público na origem.
 5. **Declarar capacidades**: operação não declarada levanta `OperacaoNaoSuportada`.
+6. **Erros (Fase 13)**: falha transitória (429/5xx) levanta `ErroTransitorio`;
+   credencial recusada levanta `ErroCredencial` (nunca com o segredo na
+   mensagem). Conector externo passa por `tests/conectores_crm.py`.
 
 ## Fase 3 acrescenta (fora deste contrato de dados)
 

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     finops_cambio_usd_brl: float | None = None
     # Fase 9: ingestão do PNCP (EXPERIMENTAL, não validada contra a API real).
     pncp_habilitado: bool = False
+    # Fase 13: conectores de CRM externos em BETA que o operador liberou
+    # para conexão (lista separada por vírgula, ex.: "salesforce,hubspot").
+    # Vazio = aparecem no hub, mas ninguém conecta.
+    conectores_crm_habilitados: str = ""
 
     # Fallback de desenvolvimento apenas — franquia real é decisão comercial
     # pendente e vem do núcleo via PlanLimitsProvider (Seção 11 da especificação).

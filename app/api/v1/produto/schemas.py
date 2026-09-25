@@ -52,6 +52,7 @@ class MapRequest(BaseModel):
 
     periodo: str = PERIODO
     dados: DadosCanonicosMap | None = Field(default=None, description="Sem `dados`, o cálculo usa o CRM da B2B ON do tenant.")
+    conexao_id: int | None = Field(default=None, description="Calcula sobre um CRM externo conectado no Integration Hub (Fase 13).")
 
 
 class MapContasRequest(BaseModel):
@@ -59,6 +60,7 @@ class MapContasRequest(BaseModel):
 
     conta_ids: list[str] | None = Field(default=None, max_length=1000)
     dados: DadosCanonicosMap | None = None
+    conexao_id: int | None = None
 
 
 class RiscoConta(BaseModel):
