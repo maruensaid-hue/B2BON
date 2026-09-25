@@ -14,7 +14,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from app.contexts.integrations.adapters import hubspot, pipedrive, salesforce
+from app.contexts.integrations.adapters import hubspot, pipedrive, rd_station, salesforce
 from app.contexts.integrations.adapters.b2bon_crm import B2BOnCrmAdapter
 from app.contexts.integrations.contract import CrmAdapter
 from app.core.config import settings
@@ -68,11 +68,15 @@ _CONECTORES: dict[str, tuple[Conector, FabricaAdapter | None]] = {
                  descricao="Leitura de organizações, pessoas, funis, negócios, atividades e produtos (API v1)."),
         pipedrive.fabrica,
     ),
-    "rd_station": (Conector(sistema="rd_station", nome="RD Station CRM", status=StatusConector.COMING_SOON, auth=TipoAuth.API_KEY, descricao="Fase 13."), None),
+    "rd_station": (
+        Conector(sistema="rd_station", nome="RD Station CRM", status=StatusConector.BETA, auth=TipoAuth.API_KEY,
+                 descricao="Leitura de organizações, contatos, funis, negociações, tarefas e produtos (API v1, sem sync incremental)."),
+        rd_station.fabrica,
+    ),
 }
 
 
-_VALIDADORES: dict[str, ValidadorConexao] = {"salesforce": salesforce.validar, "hubspot": hubspot.validar, "pipedrive": pipedrive.validar}
+_VALIDADORES: dict[str, ValidadorConexao] = {"salesforce": salesforce.validar, "hubspot": hubspot.validar, "pipedrive": pipedrive.validar, "rd_station": rd_station.validar}
 
 
 def listar_conectores() -> list[Conector]:

@@ -5,8 +5,8 @@
 | Componente | Código | Estado |
 |---|---|---|
 | Contrato de adapter (canônico) | `app/contexts/integrations/contract.py` | Fase 2 (ver `ADAPTER_CONTRACT.md`) |
-| Registro de conectores | `app/contexts/integrations/registry.py` | `b2bon_crm` AVAILABLE; Salesforce, HubSpot e Pipedrive BETA; RD Station COMING_SOON (Fase 13, um por vez) |
-| Base HTTP dos conectores | `adapters/http_base.py` | Fase 13: 429/5xx → retry, 401/403 → `ErroCredencial` (sem retry), hosts fixos por conector (anti-SSRF) |
+| Registro de conectores | `app/contexts/integrations/registry.py` | `b2bon_crm` AVAILABLE; Salesforce, HubSpot, Pipedrive e RD Station CRM BETA (D-041) (Fase 13, um por vez) |
+| Base HTTP dos conectores | `adapters/http_base.py` | Fase 13: 429/5xx → retry, 401/403 → `ErroCredencial` (sem retry), hosts fixos por conector (anti-SSRF), segredos mascarados em log e em erro de sync (D-043) |
 | Conexões por tenant | tabela `conexao_integracao` (credenciais Fernet, nunca devolvidas pela API) | Fase 3 |
 | Framework de sync | `app/contexts/integrations/sync.py` + tabela `execucao_sync` | Fase 3 |
 | Adapter de payload (dados enviados na requisição) | `adapters/payload.py` | Fase 3 (base do MAP API para CRM externo) |
@@ -130,3 +130,25 @@ recusada (401/403) marca a conexão como `erro` até reconectar.
 | Activity | Activity | call/email/meeting/task/deadline; demais tipos OTHER com o tipo original preservado |
 | Activity concluída com organização | Interaction `contato` | lida uma vez por execução |
 | Product | Offer | nome, categoria, descrição, ativo |
+
+## RD Station CRM (conector 4/4 · BETA)
+
+- **Auth**: `token` da instância. A API v1 só aceita o token na query
+  (`?token=`): o filtro de log do `httpx` e o erro gravado pelo sync
+  mascaram o valor (`token=***`, D-043). Host fixo `crm.rdstation.com`.
+- **Configuração**: `moeda` (padrão BRL; a v1 não informa moeda) e
+  `campo_cnpj` (`custom_field_id` do campo personalizado da organização).
+- **Leitura**: API v1, paginação `page`/`limit` + `has_more`. **Sem sync
+  incremental**: a v1 não filtra por data de alteração, então a capacidade
+  é declarada falsa e o sync relê tudo (não se finge incremental).
+
+| RD Station CRM | Canônico | Regra |
+|---|---|---|
+| Organization | Organization + Account | `url` → domínio; 1º segmento → industry; sem ciclo de vida: com negociação ganha → CUSTOMER, senão PROSPECT |
+| 1ª negociação ganha | Customer | `customer_since` = `closed_at`; churn desconhecido |
+| Contact | Person + Contact | primeiro e-mail/telefone; opt-out é do RD Station Marketing (não do CRM): `suppressed_at` desconhecido |
+| Deal pipeline / stage | Pipeline / PipelineStage | todo estágio OPEN (ganho/perda é o `win` da negociação) |
+| Deal | Opportunity | `win` true/false/null → WON/LOST/OPEN; `deal_lost_reason`; sem organização ou estágio fora dos funis = descartada |
+| Task | Activity | call/email/meeting/visit/task; outros tipos (ex.: whatsapp) OTHER com o tipo preservado; conta pela negociação |
+| Task concluída de negociação com organização | Interaction `contato` | lida uma vez por execução |
+| Product | Offer | nome, descrição, visível |

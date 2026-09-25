@@ -323,3 +323,12 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   o cliente HTTP não segue redirects. Campos que entram em consultas
   (ex.: `campo_cnpj`) são validados como identificadores.
 - **Status**: ACEITA.
+
+## D-043 · 2026-09-25 · Fase 13 · Segredo nunca em log nem em erro de sync
+- **Contexto**: a API v1 do RD Station CRM só aceita o token na query
+  string, e o `httpx` loga a URL de cada requisição.
+- **Decisão**: filtro no logger `httpx` e no erro gravado pelo sync mascara
+  `token`, `api_token`, `access_token`, `refresh_token` e `client_secret`.
+  Onde a API permite, o segredo vai em header (Pipedrive `x-api-token`,
+  Bearer nos demais).
+- **Status**: ACEITA.

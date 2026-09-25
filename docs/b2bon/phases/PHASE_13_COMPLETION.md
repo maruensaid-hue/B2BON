@@ -10,7 +10,7 @@
 | Salesforce | ✅ BETA (desligado por padrão, D-041) | `test_conector_salesforce.py` (23) | conector 1/4 |
 | HubSpot | ✅ BETA (desligado por padrão) | `test_conector_hubspot.py` (14) | conector 2/4 |
 | Pipedrive | ✅ BETA (desligado por padrão) | `test_conector_pipedrive.py` (11) | conector 3/4 |
-| RD Station CRM | ⏳ | — | — |
+| RD Station CRM | ✅ BETA (desligado por padrão) | `test_conector_rd_station.py` (12) | conector 4/4 |
 
 ## Base comum (entregue com o Salesforce)
 
@@ -72,3 +72,31 @@ Dívida nova: TD-071 (NPS de CRM externo). Sem migração.
 | E2E | ✅ 4/4 |
 
 Sem migração, sem dívida nova.
+
+## GATE — RD Station CRM
+
+| Evidência | Resultado |
+|---|---|
+| Suíte de conformidade compartilhada (paginação `page`/`has_more`, tenant, proveniência, referências, isolamento); só `crm.rdstation.com` | ✅ |
+| Sem incremental declarado (a v1 não permite) e o sync relê tudo, sem fingir | ✅ |
+| Token da query mascarado no log do httpx e no erro do sync (inclui erro de transporte com URL) | ✅ |
+| Mapeamento (organizações, CNPJ por campo personalizado, cliente por negociação ganha, contatos, negociações win/lost/aberta com motivo, tarefas com conta pela negociação, produtos) | ✅ |
+| 429 retentado; 401 não retentado, conexão `erro`; credencial/cursor forjados recusados | ✅ |
+| Hub (BETA só habilitado, credencial nunca volta) e MAP via conexão = payload canônico | ✅ |
+| Suite completa | ✅ **1.917 passed** |
+| Frontend lint (25) + typecheck + build | ✅ |
+| E2E | ✅ 4/4 |
+
+## Fechamento da fase
+
+Os quatro conectores do §13 estão implementados, testados pela mesma
+suíte de conformidade e documentados. Todos BETA e desligados por padrão
+(D-041): habilitar em produção exige validação contra contas reais
+(TD-069). Decisões D-041 a D-043; dívidas TD-068 a TD-071. Sem migração.
+Nenhum preço, plano ou limite alterado; pendências do PO inalteradas.
+
+## Próxima fase
+
+**PHASE 14 — PRODUCT CATALOG, PLANS & SALES PAGE** (preços existentes
+preservados; Public Procurement segue PENDING_DEFINITION; nada não
+lançado apresentado como disponível).

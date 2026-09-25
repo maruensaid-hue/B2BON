@@ -11,12 +11,35 @@ um endereço interno.
 """
 
 import json
+import logging
+import re
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
 import httpx
 
 from app.contexts.integrations.contract import ErroCredencial, ErroTransitorio
+
+_SEGREDO_NA_URL = re.compile(r"((?:api_)?token|access_token|refresh_token|client_secret)=[^&\s\"']+", re.IGNORECASE)
+
+
+def ocultar_segredos(texto: str) -> str:
+    return _SEGREDO_NA_URL.sub(r"\1=***", texto)
+
+
+class _FiltroSegredos(logging.Filter):
+    """O httpx loga a URL de cada requisição (INFO). APIs que só aceitam
+    token na query (RD Station CRM v1) vazariam a credencial para o log."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        mensagem = record.getMessage()
+        limpa = ocultar_segredos(mensagem)
+        if limpa != mensagem:
+            record.msg, record.args = limpa, ()
+        return True
+
+
+logging.getLogger("httpx").addFilter(_FiltroSegredos())
 
 # Testes injetam `httpx.MockTransport` aqui; em produção fica None (rede real).
 TRANSPORTE_PADRAO: httpx.BaseTransport | None = None

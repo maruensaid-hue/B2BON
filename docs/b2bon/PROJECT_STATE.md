@@ -2,10 +2,10 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **PHASE 13 — EXTERNAL CRM CONNECTORS** (Salesforce ✅ · HubSpot ✅ · Pipedrive ✅ · RD Station ⏳) |
-| Última fase concluída | PHASE 12 — ADVANCED AGENT ORCHESTRATION (2026-09-25) |
+| **CURRENT PHASE** | **PHASE 14 — PRODUCT CATALOG, PLANS & SALES PAGE** |
+| Última fase concluída | PHASE 13 — EXTERNAL CRM CONNECTORS (2026-09-25) |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/PHASE_12_COMPLETION.md` |
+| Relatório da última fase | `phases/PHASE_13_COMPLETION.md` |
 
 ## Autorizações
 
@@ -23,9 +23,10 @@
 - **OI-013** (comercial): taxa de conversão custo → créditos de IA.
 - **OI-010** (alta): verificar em produção se as features de IA falhavam por `temperature` com `claude-sonnet-5` (corrigido no código).
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
+- Conectores de CRM (Fase 13) estão BETA e desligados: habilitar em produção só após validar contra contas reais (TD-069).
 
-## Baseline de qualidade (Fase 13, após o conector Pipedrive)
+## Baseline de qualidade (após a Fase 13)
 
-- Backend: 1.905 passed. Migrações validadas também em Postgres 16.
+- Backend: 1.917 passed. Migrações validadas também em Postgres 16.
 - Frontend: lint OK (25 warnings), build OK.
 - E2E: 4/4.

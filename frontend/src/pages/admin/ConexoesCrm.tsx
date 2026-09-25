@@ -107,6 +107,24 @@ const CAMPOS: Record<string, Campo[]> = {
       configuracao: true,
     },
   ],
+  rd_station: [
+    {
+      nome: "token",
+      rotulo: "Token da instância (Perfil → Token)",
+      segredo: true,
+      obrigatorio: true,
+    },
+    {
+      nome: "campo_cnpj",
+      rotulo: "Id do campo personalizado de CNPJ",
+      configuracao: true,
+    },
+    {
+      nome: "moeda",
+      rotulo: "Moeda dos valores (padrão BRL)",
+      configuracao: true,
+    },
+  ],
 };
 
 const ENTIDADES = [

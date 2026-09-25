@@ -1,12 +1,13 @@
 # CHANGELOG — IMPLEMENTATION
 
-## Fase 13 — External CRM Connectors (em andamento)
+## Fase 13 — External CRM Connectors (2026-09-25)
 
 - Conector 1/4 **Salesforce** (BETA, desligado por padrão): leitura de contas, contatos, estágios, oportunidades, clientes, tarefas/eventos e produtos; incremental; renovação de token; anti-SSRF.
 - Hub: credenciais e configuração na conexão (criptografadas, nunca devolvidas), reconexão, `conectavel` por conector, conexão com credencial recusada fica `erro`.
 - MAP API aceita `conexao_id` (mesmo resultado que o payload canônico). Tela de conexões no admin de API. Sem migração.
 - Conector 2/4 **HubSpot** (BETA, desligado por padrão): empresas, contatos, pipelines, negócios (empresa via Associations v4), engajamentos e produtos; incremental pela Search API; renovação OAuth. Renovação de token extraída para `AcessoBearer` (comum aos conectores).
 - Conector 3/4 **Pipedrive** (BETA, desligado por padrão): organizações, pessoas, funis, negócios, atividades e produtos; incremental por `/recents`; token só no header.
+- Conector 4/4 **RD Station CRM** (BETA, desligado por padrão): organizações, contatos, funis, negociações, tarefas e produtos; sem incremental (a API v1 não permite, e isso é declarado). Segredos mascarados em log e em erro de sync.
 
 ## Fase 12 — Advanced Agent Orchestration (2026-09-25)
 

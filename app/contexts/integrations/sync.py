@@ -23,6 +23,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.contexts.integrations import registry
+from app.contexts.integrations.adapters.http_base import ocultar_segredos
 from app.contexts.integrations.contract import ErroCredencial, ErroTransitorio
 from app.models.conexao_integracao import ConexaoIntegracao
 from app.models.execucao_sync import ExecucaoSync
@@ -106,7 +107,7 @@ def sincronizar(
         conexao.status = "ativa"
     except Exception as erro:  # noqa: BLE001 — registra e reporta, não derruba o cron
         execucao.status = "falha"
-        execucao.erro = f"{type(erro).__name__}: {erro}"[:500]
+        execucao.erro = ocultar_segredos(f"{type(erro).__name__}: {erro}")[:500]
         conexao.ultimo_erro = execucao.erro
         if isinstance(erro, ErroCredencial):
             conexao.status = "erro"  # precisa reconectar; o cron não insiste
