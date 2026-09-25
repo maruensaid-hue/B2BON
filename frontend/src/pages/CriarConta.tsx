@@ -25,6 +25,11 @@ interface Plano {
   modulos_contratados: string[];
 }
 
+interface RepresentanteOpcao {
+  id: number;
+  nome: string;
+}
+
 // Letras miúdas da janela de assinatura (raio-X 2026-09-22) — de
 // propósito sem destaque (sem cor de aviso, fonte mínima): informa o
 // que o plano restringe, sem parecer uma limitação agressiva no momento
@@ -91,6 +96,8 @@ export function CriarConta() {
   const [aceiteTermos, setAceiteTermos] = useState(false);
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [planoId, setPlanoId] = useState<number | null>(null);
+  const [representantes, setRepresentantes] = useState<RepresentanteOpcao[]>([]);
+  const [representanteId, setRepresentanteId] = useState<number | null>(null);
 
   useEffect(() => {
     api
@@ -112,12 +119,19 @@ export function CriarConta() {
       .catch(() => setErro("Não foi possível carregar os planos agora. Tente de novo em instantes."));
   }, [searchParams]);
 
+  useEffect(() => {
+    api
+      .get<RepresentanteOpcao[]>("/representantes/self-service")
+      .then(setRepresentantes)
+      .catch(() => setErro("Não foi possível carregar a lista de representantes agora. Tente de novo em instantes."));
+  }, []);
+
   const planosSuite = planos.filter((plano) => plano.categoria !== "modulo");
   const planosModulo = planos.filter((plano) => plano.categoria === "modulo");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (planoId === null) return;
+    if (planoId === null || representanteId === null) return;
     setErro(null);
     setCarregando(true);
     const form = new FormData(event.currentTarget);
@@ -130,6 +144,7 @@ export function CriarConta() {
         senha_admin: String(form.get("senha_admin")),
         aceite_termos: aceiteTermos,
         plano_id: planoId,
+        representante_id: representanteId,
       });
       window.location.href = checkoutUrl ?? "/rede-social";
     } catch (error) {
@@ -173,6 +188,25 @@ export function CriarConta() {
           <div>
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Senha</div>
             <Input name="senha_admin" type="password" required minLength={8} placeholder="Mínimo 8 caracteres" />
+          </div>
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Representante</div>
+            <select
+              name="representante_id"
+              required
+              value={representanteId ?? ""}
+              onChange={(event) => setRepresentanteId(event.target.value ? Number(event.target.value) : null)}
+              className="w-full rounded-lg border border-border bg-surf2 px-3 py-2 text-[13px]"
+            >
+              <option value="" disabled>
+                {representantes.length === 0 ? "Carregando..." : "Selecione quem te atendeu"}
+              </option>
+              {representantes.map((representante) => (
+                <option key={representante.id} value={representante.id}>
+                  {representante.nome}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -227,7 +261,11 @@ export function CriarConta() {
 
           {erro && <div className="text-[12px] text-red">{erro}</div>}
 
-          <Button type="submit" disabled={carregando || !aceiteTermos || planoId === null} className="mt-1 w-full justify-center">
+          <Button
+            type="submit"
+            disabled={carregando || !aceiteTermos || planoId === null || representanteId === null}
+            className="mt-1 w-full justify-center"
+          >
             {carregando ? "Indo para o pagamento..." : "Continuar para o pagamento"}
           </Button>
         </form>

@@ -77,6 +77,16 @@ class Settings(BaseSettings):
     mercadopago_access_token: str = ""
     mercadopago_webhook_secret: str = ""
 
+    # Repasse mensal de comissão a Representante (raio-X: ainda sem
+    # implementação real, ver `app/providers/payout/mercadopago.py`).
+    # Default True — mesmo com credencial configurada, o cron de repasse
+    # usa `StubPayoutProvider` (calcula e registra tudo, mas não move
+    # dinheiro de verdade) até isto ser explicitamente desligado em
+    # produção, depois de validar a integração real com um repasse de
+    # valor baixo feito manualmente.
+    payout_modo_simulacao: bool = True
+    mercadopago_payout_access_token: str = ""
+
     # URL pública do frontend — usada para montar o `back_urls` do
     # Checkout Pro (pra onde o Mercado Pago devolve o usuário após pagar).
     url_base_frontend: str = "http://localhost:5173"

@@ -315,6 +315,8 @@ export function Configuracao() {
   const [templateParaNovaRegraId, setTemplateParaNovaRegraId] = useState<string>("");
   const [salvandoRegra, setSalvandoRegra] = useState(false);
   const [erroRegra, setErroRegra] = useState<string | null>(null);
+  const [codigoCapturaLead, setCodigoCapturaLead] = useState<string | null>(null);
+  const [copiadoCapturaLead, setCopiadoCapturaLead] = useState(false);
   const permiteAutoAprovacao = usuario?.recursos_plano.auto_aprovacao ?? false;
 
   const ofertaEmEdicao = ofertas.find((oferta) => oferta.id === ofertaEmEdicaoId) ?? null;
@@ -387,6 +389,12 @@ export function Configuracao() {
         }
       }
       await carregarTemplateProposta();
+      try {
+        const { codigo } = await api.get<{ codigo: string }>("/captura-lead/config");
+        setCodigoCapturaLead(codigo);
+      } catch {
+        // Não crítico — a seção só não mostra o link se isso falhar.
+      }
     } catch {
       setErro("Não foi possível carregar a configuração.");
     } finally {
@@ -1029,6 +1037,32 @@ export function Configuracao() {
             onRemover={removerItemTemplate}
           />
         </div>
+      </Card>
+
+      <Card className="mt-4">
+        <SectionLabel>Link de captura de lead</SectionLabel>
+        <div className="mb-3 text-[11px] text-muted">
+          Link público e permanente da sua empresa — use como botão de CTA num
+          anúncio (ex.: Instagram) ou na página de contatos do seu site. Quem
+          preencher cai direto como prospect no seu CRM, pronto pra qualificar.
+        </div>
+        {codigoCapturaLead ? (
+          <div className="flex items-center gap-2">
+            <Input readOnly value={`${window.location.origin}/captura-lead/${codigoCapturaLead}`} className="flex-1" />
+            <Button
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/captura-lead/${codigoCapturaLead}`);
+                setCopiadoCapturaLead(true);
+                setTimeout(() => setCopiadoCapturaLead(false), 2000);
+              }}
+            >
+              {copiadoCapturaLead ? "Copiado!" : "Copiar link"}
+            </Button>
+          </div>
+        ) : (
+          <div className="text-[11px] text-muted">Carregando link...</div>
+        )}
       </Card>
 
       <TutorialConfiguracao open={tutorialAberto} onClose={fecharTutorial} />

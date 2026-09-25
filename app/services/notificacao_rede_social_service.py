@@ -1,7 +1,14 @@
+import logging
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.notificacao_rede_social import NotificacaoRedeSocial
+from app.models.usuario import Usuario
+from app.providers.channels.email.base import EmailProvider
+
+logger = logging.getLogger(__name__)
 
 _LIMITE_PADRAO = 50
 
@@ -21,6 +28,33 @@ def criar(db: Session, tenant_id: str, tipo: str, referencia_tipo: str, referenc
         )
     )
     db.flush()
+
+
+def enviar_email_para_tenant(db: Session, email_provider: EmailProvider | None, tenant_id: str, mensagem: str) -> None:
+    """Espelha toda notificação da Rede Social também por e-mail, pra todos
+    os usuários ativos do tenant destino (a notificação em si é por
+    `tenant_id`, sem `usuario_id` — não há como saber quem "é" o
+    destinatário além de "todo mundo daquele tenant"). Chamado sempre
+    depois do `db.commit()` da ação de negócio que originou a notificação
+    (mesmo padrão de `pagamento_licenca_service`) — best-effort, uma falha
+    de envio nunca pode reverter algo que já aconteceu."""
+    if email_provider is None:
+        return
+    usuarios = db.query(Usuario).filter(Usuario.tenant_id == tenant_id, Usuario.ativo.is_(True)).all()
+    for usuario in usuarios:
+        try:
+            email_provider.enviar(
+                usuario.email,
+                "Nova notificação na B2B ON",
+                mensagem,
+                "B2B ON",
+                settings.sendgrid_remetente_email,
+                tenant_id,
+            )
+        except Exception:
+            logger.warning(
+                "Falha ao enviar e-mail de notificação da Rede Social pro tenant %s", tenant_id, exc_info=True
+            )
 
 
 def _serializar(notificacao: NotificacaoRedeSocial) -> dict:

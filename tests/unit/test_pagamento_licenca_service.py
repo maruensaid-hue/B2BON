@@ -2,9 +2,11 @@ import hashlib
 import hmac
 from datetime import UTC, datetime, timedelta
 
+from app.models.comissao_representante import ComissaoRepresentante
 from app.models.licenca import Licenca
 from app.models.pagamento_licenca import PagamentoLicenca
 from app.models.plano import Plano
+from app.models.representante import Representante
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.channels.email.stub import StubEmailProvider
@@ -273,6 +275,66 @@ def test_enviar_lembretes_cobranca_nao_reenvia_no_mesmo_dia(db_session):
 
     assert resultado["lembretes_enviados"] == 0
     assert len(email.envios) == 0
+
+
+def test_webhook_aprovado_com_representante_calcula_comissao(db_session):
+    plano = _tenant_e_plano(db_session)
+    representante = Representante(
+        nome="Fulano Vendedor", email="fulano@vendedor.com.br", chave_pix="fulano@pix.com.br",
+        percentual_comissao=0.1,
+    )
+    db_session.add(representante)
+    db_session.flush()
+    db_session.query(Tenant).filter_by(id=TENANT_ID).one().representante_id = representante.id
+    provider = StubPaymentProvider()
+    email = StubEmailProvider()
+    pagamento, _ = pagamento_licenca_service.iniciar(db_session, TENANT_ID, plano.id, "admin@teste.com.br", provider)
+    db_session.add(Licenca(tenant_id=TENANT_ID, plano_id=plano.id, status="pendente_pagamento"))
+    db_session.commit()
+
+    pagamento_id_externo = provider.aprovar(pagamento.preferencia_id_externo)
+    pagamento_licenca_service.confirmar_via_webhook(db_session, provider, pagamento_id_externo, email)
+
+    comissao = db_session.query(ComissaoRepresentante).filter_by(pagamento_licenca_id=pagamento.id).one()
+    assert comissao.representante_id == representante.id
+    assert comissao.status == "calculada"
+    assert comissao.valor_comissao == plano.preco_mensal * 0.1
+
+
+def test_webhook_aprovado_sem_representante_nao_gera_comissao(db_session):
+    plano = _tenant_e_plano(db_session)
+    provider = StubPaymentProvider()
+    email = StubEmailProvider()
+    pagamento, _ = pagamento_licenca_service.iniciar(db_session, TENANT_ID, plano.id, "admin@teste.com.br", provider)
+    db_session.add(Licenca(tenant_id=TENANT_ID, plano_id=plano.id, status="pendente_pagamento"))
+    db_session.commit()
+
+    pagamento_id_externo = provider.aprovar(pagamento.preferencia_id_externo)
+    pagamento_licenca_service.confirmar_via_webhook(db_session, provider, pagamento_id_externo, email)
+
+    assert db_session.query(ComissaoRepresentante).filter_by(pagamento_licenca_id=pagamento.id).one_or_none() is None
+
+
+def test_webhook_duplicado_nao_duplica_comissao(db_session):
+    plano = _tenant_e_plano(db_session)
+    representante = Representante(
+        nome="Fulano Vendedor", email="fulano2@vendedor.com.br", chave_pix="fulano2@pix.com.br",
+        percentual_comissao=0.1,
+    )
+    db_session.add(representante)
+    db_session.flush()
+    db_session.query(Tenant).filter_by(id=TENANT_ID).one().representante_id = representante.id
+    provider = StubPaymentProvider()
+    email = StubEmailProvider()
+    pagamento, _ = pagamento_licenca_service.iniciar(db_session, TENANT_ID, plano.id, "admin@teste.com.br", provider)
+    db_session.add(Licenca(tenant_id=TENANT_ID, plano_id=plano.id, status="pendente_pagamento"))
+    db_session.commit()
+    pagamento_id_externo = provider.aprovar(pagamento.preferencia_id_externo)
+
+    pagamento_licenca_service.confirmar_via_webhook(db_session, provider, pagamento_id_externo, email)
+    pagamento_licenca_service.confirmar_via_webhook(db_session, provider, pagamento_id_externo, email)
+
+    assert db_session.query(ComissaoRepresentante).filter_by(pagamento_licenca_id=pagamento.id).count() == 1
 
 
 def test_enviar_lembretes_cobranca_fora_da_janela_nao_envia(db_session):

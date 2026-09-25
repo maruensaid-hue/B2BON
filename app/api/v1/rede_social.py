@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_email_provider, get_tenant_id
+from app.providers.channels.email.base import EmailProvider
 from app.schemas.rede_social import (
     AbrirSalaRequestSchema,
     AtualizarPerfilRequestSchema,
@@ -105,8 +106,9 @@ def solicitar_conexao(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
 ) -> ConexaoEmpresaSchema:
-    return rede_social_service.solicitar_conexao(db, tenant_id, ator_id, dados.tenant_id_destino)
+    return rede_social_service.solicitar_conexao(db, tenant_id, ator_id, dados.tenant_id_destino, email)
 
 
 @router.get("/conexoes", response_model=list[ConexaoEmpresaSchema])
@@ -125,8 +127,9 @@ def responder_conexao(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
 ) -> ConexaoEmpresaSchema:
-    return rede_social_service.responder_conexao(db, tenant_id, ator_id, conexao_id, dados.aceitar)
+    return rede_social_service.responder_conexao(db, tenant_id, ator_id, conexao_id, dados.aceitar, email)
 
 
 @router.post("/conexoes/{conexao_id}/desconectar", response_model=ConexaoEmpresaSchema)
@@ -189,9 +192,10 @@ def enviar_mensagem(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
 ) -> MensagemRedeSocialSchema:
     """Só entre empresas já conectadas (Onda C)."""
-    return rede_social_service.enviar_mensagem(db, tenant_id, ator_id, dados.tenant_id_destinatario, dados.texto)
+    return rede_social_service.enviar_mensagem(db, tenant_id, ator_id, dados.tenant_id_destinatario, dados.texto, email)
 
 
 @router.get("/mensagens/{com_tenant_id}", response_model=list[MensagemRedeSocialSchema])
@@ -318,9 +322,10 @@ def comentar_post(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
 ) -> ComentarioPostSchema:
     """Comentários em post (master prompt §45, Fase 2C)."""
-    return post_rede_social_service.comentar(db, tenant_id, ator_id, post_id, dados.texto)
+    return post_rede_social_service.comentar(db, tenant_id, ator_id, post_id, dados.texto, email)
 
 
 @router.get("/posts/{post_id}/comentarios", response_model=list[ComentarioPostSchema])
@@ -338,11 +343,12 @@ def reagir_post(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
 ) -> ReacaoPostSchema:
     """Reação em post (master prompt §45, Fase 2C; 9 tipos desde
     2026-09-20 — curtir + 8 emojis) — troca a reação existente do
     tenant, não soma."""
-    return post_rede_social_service.reagir(db, tenant_id, ator_id, post_id, tipo=dados.tipo)
+    return post_rede_social_service.reagir(db, tenant_id, ator_id, post_id, tipo=dados.tipo, email_provider=email)
 
 
 @router.post("/posts/{post_id}/compartilhar", response_model=PostRedeSocialSchema, status_code=201)
@@ -351,10 +357,11 @@ def compartilhar_post(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
 ) -> PostRedeSocialSchema:
     """Repost simples no feed do próprio tenant (2026-09-20) — sempre
     aponta pra raiz, um tenant só compartilha o mesmo post uma vez."""
-    return post_rede_social_service.compartilhar(db, tenant_id, ator_id, post_id)
+    return post_rede_social_service.compartilhar(db, tenant_id, ator_id, post_id, email)
 
 
 @router.get("/notificacoes", response_model=list[NotificacaoRedeSocialSchema])
@@ -507,9 +514,10 @@ def enviar_mensagem_canal(
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    email: EmailProvider = Depends(get_email_provider),
 ) -> MensagemSalaSchema:
     return sala_corporativa_service.enviar_mensagem_sala(
-        db, tenant_id, ator_id, canal_id, dados.texto, dados.documento_url
+        db, tenant_id, ator_id, canal_id, dados.texto, dados.documento_url, email
     )
 
 

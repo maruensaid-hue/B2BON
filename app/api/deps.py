@@ -52,6 +52,9 @@ from app.providers.email_validation.stub import StubEmailVerificationProvider
 from app.providers.payment.base import PaymentProvider
 from app.providers.payment.mercadopago import MercadoPagoProvider
 from app.providers.payment.stub import StubPaymentProvider
+from app.providers.payout.base import PayoutProvider
+from app.providers.payout.mercadopago import MercadoPagoPayoutProvider
+from app.providers.payout.stub import StubPayoutProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
 from app.providers.rede_social.base import RedeSocialProvider
@@ -150,6 +153,18 @@ def get_payment_provider() -> PaymentProvider:
     if settings.mercadopago_access_token:
         return MercadoPagoProvider()
     return StubPaymentProvider()
+
+
+def get_payout_provider() -> PayoutProvider:
+    # Repasse de comissão a Representante — `payout_modo_simulacao=True`
+    # (default) sempre usa o stub, mesmo com credencial configurada,
+    # porque `MercadoPagoPayoutProvider` ainda não tem uma implementação
+    # real (ver seu docstring). Só sai do stub quando alguém desligar a
+    # simulação explicitamente em produção, depois de validar a
+    # integração de verdade.
+    if not settings.payout_modo_simulacao and settings.mercadopago_payout_access_token:
+        return MercadoPagoPayoutProvider()
+    return StubPayoutProvider()
 
 
 def get_calendar_provider() -> CalendarProvider:

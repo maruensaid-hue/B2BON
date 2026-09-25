@@ -56,3 +56,10 @@ class Tenant(Base):
     # automaticamente da existência de `ConfiguracaoWhatsApp` (que não
     # implica ter cadastrado um template).
     aviso_whatsapp_template_confirmado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    # Representante comercial (pessoa física, comissão simples) que vendeu
+    # o B2B ON para este tenant — setado uma vez no cadastro público
+    # (`tenant_service.criar_tenant_publico`) e imutável depois. Distinto
+    # de `tenant_pai_id`/`modo_cobranca` acima (hierarquia estrutural
+    # entre empresas, não comissão de venda a uma pessoa).
+    representante_id: Mapped[int | None] = mapped_column(ForeignKey("representante.id"), nullable=True)

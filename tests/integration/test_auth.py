@@ -640,10 +640,11 @@ def test_planos_apenas_self_service_esconde_plano_teste(client, criar_plano):
     assert any(p["nome"] == "Starter Visivel" for p in so_self_service)
 
 
-def test_registrar_publico_com_plano_pago_retorna_checkout(client, criar_plano):
+def test_registrar_publico_com_plano_pago_retorna_checkout(client, criar_plano, criar_representante):
     """Página de boas-vindas (raio-X 2026-09-21): cadastro público sem
     nenhum convite, com seleção de plano pago."""
     plano = criar_plano()
+    representante = criar_representante()
 
     resposta = client.post(
         "/api/v1/auth/registrar-publico",
@@ -654,6 +655,7 @@ def test_registrar_publico_com_plano_pago_retorna_checkout(client, criar_plano):
             "senha_admin": "senha123",
             "aceite_termos": True,
             "plano_id": plano.id,
+            "representante_id": representante.id,
         },
     )
 
@@ -664,8 +666,9 @@ def test_registrar_publico_com_plano_pago_retorna_checkout(client, criar_plano):
     assert corpo["primeiro_login"] is True
 
 
-def test_registrar_publico_com_plano_teste_e_negado(client, criar_plano):
+def test_registrar_publico_com_plano_teste_e_negado(client, criar_plano, criar_representante):
     plano_teste = criar_plano(nome="Teste", preco_mensal=0.0, visivel_self_service=False)
+    representante = criar_representante()
 
     resposta = client.post(
         "/api/v1/auth/registrar-publico",
@@ -676,22 +679,45 @@ def test_registrar_publico_com_plano_teste_e_negado(client, criar_plano):
             "senha_admin": "senha123",
             "aceite_termos": True,
             "plano_id": plano_teste.id,
+            "representante_id": representante.id,
         },
     )
 
     assert resposta.status_code == 409
 
 
-def test_registrar_publico_bloqueia_apos_muitas_tentativas(client, criar_plano):
+def test_registrar_publico_sem_representante_e_recusado(client, criar_plano):
+    """`representante_id` obrigatório (raio-X: comissão de vendas) — sem
+    ele, nem chega a validar o resto do payload."""
+    plano = criar_plano()
+
+    resposta = client.post(
+        "/api/v1/auth/registrar-publico",
+        json={
+            "razao_social": "Empresa Sem Representante Ltda",
+            "nome_admin": "Admin",
+            "email_admin": "sem-representante@teste.com.br",
+            "senha_admin": "senha123",
+            "aceite_termos": True,
+            "plano_id": plano.id,
+        },
+    )
+
+    assert resposta.status_code == 422
+
+
+def test_registrar_publico_bloqueia_apos_muitas_tentativas(client, criar_plano, criar_representante):
     """Sem convite pra servir de portão, o rate limit desta rota precisa
     ser mais apertado que o de `/registrar-vitrine`."""
     plano = criar_plano()
+    representante = criar_representante()
     payload = {
         "razao_social": "Empresa Rate Limit",
         "nome_admin": "Admin",
         "senha_admin": "senha123",
         "aceite_termos": True,
         "plano_id": plano.id,
+        "representante_id": representante.id,
     }
 
     for indice in range(3):

@@ -85,6 +85,7 @@ interface DadosRegistroPublico {
   senha_admin: string;
   aceite_termos: boolean;
   plano_id: number;
+  representante_id: number;
 }
 
 interface DadosRegistroConvite {

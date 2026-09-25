@@ -36,6 +36,7 @@ from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.licenca import Licenca
 from app.models.plano import Plano
+from app.models.representante import Representante
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.calendar.stub import StubCalendarProvider
@@ -314,6 +315,25 @@ def criar_plano(db_session: Session):
         db_session.add(plano)
         db_session.commit()
         return plano
+
+    return _criar
+
+
+@pytest.fixture()
+def criar_representante(db_session: Session):
+    def _criar(**overrides: object) -> Representante:
+        numero = db_session.query(Representante).count() + 1
+        dados = {
+            "nome": f"Representante Teste {numero}",
+            "email": f"representante{numero}@teste.com.br",
+            "chave_pix": f"pix-representante{numero}@teste.com.br",
+            "percentual_comissao": 0.1,
+        }
+        dados.update(overrides)
+        representante = Representante(**dados)
+        db_session.add(representante)
+        db_session.commit()
+        return representante
 
     return _criar
 

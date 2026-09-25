@@ -30,6 +30,7 @@ from app.services import (
     conta_service,
     pagamento_licenca_service,
     rede_social_service,
+    representante_service,
     webhook_parceiro_service,
 )
 from app.services.errors import NaoAutorizado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
@@ -937,6 +938,7 @@ def criar_tenant_publico(
     aceite_termos: bool,
     plano_id: int,
     payment_provider: PaymentProvider,
+    representante_id: int,
     cnpj: str | None = None,
 ) -> tuple[Usuario, str | None]:
     """Cadastro público sem convite (raio-X 2026-09-21, página de
@@ -947,7 +949,12 @@ def criar_tenant_publico(
     `plano_id` é validado direto contra `Plano.visivel_self_service`,
     o plano Teste nunca aparece aqui), `tenant.tipo` sempre "cliente"
     (a classificação "distribuidor" só faz sentido pro convite
-    cortesia da hierarquia)."""
+    cortesia da hierarquia).
+
+    `representante_id` obrigatório (raio-X: comissão de vendas) — grava
+    o vendedor que trouxe este tenant, pra permitir o cálculo automático
+    de comissão quando o pagamento for confirmado
+    (`pagamento_licenca_service.confirmar_via_webhook`)."""
     if not aceite_termos:
         raise ValidacaoFalhou("É preciso aceitar a Política de Privacidade e os Termos de Uso para se cadastrar.")
 
@@ -957,11 +964,15 @@ def criar_tenant_publico(
     if not plano.visivel_self_service:
         raise RegraNegocioViolada("Este plano não está disponível para cadastro self-service.")
 
+    representante_service.obter_ativo(db, representante_id)
+
     if db.query(Usuario).filter_by(email=email_admin).one_or_none() is not None:
         raise RegraNegocioViolada("E-mail já cadastrado.")
 
     tenant_id = _gerar_tenant_id(db, razao_social)
-    tenant = Tenant(id=tenant_id, razao_social=razao_social, cnpj=cnpj, tipo="cliente")
+    tenant = Tenant(
+        id=tenant_id, razao_social=razao_social, cnpj=cnpj, tipo="cliente", representante_id=representante_id
+    )
     db.add(tenant)
     db.flush()
 

@@ -234,7 +234,17 @@ def criar_lead(
 
 
 def criar_a_partir_de_convite_rede_social(
-    db: Session, tenant_id: str, nome: str, cnpj: str | None, nome_contato: str, email_contato: str
+    db: Session,
+    tenant_id: str,
+    nome: str,
+    cnpj: str | None,
+    nome_contato: str,
+    email_contato: str,
+    *,
+    telefone_contato: str | None = None,
+    cargo_contato: str | None = None,
+    origem: str = "rede_social_convite",
+    descricao_atividade: str = "Empresa cadastrada automaticamente via convite de Rede Social aceito",
 ) -> Conta:
     """Empresa convidada por um vendedor pela Rede Social e que aceitou o
     convite-vitrine (virou tenant próprio) já entra também como prospect no
@@ -243,29 +253,38 @@ def criar_a_partir_de_convite_rede_social(
     (campo opcional do formulário); continua editável depois, igual
     qualquer outra conta.
 
-    De propósito **não comita** — quem chama (`tenant_service.criar_tenant_vitrine`)
-    precisa que isso aconteça na mesma transação da criação do tenant."""
+    Reaproveitado também pela captura pública de lead (`origem` e
+    `descricao_atividade` diferentes nesse caso) — mesma forma de entrar
+    como prospect no CRM de um tenant, só muda a procedência do contato.
+
+    De propósito **não comita** — quem chama (`tenant_service.criar_tenant_vitrine`
+    ou o endpoint de captura de lead) precisa que isso aconteça na mesma
+    transação de quem criou o registro que originou este lead."""
     conta = Conta(
         tenant_id=tenant_id,
         icp_id=None,
         nome=nome,
         cnpj=_normalizar_cnpj(cnpj),
         status="prospectada",
-        origem="rede_social_convite",
+        origem=origem,
     )
     db.add(conta)
     db.flush()
 
     decisor = Decisor(
-        tenant_id=tenant_id, conta_id=conta.id, nome=nome_contato, email=email_contato,
-        origem="rede_social_convite",
+        tenant_id=tenant_id,
+        conta_id=conta.id,
+        nome=nome_contato,
+        email=email_contato,
+        telefone=telefone_contato,
+        cargo=cargo_contato,
+        origem=origem,
     )
     db.add(decisor)
     db.flush()
 
     atividade_service.registrar(
-        db, tenant_id, conta_id=conta.id, tipo="sistema",
-        descricao="Empresa cadastrada automaticamente via convite de Rede Social aceito",
+        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao=descricao_atividade,
     )
     auditoria_service.registrar(
         db, tenant_id, "conta_criada_via_rede_social", "conta", conta.id, None, {"nome": nome}, conta_id=conta.id

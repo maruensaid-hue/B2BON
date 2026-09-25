@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { CapturaLead } from "@/pages/CapturaLead";
 import { ConviteVitrine } from "@/pages/ConviteVitrine";
 import { CriarConta } from "@/pages/CriarConta";
 import { EsqueciSenha } from "@/pages/EsqueciSenha";
@@ -20,6 +21,9 @@ import { Termos } from "@/pages/Termos";
 const AdminConvites = lazy(() => import("@/pages/admin/AdminConvites").then((m) => ({ default: m.AdminConvites })));
 const AdminLicencas = lazy(() => import("@/pages/admin/AdminLicencas").then((m) => ({ default: m.AdminLicencas })));
 const AdminPlanos = lazy(() => import("@/pages/admin/AdminPlanos").then((m) => ({ default: m.AdminPlanos })));
+const AdminRepresentantes = lazy(() =>
+  import("@/pages/admin/AdminRepresentantes").then((m) => ({ default: m.AdminRepresentantes })),
+);
 const AdminVerificacoesEmpresa = lazy(() =>
   import("@/pages/admin/AdminVerificacoesEmpresa").then((m) => ({ default: m.AdminVerificacoesEmpresa })),
 );
@@ -77,6 +81,7 @@ export default function App() {
       <Route path="/esqueci-senha" element={<EsqueciSenha />} />
       <Route path="/redefinir-senha/:token" element={<RedefinirSenha />} />
       <Route path="/convite-vitrine/:codigo" element={<ConviteVitrine />} />
+      <Route path="/captura-lead/:codigo" element={<CapturaLead />} />
       <Route path="/criar-conta" element={<CriarConta />} />
       <Route path="/planos" element={<Planos />} />
       <Route
@@ -331,6 +336,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <AdminPlanos />
+              </Suspense>
+            }
+          />
+          <Route
+            path="admin/representantes"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <AdminRepresentantes />
               </Suspense>
             }
           />
