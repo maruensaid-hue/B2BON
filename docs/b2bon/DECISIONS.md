@@ -148,3 +148,16 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   com rollback do chamador. Em SQLite de desenvolvimento, com transação
   de escrita aberta, a gravação pode esperar o lock (TD-046).
 - **Status**: ACEITA.
+
+## D-019 · 2026-09-25 · Fase 5 · Custo do provedor em tabela versionada; créditos só com política definida pelo PO
+- **Decisão**: `preco_modelo_ia` (USD/MTok, com fonte e vigência) mede o
+  custo de toda chamada. A conversão para créditos fica
+  `PENDING_DEFINITION` até o PO definir a taxa: o sistema não inventa preço (§71 por analogia, §55).
+- **Consequência**: FinOps de custo funciona já. Carteira, excedente e
+  bloqueio por saldo ficam prontos e inertes até a política ser ativada.
+- **Status**: ACEITA.
+
+## D-020 · 2026-09-25 · Fase 5 · Tenant não vê custo em USD; limite em USD é só da operação
+- **Decisão**: o custo do provedor é dado interno da B2B ON. O tenant vê
+  chamadas e créditos, e define limites por número de chamadas.
+- **Status**: ACEITA.

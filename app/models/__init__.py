@@ -55,6 +55,11 @@ from app.models.pergunta_agente_corporativo import PerguntaAgenteCorporativo
 from app.models.pesquisa_nps import PesquisaNps
 from app.models.registro_uso_ia import RegistroUsoIa
 from app.models.evento_dominio import EventoDominio
+from app.models.preco_modelo_ia import PrecoModeloIa
+from app.models.politica_creditos_ia import PoliticaCreditosIa
+from app.models.carteira_creditos import CarteiraCreditos
+from app.models.carteira_creditos import MovimentoCredito
+from app.models.orcamento_ia import OrcamentoIa
 from app.models.conhecimento_corporativo import ConhecimentoCorporativo
 from app.models.perfil_inteligencia import PerfilInteligencia
 from app.models.evento_aprendizado import EventoAprendizado
@@ -191,6 +196,11 @@ __all__ = [
     "PerguntaAgenteCorporativo",
     "RegistroUsoIa",
     "EventoDominio",
+    "PrecoModeloIa",
+    "PoliticaCreditosIa",
+    "CarteiraCreditos",
+    "MovimentoCredito",
+    "OrcamentoIa",
     "ConhecimentoCorporativo",
     "PerfilInteligencia",
     "EventoAprendizado",

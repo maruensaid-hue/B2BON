@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # WhatsApp/e-mail, bot de reunião, cron) por tenant por hora — um
     # remetente externo não pode gerar custo ilimitado (risco S2).
     ai_limite_automatico_por_hora: int = 300
+    # Câmbio USD→BRL para métricas de FinOps que cruzam custo (USD) com
+    # receita (BRL). Vazio = essas métricas voltam `null` (não inventa câmbio).
+    finops_cambio_usd_brl: float | None = None
 
     # Fallback de desenvolvimento apenas — franquia real é decisão comercial
     # pendente e vem do núcleo via PlanLimitsProvider (Seção 11 da especificação).

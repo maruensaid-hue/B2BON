@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -37,3 +37,7 @@ class RegistroUsoIa(Base):
     status: Mapped[str] = mapped_column(String, default="sucesso", server_default="sucesso")  # sucesso | falha | bloqueado
     erro: Mapped[str | None] = mapped_column(String, nullable=True)
     correlation_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # --- Fase 5 (FinOps) ------------------------------------------------------
+    custo_usd: Mapped[float | None] = mapped_column(Numeric(18, 8), nullable=True)  # None = modelo sem preço cadastrado
+    preco_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    creditos_consumidos: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)  # None = política pendente

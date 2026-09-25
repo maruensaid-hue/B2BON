@@ -13,9 +13,11 @@
 4. Roteia o modelo pela classe e só manda `temperature` a quem aceita.
 5. Feature que carrega conteúdo externo recebe a instrução de sistema
    anti-injeção (`prompt_seguro`).
-6. Registra `RegistroUsoIa` — sucesso, falha ou bloqueio — numa sessão
-   própria, independente da transação de quem chamou: um rollback do
-   chamador não apaga o uso já incorrido.
+6. Orçamento/quota e saldo de créditos (Fase 5) checados ANTES do provedor.
+7. Registra `RegistroUsoIa` — sucesso, falha ou bloqueio — com custo em
+   USD e créditos, e debita a carteira, numa sessão própria independente
+   da transação de quem chamou: um rollback do chamador não apaga o uso
+   já incorrido.
 """
 
 import logging
@@ -24,6 +26,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.contexts.finops import contract as finops
 from app.contexts.intelligence import prompt_seguro, registro, roteador
 from app.core.config import settings
 from app.core.observability import correlation_id_atual
@@ -83,7 +86,19 @@ def _registrar(db: Session, ctx: ContextoIA, feature: registro.Feature, gatilho:
     )
     sessao = sessionmaker(bind=db.get_bind(), expire_on_commit=False)()
     try:
+        # Custo e créditos (Fase 5) na MESMA transação do ledger: ou os três
+        # (uso, custo, débito na carteira) entram juntos, ou nenhum.
+        if resposta is not None:
+            custo, preco_id, creditos = finops.custear(
+                sessao, resposta.model, resposta.input_tokens, resposta.output_tokens,
+                resposta.cache_creation_input_tokens, resposta.cache_read_input_tokens, resposta.provider,
+            )
+            linha.custo_usd, linha.preco_id, linha.creditos_consumidos = custo, preco_id, creditos
         sessao.add(linha)
+        sessao.flush()
+        if resposta is not None and linha.creditos_consumidos:
+            politica = finops.creditos.politica_vigente(sessao)
+            finops.creditos.debitar_consumo(sessao, ctx.tenant_id, linha.creditos_consumidos, linha.id, bool(politica and politica.permite_excedente))
         sessao.commit()
     except Exception:  # noqa: BLE001
         sessao.rollback()
@@ -106,6 +121,11 @@ def gerar(db: Session, llm: LLMProvider, ctx: ContextoIA, requisicao: LLMRequest
         except LimiteDeTaxaExcedido as erro:
             _registrar(db, ctx, feature, gatilho, modelo.classe.value, modelo.id, None, 0, "bloqueado", "limite automático por hora")
             raise RegraNegocioViolada("Limite de uso automático de IA atingido nesta hora.") from erro
+
+    motivo = finops.orcamentos.motivo_de_bloqueio(db, ctx.tenant_id, feature.modulo, feature.nome)
+    if motivo is not None:
+        _registrar(db, ctx, feature, gatilho, modelo.classe.value, modelo.id, None, 0, "bloqueado", motivo)
+        raise RegraNegocioViolada(f"IA indisponível: {motivo}.")
 
     requisicao = requisicao.model_copy(
         update={

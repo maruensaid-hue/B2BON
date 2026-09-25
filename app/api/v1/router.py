@@ -26,6 +26,7 @@ from app.api.v1.decisores import router as decisores_router
 from app.api.v1.email_direto import router as email_direto_router
 from app.api.v1.envios import router as envios_router
 from app.api.v1.faq import router as faq_router
+from app.api.v1.finops import router as finops_router
 from app.api.v1.icp import router as icp_router
 from app.api.v1.indicacoes import router as indicacoes_router
 from app.api.v1.inteligencia_rede import router as inteligencia_rede_router
@@ -175,3 +176,6 @@ router.include_router(map_api_router)
 router.include_router(predator_api_router)
 # Fase 4 — B2B ON Intelligence (Corporate Brain, perfis, aprendizado, auditoria de IA).
 router.include_router(inteligencia_router, dependencies=_exige_licenca)
+# Fase 5 — AI FinOps & Credits. Sem gate de licença: o super_admin opera a
+# plataforma; as rotas do tenant exigem papel admin (checado no router).
+router.include_router(finops_router)

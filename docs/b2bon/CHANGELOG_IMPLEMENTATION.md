@@ -1,5 +1,17 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 5 — AI FinOps & Credits (2026-09-25)
+
+- Custo do provedor por chamada (tabela `preco_modelo_ia` versionada, 6 modelos).
+- Créditos: política `PENDING_DEFINITION` (taxa a definir pelo PO), carteira por tenant, extrato, excedente.
+- Orçamentos/quotas por tenant/módulo/feature com bloqueio antes do provedor.
+- Dashboard FinOps (super_admin, USD) e consumo do tenant (créditos, sem USD). UI: Admin → IA & Créditos.
+- Migração `f892ebf6e6f9`.
+
+## Merge paralelo (2026-09-25)
+
+- Integradas as features de outra sessão (captura pública de lead, representantes com comissão, e-mail de notificação da Rede). Migração de merge `b53c1ac42468`.
+
 ## Fase 4 — AI Intelligence Foundation (2026-09-25)
 
 - AI Gateway único (14/14 chamadas), roteador C0–C3, registro de features/agentes/ferramentas.
