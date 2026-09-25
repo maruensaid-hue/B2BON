@@ -71,7 +71,7 @@ def test_score_de_risco_por_conta_e_identico_pelo_modelo_canonico(db_session):
 
     for conta in contas:
         interno = map_contract.score_risco_conta(db_session, conta)
-        canonico = map_contract.saude.score_risco(fonte, refs[cid("account", conta.id)])
+        canonico = map_contract.score_risco(fonte, refs[cid("account", conta.id)])
         assert (canonico["score"], canonico["classificacao"], canonico["sinais"]) == (
             interno["score"], interno["classificacao"], interno["sinais"],
         ), conta.nome

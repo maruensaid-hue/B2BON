@@ -15,6 +15,8 @@ calcular_roi = economics.calcular_roi
 listar_interacoes = interacoes.listar_interacoes
 TIPOS_INTERACAO_VALIDOS = risk.TIPOS_VALIDOS
 calcular_score = risk.calcular_score
+score_risco = saude.score_risco
+calcular_cs_score = economics.calcular_cs_score
 classificar = risk.classificar
 
 

@@ -40,6 +40,9 @@ from app.api.v1.optout import router as optout_router
 from app.api.v1.painel import router as painel_router
 from app.api.v1.parceiros import router as parceiros_router
 from app.api.v1.planos import router as planos_router
+from app.api.v1.plataforma_api import router as plataforma_api_router
+from app.api.v1.produto.map_api import router as map_api_router
+from app.api.v1.produto.predator_api import router as predator_api_router
 from app.api.v1.prospeccao_contas import router as prospeccao_contas_router
 from app.api.v1.regras_aprendidas import router as regras_aprendidas_router
 from app.api.v1.relatorios import router as relatorios_router
@@ -155,3 +158,9 @@ router.include_router(saude_conta_router, dependencies=_exige_map)
 router.include_router(registro_oportunidade_router, dependencies=_exige_predator)
 router.include_router(usuarios_router, dependencies=_exige_licenca)
 router.include_router(template_proposta_router, dependencies=_exige_crm)
+# Fase 3 — plataforma de API. Gestão (JWT, admin) exige licença ativa;
+# a API de produto autentica por chave de API (`autenticar_api` faz
+# licença + módulo + escopo por conta própria, sem JWT).
+router.include_router(plataforma_api_router, dependencies=_exige_licenca)
+router.include_router(map_api_router)
+router.include_router(predator_api_router)

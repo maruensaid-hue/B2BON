@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.contexts.shared.canonical.base import DataClassification
+from app.core.observability import correlation_id_atual
 from app.models.evento_dominio import EventoDominio
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,9 @@ _handlers: dict[str, list[Handler]] = defaultdict(list)
 
 
 def inscrever(tipo: TipoEvento | str, handler: Handler) -> None:
-    _handlers[str(tipo)].append(handler)
+    """Idempotente: inscrever o mesmo handler duas vezes não duplica entrega."""
+    if handler not in _handlers[str(tipo)]:
+        _handlers[str(tipo)].append(handler)
 
 
 def cancelar_inscricoes() -> None:
@@ -102,7 +105,7 @@ def publicar(
         agregado_id=str(agregado_id),
         ator_id=ator_id,
         classificacao=str(classificacao),
-        correlation_id=correlation_id,
+        correlation_id=correlation_id or correlation_id_atual(),
         payload=payload or {},
         tentativas=0,
     )

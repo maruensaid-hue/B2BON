@@ -16,7 +16,7 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[2]
 APP = RAIZ / "app"
-CONTEXTOS = {"crm", "map", "predator", "shared"}
+CONTEXTOS = {p.name for p in (APP / "contexts").iterdir() if p.is_dir() and not p.name.startswith("__")}
 
 
 def _imports(arquivo: Path) -> list[str]:

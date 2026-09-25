@@ -100,3 +100,26 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   validada em Postgres 16 local (upgrade → downgrade -1 → upgrade),
   além do teste SQLite existente.
 - **Status**: ACEITA.
+
+## D-013 · 2026-09-25 · Fase 3 · API de produto separada, autenticada por chave de API do tenant com escopos
+- **Decisão**: `/api/v1/map/*` e `/api/v1/predator/*` aceitam só chave
+  `b2bk_…` (hash SHA-256), com escopos por módulo/operação, rate limit
+  por chave, licença e módulo checados no backend. JWT não abre a API de
+  produto.
+- **Consequência**: integrações de clientes não usam credencial de
+  usuário humano; revogação é por chave.
+- **Status**: ACEITA.
+
+## D-014 · 2026-09-25 · Fase 3 · MAP API aceita dados canônicos no corpo
+- **Decisão**: sem conector instalado, um CRM externo pode enviar
+  contas/oportunidades/interações no modelo canônico e receber a análise
+  do MAP, sem persistência. `tenant_id` do corpo é sempre substituído.
+- **Consequência**: o MAP é consumível por CRM externo já na Fase 3
+  (§11), com resultado idêntico ao do CRM interno para os mesmos dados
+  (teste de contrato).
+- **Status**: ACEITA.
+
+## D-015 · 2026-09-25 · Fase 3 · Webhooks de saída consomem o outbox; só PUBLIC/INTERNAL saem
+- **Decisão**: entregas únicas por (assinatura, evento), assinatura
+  HMAC com timestamp, segredo criptografado em repouso, retry com backoff.
+- **Status**: ACEITA.

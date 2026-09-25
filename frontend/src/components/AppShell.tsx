@@ -105,6 +105,7 @@ const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
 // API de provisionamento/billing (Fase 2 da hierarquia, raio-X) — exclusivo
 // de admin de tenant tipo="distribuidor" (decisão validada com o usuário).
 const ADMIN_NAV_ITEM_INTEGRACOES: NavItem = { path: "/admin/integracoes", label: "Integrações", icon: "🔌" };
+const ADMIN_NAV_ITEM_API: NavItem = { path: "/admin/api", label: "API & Webhooks", icon: "🧩" };
 
 const CLASSE_ITEM_BASE =
   "mb-0.5 flex items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-2 text-[12.5px] whitespace-nowrap text-nav-muted transition-colors";
@@ -775,6 +776,7 @@ export function AppShell() {
                   <NavButton key={item.path} {...item} collapsed={collapsed} />
                 ))}
               {ehAdminDistribuidor && <NavButton {...ADMIN_NAV_ITEM_INTEGRACOES} collapsed={collapsed} />}
+              {(isAdmin || isSuperAdmin) && <NavButton {...ADMIN_NAV_ITEM_API} collapsed={collapsed} />}
               <NavButton {...ADMIN_NAV_ITEM_CONVITES} collapsed={collapsed} />
               {isSuperAdmin &&
                 ADMIN_NAV_ITEMS_SUPER_ADMIN.map((item) => <NavButton key={item.path} {...item} collapsed={collapsed} />)}

@@ -53,6 +53,12 @@ from app.models.pergunta_agente_corporativo import PerguntaAgenteCorporativo
 from app.models.pesquisa_nps import PesquisaNps
 from app.models.registro_uso_ia import RegistroUsoIa
 from app.models.evento_dominio import EventoDominio
+from app.models.chave_api_tenant import ChaveApiTenant
+from app.models.registro_idempotencia import RegistroIdempotencia
+from app.models.assinatura_webhook_tenant import AssinaturaWebhookTenant
+from app.models.entrega_webhook import EntregaWebhook
+from app.models.conexao_integracao import ConexaoIntegracao
+from app.models.execucao_sync import ExecucaoSync
 from app.models.plano import Plano
 from app.models.proposta_negocio import PropostaNegocio
 from app.models.template_proposta import ItemTemplateProposta, TemplateProposta
@@ -179,6 +185,12 @@ __all__ = [
     "PerguntaAgenteCorporativo",
     "RegistroUsoIa",
     "EventoDominio",
+    "ChaveApiTenant",
+    "RegistroIdempotencia",
+    "AssinaturaWebhookTenant",
+    "EntregaWebhook",
+    "ConexaoIntegracao",
+    "ExecucaoSync",
     "CacheMercadoExterno",
     "EmailDireto",
     "EmailRecebido",

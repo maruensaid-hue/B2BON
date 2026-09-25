@@ -41,13 +41,16 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-030 | CI só em `master`; `staging` sem CI | `.github/workflows/ci.yml` | Regressões chegam ao staging | — (OI-005) | PAID (Fase 1, D-009) |
 | TD-031 | Sem lock file Python (`pyproject.toml` com ranges) | comentários no próprio `pyproject`/`claude_provider.py` | Drift de SDK já causou incidente | 17 | OPEN |
 | TD-032 | Rate limit em memória, 1 instância, sem fila/worker | `app/core/rate_limit.py` | Não escala horizontalmente | 17 | OPEN |
-| TD-033 | Sem correlation ID nem métricas; só logging + Sentry | `app/core/logging.py` | Observabilidade (§76) | 3 | OPEN |
+| TD-033 | Sem correlation ID nem métricas; só logging + Sentry | `app/core/logging.py` | Observabilidade (§76) | 3 | IN_PROGRESS: correlation ID + log de acesso (Fase 3); métricas agregadas na Fase 17 |
 | TD-034 | Testes de mídia dependem de `ffmpeg` no host, sem skip quando ausente | 6 falhas no ambiente sem ffmpeg | Suite falha fora do CI | 1 | PAID (Fase 1: `tests/markers.py::requer_ffmpeg`) |
 | TD-035 | 25 warnings de lint (`react-hooks/exhaustive-deps`) no frontend | `npm run lint` | Bugs sutis de re-render | oportunista | OPEN |
 | TD-036 | Documentação de arquitetura duplicada (raiz × `docs/b2bon/`) | D-003 | Confusão sobre qual é a fonte | 1 | PAID (Fase 1: aviso no topo dos 5 docs de raiz) |
 | TD-038 | `crm_service` ↔ `saude_conta_service` tinham import circular (mitigado com import local) | Fase 0 | Frágil | 1 | PAID (Fase 1: nenhum dos dois importa mais o outro) |
 | TD-039 | Shims de compatibilidade em `conta_service`, `crm_service` e `metricas_service` (aliases para os contextos) | Fase 1 | Dois caminhos para a mesma função | 2–3 (remover quando não houver chamador) | OPEN |
 | TD-040 | `decisores_da_conta(db, conta_id)` não filtra por tenant (confia em validação prévia do chamador) | `contexts/shared/organizations.py` | Risco de isolamento se chamado sem `obter_conta` antes | 2 | OPEN |
-| TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher ainda sem gatilho | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
+| TD-043 | Telas da B2B ON chamam rotas internas, não a API de produto (cliente zero só no nível de contrato) | `05_API_ARCHITECTURE.md` §8 | Duas superfícies HTTP para a mesma regra | 14/17 | OPEN |
+| TD-044 | `AssinaturaWebhookParceiro.segredo` (API de Distribuidor, pré-Fase 3) grava o segredo HMAC em texto puro | `app/models/assinatura_webhook_parceiro.py` | Vazamento do banco expõe segredo de assinatura | 17 | OPEN |
+| TD-045 | Rate limit da API de produto é em memória (1 instância) | `app/core/rate_limit.py` | Limite não vale entre instâncias | 17 | OPEN |
+| TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher com gatilho por cron desde a Fase 3 | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
 | TD-042 | `B2BOnCrmAdapter.list_*` sem paginação para pipelines/estágios/ofertas e `CanonicalMapDataSource` carrega tudo em memória | `adapters/b2bon_crm.py`, `map/data_source.py` | Custo em tenants grandes | 17 | OPEN |
 | TD-037 | `starlette.testclient` com `httpx` deprecated (warning) | saída do pytest | Quebra futura na atualização | oportunista | OPEN |

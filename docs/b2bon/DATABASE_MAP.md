@@ -52,6 +52,8 @@ O `SECURITY_BOUNDARIES.md` de raiz diz que o staging de CNPJ é a
 
 **Fase 2:** nova tabela `evento_dominio` (outbox de eventos, `tenant_id` + FK). Total: 93 tabelas.
 
+**Fase 3:** `chave_api_tenant`, `registro_idempotencia`, `assinatura_webhook_tenant`, `entrega_webhook`, `conexao_integracao`, `execucao_sync` (todas com `tenant_id`; segredos/credenciais com Fernet). Total: 99 tabelas.
+
 Nenhuma tabela de Procurement, Bid, Credit Wallet, Usage Ledger
 completo, Entitlement, Integration Registry ou vetores existe.
 

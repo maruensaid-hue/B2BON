@@ -119,3 +119,28 @@ def iterar_todos(listar, tenant_id: str, **kwargs) -> list:
         if not pagina.next_cursor:
             return itens
         cursor = pagina.next_cursor
+
+
+# --- Superfície pública do contexto para fora dele (Fase 3) ----------------------
+def obter_registry():
+    from app.contexts.integrations import registry
+
+    return registry
+
+
+def obter_sync():
+    from app.contexts.integrations import sync
+
+    return sync
+
+
+def adapter_b2bon(db):
+    from app.contexts.integrations.adapters.b2bon_crm import B2BOnCrmAdapter
+
+    return B2BOnCrmAdapter(db)
+
+
+def adapter_de_payload(tenant_id: str, **colecoes: list) -> CrmAdapter:
+    from app.contexts.integrations.adapters.payload import PayloadCrmAdapter
+
+    return PayloadCrmAdapter(tenant_id, **colecoes)

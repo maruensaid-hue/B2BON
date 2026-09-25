@@ -20,3 +20,4 @@
 | Fase | Revisão | O quê |
 |---|---|---|
 | 2 | `1ca76a6cdfbc` | tabela `evento_dominio` |
+| 3 | `494a19ef8c61` | chaves de API, idempotência, webhooks de saída, conexões e execuções de sync |

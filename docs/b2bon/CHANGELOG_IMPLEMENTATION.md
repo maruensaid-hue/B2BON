@@ -1,5 +1,15 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 3 — API & Integration Foundation (2026-09-25)
+
+- API de produto `/api/v1/map/*` e `/api/v1/predator/*` com chave de API por tenant (escopos, rate limit, licença e módulo no backend).
+- MAP API aceita dados canônicos no corpo (CRM externo sem conector).
+- Idempotência (`Idempotency-Key`), webhooks de saída assinados a partir do outbox, cron `/cron/processar-eventos`.
+- Integration Hub: registro de conectores, conexões com credenciais cifradas, framework de sync incremental com retry.
+- Correlation ID (`X-Request-ID`) em respostas, logs e eventos; log de acesso por requisição.
+- UI: Admin → API & Webhooks.
+- Migração `494a19ef8c61` (6 tabelas).
+
 ## Fase 2 — Canonical Business Model (2026-09-25)
 
 - Modelo canônico comercial (21 entidades) e fundação de procurement (20) em `app/contexts/shared/canonical/`.

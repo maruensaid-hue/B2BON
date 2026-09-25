@@ -10,6 +10,7 @@ import app.models  # noqa: F401 — registra as tabelas em Base.metadata
 from app.api.v1.router import router as api_v1_router
 from app.core.config import settings
 from app.core.logging import configure_logging
+from app.core.observability import CorrelationIdMiddleware
 from app.db.base import Base
 from app.db.session import engine
 from app.services.errors import (
@@ -48,12 +49,17 @@ if settings.database_url.startswith("sqlite"):
 
 app = FastAPI(title="B2B ON — PREDATOR", version="0.1.0")
 
+# Adicionado antes do CORS = roda por dentro dele: toda resposta (inclusive
+# erro) sai com `X-Request-ID`.
+app.add_middleware(CorrelationIdMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.origens_cors,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
 )
 
 
