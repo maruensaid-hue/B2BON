@@ -90,6 +90,9 @@ FEATURES: dict[str, Feature] = {
                 "Extrai requisitos, prazos e riscos de edital com citação literal (vai para revisão).", conteudo_externo=True),
         Feature("bids.analise_tr", "bids", "tr_analyzer", ClasseModelo.C3, Gatilho.USUARIO,
                 "Extrai requisitos de termo de referência com citação literal (vai para revisão).", conteudo_externo=True),
+        Feature("procurement.analise_documento", "procurement", "procurement_intelligence_agent", ClasseModelo.C3, Gatilho.USUARIO,
+                "Extrai obrigações, prazos e riscos de documento de compras, com citação literal (uso interno do órgão).",
+                conteudo_externo=True),
         Feature("plataforma.faq", "plataforma", "help_agent", ClasseModelo.C1, Gatilho.USUARIO, "Ajuda sobre como usar a plataforma."),
     ]
 }
@@ -125,13 +128,13 @@ AGENTES: dict[str, Agente] = {
         Agente("opportunity_agent", "Opportunity Agent", "intelligence", StatusAgente.ATIVO),
         Agente("tender_analyzer", "Tender Analyzer", "bids", StatusAgente.ATIVO),
         Agente("tr_analyzer", "Term of Reference Analyzer", "bids", StatusAgente.ATIVO),
-        # §19 — planejados (fases 10, 12)
+        Agente("procurement_intelligence_agent", "Procurement Intelligence Agent", "procurement", StatusAgente.ATIVO),
+        # §19 — planejados (Fase 12: orquestrador multiagente)
         Agente("icp_agent", "ICP Agent", "predator", StatusAgente.PLANEJADO),
         Agente("stakeholder_agent", "Stakeholder Agent", "intelligence", StatusAgente.PLANEJADO),
         Agente("pipeline_agent", "Pipeline Agent", "crm", StatusAgente.PLANEJADO),
         Agente("revenue_agent", "Revenue Agent", "map", StatusAgente.PLANEJADO),
         Agente("churn_intelligence_agent", "Churn Intelligence Agent", "map", StatusAgente.PLANEJADO),
-        Agente("procurement_intelligence_agent", "Procurement Intelligence Agent", "procurement", StatusAgente.PLANEJADO),
         Agente("bid_qualification_agent", "Bid Qualification Agent", "bids", StatusAgente.PLANEJADO),
         Agente("competitive_intelligence_agent", "Competitive Intelligence Agent", "bids", StatusAgente.PLANEJADO),
         Agente("contract_intelligence_agent", "Contract Intelligence Agent", "procurement", StatusAgente.PLANEJADO),

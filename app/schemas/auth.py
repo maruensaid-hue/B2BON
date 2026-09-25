@@ -21,6 +21,7 @@ class RecursosPlanoSchema(BaseModel):
     modulo_predator: bool = False
     modulo_crm: bool = False
     modulo_bids: bool = False
+    modulo_procurement: bool = False
 
 
 class UsuarioSchema(BaseModel):

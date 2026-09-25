@@ -30,6 +30,18 @@ from app.models.email_direto import EmailDireto
 from app.models.email_recebido import EmailRecebido
 from app.models.descarte_conta import DescarteConta
 from app.models.empresa_rede import EmpresaRede
+from app.models.orgao_publico import OrgaoPublico
+from app.models.unidade_compras import UnidadeCompras
+from app.models.plano_contratacao import PlanoContratacao
+from app.models.item_pca import ItemPca
+from app.models.demanda_compra import DemandaCompra
+from app.models.processo_contratacao import ProcessoContratacao
+from app.models.evento_processo import EventoProcesso
+from app.models.fornecedor_compras import FornecedorCompras
+from app.models.contrato_compra import ContratoCompra
+from app.models.evento_contrato_compra import EventoContratoCompra
+from app.models.documento_compras import DocumentoCompras
+from app.models.pesquisa_preco import PesquisaPreco
 from app.models.licitacao import Licitacao
 from app.models.documento_licitacao import DocumentoLicitacao
 from app.models.requisito_licitacao import RequisitoLicitacao
@@ -120,6 +132,18 @@ __all__ = [
     "MaterialOferta",
     "NecessidadeOportunidade",
     "EmpresaRede",
+    "OrgaoPublico",
+    "UnidadeCompras",
+    "PlanoContratacao",
+    "ItemPca",
+    "DemandaCompra",
+    "ProcessoContratacao",
+    "EventoProcesso",
+    "FornecedorCompras",
+    "ContratoCompra",
+    "EventoContratoCompra",
+    "DocumentoCompras",
+    "PesquisaPreco",
     "Licitacao",
     "DocumentoLicitacao",
     "RequisitoLicitacao",

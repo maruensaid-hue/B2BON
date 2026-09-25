@@ -68,6 +68,8 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-060 | Adapter PNCP não validado contra a API real (egress bloqueado no dev) | `bids/fontes/pncp.py` | Ingestão automática desligada | 17 | OPEN |
 | TD-061 | Arquivos de edital/cofre em `LargeBinary` no Postgres | `documento_licitacao`, `documento_cofre` | Crescimento do banco; mover para object storage | 17 | OPEN |
 | TD-062 | Casamento requisito × cofre/oferta é lexical | `bids/conformidade.py` | Requisito com outras palavras vira UNKNOWN | 17 | OPEN |
+| TD-063 | Sem projeção pública de processo publicado para fornecedores (Sell Side ainda não consome oportunidades publicadas na própria plataforma) | `procurement` | Oportunidade só entra no Bids por cadastro/PNCP | 11/13 | OPEN |
+| TD-064 | CRUD genérico do comprador (`/procurement/{recurso}`) valida por coluna, não por schema de negócio por recurso | `api/v1/procurement.py` | Mensagens de validação genéricas | 17 | OPEN |
 | TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher com gatilho por cron desde a Fase 3 | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
 | TD-042 | `B2BOnCrmAdapter.list_*` sem paginação para pipelines/estágios/ofertas e `CanonicalMapDataSource` carrega tudo em memória | `adapters/b2bon_crm.py`, `map/data_source.py` | Custo em tenants grandes | 17 | OPEN |
 | TD-037 | `starlette.testclient` com `httpx` deprecated (warning) | saída do pytest | Quebra futura na atualização | oportunista | OPEN |

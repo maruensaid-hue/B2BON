@@ -66,6 +66,8 @@ O `SECURITY_BOUNDARIES.md` de raiz diz que o staging de CNPJ é a
 
 **Fase 9:** `licitacao`, `documento_licitacao`, `requisito_licitacao`, `documento_cofre`, `decisao_go_no_go`, `contrato_venda_publica`. Total: 118 tabelas.
 
+**Fase 10:** `orgao_publico`, `unidade_compras`, `plano_contratacao`, `item_pca`, `demanda_compra`, `processo_contratacao`, `evento_processo`, `fornecedor_compras`, `contrato_compra`, `evento_contrato_compra`, `pesquisa_preco`, `documento_compras`. Total: 130 tabelas.
+
 Nenhuma tabela de Procurement, Bid, Credit Wallet, Usage Ledger
 completo, Entitlement, Integration Registry ou vetores existe.
 

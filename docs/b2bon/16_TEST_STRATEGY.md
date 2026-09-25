@@ -18,7 +18,7 @@
 | Matriz de entitlement por plano (suíte × avulsos × rotas) | `tests/integration/test_matriz_entitlements.py` | Fase 1 |
 | Isolamento de IA entre tenants (§79, parcial) | `tests/integration/test_isolamento_ia_critico.py` | pré-Fase 0 |
 | Aprovação humana: não aprovado não envia (§81) | `tests/integration/test_aprovacoes.py`, `test_envios.py` | pré-Fase 0 |
-| Barreira Buy/Sell (§80) | — | Fase 10 |
+| Barreira Buy/Sell (§80) | `tests/unit/test_barreira_buy_sell.py` (estrutural), `tests/integration/test_public_procurement.py` (comportamento) | Fase 10 |
 | Nenhuma chamada de IA fora do gateway (§82) | `tests/unit/test_gateway_ia_unico_caminho.py` | Fase 4 |
 | Nenhuma chamada de IA sem custo/créditos (§82, todas as features registradas) | `tests/unit/test_finops.py` | Fase 5 |
 | Isolamento do Corporate Brain / prompt real (§79) | `tests/integration/test_inteligencia_brain.py` | Fase 4 |
@@ -54,3 +54,4 @@
 | 7 | 1.795 passed | lint OK (25 warnings), build OK | 4/4 |
 | 8 | 1.805 passed | lint OK (25 warnings), build OK | 4/4 |
 | 9 | 1.825 passed | lint OK (25 warnings), build OK | 4/4 |
+| 10 | 1.840 passed | lint OK (25 warnings), build OK | 4/4 |

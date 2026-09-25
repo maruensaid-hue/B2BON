@@ -80,6 +80,9 @@ const NAV_ITEM_CEREBRO: NavItem = { path: "/inteligencia/cerebro", label: "Cére
 // Bid Intelligence (Fase 9) — só com o módulo "bids" (B2B ON Public Sector).
 const NAV_ITEM_BIDS: NavItem = { path: "/bids", label: "Licitações", icon: "🏛", end: false };
 
+// Public Procurement (Fase 10) — só com o módulo "procurement" (lado comprador).
+const NAV_ITEM_COMPRAS: NavItem = { path: "/compras", label: "Compras públicas", icon: "🧾", end: false };
+
 // RO (Registro de Oportunidade) — deal registration: qualquer papel
 // registra/vê as próprias oportunidades; "Aprovar Descontos" é só de
 // quem decide desconto pra toda a rede (admin do tenant raiz/distribuidor,
@@ -600,6 +603,7 @@ export function AppShell() {
   const temModuloPredator = temLicencaAtiva && (usuario?.recursos_plano.modulo_predator ?? false);
   const temModuloCrm = temLicencaAtiva && (usuario?.recursos_plano.modulo_crm ?? false);
   const temModuloBids = temLicencaAtiva && (usuario?.recursos_plano.modulo_bids ?? false);
+  const temModuloCompras = temLicencaAtiva && (usuario?.recursos_plano.modulo_procurement ?? false);
   const navItems = temLicencaAtiva
     ? [
         NAV_ITEMS_PAGOS[0],
@@ -607,6 +611,7 @@ export function AppShell() {
         ...(temModuloMap ? [NAV_ITEMS_PAGOS[1]] : []),
         ...(temModuloPredator ? PREDATOR_NAV_ITEMS : []),
         ...(temModuloBids ? [NAV_ITEM_BIDS] : []),
+        ...(temModuloCompras ? [NAV_ITEM_COMPRAS] : []),
         NAV_ITEM_REDE_SOCIAL,
         NAV_ITEM_CEREBRO,
       ]

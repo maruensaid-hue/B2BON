@@ -258,3 +258,23 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   prazos e concorrência são regras explicáveis sem custo de IA. A decisão
   Go/No-Go é humana, com justificativa quando diverge da recomendação.
 - **Status**: ACEITA.
+
+## D-034 · 2026-09-25 · Fase 10 · Barreira Buy/Sell estrutural + testes de comportamento
+- **Decisão**: além de tenant e módulo, a barreira é garantida por
+  construção: só o contexto de procurement, a API do comprador e
+  `app/models` conhecem os dados do comprador (fitness function). O lado
+  comprador não escreve no Corporate Brain. A única direção entre os lados
+  é público → comprador (perfil público no Supplier 360).
+- **Status**: ACEITA.
+
+## D-035 · 2026-09-25 · Fase 10 · Módulo `procurement` com preço PENDING_DEFINITION
+- **Decisão**: módulo no catálogo de entitlements, fora de todos os planos,
+  sem preço (§71). A Fase 15 só roda com os valores do PO.
+- **Status**: ACEITA.
+
+## D-036 · 2026-09-25 · Fase 10 · Risco é sinal para revisão; regime jurídico é parâmetro
+- **Decisão**: o motor de risco nunca conclui irregularidade; mensagens
+  com "requer revisão". Limites que dependem do regime (fragmentação,
+  prazos de alerta) vêm de `orgao_publico.parametros`; sem parâmetro, o
+  sinal não é avaliado e isso é declarado.
+- **Status**: ACEITA.

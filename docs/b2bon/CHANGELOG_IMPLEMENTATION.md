@@ -1,5 +1,14 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 10 — Public Procurement / Buy Side (2026-09-25)
+
+- Contexto `app/contexts/procurement/` e API `/api/v1/procurement/*` (módulo `procurement`, preço PENDING_DEFINITION, fora de todos os planos).
+- Órgãos, unidades, demandas (aprovação por admin, análise para revisão), PCA com painel, processos com workspace e auditoria, fornecedores (Supplier 360), contratos e eventos, pesquisa de preços, documentos com IA ancorada.
+- Motor de risco (11 sinais, "requer revisão") e próxima ação.
+- Barreira Buy/Sell: fitness function estrutural + teste crítico §80 (acesso, recuperação, vazamento, IA indireta, mesmo tenant).
+- Shared Kernel: extração de documentos e grounding usados por Bids e Procurement.
+- UI: Compras públicas. Migração `815caa6c49f8`. Nenhum preço criado ou alterado.
+
 ## Fase 9 — Bid Intelligence / Sell Side (2026-09-25)
 
 - Contexto `app/contexts/bids/` e API `/api/v1/bids/*` (módulo `bids`, fora de todos os planos até decisão do PO).

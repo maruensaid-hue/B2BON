@@ -127,3 +127,33 @@ def como_dict(empresa: EmpresaRede) -> dict:
         "status": empresa.status,
         "origem": empresa.origem,
     }
+
+
+def perfil_publico_por_cnpj(db: Session, cnpj: str | None) -> dict | None:
+    """Perfil público de uma empresa da rede pelo CNPJ (Fase 10: Supplier 360
+    do comprador). Só campos públicos, só se a empresa estiver no diretório.
+    Leitura: não cria identidade."""
+    digitos = normalizar_cnpj(cnpj)
+    if not digitos:
+        return None
+    empresa = (
+        db.query(EmpresaRede)
+        .filter(EmpresaRede.cnpj == digitos, EmpresaRede.tenant_id.isnot(None), EmpresaRede.status != "MESCLADA")
+        .first()
+    )
+    perfil = db.query(PerfilEmpresa).filter_by(tenant_id=empresa.tenant_id).one_or_none() if empresa else None
+    if perfil is None or not perfil.visivel_no_diretorio:
+        return None
+    return {
+        "origem": "SELF_DECLARED",
+        "fonte": "B2B ON Business Network (perfil público)",
+        "nome_exibicao": perfil.nome_exibicao,
+        "setor": perfil.setor,
+        "site": perfil.site,
+        "porte": perfil.porte,
+        "sede_uf": perfil.sede_uf,
+        "produtos_servicos": perfil.produtos_servicos or [],
+        "tecnologias": perfil.tecnologias or [],
+        "certificacoes": perfil.certificacoes or [],
+        "verificada_pela_plataforma": empresa.status == "VERIFICADA",
+    }

@@ -32,6 +32,10 @@ const Licitacoes = lazy(() => import("@/pages/bids/Licitacoes").then((m) => ({ d
 const LicitacaoWorkspace = lazy(() =>
   import("@/pages/bids/LicitacaoWorkspace").then((m) => ({ default: m.LicitacaoWorkspace })),
 );
+const ComprasPublicas = lazy(() => import("@/pages/compras/ComprasPublicas").then((m) => ({ default: m.ComprasPublicas })));
+const ProcessoWorkspace = lazy(() =>
+  import("@/pages/compras/ProcessoWorkspace").then((m) => ({ default: m.ProcessoWorkspace })),
+);
 const CerebroCorporativo = lazy(() =>
   import("@/pages/inteligencia/CerebroCorporativo").then((m) => ({ default: m.CerebroCorporativo })),
 );
@@ -281,6 +285,22 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <LicitacaoWorkspace />
+              </Suspense>
+            }
+          />
+          <Route
+            path="compras"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <ComprasPublicas />
+              </Suspense>
+            }
+          />
+          <Route
+            path="compras/processos/:id"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <ProcessoWorkspace />
               </Suspense>
             }
           />

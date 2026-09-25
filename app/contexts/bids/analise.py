@@ -10,15 +10,13 @@ Documento longo é analisado em blocos de páginas; cada bloco é uma chamada
 medida. Acima do teto de blocos, a análise é parcial e isso é declarado.
 """
 
-import json
-import re
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from app.contexts.bids.tipos import CATEGORIAS_REQUISITO
 from app.contexts.intelligence.contract import ContextoIA, aprendizado, gerar, prompt_seguro
-from app.contexts.shared import texto
+from app.contexts.shared import grounding, texto
 from app.core.observability import correlation_id_atual
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
@@ -43,41 +41,6 @@ _SISTEMA = (
 )
 
 
-def _blocos(paginas: list[str]) -> list[list[int]]:
-    blocos: list[list[int]] = []
-    atual: list[int] = []
-    tamanho = 0
-    for indice, pagina in enumerate(paginas):
-        if atual and tamanho + len(pagina) > CARACTERES_POR_BLOCO:
-            blocos.append(atual)
-            atual, tamanho = [], 0
-        atual.append(indice)
-        tamanho += len(pagina)
-    if atual:
-        blocos.append(atual)
-    return blocos
-
-
-def _itens(conteudo: str) -> list[dict]:
-    achado = re.search(r"\[.*\]", conteudo, re.DOTALL)
-    if achado is None:
-        return []
-    try:
-        itens = json.loads(achado.group(0))
-    except json.JSONDecodeError:
-        return []
-    return [i for i in itens if isinstance(i, dict)] if isinstance(itens, list) else []
-
-
-def _clausula_valida(clausula: object, pagina_texto: str) -> str | None:
-    if not isinstance(clausula, str):
-        return None
-    clausula = clausula.strip()[:40]
-    if not clausula or not re.search(r"\w", clausula):
-        return None
-    return clausula if clausula.lower() in pagina_texto.lower() else None
-
-
 def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | None, documento: DocumentoLicitacao) -> dict:
     if documento.status_analise == "SEM_TEXTO":
         raise RegraNegocioViolada(
@@ -85,7 +48,7 @@ def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | No
         )
     paginas: list[str] = documento.paginas_texto or []
     feature = FEATURE_TR if documento.tipo == "TR" else FEATURE_EDITAL
-    blocos = _blocos(paginas)
+    blocos = grounding.blocos(paginas, CARACTERES_POR_BLOCO)
     parcial = len(blocos) > MAXIMO_BLOCOS
     blocos = blocos[:MAXIMO_BLOCOS]
 
@@ -96,7 +59,7 @@ def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | No
     criados: list[RequisitoLicitacao] = []
     sem_evidencia = 0
     for bloco in blocos:
-        corpo = "\n".join(f"[[página {i + 1}]]\n{paginas[i]}" for i in bloco)
+        corpo = grounding.corpo_do_bloco(paginas, bloco)
         resposta = gerar(
             db, llm,
             ContextoIA(tenant_id=tenant_id, feature=feature, usuario_id=usuario_id,
@@ -107,18 +70,16 @@ def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | No
                 max_tokens=8000,
             ),
         )
-        paginas_do_bloco = [paginas[i] for i in bloco]
-        for item in _itens(resposta.content)[:MAXIMO_ITENS_POR_BLOCO]:
+        for item in grounding.itens_json(resposta.content)[:MAXIMO_ITENS_POR_BLOCO]:
             descricao = str(item.get("descricao") or "").strip()[:500]
             citacao = str(item.get("citacao") or "").strip()[:2000]
             categoria = str(item.get("categoria") or "").strip().upper()
             if not descricao or categoria not in CATEGORIAS_REQUISITO:
                 continue
-            pagina_relativa = texto.localizar_pagina(paginas_do_bloco, citacao) if citacao else None
-            if pagina_relativa is None:
+            pagina = grounding.ancorar(paginas, bloco, citacao)
+            if pagina is None:
                 sem_evidencia += 1
                 continue
-            pagina = bloco[pagina_relativa - 1] + 1
             chave = texto.normalizar(descricao)
             if chave in existentes:
                 continue
@@ -126,7 +87,7 @@ def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | No
             requisito = RequisitoLicitacao(
                 tenant_id=tenant_id, licitacao_id=documento.licitacao_id, documento_id=documento.id,
                 categoria=categoria, descricao=descricao, evidencia=citacao, pagina=pagina,
-                clausula=_clausula_valida(item.get("clausula"), paginas[pagina - 1]),
+                clausula=grounding.clausula_valida(item.get("clausula"), paginas[pagina - 1]),
                 origem="ia", status="sugerido", correlation_id=correlation_id_atual(),
             )
             db.add(requisito)
