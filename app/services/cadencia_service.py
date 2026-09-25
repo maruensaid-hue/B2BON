@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.aprovacao import Aprovacao
@@ -23,7 +24,6 @@ from app.services import (
     comunicacao_service,
     franquia_service,
     limite_criacao_service,
-    llm_helpers,
     regra_aprendida_service,
     reputacao_service,
 )
@@ -415,6 +415,7 @@ _TENTATIVAS_POR_TOQUE = 3
 
 
 def _gerar_conteudo_toque(
+    db: Session,
     llm: LLMProvider,
     icp: ICP,
     oferta: Oferta,
@@ -485,7 +486,11 @@ def _gerar_conteudo_toque(
             # max_tokens acima do default (1024) — mensagens de prospecção
             # em português, com contexto de ICP/oferta, às vezes batiam no
             # teto padrão e voltavam cortadas ao meio (ver claude_provider.py).
-            resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt, max_tokens=2048))
+            resposta = intel.gerar(
+                db, llm,
+                intel.ContextoIA(tenant_id=conta.tenant_id, feature="predator.mensagem_cadencia", entidade_tipo="conta", entidade_id=conta.id),
+                LLMRequest(prompt=prompt, max_tokens=2048),
+            )
         except RegraNegocioViolada as erro:
             # Raio-X: a retentativa engolia esse erro sem logar nada — o
             # Render só mostrava "POST .../messages 400 Bad Request" (do
@@ -576,7 +581,7 @@ def gerar_para_lote(
         for toque in toques:
             variante = variante_ab_para_decisor(decisor.id) if toque.ab_teste_habilitado else None
             conteudo, assunto, falhou_por_erro_ia = _gerar_conteudo_toque(
-                llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal]
+                db, llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal]
             )
             if conteudo is None:
                 if falhou_por_erro_ia:

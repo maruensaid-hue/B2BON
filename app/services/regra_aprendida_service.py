@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.aprovacao import Aprovacao
@@ -9,7 +10,7 @@ from app.models.conta import Conta
 from app.models.mensagem import Mensagem
 from app.models.regra_aprendida import RegraAprendida
 from app.schemas.regra_aprendida import RegraAprendidaCreateSchema
-from app.services import auditoria_service, llm_helpers
+from app.services import auditoria_service
 from app.services.errors import NaoEncontrado
 
 # Correções recentes (raio-X 2026-09-17, Peça 2 do loop de aprendizado)
@@ -261,5 +262,9 @@ def sugerir_regra_com_ia(db: Session, tenant_id: str, correcao_log_id: int, llm:
             "motivo nas próximas mensagens geradas. Responda só com a regra, sem explicações nem aspas."
         )
 
-    resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt, max_tokens=200))
+    resposta = intel.gerar(
+        db, llm,
+        intel.ContextoIA(tenant_id=tenant_id, feature="predator.sugerir_regra", entidade_tipo="audit_log", entidade_id=correcao_log_id),
+        LLMRequest(prompt=prompt, max_tokens=200),
+    )
     return resposta.content.strip()

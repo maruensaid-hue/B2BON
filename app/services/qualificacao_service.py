@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
@@ -18,7 +19,6 @@ from app.services import (
     auditoria_service,
     cadencia_service,
     faq_service,
-    llm_helpers,
     notificacao_service,
     scoring_service,
 )
@@ -101,8 +101,10 @@ def processar_mensagem_recebida(
         else ""
     )
 
-    resposta = llm_helpers.gerar(
+    resposta = intel.gerar(
+        db,
         llm,
+        intel.ContextoIA(tenant_id=tenant_id, feature="predator.qualificacao", entidade_tipo="conversa_qualificacao", entidade_id=conversa.id),
         LLMRequest(
             prompt=(
                 "Você conduz uma qualificação de vendas pelo método S.H.A.R.K. "

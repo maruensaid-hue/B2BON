@@ -29,6 +29,7 @@ from app.api.v1.icp import router as icp_router
 from app.api.v1.indicacoes import router as indicacoes_router
 from app.api.v1.inteligencia_rede import router as inteligencia_rede_router
 from app.api.v1.integracoes import router as integracoes_router
+from app.api.v1.inteligencia import router as inteligencia_router
 from app.api.v1.leads import router as leads_router
 from app.api.v1.linkedin import router as linkedin_router
 from app.api.v1.motor import router as motor_router
@@ -164,3 +165,5 @@ router.include_router(template_proposta_router, dependencies=_exige_crm)
 router.include_router(plataforma_api_router, dependencies=_exige_licenca)
 router.include_router(map_api_router)
 router.include_router(predator_api_router)
+# Fase 4 — B2B ON Intelligence (Corporate Brain, perfis, aprendizado, auditoria de IA).
+router.include_router(inteligencia_router, dependencies=_exige_licenca)

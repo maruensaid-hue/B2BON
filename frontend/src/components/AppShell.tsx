@@ -74,6 +74,9 @@ const LEADS_NAV_ITEMS: NavItem[] = [
 // (entrou via convite-vitrine, Onda H) tem acesso.
 const NAV_ITEM_REDE_SOCIAL: NavItem = { path: "/rede-social", label: "Shoal", icon: "◎", end: false };
 
+// B2B ON Intelligence (Fase 4) — Corporate Brain do tenant, qualquer plano pago.
+const NAV_ITEM_CEREBRO: NavItem = { path: "/inteligencia/cerebro", label: "Cérebro Corporativo", icon: "🧬" };
+
 // RO (Registro de Oportunidade) — deal registration: qualquer papel
 // registra/vê as próprias oportunidades; "Aprovar Descontos" é só de
 // quem decide desconto pra toda a rede (admin do tenant raiz/distribuidor,
@@ -598,6 +601,7 @@ export function AppShell() {
         ...(temModuloMap ? [NAV_ITEMS_PAGOS[1]] : []),
         ...(temModuloPredator ? PREDATOR_NAV_ITEMS : []),
         NAV_ITEM_REDE_SOCIAL,
+        NAV_ITEM_CEREBRO,
       ]
     : [NAV_ITEM_REDE_SOCIAL];
 
@@ -742,6 +746,8 @@ export function AppShell() {
           <div data-tour-id="rede-social">
             <NavButton {...NAV_ITEM_REDE_SOCIAL} collapsed={collapsed} />
           </div>
+
+          {temLicencaAtiva && <NavButton {...NAV_ITEM_CEREBRO} collapsed={collapsed} />}
 
           {temModuloPredator && (
             <div data-tour-id="leads">

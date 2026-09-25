@@ -2,10 +2,10 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **PHASE 4 — AI INTELLIGENCE FOUNDATION** |
-| Última fase concluída | PHASE 3 — API & INTEGRATION FOUNDATION (2026-09-25) |
+| **CURRENT PHASE** | **PHASE 5 — AI FINOPS & CREDITS** |
+| Última fase concluída | PHASE 4 — AI INTELLIGENCE FOUNDATION (2026-09-25) |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/PHASE_3_COMPLETION.md` |
+| Relatório da última fase | `phases/PHASE_4_COMPLETION.md` |
 
 ## Autorizações
 
@@ -17,10 +17,11 @@
 ## Pendências abertas relevantes
 
 - **OI-001** (crítica): limites 0 nos planos PREDATOR avulsos. Depende de valores do PO.
+- **OI-010** (alta): verificar em produção se as features de IA falhavam por `temperature` com `claude-sonnet-5` (corrigido no código).
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
 
-## Baseline de qualidade (após a Fase 3)
+## Baseline de qualidade (após a Fase 4)
 
-- Backend: 1.625 passed. Migrações validadas também em Postgres 16.
+- Backend: 1.648 passed. Migrações validadas também em Postgres 16.
 - Frontend: lint OK (25 warnings), build OK.
 - E2E: 4/4.

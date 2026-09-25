@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.atividade import Atividade
@@ -23,7 +24,7 @@ from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
 from app.models.sala_corporativa import SalaCorporativa
 from app.models.sinal_oportunidade import SinalOportunidade
 from app.models.tenant import Tenant
-from app.services import auditoria_service, conta_service, llm_helpers
+from app.services import auditoria_service, conta_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 _STATUS_SINAL_IMUTAVEIS = {"convertido", "descartado"}
@@ -214,7 +215,9 @@ def sugerir_fornecedores_para_intent(db: Session, tenant_id: str, intent_id: int
     return matches
 
 
-def explicar_match_com_ia(db: Session, intent_id: int, tenant_id_candidato: str, llm: LLMProvider) -> str:
+def explicar_match_com_ia(
+    db: Session, intent_id: int, tenant_id_candidato: str, llm: LLMProvider, tenant_id_solicitante: str | None = None
+) -> str:
     """UMA chamada real de IA (mesmo padrão de
     `regra_aprendida_service.sugerir_regra_com_ia`, Peça 3) — só
     escreve uma frase explicando, em linguagem natural, os motivos
@@ -241,7 +244,11 @@ def explicar_match_com_ia(db: Session, intent_id: int, tenant_id_candidato: str,
         "Em uma frase curta, escreva por que essa empresa pode atender a necessidade, usando só os motivos "
         "acima. Responda só com a frase, sem explicações nem aspas."
     )
-    resposta = llm_helpers.gerar(llm, LLMRequest(prompt=prompt, max_tokens=200))
+    resposta = intel.gerar(
+        db, llm,
+        intel.ContextoIA(tenant_id=tenant_id_solicitante or tenant_id_candidato, feature="network.explicar_match", entidade_tipo="intent", entidade_id=intent_id),
+        LLMRequest(prompt=prompt, max_tokens=200),
+    )
     return resposta.content.strip()
 
 

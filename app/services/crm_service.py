@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.contexts.map import contract as map_contract
 from app.contexts.shared import events as eventos
 from app.llm.base import LLMProvider
@@ -18,13 +19,7 @@ from app.models.negocio import Negocio
 from app.models.oferta import Oferta
 from app.models.usuario import Usuario
 from app.schemas.crm import LinhaImportacaoNegocioSchema
-from app.services import (
-    atividade_service,
-    auditoria_service,
-    conta_service,
-    llm_helpers,
-    panel_service,
-)
+from app.services import atividade_service, auditoria_service, conta_service, panel_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 # Padrão recomendado, não decisão comercial fechada — configurável depois
@@ -906,11 +901,10 @@ def gerar_meeting_brief(db: Session, tenant_id: str, ator_id: str | None, negoci
     oferta = db.query(Oferta).filter_by(id=negocio.oferta_id).one_or_none() if negocio.oferta_id else None
     linha_oferta = f"Oferta vinculada: {oferta.nome} — {oferta.descricao}" if oferta is not None else "Sem oferta vinculada."
 
-    resposta = llm_helpers.gerar_e_registrar(
+    resposta = intel.gerar(
         db,
-        tenant_id,
-        "meeting_agent",
         llm,
+        intel.ContextoIA(tenant_id=tenant_id, feature="crm.meeting_brief", usuario_id=ator_id, entidade_tipo="negocio", entidade_id=negocio.id),
         LLMRequest(
             prompt=(
                 f"Negócio: \"{negocio.nome}\" (R$ {negocio.valor:.2f}), conta \"{conta.nome}\" "
@@ -925,8 +919,6 @@ def gerar_meeting_brief(db: Session, tenant_id: str, ator_id: str | None, negoci
             ),
             system="Você prepara vendedores B2B para reuniões, só com base nos dados fornecidos.",
         ),
-        entidade_tipo="negocio",
-        entidade_id=negocio.id,
     )
 
     auditoria_service.registrar(

@@ -49,7 +49,7 @@ def explicar_match_com_ia(
     db: Session = Depends(get_db),
 ) -> ExplicacaoMatchSchema:
     intent_service.obter_visivel(db, tenant_id, intent_id)
-    explicacao = sinal_oportunidade_service.explicar_match_com_ia(db, intent_id, tenant_id_candidato, llm)
+    explicacao = sinal_oportunidade_service.explicar_match_com_ia(db, intent_id, tenant_id_candidato, llm, tenant_id_solicitante=tenant_id)
     return {"explicacao": explicacao}
 
 

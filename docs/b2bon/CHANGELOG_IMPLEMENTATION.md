@@ -1,5 +1,15 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 4 — AI Intelligence Foundation (2026-09-25)
+
+- AI Gateway único (14/14 chamadas), roteador C0–C3, registro de features/agentes/ferramentas.
+- Correção: `temperature` não é mais enviada a modelos que a rejeitam (`claude-sonnet-5`).
+- Ledger de IA completo (sucesso/falha/bloqueio, cache tokens, correlation id) em sessão própria.
+- Corporate Brain + Context Engine com propósito; perfis de empresa/usuário consolidados; Learning Loop nas aprovações.
+- Anti-injeção: bloco de dados externos + instrução automática; teto de IA automática por tenant/hora.
+- UI: Cérebro Corporativo. API: `/api/v1/inteligencia/*`.
+- Migração `af4fcaf0098f`.
+
 ## Fase 3 — API & Integration Foundation (2026-09-25)
 
 - API de produto `/api/v1/map/*` e `/api/v1/predator/*` com chave de API por tenant (escopos, rate limit, licença e módulo no backend).

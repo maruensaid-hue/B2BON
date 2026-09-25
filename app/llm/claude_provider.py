@@ -24,9 +24,9 @@ class ClaudeProvider(LLMProvider):
             raise LLMIndisponivel("ANTHROPIC_API_KEY não configurada no servidor.")
         try:
             message = self._client.messages.create(
-                model=self._model,
+                model=request.model or self._model,
                 max_tokens=request.max_tokens,
-                temperature=request.temperature,
+                temperature=request.temperature if request.temperature is not None else anthropic.NOT_GIVEN,
                 system=request.system or anthropic.NOT_GIVEN,
                 messages=[{"role": "user", "content": request.prompt}],
             )
@@ -74,4 +74,7 @@ class ClaudeProvider(LLMProvider):
             model=message.model,
             input_tokens=message.usage.input_tokens,
             output_tokens=message.usage.output_tokens,
+            cache_creation_input_tokens=getattr(message.usage, "cache_creation_input_tokens", None) or 0,
+            cache_read_input_tokens=getattr(message.usage, "cache_read_input_tokens", None) or 0,
+            provider="anthropic",
         )

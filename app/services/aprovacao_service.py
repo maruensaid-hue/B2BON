@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.contexts.shared import events as eventos
 from app.models.aprovacao import Aprovacao
 from app.models.decisor import Decisor
@@ -215,6 +216,20 @@ def _obter_aprovacao(db: Session, tenant_id: str, aprovacao_id: int) -> Aprovaca
     return aprovacao
 
 
+def _feature_da_mensagem(mensagem: Mensagem) -> str:
+    return "predator.mensagem_cadencia" if mensagem.cadencia_id else "predator.mensagem_indicacao"
+
+
+def _aprender(db: Session, tenant_id: str, ator_id: str | None, mensagem: Mensagem, tipo: str, dados: dict) -> None:
+    """Learning Loop (Fase 4, §18): toda decisão humana sobre rascunho de IA
+    vira evidência. Sem conteúdo da mensagem (já está na auditoria)."""
+    intel.aprendizado.registrar(
+        db, tenant_id, _feature_da_mensagem(mensagem), tipo,
+        entidade_tipo="mensagem", entidade_id=mensagem.id, usuario_id=ator_id,
+        dados={"canal": mensagem.canal, **dados},
+    )
+
+
 def _publicar_mensagem_aprovada(db: Session, tenant_id: str, ator_id: str | None, mensagem: Mensagem) -> None:
     eventos.publicar(
         db, eventos.TipoEvento.MESSAGE_APPROVED, tenant_id, "mensagem", mensagem.id,
@@ -227,10 +242,12 @@ def aprovar(db: Session, tenant_id: str, ator_id: str | None, aprovacao_id: int)
     aprovacao = _obter_aprovacao(db, tenant_id, aprovacao_id)
     mensagem = db.query(Mensagem).filter_by(id=aprovacao.mensagem_id).one()
 
+    foi_editada = aprovacao.status == "editado"
     aprovacao.status = "aprovado"
     aprovacao.aprovador_id = ator_id
     aprovacao.decidido_em = datetime.now(UTC)
     mensagem.status = "aprovado"
+    _aprender(db, tenant_id, ator_id, mensagem, "APROVADO", {"editada_antes": foi_editada})
 
     auditoria_service.registrar(
         db,
@@ -260,6 +277,7 @@ def aprovar_lote(db: Session, tenant_id: str, ator_id: str | None, aprovacao_ids
 
     agora = datetime.now(UTC)
     for aprovacao, mensagem in zip(aprovacoes, mensagens, strict=True):
+        _aprender(db, tenant_id, ator_id, mensagem, "APROVADO", {"editada_antes": aprovacao.status == "editado", "lote": True})
         aprovacao.status = "aprovado"
         aprovacao.aprovador_id = ator_id
         aprovacao.decidido_em = agora
@@ -290,6 +308,7 @@ def rejeitar(db: Session, tenant_id: str, ator_id: str | None, aprovacao_id: int
     aprovacao.status = "rejeitado"
     aprovacao.aprovador_id = ator_id
     aprovacao.decidido_em = datetime.now(UTC)
+    _aprender(db, tenant_id, ator_id, mensagem, "REJEITADO", {"motivo": (motivo or "")[:300]})
 
     auditoria_service.registrar(
         db,
@@ -412,6 +431,7 @@ def editar_mensagem(
     conteudo_anterior = mensagem.conteudo
     mensagem.conteudo = novo_conteudo
     aprovacao.status = "editado"
+    _aprender(db, tenant_id, ator_id, mensagem, "EDITADO", {"chars_antes": len(conteudo_anterior or ""), "chars_depois": len(novo_conteudo)})
 
     auditoria_service.registrar(
         db,

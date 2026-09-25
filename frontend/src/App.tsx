@@ -24,6 +24,9 @@ const AdminVerificacoesEmpresa = lazy(() =>
   import("@/pages/admin/AdminVerificacoesEmpresa").then((m) => ({ default: m.AdminVerificacoesEmpresa })),
 );
 const AdminTenants = lazy(() => import("@/pages/admin/AdminTenants").then((m) => ({ default: m.AdminTenants })));
+const CerebroCorporativo = lazy(() =>
+  import("@/pages/inteligencia/CerebroCorporativo").then((m) => ({ default: m.CerebroCorporativo })),
+);
 const ApiPlataforma = lazy(() => import("@/pages/admin/ApiPlataforma").then((m) => ({ default: m.ApiPlataforma })));
 const Integracoes = lazy(() => import("@/pages/admin/Integracoes").then((m) => ({ default: m.Integracoes })));
 const Relatorios = lazy(() => import("@/pages/admin/Relatorios").then((m) => ({ default: m.Relatorios })));
@@ -252,6 +255,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <RelatorioEntrega />
+              </Suspense>
+            }
+          />
+          <Route
+            path="inteligencia/cerebro"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <CerebroCorporativo />
               </Suspense>
             }
           />

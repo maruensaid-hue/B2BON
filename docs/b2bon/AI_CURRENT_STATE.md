@@ -1,4 +1,4 @@
-# AI — CURRENT STATE (Fase 0, 2026-09-25)
+# AI — CURRENT STATE (Fase 0, 2026-09-25; ver §8 para o estado após a Fase 4)
 
 Substitui `AI_CURRENT_ARCHITECTURE.md` (raiz, 2026-09-17), que está
 **desatualizado**: ele lista 8 pontos de IA e diz que não há ledger de
@@ -121,3 +121,18 @@ call site:
   o único caminho (com os 11 call sites migrados).
 - **Fase 5 (FinOps)**: o ledger precisa deixar de ser best-effort e
   virar transacional (ou outbox), e ganhar custo por tabela versionada.
+
+
+## 8. Estado após a Fase 4 (2026-09-25)
+
+- **14 de 14 chamadas passam pelo AI Gateway** e são medidas, inclusive
+  as que falham ou são bloqueadas (`06_AI_ARCHITECTURE.md`).
+- Roteamento de modelo C0–C3; 4 features movidas para o modelo econômico.
+- Bug de `temperature` com `claude-sonnet-5` corrigido (OI-010).
+- Gatilhos automáticos (#7 qualificação, #8 bot de reunião, #4 em lote)
+  com teto por tenant/hora.
+- Instrução anti-injeção automática nas 4 features com conteúdo externo;
+  transcrição de reunião entra delimitada.
+- Corporate Brain, Context Engine com propósito, perfis consolidados,
+  Learning Loop sobre as aprovações.
+- Custo e créditos: Fase 5.

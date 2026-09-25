@@ -313,3 +313,27 @@ def test_aprovar_publica_message_approved_e_rejeitar_nao(client, db_session, cad
     client.post(f"/api/v1/aprovacoes/{ids[1]}/aprovar")
     eventos = db_session.query(EventoDominio).filter_by(tipo="MessageApproved").all()
     assert len(eventos) == 1 and eventos[0].ator_id == ATOR_ID
+
+
+def test_decisoes_humanas_viram_eventos_de_aprendizado(client, db_session, cadencia_e_decisor):
+    """Fase 4 (§18): editar, aprovar e rejeitar rascunho de IA geram
+    evidência de aprendizado e eventos AIRecommendation*."""
+    from app.models.evento_aprendizado import EventoAprendizado
+    from app.models.evento_dominio import EventoDominio
+
+    cadencia, decisor, _ = cadencia_e_decisor
+    _propor_mensagem(db_session, cadencia, decisor)
+    _propor_mensagem(db_session, cadencia, decisor)
+    ids = [item["aprovacao_id"] for item in client.get("/api/v1/aprovacoes").json()]
+
+    resposta_edicao = client.put(f"/api/v1/aprovacoes/{ids[0]}/mensagem", json={"conteudo": "Olá, texto revisado."})
+    assert resposta_edicao.status_code == 200, resposta_edicao.text
+    client.post(f"/api/v1/aprovacoes/{ids[0]}/aprovar")
+    client.post(f"/api/v1/aprovacoes/{ids[1]}/rejeitar", json={"motivo": "tom errado"})
+
+    tipos = [e.tipo for e in db_session.query(EventoAprendizado).order_by(EventoAprendizado.id)]
+    assert tipos == ["EDITADO", "APROVADO", "REJEITADO"]
+    aprovado = db_session.query(EventoAprendizado).filter_by(tipo="APROVADO").one()
+    assert aprovado.dados["editada_antes"] is True and aprovado.feature == "predator.mensagem_cadencia"
+    dominio = {e.tipo for e in db_session.query(EventoDominio)}
+    assert {"AIRecommendationAccepted", "AIRecommendationRejected"} <= dominio

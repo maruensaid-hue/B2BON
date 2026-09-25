@@ -53,6 +53,9 @@ from app.models.pergunta_agente_corporativo import PerguntaAgenteCorporativo
 from app.models.pesquisa_nps import PesquisaNps
 from app.models.registro_uso_ia import RegistroUsoIa
 from app.models.evento_dominio import EventoDominio
+from app.models.conhecimento_corporativo import ConhecimentoCorporativo
+from app.models.perfil_inteligencia import PerfilInteligencia
+from app.models.evento_aprendizado import EventoAprendizado
 from app.models.chave_api_tenant import ChaveApiTenant
 from app.models.registro_idempotencia import RegistroIdempotencia
 from app.models.assinatura_webhook_tenant import AssinaturaWebhookTenant
@@ -185,6 +188,9 @@ __all__ = [
     "PerguntaAgenteCorporativo",
     "RegistroUsoIa",
     "EventoDominio",
+    "ConhecimentoCorporativo",
+    "PerfilInteligencia",
+    "EventoAprendizado",
     "ChaveApiTenant",
     "RegistroIdempotencia",
     "AssinaturaWebhookTenant",

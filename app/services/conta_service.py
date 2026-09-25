@@ -5,6 +5,7 @@ from datetime import datetime
 from fpdf import FPDF
 from sqlalchemy.orm import Session
 
+from app.contexts.intelligence import contract as intel
 from app.contexts.predator import contract as predator_contract
 from app.contexts.shared import organizations
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
@@ -35,7 +36,7 @@ from app.models.tarefa_linkedin import TarefaLinkedin
 from app.models.usuario import Usuario
 from app.schemas.conta import ParticipanteEventoSchema
 from app.schemas.decisor import DecisorCreateSchema
-from app.services import atividade_service, auditoria_service, llm_helpers, metricas_service
+from app.services import atividade_service, auditoria_service, metricas_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 
@@ -994,11 +995,10 @@ def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LL
     linhas_atividades = atividade_service.contexto_recentes_texto(db, tenant_id, conta_id=conta.id)
     secao_padroes = _secao_padroes_observados_texto(metricas_service.calcular_padroes_observados(db, tenant_id))
 
-    resposta = llm_helpers.gerar_e_registrar(
+    resposta = intel.gerar(
         db,
-        tenant_id,
-        "sales_strategy_agent",
         llm,
+        intel.ContextoIA(tenant_id=tenant_id, feature="intelligence.estrategia_venda", entidade_tipo="conta", entidade_id=conta.id),
         LLMRequest(
             prompt=(
                 f"Conta: \"{conta.nome}\" ({conta.segmento or 'segmento desconhecido'}, porte "
@@ -1013,8 +1013,6 @@ def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LL
             ),
             system="Você recomenda estratégias de venda B2B, só com base nos dados fornecidos.",
         ),
-        entidade_tipo="conta",
-        entidade_id=conta.id,
     )
     return {"estrategia": resposta.content.strip()}
 
