@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, func, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -41,6 +41,9 @@ class PerfilEmpresa(Base):
     certificacoes: Mapped[list] = mapped_column(JSON, default=list)
     redes_sociais: Mapped[dict] = mapped_column(JSON, default=dict)
     status_verificacao: Mapped[str] = mapped_column(String, default="nao_verificada")
+    # Privacidade (Fase 7): falso tira a empresa do diretório para quem não
+    # é conexão. Padrão verdadeiro = comportamento anterior (OI-014).
+    visivel_no_diretorio: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

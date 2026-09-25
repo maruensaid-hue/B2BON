@@ -1,5 +1,9 @@
+import pytest
+
 from app.services import relacionamento_empresarial_service
 from app.services.errors import NaoAutorizado, NaoEncontrado, ValidacaoFalhou
+
+pytestmark = pytest.mark.usefixtures("tenants_da_rede")
 
 TENANT_A = "tenant-teste"
 TENANT_B = "tenant-outro"
@@ -105,3 +109,12 @@ def test_remover_por_quem_nao_e_origem_falha(db_session):
         assert False, "deveria ter levantado NaoEncontrado"
     except NaoEncontrado:
         pass
+
+
+def test_empresa_citada_nao_ve_aresta_privada_declarada_sobre_ela(db_session):
+    """D-027: antes a listagem da própria empresa trazia as arestas privadas
+    que OUTRA empresa declarou sobre ela."""
+    relacionamento_empresarial_service.declarar(db_session, TENANT_A, None, TENANT_B, "LOOKING_FOR", "privada")
+
+    assert relacionamento_empresarial_service.listar_da_empresa(db_session, TENANT_B, TENANT_B) == []
+    assert len(relacionamento_empresarial_service.listar_da_empresa(db_session, TENANT_A, TENANT_A)) == 1

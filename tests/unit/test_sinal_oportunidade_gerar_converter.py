@@ -1,8 +1,12 @@
+import pytest
+
 from app.models.conta import Conta
 from app.models.icp import ICP
 from app.models.perfil_empresa import PerfilEmpresa
 from app.services import intent_service, relacionamento_empresarial_service, sinal_oportunidade_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
+
+pytestmark = pytest.mark.usefixtures("tenants_da_rede")
 
 TENANT_A = "tenant-teste"
 TENANT_B = "tenant-outro"

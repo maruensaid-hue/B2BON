@@ -4,6 +4,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.contexts.network.contract import privacidade
 from app.models.conexao_empresa import ConexaoEmpresa
 from app.models.mensagem_rede_social import MensagemRedeSocial
 from app.models.oferta import Oferta
@@ -171,6 +172,11 @@ def listar_empresas(
             func.lower(PerfilEmpresa.nome_exibicao).like(termo) | func.lower(PerfilEmpresa.descricao).like(termo)
         )
     perfis = query.all()
+    # Privacidade (Fase 7): empresa fora do diretório só aparece para conexões.
+    ocultas = [perfil for perfil in perfis if not perfil.visivel_no_diretorio]
+    if ocultas:
+        conectados = privacidade.conectados(db, tenant_id_atual)
+        perfis = [perfil for perfil in perfis if perfil.visivel_no_diretorio or perfil.tenant_id in conectados]
     if mercado:
         # JSON list — filtra em Python (portável entre SQLite e Postgres,
         # sem depender de operador JSON específico do dialeto).

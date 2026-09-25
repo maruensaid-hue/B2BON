@@ -281,6 +281,17 @@ def client(
 
 
 @pytest.fixture()
+def tenants_da_rede(db_session: Session) -> None:
+    """Fase 7: relacionamentos da rede ligam identidades de empresas reais,
+    então os testes de serviço precisam das linhas de `tenant` (em Postgres
+    a FK já exigia isso; o SQLite dos testes não aplica FK)."""
+    for tenant_id in ("tenant-teste", "tenant-outro", "tenant-terceiro"):
+        if db_session.get(Tenant, tenant_id) is None:
+            db_session.add(Tenant(id=tenant_id, razao_social=f"Empresa {tenant_id}"))
+    db_session.commit()
+
+
+@pytest.fixture()
 def criar_usuario_autenticado(db_session: Session):
     """Cria um usuário (de um tenant qualquer) e devolve os headers de
     autenticação prontos — usado por testes que precisam de um segundo

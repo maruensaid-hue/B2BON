@@ -1,5 +1,13 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 7 — Business Network Foundation (2026-09-25)
+
+- Contexto `app/contexts/network/`: Company Identity (`empresa_rede`), Company Claim, Membership, Business Graph com as propriedades do §28, regra única de privacidade.
+- Relacionamento com empresa fora da rede por CNPJ; reivindicação por empresa verificada com o mesmo CNPJ.
+- Privacidade: aresta privada deixa de aparecer para a empresa citada; visibilidade `conexoes` implementada; bloqueio esconde feed, intents e arestas; empresa pode sair do diretório.
+- Membership: identidade pública da empresa só por admin (D-026).
+- UI: card "Identidade da empresa na rede". Migração `7dc1428d524f` (com backfill).
+
 ## Fase 6 — Opportunity Intelligence (2026-09-25)
 
 - Contexto `app/contexts/opportunity/`: Discovery Gap, Next Best Offer, Next Best Action, White Space, sinais de compra, riscos e stakeholders faltantes, todos determinísticos e explicáveis.

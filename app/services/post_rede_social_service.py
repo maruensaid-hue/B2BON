@@ -1,6 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.contexts.network.contract import privacidade
 from app.models.comentario_post import ComentarioPost
 from app.models.midia_post import MidiaPost
 from app.models.perfil_empresa import PerfilEmpresa
@@ -187,7 +188,13 @@ def listar_feed(db: Session, tenant_id_atual: str | None = None, limite: int = _
     # `id.desc()` como critério de desempate — `criado_em` pode colidir
     # no mesmo segundo (granularidade do timestamp do banco), e sem isso
     # a ordem entre posts criados quase juntos fica indefinida.
-    posts = db.query(PostRedeSocial).order_by(PostRedeSocial.criado_em.desc(), PostRedeSocial.id.desc()).limit(limite).all()
+    consulta = db.query(PostRedeSocial)
+    if tenant_id_atual is not None:
+        # Privacidade (Fase 7): bloqueio em qualquer direção some com o feed.
+        bloqueados = privacidade.bloqueados(db, tenant_id_atual)
+        if bloqueados:
+            consulta = consulta.filter(PostRedeSocial.tenant_id.notin_(bloqueados))
+    posts = consulta.order_by(PostRedeSocial.criado_em.desc(), PostRedeSocial.id.desc()).limit(limite).all()
     return [_serializar(db, post, tenant_id_atual) for post in posts]
 
 

@@ -59,6 +59,9 @@ Status: `OPEN | IN_PROGRESS | PAID`.
 | TD-051 | Casamento necessidade × oferta é lexical (sem sinônimos/embeddings) | `opportunity/texto.py` | Recomendação perdida quando o cliente usa outras palavras | 17 | OPEN |
 | TD-052 | Pesos do NBO e limiares do NBA (14 dias, 60%) sem calibração com resultado real | `opportunity/nbo.py`, `nba.py` | Ordem de recomendação subótima | 17 | OPEN |
 | TD-053 | Tela de riscos de pipeline fica no menu da Rede (PREDATOR); cliente só CRM tem a API mas não a tela | `InteligenciaRede.tsx` | CRM-only vê riscos só no card do negócio | 7 | OPEN |
+| TD-054 | Neo4j legado (`app/graph`) segue ativo para Conta/Decisor, paralelo ao Business Graph relacional | `app/graph/client.py` | Dois grafos; instância Aura pausa | 17 | OPEN |
+| TD-055 | Bloqueio não registra quem bloqueou (conexão reaproveitada); regra é simétrica | `rede_social_service.bloquear` | Ambos deixam de se ver | 8 | OPEN |
+| TD-056 | Nome de empresa não reivindicada é o informado por quem citou, não o oficial (BrasilAPI) | `network/identidade.por_cnpj` | Nome pode divergir da razão social | 8 | OPEN |
 | TD-041 | Eventos publicados em só 3 fluxos (negócio, estágio, aprovação); dispatcher com gatilho por cron desde a Fase 3 | `EVENT_MODEL.md` | Consumidores não recebem os demais fatos | 3, 6–10 | OPEN |
 | TD-042 | `B2BOnCrmAdapter.list_*` sem paginação para pipelines/estágios/ofertas e `CanonicalMapDataSource` carrega tudo em memória | `adapters/b2bon_crm.py`, `map/data_source.py` | Custo em tenants grandes | 17 | OPEN |
 | TD-037 | `starlette.testclient` com `httpx` deprecated (warning) | saída do pytest | Quebra futura na atualização | oportunista | OPEN |

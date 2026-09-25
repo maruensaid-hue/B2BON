@@ -186,3 +186,37 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   `/atribuicao-receita` (sinais da rede) e o Agente Corporativo continuam
   PREDATOR até a Fase 7 definir o módulo da Business Network.
 - **Status**: ACEITA.
+
+## D-024 · 2026-09-25 · Fase 7 · Business Graph em tabelas relacionais, sem graph database
+- **Contexto**: §29 pede avaliar a infraestrutura existente antes de um
+  graph database. O Neo4j legado (Aura Free) pausa sozinho e só modela
+  dados internos do CRM.
+- **Decisão**: arestas em `relacionamento_empresarial` (com identidade,
+  fonte, validade) e CONNECTED_TO derivada de `conexao_empresa`. Leitura
+  por vizinhança (1 salto) com a regra única de privacidade.
+- **Consequência**: sem travessias profundas por enquanto; reavaliar na
+  Fase 8 (matching) com volume real.
+- **Status**: ACEITA.
+
+## D-025 · 2026-09-25 · Fase 7 · Membership como projeção de usuário → tenant
+- **Decisão**: sem tabela de membros enquanto 1 usuário pertence a 1
+  empresa. Papel na rede: ADMIN (admin/super_admin) ou MEMBRO (user).
+- **Status**: ACEITA.
+
+## D-026 · 2026-09-25 · Fase 7 · Identidade pública da empresa só por admin
+- **Contexto**: antes qualquer usuário editava o perfil da empresa (inclusive
+  o site usado na checagem de domínio da verificação) e declarava
+  relacionamentos em nome dela.
+- **Decisão**: editar perfil, declarar/confirmar/remover relacionamento,
+  reivindicar identidade e mudar visibilidade exigem admin. A UI esconde
+  essas ações para `user`.
+- **Consequência**: mudança de comportamento para usuários `user`
+  (reversível em `membership.ACOES_ADMIN`).
+- **Status**: ACEITA.
+
+## D-027 · 2026-09-25 · Fase 7 · Aresta `privada` é só do autor
+- **Contexto**: a listagem mostrava à empresa citada as arestas privadas
+  que outra empresa declarou sobre ela (ex.: "LOOKING_FOR").
+- **Decisão**: `privada` = só o autor; `conexoes` passa a funcionar
+  (partes + conexões do autor); bloqueio esconde conteúdo nas duas direções.
+- **Status**: ACEITA.

@@ -6,6 +6,7 @@ import { Input, Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import type { PerfilEmpresa } from "@/pages/rede-social/RedeSocial";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 const ROTULOS_VERIFICACAO: Record<string, { texto: string; tone: "green" | "amber" | "muted" | "red" }> = {
   verificada: { texto: "Verificada", tone: "green" },
@@ -66,6 +67,9 @@ export function PerfilEmpresaDetalheModal({
   statusConexao?: string | null;
   onClose: () => void;
 }) {
+  const { usuario } = useAuth();
+  // Membership (Fase 7): declarar/confirmar relacionamento é ação de admin.
+  const admin = usuario?.papel === "admin" || usuario?.papel === "super_admin";
   const [relacionamentos, setRelacionamentos] = useState<RelacionamentoEmpresarial[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [declarando, setDeclarando] = useState(false);
@@ -208,7 +212,7 @@ export function PerfilEmpresaDetalheModal({
                   <Badge tone={relacionamento.confianca === "confirmada_pela_contraparte" ? "green" : "muted"}>
                     {relacionamento.confianca === "confirmada_pela_contraparte" ? "Confirmado" : "Autodeclarado"}
                   </Badge>
-                  {relacionamento.pode_confirmar && (
+                  {admin && relacionamento.pode_confirmar && (
                     <Button
                       size="sm"
                       variant="green"
@@ -225,18 +229,20 @@ export function PerfilEmpresaDetalheModal({
               <div className="text-[11px] text-muted">Nenhum relacionamento comercial declarado ainda.</div>
             )}
           </div>
-          <form onSubmit={declarar} className="mt-2 flex gap-2">
-            <Select name="tipo" className="flex-1">
-              {Object.entries(ROTULOS_RELACIONAMENTO).map(([valor, rotulo]) => (
-                <option key={valor} value={valor}>
-                  {rotulo}
-                </option>
-              ))}
-            </Select>
-            <Button type="submit" size="sm" disabled={declarando}>
-              {declarando ? "Declarando..." : "Declarar"}
-            </Button>
-          </form>
+{admin && (
+            <form onSubmit={declarar} className="mt-2 flex gap-2">
+              <Select name="tipo" className="flex-1">
+                {Object.entries(ROTULOS_RELACIONAMENTO).map(([valor, rotulo]) => (
+                  <option key={valor} value={valor}>
+                    {rotulo}
+                  </option>
+                ))}
+              </Select>
+              <Button type="submit" size="sm" disabled={declarando}>
+                {declarando ? "Declarando..." : "Declarar"}
+              </Button>
+            </form>
+          )}
         </div>
 
         {statusConexao === "aceita" && (

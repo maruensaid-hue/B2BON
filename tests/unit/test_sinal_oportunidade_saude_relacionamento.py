@@ -1,8 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.models.mensagem_rede_social import MensagemRedeSocial
 from app.models.perfil_empresa import PerfilEmpresa
 from app.services import rede_social_service, relacionamento_empresarial_service, sinal_oportunidade_service
+
+pytestmark = pytest.mark.usefixtures("tenants_da_rede")
 
 TENANT_A = "tenant-teste"
 TENANT_B = "tenant-outro"

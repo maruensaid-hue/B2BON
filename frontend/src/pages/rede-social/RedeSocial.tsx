@@ -8,12 +8,14 @@ import { Modal } from "@/components/ui/Modal";
 import { ConversaModal } from "@/pages/rede-social/ConversaModal";
 import { SalaCorporativaModal } from "@/pages/rede-social/SalaCorporativaModal";
 import { PerfilEmpresaDetalheModal } from "@/pages/rede-social/PerfilEmpresaDetalheModal";
+import { IdentidadeRede } from "@/pages/rede-social/IdentidadeRede";
 import { TutorialShoal } from "@/pages/rede-social/TutorialShoal";
 import { api, ApiError, getBlob, postFiles } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export interface PerfilEmpresa {
   tenant_id: string;
+  visivel_no_diretorio?: boolean;
   nome_exibicao: string;
   descricao: string | null;
   setor: string | null;
@@ -874,12 +876,16 @@ export function RedeSocial() {
                 Solicitar verificação
               </Button>
             )}
-            <Button size="sm" onClick={() => setModalPerfilAberto(true)}>
-              Editar
-            </Button>
+            {(usuario?.papel === "admin" || usuario?.papel === "super_admin") && (
+              <Button size="sm" onClick={() => setModalPerfilAberto(true)}>
+                Editar
+              </Button>
+            )}
           </div>
         </div>
       </Card>
+
+      {perfil && <IdentidadeRede visivelNoDiretorio={perfil.visivel_no_diretorio ?? true} aoAlterar={carregarTudo} />}
 
       <Card className="mb-4">
         <div className="mb-2 flex items-center justify-between">

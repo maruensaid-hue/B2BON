@@ -2,11 +2,11 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.network.contract import privacidade
 from app.models.intent import Intent
 from app.models.perfil_empresa import PerfilEmpresa
 from app.services import auditoria_service
 from app.services.errors import NaoAutorizado, NaoEncontrado
-from app.services.rede_social_service import status_conexao_com
 
 
 def _serializar(db: Session, intent: Intent) -> dict:
@@ -72,12 +72,9 @@ def _obter(db: Session, intent_id: int) -> Intent:
     return intent
 
 
-def _visivel_para(db: Session, tenant_id_atual: str, intent: Intent) -> bool:
-    if intent.tenant_id == tenant_id_atual:
-        return True
-    if intent.visibilidade == "publica":
-        return True
-    return status_conexao_com(db, tenant_id_atual, intent.tenant_id) == "aceita"
+def _visivel_para(db: Session, tenant_id_atual: str, intent: Intent, cache: dict | None = None) -> bool:
+    """Regra única da rede (Fase 7): inclui bloqueio em qualquer direção."""
+    return privacidade.pode_ver(db, tenant_id_atual, intent.tenant_id, intent.visibilidade, cache=cache)
 
 
 def obter_visivel(db: Session, tenant_id_atual: str, intent_id: int) -> dict:
@@ -92,7 +89,8 @@ def listar(db: Session, tenant_id_atual: str) -> list[dict]:
     de outros tenants respeitando `visibilidade` (`conexoes` só é
     visível pra quem já tem conexão aceita com o autor)."""
     intents = db.query(Intent).order_by(Intent.criado_em.desc(), Intent.id.desc()).all()
-    visiveis = [intent for intent in intents if _visivel_para(db, tenant_id_atual, intent)]
+    cache: dict = {}
+    visiveis = [intent for intent in intents if _visivel_para(db, tenant_id_atual, intent, cache)]
     return [_serializar(db, intent) for intent in visiveis]
 
 

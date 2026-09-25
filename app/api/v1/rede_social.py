@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_email_provider, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_email_provider, get_tenant_id, get_usuario_atual
+from app.contexts.network.contract import grafo, identidade, membership
+from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
 from app.schemas.rede_social import (
+    DeclararRelacionamentoPorCnpjSchema,
+    VisibilidadeDiretorioSchema,
     AbrirSalaRequestSchema,
     AtualizarPerfilRequestSchema,
     CanalSalaSchema,
@@ -35,6 +39,7 @@ from app.schemas.rede_social import (
     VincularNegocioRequestSchema,
 )
 from app.services import (
+    auditoria_service,
     intent_service,
     notificacao_rede_social_service,
     post_rede_social_service,
@@ -61,8 +66,10 @@ def atualizar_perfil(
     dados: AtualizarPerfilRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> PerfilEmpresaSchema:
+    membership.exigir(usuario, "editar_perfil")
     return rede_social_service.atualizar_perfil(
         db,
         tenant_id,
@@ -221,11 +228,30 @@ def declarar_relacionamento(
     dados: DeclararRelacionamentoRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> RelacionamentoEmpresarialSchema:
     """Business Graph foundation (master prompt §40, Fase 1D)."""
+    membership.exigir(usuario, "gerenciar_relacionamentos")
     return relacionamento_empresarial_service.declarar(
-        db, tenant_id, ator_id, dados.tenant_id_destino, dados.tipo, dados.visibilidade
+        db, tenant_id, ator_id, dados.tenant_id_destino, dados.tipo, dados.visibilidade,
+        dados.valido_desde, dados.valido_ate,
+    )
+
+
+@router.post("/relacionamentos/por-cnpj", response_model=RelacionamentoEmpresarialSchema, status_code=201)
+def declarar_relacionamento_por_cnpj(
+    dados: DeclararRelacionamentoPorCnpjSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> RelacionamentoEmpresarialSchema:
+    """Company Claim (Fase 7): a empresa citada pode ainda não estar na rede."""
+    membership.exigir(usuario, "gerenciar_relacionamentos")
+    return relacionamento_empresarial_service.declarar_por_cnpj(
+        db, tenant_id, ator_id, dados.cnpj, dados.nome, dados.tipo, dados.visibilidade,
+        dados.valido_desde, dados.valido_ate,
     )
 
 
@@ -243,8 +269,10 @@ def confirmar_relacionamento(
     relacionamento_id: int,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> RelacionamentoEmpresarialSchema:
+    membership.exigir(usuario, "gerenciar_relacionamentos")
     return relacionamento_empresarial_service.confirmar(db, tenant_id, ator_id, relacionamento_id)
 
 
@@ -253,9 +281,73 @@ def remover_relacionamento(
     relacionamento_id: int,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> None:
+    membership.exigir(usuario, "gerenciar_relacionamentos")
     relacionamento_empresarial_service.remover(db, tenant_id, ator_id, relacionamento_id)
+
+
+@router.get("/identidade")
+def minha_identidade(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    """Company Identity do tenant e identidades não reivindicadas com o mesmo CNPJ."""
+    propria = identidade.garantir_do_tenant(db, tenant_id)
+    reivindicaveis = identidade.reivindicaveis(db, tenant_id)
+    db.commit()
+    return {
+        "empresa": identidade.como_dict(propria),
+        "reivindicaveis": [identidade.como_dict(e) for e in reivindicaveis],
+    }
+
+
+@router.post("/identidades/{empresa_id}/reivindicar")
+def reivindicar_identidade(
+    empresa_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Company Claim (Fase 7): só admin de empresa verificada com o mesmo CNPJ."""
+    membership.exigir(usuario, "reivindicar")
+    empresa = identidade.reivindicar(db, tenant_id, empresa_id)
+    auditoria_service.registrar(db, tenant_id, "identidade_rede_reivindicada", "empresa_rede", empresa_id, ator_id, {})
+    db.commit()
+    return identidade.como_dict(empresa)
+
+
+@router.get("/grafo/{empresa_id}")
+def grafo_da_empresa(empresa_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
+    """Business Graph (Fase 7): arestas visíveis para quem consulta."""
+    arestas = grafo.arestas_da_empresa(db, tenant_id, empresa_id)
+    db.commit()
+    return [a.model_dump(mode="json") for a in arestas]
+
+
+@router.get("/membros")
+def membros(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
+    """Membership (Fase 7): só os membros da própria empresa."""
+    return membership.membros(db, tenant_id)
+
+
+@router.put("/perfil/visibilidade", response_model=PerfilEmpresaSchema)
+def alterar_visibilidade_diretorio(
+    dados: VisibilidadeDiretorioSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> PerfilEmpresaSchema:
+    membership.exigir(usuario, "visibilidade_diretorio")
+    perfil = rede_social_service.garantir_perfil(db, tenant_id)
+    perfil.visivel_no_diretorio = dados.visivel_no_diretorio
+    auditoria_service.registrar(
+        db, tenant_id, "perfil_visibilidade_diretorio", "perfil_empresa", perfil.id, ator_id,
+        {"visivel_no_diretorio": dados.visivel_no_diretorio},
+    )
+    db.commit()
+    db.refresh(perfil)
+    return perfil
 
 
 @router.post("/posts", response_model=PostRedeSocialSchema, status_code=201)

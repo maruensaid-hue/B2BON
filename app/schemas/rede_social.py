@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PerfilEmpresaSchema(BaseModel):
@@ -23,6 +23,7 @@ class PerfilEmpresaSchema(BaseModel):
     certificacoes: list[str]
     redes_sociais: dict[str, str]
     status_verificacao: str
+    visivel_no_diretorio: bool = True
     criado_em: datetime
     atualizado_em: datetime
 
@@ -96,19 +97,42 @@ class EnviarMensagemRequestSchema(BaseModel):
 class RelacionamentoEmpresarialSchema(BaseModel):
     id: int
     tenant_id_origem: str
-    tenant_id_destino: str
+    tenant_id_destino: str | None
     outro_tenant_nome: str
     tipo: str
     visibilidade: str
     confianca: str
     pode_confirmar: bool
     criado_em: datetime
+    empresa_origem_id: int | None = None
+    empresa_destino_id: int | None = None
+    destino_reivindicado: bool = True
+    fonte: str = "DECLARADA"
+    valido_desde: date | None = None
+    valido_ate: date | None = None
 
 
 class DeclararRelacionamentoRequestSchema(BaseModel):
     tenant_id_destino: str
     tipo: str
     visibilidade: str = "publica"
+    valido_desde: date | None = None
+    valido_ate: date | None = None
+
+
+class DeclararRelacionamentoPorCnpjSchema(BaseModel):
+    """Fase 7: relacionamento com empresa que talvez ainda não esteja na rede."""
+
+    cnpj: str = Field(min_length=14, max_length=18)
+    nome: str | None = Field(default=None, max_length=200)
+    tipo: str
+    visibilidade: str = "publica"
+    valido_desde: date | None = None
+    valido_ate: date | None = None
+
+
+class VisibilidadeDiretorioSchema(BaseModel):
+    visivel_no_diretorio: bool
 
 
 class SeguirRequestSchema(BaseModel):

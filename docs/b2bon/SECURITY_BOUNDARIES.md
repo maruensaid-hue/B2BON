@@ -109,3 +109,4 @@ expiração por cron, opt-out cancela mensagens pendentes.
 | S4 | Concessão de rotas PREDATOR a plano só-CRM (C3) | Baixa–Média | 1 |
 | S5 | CI não roda em `staging` | Média (processo) | decisão do PO (OI-005) |
 | S6 | Sem modelo de classificação de dado / propósito (pré-requisito da barreira Buy/Sell) | Alta (futuro) | 2, 10 |
+| S7 | Aresta `privada` da rede visível para a empresa citada; qualquer usuário editava a identidade pública da empresa | Média | **7 (corrigido: D-026, D-027, `test_privacidade_rede.py`)** |

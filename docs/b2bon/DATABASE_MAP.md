@@ -60,6 +60,8 @@ O `SECURITY_BOUNDARIES.md` de raiz diz que o staging de CNPJ é a
 
 **Fase 6:** `necessidade_oportunidade`; `oferta` ganhou as colunas de Offer Intelligence (§25) e `disponivel_para_venda`. Total: 111 tabelas.
 
+**Fase 7:** `empresa_rede`; `relacionamento_empresarial` + `empresa_origem_id`, `empresa_destino_id`, `fonte`, `valido_desde`, `valido_ate` (`tenant_id_destino` passa a aceitar nulo); `perfil_empresa.visivel_no_diretorio`. Total: 112 tabelas.
+
 Nenhuma tabela de Procurement, Bid, Credit Wallet, Usage Ledger
 completo, Entitlement, Integration Registry ou vetores existe.
 

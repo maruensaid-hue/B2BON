@@ -1,7 +1,8 @@
 TENANT_B = "tenant-outro"
 
 
-def test_declarar_e_listar_relacionamento_via_api(client):
+def test_declarar_e_listar_relacionamento_via_api(client, criar_usuario_autenticado):
+    criar_usuario_autenticado(TENANT_B)  # a contraparte precisa existir (Fase 7: identidade da empresa)
     resposta = client.post(
         "/api/v1/rede-social/relacionamentos", json={"tenant_id_destino": TENANT_B, "tipo": "SUPPLIER_OF"}
     )
@@ -38,7 +39,8 @@ def test_terceiro_nao_pode_confirmar_via_api(client, criar_usuario_autenticado):
     assert resposta.status_code == 403
 
 
-def test_remover_relacionamento_via_api(client):
+def test_remover_relacionamento_via_api(client, criar_usuario_autenticado):
+    criar_usuario_autenticado(TENANT_B)
     declarado = client.post(
         "/api/v1/rede-social/relacionamentos", json={"tenant_id_destino": TENANT_B, "tipo": "SUPPLIER_OF"}
     ).json()
@@ -47,3 +49,10 @@ def test_remover_relacionamento_via_api(client):
 
     assert resposta.status_code == 204
     assert client.get("/api/v1/rede-social/relacionamentos/tenant-teste").json() == []
+
+
+def test_declarar_para_empresa_inexistente_devolve_404(client):
+    resposta = client.post(
+        "/api/v1/rede-social/relacionamentos", json={"tenant_id_destino": "nao-existe", "tipo": "SUPPLIER_OF"}
+    )
+    assert resposta.status_code == 404
