@@ -1,7 +1,7 @@
 """link_captura_lead
 
 Revision ID: e78f9073763e
-Revises: bd1685385a43
+Revises: 494a19ef8c61
 Create Date: 2026-09-25 08:51:56.912374
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'e78f9073763e'
-down_revision: Union[str, Sequence[str], None] = 'bd1685385a43'
+down_revision: Union[str, Sequence[str], None] = '494a19ef8c61'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
