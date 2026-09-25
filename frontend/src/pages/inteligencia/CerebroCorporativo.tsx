@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { AgenteInteligencia } from "@/pages/inteligencia/AgenteInteligencia";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -127,6 +128,8 @@ export function CerebroCorporativo() {
       </div>
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
+
+      <AgenteInteligencia />
 
       {podeEditar && (
         <Card className="mb-4">

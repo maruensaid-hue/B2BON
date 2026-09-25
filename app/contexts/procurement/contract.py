@@ -11,3 +11,6 @@ __all__ = [
     "cadastros", "contratos", "demandas", "documentos", "fornecedores", "nba", "planejamento", "precos", "riscos", "tipos",
     "workspace",
 ]
+
+# Fase 12: registra as ferramentas deste contexto no B2B ON Intelligence Agent.
+from app.contexts.procurement import ferramentas as _ferramentas  # noqa: E402, F401

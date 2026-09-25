@@ -8,3 +8,6 @@ __all__ = [
     "FontePncp", "analise", "cofre", "concorrencia", "conformidade", "contratos", "documentos", "fontes", "go_no_go", "grafo",
     "licitacoes", "prazos", "tipos", "workspace",
 ]
+
+# Fase 12: registra as ferramentas deste contexto no B2B ON Intelligence Agent.
+from app.contexts.bids import ferramentas as _ferramentas  # noqa: E402, F401

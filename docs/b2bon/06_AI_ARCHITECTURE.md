@@ -43,8 +43,8 @@ repassa amostragem a modelos que aceitam (OI-010).
 
 ## 3. Registro de features, agentes e ferramentas (§19, §72)
 
-`registro.py`: 18 features (cada uma → módulo, agente, classe, gatilho),
-27 agentes (16 ATIVOS, 11 PLANEJADOS do §19, marcados como tal na UI),
+`registro.py`: 19 features (cada uma → módulo, agente, classe, gatilho),
+28 agentes (21 ATIVOS, 7 PLANEJADOS após a Fase 12 do §19, marcados como tal na UI),
 6 ferramentas com sensibilidade READ / WRITE / EXTERNAL_ACTION /
 SENSITIVE_ACTION. `agente_pode_usar(agente, ferramenta)` é a checagem
 que o orquestrador da Fase 12 usa.
@@ -86,3 +86,43 @@ id. Visão do tenant: `GET /api/v1/inteligencia/uso-ia`. Custo e créditos: Fase
 Embeddings/RAG vetorial (D-017), tool calling pelo LLM e orquestrador
 multi-agente (Fase 12), endpoints de IA na API de produto (dependem da
 Fase 5 para cobrança).
+
+## 9. B2B ON Intelligence Agent — orquestração (Fase 12)
+
+`app/contexts/intelligence/orquestrador.py`; registro de ferramentas no
+Shared Kernel (`shared/ferramentas.py`), populado por cada contexto
+(`<contexto>/ferramentas.py`, carregado pelo contrato do contexto). API:
+`POST /inteligencia/agente`, `GET /inteligencia/agente/ferramentas`. UI:
+painel no Cérebro Corporativo.
+
+```
+pergunta ──► ferramentas PERMITIDAS ao usuário (declarada + agente autorizado + módulo do plano + papel)
+               │
+               ├─ roteamento por palavras-chave (C0)  ──┐
+               └─ sem rota: IA C1 `intelligence.orquestrador`, vendo só o catálogo permitido
+                                                        ▼
+               compra × venda? → ESCLARECER (nunca mistura)
+               READ → executa no tenant do usuário │ WRITE/EXTERNAL → proposta │ SENSITIVE → RECUSADO
+```
+
+| Ferramenta | Agente | Módulo | Sensibilidade | Lado |
+|---|---|---|---|---|
+| `opportunity.analisar_oportunidade` | opportunity_agent | crm | READ | SELL |
+| `opportunity.clientes_expansao` | revenue_agent | crm | READ | SELL |
+| `crm.listar_oportunidades` | pipeline_agent | crm | READ | SELL |
+| `crm.mover_estagio` | pipeline_agent | crm | WRITE (proposta) | SELL |
+| `map.saude_conta` | remediation_agent | map | READ | SELL |
+| `bids.analisar_licitacao`, `bids.prazos` | bid_qualification_agent | bids | READ | SELL |
+| `bids.contratos_vencendo` | contract_intelligence_agent | bids | READ | SELL |
+| `procurement.contratos_vencendo` | contract_intelligence_agent | procurement | READ | BUY |
+| `procurement.pca_atrasado` | procurement_planning_agent | procurement | READ | BUY |
+| `brain.buscar` | sales_strategy_agent | — | READ | NEUTRO |
+| `predator.rascunho_mensagem` | cadence_agent | predator | EXTERNAL_ACTION (proposta, vai para aprovação) | SELL |
+| `plataforma.alterar_plano` | b2bon_intelligence_agent | — | SENSITIVE_ACTION (recusada) | NEUTRO |
+
+Os cinco exemplos do §84 Fase 12 funcionam: "Analise esta oportunidade…",
+"Analise este edital", "Mostre contratos próximos do vencimento" (pergunta
+o lado se ambíguo), "Quais compras do PCA estão atrasadas?", "Quais
+clientes possuem oportunidade de expansão?".
+
+Agentes: 28 (21 ATIVOS, 7 PLANEJADOS). O orquestrador é o 28º.

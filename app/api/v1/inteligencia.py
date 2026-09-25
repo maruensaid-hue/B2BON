@@ -9,10 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_db, get_usuario_atual
+from app.api.deps import exigir_papel, get_db, get_llm_provider, get_plan_limits_provider, get_usuario_atual, limitar_ia_por_tenant
 from app.contexts.intelligence import contract as intel
+from app.contexts.shared.entitlements import Entitlements
+from app.llm.base import LLMProvider
 from app.models.registro_uso_ia import RegistroUsoIa
 from app.models.usuario import Usuario
+from app.providers.plan_limits.base import PlanLimitsProvider
+from app.services import auditoria_service
 
 router = APIRouter(prefix="/inteligencia", tags=["inteligencia"])
 
@@ -118,3 +122,41 @@ def listar_features() -> list[dict]:
         {"nome": f.nome, "modulo": f.modulo, "agente": f.agente, "classe_modelo": f.classe.value, "gatilho": f.gatilho.value, "descricao": f.descricao}
         for f in intel.registro.FEATURES.values()
     ]
+
+
+# --- B2B ON Intelligence Agent (Fase 12) ------------------------------------------
+
+
+class PerguntaAgente(BaseModel):
+    pergunta: str = Field(min_length=3, max_length=1000)
+
+
+def _contexto_agente(usuario: Usuario, plan_limits: PlanLimitsProvider):
+    entitlements = Entitlements(plan_limits, usuario.tenant_id)
+    ctx = intel.ContextoFerramenta(tenant_id=usuario.tenant_id, usuario_id=usuario.id, papel=usuario.papel)
+    return ctx, entitlements.has_module
+
+
+@router.get("/agente/ferramentas")
+def ferramentas_do_agente(usuario: Usuario = Depends(get_usuario_atual),
+                          plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider)) -> list[dict]:
+    """Só o que ESTE usuário pode usar (plano, papel, agente autorizado)."""
+    ctx, tem_modulo = _contexto_agente(usuario, plan_limits)
+    return intel.orquestrador.catalogo(ctx, tem_modulo)
+
+
+@router.post("/agente", dependencies=[Depends(limitar_ia_por_tenant())])
+def perguntar_ao_agente(
+    dados: PerguntaAgente,
+    usuario: Usuario = Depends(get_usuario_atual),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+    llm: LLMProvider = Depends(get_llm_provider),
+    db: Session = Depends(get_db),
+) -> dict:
+    """B2B ON Intelligence Agent: escolhe o agente e a ferramenta; lê, propõe ou recusa."""
+    ctx, tem_modulo = _contexto_agente(usuario, plan_limits)
+    resposta = intel.orquestrador.perguntar(db, llm, ctx, dados.pergunta, tem_modulo)
+    auditoria_service.registrar(db, usuario.tenant_id, "intelligence_agent_consulta", "usuario", usuario.id, str(usuario.id),
+                                {"ferramenta": resposta["ferramenta"], "status": resposta["status"], "roteamento": resposta["roteamento"]})
+    db.commit()
+    return resposta

@@ -292,3 +292,17 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   acessam (comportamento anterior); com participantes, só eles e os admins.
   Cada empresa governa só o próprio lado.
 - **Status**: ACEITA.
+
+## D-039 · 2026-09-25 · Fase 12 · Registro de ferramentas no Shared Kernel, populado pelos contextos
+- **Decisão**: o orquestrador não importa contextos de negócio; cada contexto
+  registra as próprias ferramentas. Mantém a barreira Buy/Sell estrutural e
+  evita ciclo de import. Coerência com o registro declarado (sensibilidade,
+  agente, módulo) é validada pelo orquestrador e por teste.
+- **Status**: ACEITA.
+
+## D-040 · 2026-09-25 · Fase 12 · Roteamento determinístico primeiro; IA só como fallback e só sobre o permitido
+- **Decisão**: palavras-chave (custo zero, previsível); sem rota, IA C1 com
+  o catálogo das ferramentas permitidas ao usuário. A escolha da IA é
+  validada contra esse catálogo. Uma ferramenta por pergunta (sem cadeia
+  multi-passo por enquanto); compra × venda ambíguo pede esclarecimento.
+- **Status**: ACEITA.

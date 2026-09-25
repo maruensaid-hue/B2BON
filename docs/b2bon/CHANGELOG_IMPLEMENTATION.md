@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Fase 12 — Advanced Agent Orchestration (2026-09-25)
+
+- B2B ON Intelligence Agent: pergunta → agente especialista → ferramenta; 13 ferramentas registradas pelos contextos (Shared Kernel).
+- Permissões: ferramenta declarada, agente autorizado, módulo do plano, papel; READ executa, WRITE/EXTERNAL viram proposta, SENSITIVE é recusada; tenant sempre do usuário; compra × venda não se misturam.
+- Fallback por IA (C1, medido) vendo só o catálogo permitido. Painel no Cérebro Corporativo. Sem migração.
+
 ## Fase 11 — Corporate Rooms & Buying Rooms (2026-09-25)
 
 - Participantes por usuário (EDITOR/LEITOR), documentos com hash, tarefas, reuniões e comitê de compra na sala, cada um com escopo compartilhado/interno.

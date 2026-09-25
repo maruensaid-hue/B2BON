@@ -57,3 +57,6 @@ def abrir_ou_reaproveitar_oportunidade(
     from app.services import crm_service
 
     return crm_service.abrir_ou_reaproveitar_oportunidade(db, tenant_id, ator_id, conta_id, nome, origem)
+
+# Fase 12: registra as ferramentas deste contexto no B2B ON Intelligence Agent.
+from app.contexts.crm import ferramentas as _ferramentas  # noqa: E402, F401

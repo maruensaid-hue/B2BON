@@ -93,3 +93,6 @@ def vendedores_com_contas(db: Session, tenant_id: str, fonte: MapDataSource | No
     resultado = list(agrupado.values())
     resultado.sort(key=lambda item: item["nome"])
     return resultado
+
+# Fase 12: registra as ferramentas deste contexto no B2B ON Intelligence Agent.
+from app.contexts.map import ferramentas as _ferramentas  # noqa: E402, F401
