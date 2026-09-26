@@ -23,6 +23,7 @@ from decimal import Decimal
 
 import httpx
 
+from app.contexts.integrations.adapters import interacoes
 from app.contexts.integrations.adapters.http_base import ClienteHttp
 from app.contexts.integrations.contract import AdapterCapabilities, CrmAdapter, Page
 from app.contexts.shared.canonical.base import SourceRef, canonical_id
@@ -304,18 +305,8 @@ class RdStationCrmAdapter(CrmAdapter):
             return Page(items=[])
         if self._interacoes is None:
             agora = datetime.now(UTC)
-            por_conta: dict[str, list[Interaction]] = {}
-            for r in self._todos("tasks", "tasks", done="true"):
-                atividade = self._atividade(r, agora)
-                if atividade.account_id:
-                    por_conta.setdefault(atividade.account_id, []).append(Interaction(
-                        id=cid("interaction", r["id"]), tenant_id=self._tenant_id, source=atividade.source,
-                        account_id=atividade.account_id, kind="contato", description=atividade.description or None,
-                        created_at=atividade.created_at))
-            self._interacoes = por_conta
-        if account_id is not None:
-            return Page(items=list(self._interacoes.get(account_id, [])))
-        return Page(items=[i for itens in self._interacoes.values() for i in itens])
+            self._interacoes = interacoes.por_conta(self._todos("tasks", "tasks", done="true"), lambda r: self._atividade(r, agora), cid, self._tenant_id)
+        return interacoes.pagina(self._interacoes, account_id)
 
     def list_cs_metrics(self, tenant_id, cursor=None, limit=100):
         return Page(items=[])  # RD Station CRM não tem NPS

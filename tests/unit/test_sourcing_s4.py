@@ -125,7 +125,7 @@ def test_espelho_so_grava_codigos_registrados():
         assert ruleset is None or ruleset in sourcing.ruleset.codigos()
     assert ("ENTERPRISE_RFP_SELL@2", "PRIVATE_RFP@1") in codigos  # Phase C: v2 (com negociação)
     assert ("PUBLIC_TENDER_SELL@1", None) in codigos
-    assert ("PUBLIC_PROCUREMENT_BUY@1", "PUBLIC_PROCUREMENT_BR_14133@1") in codigos
+    assert ("PUBLIC_PROCUREMENT_BUY@1", "PUBLIC_PROCUREMENT_BR_14133@2") in codigos
 
 
 def test_lado_do_workflow_bate_com_o_lado_que_o_grava():

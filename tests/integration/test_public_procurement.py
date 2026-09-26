@@ -312,7 +312,7 @@ def test_phase_d_workspace_mostra_proximas_etapas_e_documentos_esperados_pela_re
 
     fluxo = client.get(f"{P}/processos/{processo['id']}/workspace").json()["fluxo"]
 
-    assert fluxo["ruleset"]["codigo"] == "PUBLIC_PROCUREMENT_BR_14133@1" and "14.133" in fluxo["ruleset"]["fonte"]
+    assert fluxo["ruleset"]["codigo"] == "PUBLIC_PROCUREMENT_BR_14133@2" and "14.133" in fluxo["ruleset"]["fonte"]
     assert fluxo["documentos_da_etapa"] == [{"tipo": "ETP", "presente": True}, {"tipo": "TR", "presente": False}]
     assert "PESQUISA_PRECOS" not in fluxo["proximos_status"] and "APROVACAO" in fluxo["proximos_status"]
     assert fluxo["final"] is False

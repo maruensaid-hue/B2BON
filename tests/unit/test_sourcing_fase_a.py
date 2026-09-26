@@ -44,7 +44,7 @@ def test_toda_modalidade_resolve_pelo_ponto_central_com_o_fluxo_de_antes():
         assert tipo in sourcing.tipos.TIPOS_PROCESSO
     for modalidade in (*sourcing.tipos.TIPOS_PROCESSO, None, "MODALIDADE_ANTIGA"):
         workflow, regras = fluxo_compra.configuracao(modalidade)
-        assert (workflow.codigo, regras.codigo) == ("PUBLIC_PROCUREMENT_BUY@1", "PUBLIC_PROCUREMENT_BR_14133@1")
+        assert (workflow.codigo, regras.codigo) == ("PUBLIC_PROCUREMENT_BUY@1", "PUBLIC_PROCUREMENT_BR_14133@2")
 
 
 def test_sem_vinculo_falha_fechado(monkeypatch):
@@ -77,3 +77,12 @@ def test_vinculo_por_tipo_vence_o_do_segmento(monkeypatch):
 
 def test_versao_vem_do_codigo():
     assert sourcing.workflow.obter("PUBLIC_PROCUREMENT_BUY@1").versao == 1
+
+
+def test_ruleset_14133_v2_traz_os_limiares_de_risco_com_os_padroes_de_antes():
+    """TD-089 (Phase J2): limiares saem do código para o ruleset, com os mesmos padrões; @1 segue registrado."""
+    v1, v2 = sourcing.ruleset.obter("PUBLIC_PROCUREMENT_BR_14133@1"), sourcing.ruleset.obter("PUBLIC_PROCUREMENT_BR_14133@2")
+    assert {k: v2.parametros[k] for k in v1.parametros} == v1.parametros
+    assert {k: v2.parametro(k) for k in ("aditivos_alerta", "acrescimo_alerta", "concentracao_alerta", "dias_planejamento")} == {
+        "aditivos_alerta": 3, "acrescimo_alerta": 0.25, "concentracao_alerta": 0.5, "dias_planejamento": 60}
+    assert v2.parametro("aditivos_alerta", {"aditivos_alerta": 5}) == 5  # o órgão pode configurar

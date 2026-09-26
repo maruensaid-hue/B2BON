@@ -24,10 +24,6 @@ from app.models.processo_contratacao import ProcessoContratacao
 
 AVISO = "Sinais analíticos para revisão humana. Não indicam irregularidade."
 DIAS_CONTRATO = LEI_14133.parametro("dias_alerta_contrato")  # padrão; o órgão pode configurar
-DIAS_PLANEJAMENTO = 60
-ACRESCIMO_ALERTA = 0.25
-ADITIVOS_ALERTA = 3
-CONCENTRACAO_ALERTA = 0.5
 DESVIO_ORCAMENTO = LEI_14133.parametro("desvio_orcamento")
 
 
@@ -99,7 +95,9 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
                                         f"Contrato vence em {intel['dias_para_fim']} dias e existe necessidade continuada, mas não foi "
                                         "localizado processo sucessor. Requer revisão.", "contrato_compra", c.id,
                                         {"vigencia_fim": c.vigencia_fim, "dias_para_fim": intel["dias_para_fim"]}))
-        if intel["aditivos"] >= ADITIVOS_ALERTA or (intel["acrescimo_percentual"] or 0) > ACRESCIMO_ALERTA:
+        config_orgao = orgaos[c.orgao_id].parametros if orgaos.get(c.orgao_id) else None
+        if (intel["aditivos"] >= LEI_14133.parametro("aditivos_alerta", config_orgao)
+                or (intel["acrescimo_percentual"] or 0) > LEI_14133.parametro("acrescimo_alerta", config_orgao)):
             resultado.append(_sinal("REPEATED_AMENDMENTS", "ATENCAO",
                                     f"Sinal analítico: {intel['aditivos']} aditivo(s), acréscimo de "
                                     f"{(intel['acrescimo_percentual'] or 0) * 100:.0f}% sobre o valor inicial. Requer revisão.",
@@ -123,7 +121,7 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
             for c in lista:
                 por_fornecedor[c.fornecedor_id] = por_fornecedor.get(c.fornecedor_id, 0) + (c.valor_atual or 0)
             fornecedor_id, valor = max(por_fornecedor.items(), key=lambda kv: kv[1])
-            if valor / total > CONCENTRACAO_ALERTA:
+            if valor / total > LEI_14133.parametro("concentracao_alerta"):  # visão do tenant (categoria atravessa órgãos)
                 resultado.append(_sinal("SUPPLIER_CONCENTRATION", "INFO",
                                         f"Sinal analítico: um fornecedor concentra {valor / total:.0%} do valor contratado em \"{categoria}\". "
                                         "Requer revisão.", "fornecedor_compras", fornecedor_id, {"categoria": categoria, "participacao": round(valor / total, 3)}))
@@ -145,9 +143,10 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
                                         f"{soma:,.2f}, acima do limite configurado. Requer revisão.", "orgao_publico", orgao.id,
                                         {"processos": [p.id for p in lista], "limite": limite, "soma": soma}))
 
+    dias_planejamento = LEI_14133.parametro("dias_planejamento")
     for item in db.query(ItemPca).filter_by(tenant_id=tenant_id, status="PLANEJADO").all():
         tem_processo = any(p.item_pca_id == item.id for p in abertos)
-        if item.data_prevista and item.data_prevista <= hoje + timedelta(days=DIAS_PLANEJAMENTO) and not tem_processo:
+        if item.data_prevista and item.data_prevista <= hoje + timedelta(days=dias_planejamento) and not tem_processo:
             resultado.append(_sinal("INCOMPLETE_PLANNING", "ALTA" if item.data_prevista < hoje else "ATENCAO",
                                     f"Item do PCA \"{item.descricao}\" previsto para {item.data_prevista:%d/%m/%Y} sem processo ativo. Requer revisão.",
                                     "item_pca", item.id, {"data_prevista": item.data_prevista}))

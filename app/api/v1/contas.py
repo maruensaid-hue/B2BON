@@ -134,7 +134,7 @@ def listar_decisores_da_conta(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> list[DecisorSchema]:
-    decisores = conta_service.decisores_da_conta(db, conta_id)
+    decisores = conta_service.decisores_da_conta(db, conta_service.obter(db, tenant_id, conta_id))
     return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, decisores)
 
 

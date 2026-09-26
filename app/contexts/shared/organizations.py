@@ -74,10 +74,10 @@ def obter_conta(db: Session, tenant_id: str, conta_id: int) -> Conta:
     return conta
 
 
-def decisores_da_conta(db: Session, conta_id: int) -> list[Decisor]:
-    """Sem filtro de tenant: quem chama já validou a conta com
-    `obter_conta` (mesmo contrato de antes da Fase 1)."""
-    return db.query(Decisor).filter_by(conta_id=conta_id).all()
+def decisores_da_conta(db: Session, conta: Conta) -> list[Decisor]:
+    """Recebe a conta já validada (`obter_conta`), não um id solto, e filtra também pelo tenant dela
+    (TD-040, Phase J2): não há como listar decisores de uma conta que o chamador não carregou."""
+    return db.query(Decisor).filter_by(conta_id=conta.id, tenant_id=conta.tenant_id).all()
 
 
 def normalizar_dominio(dominio: str | None) -> str | None:

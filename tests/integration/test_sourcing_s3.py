@@ -53,7 +53,7 @@ def test_escrita_antiga_chega_as_tabelas_novas_com_o_lado_certo(client, db_sessi
     compra = db_session.query(ProcessoSourcing).filter_by(origem_tabela="processo_contratacao", origem_id=proc["id"]).one()
     assert (venda.lado, venda.segmento, venda.workflow, venda.classificacao, float(venda.valor_estimado)) == (
         "SELL", "PUBLIC", "PUBLIC_TENDER_SELL@1", "INTERNAL", 1234.57)
-    assert (compra.lado, compra.ruleset, compra.classificacao) == ("BUY", "PUBLIC_PROCUREMENT_BR_14133@1", "CONFIDENTIAL")
+    assert (compra.lado, compra.ruleset, compra.classificacao) == ("BUY", "PUBLIC_PROCUREMENT_BR_14133@2", "CONFIDENTIAL")
     assert {d.lado for d in db_session.query(DocumentoSourcing)} == {"SELL", "BUY"}
     achado = db_session.query(RequisitoSourcing).filter_by(origem_tabela="documento_compras.achados").one()
     assert (achado.lado, achado.texto, achado.confianca, achado.processo_id) == ("BUY", "Prazo de 30 dias", "grounded", compra.id)

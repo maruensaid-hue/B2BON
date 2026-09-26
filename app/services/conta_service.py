@@ -1094,7 +1094,7 @@ def _texto_seguro_pdf(texto: str) -> str:
 def exportar_pdf(db: Session, tenant_id: str, conta_id: int) -> bytes:
     """Exportação da ficha da conta em PDF (E2-H3)."""
     conta = obter(db, tenant_id, conta_id)
-    decisores = decisores_da_conta(db, conta.id)
+    decisores = decisores_da_conta(db, conta)
 
     pdf = FPDF()
     pdf.add_page()

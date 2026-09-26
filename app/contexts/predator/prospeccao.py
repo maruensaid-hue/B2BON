@@ -526,7 +526,7 @@ def mapear_decisores(
         candidatos.extend(account_data.buscar_decisores(conta.cnpj))
     candidatos.extend(contact_enrichment.buscar_contatos(FiltroContatos(**kwargs_filtro)))
 
-    existentes = {_normalizar_nome_decisor(d.nome): d for d in decisores_da_conta(db, conta.id)}
+    existentes = {_normalizar_nome_decisor(d.nome): d for d in decisores_da_conta(db, conta)}
     novos = 0
     for candidato in candidatos:
         dados = _dados_candidato(candidato)
@@ -580,4 +580,4 @@ def mapear_decisores(
         conta_id=conta.id,
     )
     db.commit()
-    return decisores_da_conta(db, conta.id)
+    return decisores_da_conta(db, conta)
