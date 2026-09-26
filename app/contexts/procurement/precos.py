@@ -5,10 +5,11 @@ from statistics import mean, median, pstdev
 
 from sqlalchemy.orm import Session
 
+from app.contexts.procurement.fluxo import LEI_14133
 from app.contexts.shared.texto import normalizar
 from app.models.pesquisa_preco import PesquisaPreco
 
-DESVIO_ALERTA = 0.30  # cotação 30% acima/abaixo da mediana = sinal para revisão
+DESVIO_ALERTA = LEI_14133.parametro("desvio_alerta_preco")  # cotação fora da faixa da mediana = sinal para revisão
 MINIMO_AMOSTRAS = 3
 
 

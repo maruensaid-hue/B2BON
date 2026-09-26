@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.contexts.procurement import contratos as contratos_intel
 from app.contexts.procurement import precos, repositorio
-from app.contexts.procurement.tipos import DOCUMENTOS_ESPERADOS, STATUS_PROCESSO_FINAIS
+from app.contexts.procurement.fluxo import LEI_14133
+from app.contexts.procurement.tipos import STATUS_PROCESSO_FINAIS
 from app.contexts.shared.texto import termos_em_comum
 from app.models.contrato_compra import ContratoCompra
 from app.models.evento_contrato_compra import EventoContratoCompra
@@ -22,12 +23,12 @@ from app.models.orgao_publico import OrgaoPublico
 from app.models.processo_contratacao import ProcessoContratacao
 
 AVISO = "Sinais analíticos para revisão humana. Não indicam irregularidade."
-DIAS_CONTRATO = 120
+DIAS_CONTRATO = LEI_14133.parametro("dias_alerta_contrato")  # padrão; o órgão pode configurar
 DIAS_PLANEJAMENTO = 60
 ACRESCIMO_ALERTA = 0.25
 ADITIVOS_ALERTA = 3
 CONCENTRACAO_ALERTA = 0.5
-DESVIO_ORCAMENTO = 0.2
+DESVIO_ORCAMENTO = LEI_14133.parametro("desvio_orcamento")
 
 
 def _sinal(tipo: str, severidade: str, mensagem: str, entidade: str, entidade_id: int, evidencia: dict) -> dict:
@@ -66,7 +67,7 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
                                     f"Possível inconsistência: valor do processo {p.valor_estimado:,.2f} acima do planejado no PCA "
                                     f"({item.valor_estimado:,.2f}). Requer revisão.", "processo_contratacao", p.id,
                                     {"valor_processo": p.valor_estimado, "valor_pca": item.valor_estimado, "item_pca_id": item.id}))
-        esperados = DOCUMENTOS_ESPERADOS.get(p.status, ())
+        esperados = LEI_14133.documentos(p.status)
         if esperados:
             presentes = tipos_por_processo.get(p.id, set())
             faltam = [t for t in esperados if t not in presentes]
@@ -84,7 +85,7 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
 
     for c in contratos:
         intel = contratos_intel.inteligencia(db, tenant_id, c, hoje)
-        dias_param = (orgaos.get(c.orgao_id).parametros or {}).get("dias_alerta_contrato", DIAS_CONTRATO) if orgaos.get(c.orgao_id) else DIAS_CONTRATO
+        dias_param = LEI_14133.parametro("dias_alerta_contrato", orgaos[c.orgao_id].parametros if orgaos.get(c.orgao_id) else None)
         if c.status == "VIGENTE" and intel["dias_para_fim"] is not None and 0 <= intel["dias_para_fim"] <= dias_param and c.necessidade_continuada:
             sucessor = next((p for p in abertos if termos_em_comum(c.objeto, p.objeto)), None)
             if sucessor is None:
@@ -122,7 +123,7 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
                                         "Requer revisão.", "fornecedor_compras", fornecedor_id, {"categoria": categoria, "participacao": round(valor / total, 3)}))
 
     for orgao in orgaos.values():
-        limite = (orgao.parametros or {}).get("limite_fragmentacao")
+        limite = LEI_14133.parametro("limite_fragmentacao", orgao.parametros)
         if limite is None:
             nao_avaliados.append(f"PROCUREMENT_FRAGMENTATION ({orgao.nome}): limite não configurado para o regime do órgão.")
             continue

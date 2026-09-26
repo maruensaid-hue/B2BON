@@ -9,6 +9,7 @@ A leitura dupla (`repositorio.py`) compara com estes mesmos mapeamentos.
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
+from app.contexts.bids import fluxo
 from app.contexts.sourcing.contract import espelho, tipos
 from app.models.contrato_venda_publica import ContratoVendaPublica
 from app.models.documento_licitacao import DocumentoLicitacao
@@ -23,7 +24,8 @@ def _iso(valor):
 
 
 def processo(lic: Licitacao) -> dict:
-    empresa = lic.modalidade == "PRIVATE_RFP"
+    empresa = fluxo.empresa(lic.modalidade)
+    regras = fluxo.regras_de(lic.modalidade)
     return {
         "tenant_id": lic.tenant_id,
         "segmento": tipos.Segmento.EMPRESA.value if empresa else tipos.Segmento.PUBLICO.value,
@@ -37,8 +39,8 @@ def processo(lic: Licitacao) -> dict:
         "status": lic.status,
         "visibilidade": "PRIVADO",
         "classificacao": "INTERNAL",
-        "ruleset": "PRIVATE_RFP@1" if empresa else None,
-        "workflow": "ENTERPRISE_RFP_SELL@1" if empresa else "PUBLIC_TENDER_SELL@1",
+        "ruleset": regras.codigo if regras else None,
+        "workflow": fluxo.de(lic.modalidade).codigo,
         "publicado_em": lic.data_publicacao,
         "prazo": lic.prazo_proposta,
         "valor_estimado": lic.valor_estimado,

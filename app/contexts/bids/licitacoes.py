@@ -4,9 +4,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.contexts.bids import conformidade, go_no_go, repositorio
+from app.contexts.bids import conformidade, fluxo, go_no_go, repositorio
 from app.contexts.bids.fontes.base import LicitacaoExterna
-from app.contexts.bids.tipos import CATEGORIAS_REQUISITO, MODALIDADES, STATUS_CONFORMIDADE, STATUS_LICITACAO
+from app.contexts.bids.tipos import CATEGORIAS_REQUISITO, MODALIDADES, STATUS_CONFORMIDADE
 from app.contexts.shared import paginacao
 from app.models.contrato_venda_publica import ContratoVendaPublica
 from app.models.decisao_go_no_go import DecisaoGoNoGo
@@ -14,7 +14,7 @@ from app.models.documento_licitacao import DocumentoLicitacao
 from app.models.licitacao import Licitacao
 from app.models.requisito_licitacao import RequisitoLicitacao
 from app.services import auditoria_service
-from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
+from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 CAMPOS_EDITAVEIS = (
     "titulo", "objeto", "orgao_nome", "orgao_cnpj", "conta_id", "oferta_id", "modalidade", "fonte_url",
@@ -43,7 +43,7 @@ def _validar(dados: dict) -> None:
 
 def criar(db: Session, tenant_id: str, usuario_id: int | None, dados: dict) -> Licitacao:
     _validar(dados)
-    licitacao = Licitacao(tenant_id=tenant_id, fonte="MANUAL", status="IDENTIFICADA",
+    licitacao = Licitacao(tenant_id=tenant_id, fonte="MANUAL", status=fluxo.de(dados.get("modalidade")).inicial,
                           **{k: v for k, v in dados.items() if k in CAMPOS_EDITAVEIS})
     db.add(licitacao)
     db.flush()
@@ -77,7 +77,8 @@ def ingerir(db: Session, tenant_id: str, usuario_id: int | None, externas: list[
             "valor_estimado": ext.valor_estimado, "fonte_url": ext.url,
         }
         if existente is None:
-            licitacao = Licitacao(tenant_id=tenant_id, fonte=ext.fonte, fonte_id_externo=ext.id_externo, status="IDENTIFICADA", **campos)
+            licitacao = Licitacao(tenant_id=tenant_id, fonte=ext.fonte, fonte_id_externo=ext.id_externo,
+                                  status=fluxo.de(ext.modalidade).inicial, **campos)
             db.add(licitacao)
             db.flush()
             criadas.append(licitacao.id)
@@ -92,13 +93,8 @@ def ingerir(db: Session, tenant_id: str, usuario_id: int | None, externas: list[
 
 
 def mudar_status(db: Session, tenant_id: str, usuario_id: int | None, licitacao_id: int, status: str) -> Licitacao:
-    if status not in STATUS_LICITACAO:
-        raise ValidacaoFalhou(f"Status inválido: {status}")
-    if status in ("GO", "NO_GO"):
-        raise RegraNegocioViolada("GO/NO_GO é registrado pela decisão Go/No-Go, com a recomendação e a justificativa.")
-    if status in ("GANHA", "PERDIDA"):
-        raise RegraNegocioViolada("Use o registro de resultado para informar vencedor e valor.")
     licitacao = obter(db, tenant_id, licitacao_id)
+    fluxo.de(licitacao.modalidade).validar(status, "status", de=licitacao.status)
     anterior, licitacao.status = licitacao.status, status
     auditoria_service.registrar(db, tenant_id, "licitacao_status", "licitacao", licitacao.id, _ator(usuario_id),
                                 {"de": anterior, "para": status})
@@ -112,7 +108,9 @@ def registrar_resultado(
     vencedor: str | None, valor_proposta: float | None, motivo: str | None,
 ) -> Licitacao:
     licitacao = obter(db, tenant_id, licitacao_id)
-    licitacao.status = "GANHA" if ganhou else "PERDIDA"
+    novo = "GANHA" if ganhou else "PERDIDA"
+    fluxo.de(licitacao.modalidade).validar(novo, "resultado", de=licitacao.status)
+    licitacao.status = novo
     licitacao.vencedor = vencedor
     licitacao.valor_proposta = valor_proposta
     licitacao.motivo_resultado = motivo
@@ -236,6 +234,7 @@ def decidir(
     if decisao not in ("GO", "NO_GO"):
         raise ValidacaoFalhou("Decisão deve ser GO ou NO_GO.")
     licitacao = obter(db, tenant_id, licitacao_id)
+    fluxo.de(licitacao.modalidade).validar(decisao, "go_no_go", de=licitacao.status)
     recomendacao = go_no_go.recomendar(db, tenant_id, licitacao, conformidade.calcular(db, tenant_id, licitacao))
     if recomendacao["recomendacao"] != decisao and not (justificativa and justificativa.strip()):
         raise ValidacaoFalhou(

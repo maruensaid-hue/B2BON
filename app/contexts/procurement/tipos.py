@@ -1,14 +1,13 @@
 """Vocabulário do Public Procurement (§38-§48)."""
 
+from app.contexts.procurement import fluxo
+
 STATUS_DEMANDA = ("RASCUNHO", "ENVIADA", "EM_ANALISE", "APROVADA", "REJEITADA", "CONSOLIDADA", "ATENDIDA")
 STATUS_PLANO = ("ELABORACAO", "APROVADO", "PUBLICADO", "EM_EXECUCAO", "ENCERRADO")
 STATUS_ITEM_PCA = ("PLANEJADO", "EM_PROCESSO", "CONTRATADO", "CANCELADO")
-# Ciclo do §38 (processo), parametrizável por órgão no futuro.
-STATUS_PROCESSO = (
-    "PLANEJAMENTO", "ESTUDOS_TECNICOS", "TERMO_REFERENCIA", "PESQUISA_PRECOS", "APROVACAO", "PUBLICADO",
-    "SELECAO", "HOMOLOGADO", "CONTRATADO", "FRACASSADO", "CANCELADO",
-)
-STATUS_PROCESSO_FINAIS = ("CONTRATADO", "FRACASSADO", "CANCELADO")
+# Ciclo do §38 (processo): vem do workflow declarativo (S4), `fluxo.py` é a fonte única.
+STATUS_PROCESSO = fluxo.PROCESSO.estados
+STATUS_PROCESSO_FINAIS = fluxo.PROCESSO.finais
 TIPOS_EVENTO_PROCESSO = ("APROVACAO", "ESCLARECIMENTO", "TAREFA", "MARCO", "NOTA")
 STATUS_CONTRATO = ("VIGENTE", "SUSPENSO", "ENCERRADO", "RESCINDIDO")
 TIPOS_EVENTO_CONTRATO = ("ADITIVO", "ENTREGA", "FISCALIZACAO", "PAGAMENTO", "OCORRENCIA", "RENOVACAO", "ENCERRAMENTO")
@@ -17,10 +16,5 @@ TIPOS_DOCUMENTO = (
 )
 FONTES_PRECO = ("PAINEL_PRECOS", "CONTRATACAO_SIMILAR", "COTACAO_FORNECEDOR", "SITE", "OUTRO")
 CLASSIFICACOES = ("PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED")
-# Documento que o processo deveria ter a partir de cada etapa (Missing Documentation).
-DOCUMENTOS_ESPERADOS = {
-    "TERMO_REFERENCIA": ("ETP",),
-    "PESQUISA_PRECOS": ("ETP", "TR"),
-    "APROVACAO": ("ETP", "TR", "PESQUISA_PRECO"),
-    "PUBLICADO": ("ETP", "TR", "PESQUISA_PRECO", "EDITAL"),
-}
+# Documento que o processo deveria ter a partir de cada etapa: regra do ruleset (S4).
+DOCUMENTOS_ESPERADOS = fluxo.LEI_14133.documentos_esperados

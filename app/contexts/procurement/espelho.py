@@ -11,6 +11,7 @@ from datetime import datetime, time
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
+from app.contexts.procurement import fluxo
 from app.contexts.sourcing.contract import espelho, tipos
 from app.models.contrato_compra import ContratoCompra
 from app.models.documento_compras import DocumentoCompras
@@ -36,8 +37,8 @@ def processo(p: ProcessoContratacao) -> dict:
         "status": p.status,
         "visibilidade": "PRIVADO",
         "classificacao": "CONFIDENTIAL",
-        "ruleset": "PUBLIC_PROCUREMENT_BR_14133@1",
-        "workflow": "PUBLIC_PROCUREMENT_BUY@1",
+        "ruleset": fluxo.LEI_14133.codigo,
+        "workflow": fluxo.PROCESSO.codigo,
         "publicado_em": p.publicado_em,
         "prazo": datetime.combine(p.prazo_previsto, time.min) if p.prazo_previsto else None,
         "valor_estimado": p.valor_estimado,

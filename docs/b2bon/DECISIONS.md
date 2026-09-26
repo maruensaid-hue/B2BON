@@ -534,3 +534,29 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
     autorizada (OI-021), pela regra de fase da própria resolução.
 - **Status**: ACEITA. Resolve OI-019 e OI-015.
 
+
+## D-060 · 2026-09-26 · Sourcing S4 · Workflow e ruleset declarados por lado, validados por motor neutro
+- **Contexto**: S4 do plano (`18_STRATEGIC_SOURCING.md` §8), autorizada pelo PO ("S4: pode trocar"). Estados de
+  licitação e de processo de compra viviam em tuplas; as regras da Lei 14.133 (documentos por etapa, limites de
+  sinal) em constantes soltas; as transições reservadas (GO/NO_GO, GANHA/PERDIDA) em `if`s no serviço.
+- **Decisão**:
+  - **Motor neutro** no núcleo: `sourcing/workflow.py` (estados, inicial, finais, transições marcadas pela ação que
+    as alcança — `status`, `go_no_go`, `resultado` — e origem opcional) e `sourcing/ruleset.py` (documentos
+    esperados por etapa e parâmetros com padrão, sobrescritos pela configuração do cliente). Registro por código
+    versionado; registrar outra definição com o mesmo código é recusado (mudança = nova versão).
+  - **Definições por lado**, porque o núcleo não conhece estado de nenhum lado e só o comprador usa
+    `Lado.COMPRA`: `bids/fluxo.py` (`PUBLIC_TENDER_SELL@1`, `ENTERPRISE_RFP_SELL@1`, `PRIVATE_RFP@1`) e
+    `procurement/fluxo.py` (`PUBLIC_PROCUREMENT_BUY@1`, `PUBLIC_PROCUREMENT_BR_14133@1`).
+  - **Paridade**: v1 reproduz o comportamento anterior (sem restrição de origem; mesmas mensagens e códigos HTTP).
+    As tuplas, `DOCUMENTOS_ESPERADOS` e as constantes viram aliases derivados; o espelho grava os códigos do
+    registro.
+  - `ENTERPRISE_RFP_SELL@1` é o fluxo atual aplicado ao RFP privado, com código próprio (o fluxo enterprise da S7
+    nasce como nova versão). `PRIVATE_RFP@1` não tem regra: contratação privada, sem regime legal.
+  - `limite_fragmentacao` não tem padrão: sem configuração do órgão, o sinal fica sem avaliação (nunca inventado).
+- **Desvio de comportamento (único)**: `mudar_status` agora carrega a licitação antes de validar (o fluxo depende da
+  modalidade). Licitação inexistente ou de outro tenant com status inválido/reservado responde 404 em vez de
+  422/409. Não vaza nada (antes o 409 confirmava a regra sem dizer se o id existia; agora nem isso).
+- **Fora do escopo**: estados de demanda, plano, item do PCA e contrato continuam em tuplas (não são processo de
+  sourcing); limiares analíticos de risco sem base regulatória (`DIAS_PLANEJAMENTO`, `ACRESCIMO_ALERTA`,
+  `ADITIVOS_ALERTA`, `CONCENTRACAO_ALERTA`) continuam em `riscos.py` (TD-089).
+- **Status**: ACEITA.

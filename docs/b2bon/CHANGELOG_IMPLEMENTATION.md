@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Sourcing S4 — workflow e rulesets declarativos (2026-09-26, autorizada pelo PO)
+
+- Motor neutro `sourcing/workflow.py` e `sourcing/ruleset.py`, com registro por código versionado.
+- `PUBLIC_TENDER_SELL@1`, `ENTERPRISE_RFP_SELL@1`, `PRIVATE_RFP@1` (vendedor) e `PUBLIC_PROCUREMENT_BUY@1`, `PUBLIC_PROCUREMENT_BR_14133@1` (comprador) no lugar das tuplas de status, de `DOCUMENTOS_ESPERADOS` e das constantes da Lei 14.133.
+- Mudança de status, decisão Go/No-Go, registro de resultado e atualização de processo validam pelo workflow; mesmas mensagens e respostas.
+- Espelho grava os códigos do registro. Nenhuma mudança de schema.
+
 ## OI-019 resolvido — produtos por job-to-be-done (2026-09-26, documentação)
 
 - D-059: B2B ON Bid Intelligence (Public + Enterprise Bids, R$ 1.490, 25K AI Credits), Strategic Sourcing (R$ 2.990, 5 buyer users, 50K), Strategic Sourcing Enterprise (a partir de R$ 5.990, 100K), Public Procurement (preço pendente).

@@ -355,7 +355,13 @@ S0–S2 não mudam schema nem comportamento e podem ir primeiro. S3–S6 são o 
 | S1 | ✅ 2026-09-26 | `contexts/sourcing/{requisitos,documentos,avaliacao,tipos}.py`, `shared/matching.py`; `bids` e `procurement` usam os engines; ICP (PREDATOR e rede) na estratégia única; `test_sourcing_nucleo.py`. Única mudança de resultado: o fit de ICP da rede passa a casar CNAE pontuado com dígitos (bug) |
 | S2 | ✅ 2026-09-26 | protocolo `sourcing/repositorio.py`; `RepositorioVenda` (`bids`) e `RepositorioCompra` (`procurement`) com lado fixo; FinOps e Analytics leem venda só pelo repositório; fitness `test_barreira_sourcing.py` junto com `test_barreira_buy_sell.py`; `test_sourcing_repositorio.py` |
 | S3 | ✅ 2026-09-26 | migração `a3d5f7b9c1e2`: 6 tabelas `*_sourcing` com `lado` em CHECK e imutável (ORM + trigger SQLite/Postgres); espelho por eventos do ORM (`bids/espelho.py`, `procurement/espelho.py` → núcleo neutro `sourcing/espelho.py`); backfill idempotente em lotes (`/cron/sourcing-sincronizar`); leitura dupla nos repositórios (`SOURCING_LEITURA_DUPLA`: COMPARAR em produção, ESTRITA na suíte inteira); `test_sourcing_s3.py`, `test_sourcing_s3_pg.py`, `test_alembic_upgrade.py` |
-| S4–S8 | aguardando o PO (OI-020) | — |
+| S4 | ✅ 2026-09-26 | motor neutro `sourcing/{workflow,ruleset}.py`; definições por lado em `bids/fluxo.py` (`PUBLIC_TENDER_SELL@1`, `ENTERPRISE_RFP_SELL@1`, `PRIVATE_RFP@1`) e `procurement/fluxo.py` (`PUBLIC_PROCUREMENT_BUY@1`, `PUBLIC_PROCUREMENT_BR_14133@1`); tuplas, `DOCUMENTOS_ESPERADOS` e constantes viram aliases; espelho grava os códigos do registro; `test_sourcing_s4.py` (todas as combinações origem × destino × ação contra o comportamento anterior) e `test_sourcing_s4_api.py` |
+| S5–S8 | aguardando o PO (OI-020) | — |
+
+**Desvios na S4 (registrados em D-060):**
+- Workflow e ruleset são definidos no próprio lado, não no núcleo: o núcleo não conhece estado de nenhum lado e só o comprador pode usar `Lado.COMPRA` (fitness). O núcleo tem o motor e o registro.
+- Licitação inexistente com status inválido passa a responder 404 (antes 422/409): o fluxo depende da modalidade.
+- Estados de demanda, plano, item do PCA e contrato continuam em tuplas (não são processo de sourcing); limiares analíticos sem base regulatória continuam em `riscos.py` (TD-089).
 
 **Desvios do desenho na S3 (registrados em D-058):**
 - 6 tabelas, não 9: participante, proposta e avaliação só ganham tabela quando o primeiro fluxo gravar nelas (S7/S8). Hoje não há dado para elas, e a regra é não criar abstração sem uso.

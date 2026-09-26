@@ -2,12 +2,12 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **SOURCING S4** (em execução) — workflow e rulesets declarativos no lugar de tuplas de status e regras fixas; S5–S8 não autorizadas |
+| **CURRENT PHASE** | **NENHUMA** — SOURCING S4 concluída em 2026-09-26. Aguardando o PO: S5 (UI compartilhada, OI-020) e a implementação comercial de D-059 (OI-021) |
 | Última fase concluída | PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION (2026-09-25) |
 | Fase 15 | Desbloqueada pelo PO em 2026-09-25 com o prompt "PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION" (substitui o escopo "Public Procurement Pricing") e concluída no mesmo dia. Preço-base do Public Procurement e franquias do Procurement/Full Suite continuam PENDING_FINAL_DEFINITION por decisão do PO |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/SOURCING_S3_COMPLETION.md` (antes: `SOURCING_S0_S2_COMPLETION.md`, `PHASE_15_COMPLETION.md`) |
-| Correção arquitetural | 2026-09-26 — Strategic Sourcing & Bids (D-055, `18_STRATEGIC_SOURCING.md`). Plano S0–S8; **S0–S3 autorizadas e concluídas** em 2026-09-26 (OI-020); S4–S8 não autorizadas. Após o deploy da S3: rodar o backfill (`/cron/sourcing-sincronizar`) |
+| Relatório da última fase | `phases/SOURCING_S4_COMPLETION.md` (antes: `SOURCING_S3_COMPLETION.md`, `SOURCING_S0_S2_COMPLETION.md`, `PHASE_15_COMPLETION.md`) |
+| Correção arquitetural | 2026-09-26 — Strategic Sourcing & Bids (D-055, `18_STRATEGIC_SOURCING.md`). Plano S0–S8; **S0–S4 autorizadas e concluídas** em 2026-09-26 (OI-020); S5–S8 não autorizadas. Após o deploy da S3: rodar o backfill (`/cron/sourcing-sincronizar`) uma vez |
 
 ## Autorizações
 
@@ -28,7 +28,7 @@
 - **OI-018** (financeiro): câmbio USD→BRL para a margem de IA (sem ele a margem aparece indisponível).
 - **OI-021** (priorização): autorizar a implementação comercial de D-059 (planos, catálogo, entitlements, página de vendas).
 - **OI-022** (comercial): preço do buyer seat adicional e dos bundles futuros.
-- **OI-020** (priorização): S0–S3 concluídas; S4 (workflow/rulesets) e seguintes aguardam o PO.
+- **OI-020** (priorização): S0–S4 concluídas; S5 (UI compartilhada) e seguintes aguardam o PO.
 - **OI-014** (produto): visibilidade padrão de empresas novas no diretório da rede.
 - **OI-010** (alta): verificar em produção se as features de IA falhavam por `temperature` com `claude-sonnet-5` (corrigido no código).
 - **OI-016** (operação): metas de RPO/RTO.

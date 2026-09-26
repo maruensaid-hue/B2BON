@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.contexts.procurement import tipos
+from app.contexts.procurement import fluxo, tipos
 from app.contexts.shared import paginacao
 from app.models.contrato_compra import ContratoCompra
 from app.models.demanda_compra import DemandaCompra
@@ -44,11 +44,11 @@ REFERENCIAS = {
 }
 STATUS_INICIAL = {
     "plano_contratacao": "ELABORACAO", "item_pca": "PLANEJADO", "demanda_compra": "RASCUNHO",
-    "processo_contratacao": "PLANEJAMENTO", "evento_processo": "ABERTO", "contrato_compra": "VIGENTE",
+    "processo_contratacao": fluxo.PROCESSO.inicial, "evento_processo": "ABERTO", "contrato_compra": "VIGENTE",
 }
 STATUS_VALIDOS = {
     "plano_contratacao": tipos.STATUS_PLANO, "item_pca": tipos.STATUS_ITEM_PCA, "demanda_compra": tipos.STATUS_DEMANDA,
-    "processo_contratacao": tipos.STATUS_PROCESSO, "evento_processo": ("ABERTO", "CONCLUIDO", "CANCELADO"),
+    "processo_contratacao": fluxo.PROCESSO.estados, "evento_processo": ("ABERTO", "CONCLUIDO", "CANCELADO"),
     "contrato_compra": tipos.STATUS_CONTRATO,
 }
 TIPOS_VALIDOS = {
@@ -115,6 +115,8 @@ def atualizar(db: Session, tenant_id: str, usuario_id: int | None, entidade: str
     registro = obter(db, tenant_id, entidade, registro_id)
     if entidade in ("demanda_compra", "plano_contratacao") and dados.get("status") in ("APROVADA", "APROVADO"):
         raise RegraNegocioViolada("Aprovação é feita pela ação de aprovar (administrador).")
+    if entidade == "processo_contratacao" and dados.get("status") is not None:
+        fluxo.PROCESSO.validar(dados["status"], "status", de=registro.status)
     for campo, valor in dados.items():
         setattr(registro, campo, valor)
     auditoria_service.registrar(db, tenant_id, f"{entidade}_atualizado", entidade, registro.id,
