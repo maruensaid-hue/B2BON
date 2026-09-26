@@ -774,3 +774,18 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
     número e sem botão de compra. **Assinatura** mostra "condições por contrato (a partir de …)" para STARTING_AT.
   - **Pendência nova**: limite de usuários do Bid Intelligence não foi definido pelo PO (OI-023); hoje sem limite.
 - **Status**: ACEITA. Resolve OI-021.
+
+## D-070 · 2026-09-26 · Phase J1 · Troca de leitura da S6 preparada atrás de configuração (desligada)
+- **Contexto**: autorização do PO após o plano A–I ("preparar a troca S6"). O portão operacional continua: trocar a
+  leitura só depois do backfill em produção e de uma release sem `SOURCING_DIVERGENCIA` (TD-087/088).
+- **Decisão**:
+  - Configuração `sourcing_leitura_fonte` = **ANTIGA** (padrão) | UNIFICADA.
+  - Em UNIFICADA, as leituras de **listagem** dos repositórios por lado vêm de `*_sourcing`, filtradas por tenant e pelo
+    lado de quem pergunta, e voltam no formato antigo (ids de origem, mesmos campos): vendedor — processos (mesma ordem e
+    keyset), documentos, requisitos (ordem do banco para vazios), tipos de documento; comprador — tipos de documento.
+    Consulta no núcleo neutro (`sourcing/leitura.py`); a volta de cada lado fica ao lado do mapeamento de ida (`bids/espelho.py`).
+  - **Fica nas tabelas antigas** (próximos passos da S6): `obter_processo` (o registro é alterado por quem chama — a escrita
+    precisa mudar antes); processo e documentos do comprador (achados em JSON); arquivo e texto das páginas (TD-088).
+  - Prova: a mesma API responde igual nos dois modos depois do backfill (SQLite e Postgres 16); em UNIFICADA a leitura
+    dupla dessas rotas some (workspace do vendedor 26 → 22 consultas).
+- **Status**: ACEITA. Não liga a troca em produção.

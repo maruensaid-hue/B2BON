@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.contexts.procurement import cadastros, espelho
 from app.contexts.shared import paginacao
-from app.contexts.sourcing.contract import paridade
+from app.contexts.sourcing.contract import leitura, paridade
 from app.contexts.sourcing.contract import tipos as tipos_sourcing
 from app.models.documento_compras import DocumentoCompras
 from app.models.processo_contratacao import ProcessoContratacao
@@ -46,6 +46,8 @@ class RepositorioCompra:
         return documentos
 
     def tipos_de_documento(self, db: Session, tenant_id: str) -> dict[int, set[str]]:
+        if leitura.unificada():  # Phase J1: única leitura do comprador já trocável (processo e documentos: ver 18 §10)
+            return paridade.tipos_de_documento(db, self.lado, tenant_id, "processo_contratacao")
         resultado: dict[int, set[str]] = {}
         for processo_id, tipo in db.query(DocumentoCompras.processo_id, DocumentoCompras.tipo).filter(
                 DocumentoCompras.tenant_id == tenant_id, DocumentoCompras.processo_id.isnot(None)):

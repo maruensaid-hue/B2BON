@@ -6,6 +6,9 @@ tabelas antigas é copiada na mesma transação) e pelo backfill idempotente.
 A leitura dupla (`repositorio.py`) compara com estes mesmos mapeamentos.
 """
 
+from datetime import datetime
+from types import SimpleNamespace
+
 from app.contexts.bids import fluxo
 from app.contexts.sourcing.contract import espelho, tipos
 from app.models.contrato_venda_publica import ContratoVendaPublica
@@ -91,6 +94,51 @@ def contrato(c: ContratoVendaPublica) -> dict:
 
 
 # modelo antigo → (tabela nova, origem_tabela, mapeamento)
+# --- Volta (Phase J1, preparação da S6): linha unificada → registro no formato antigo ------------
+# Mesmos ids (os de origem) e campos que `licitacoes.como_dict`, `documentos.como_dict` e `requisito_dict`
+# leem; o arquivo e o texto das páginas não estão nas tabelas novas (TD-088).
+def _float(valor):
+    return float(valor) if valor is not None else None
+
+
+def _data(valor):
+    return datetime.fromisoformat(valor) if isinstance(valor, str) else valor
+
+
+def licitacao_de(linha: dict) -> SimpleNamespace:
+    extras = linha.get("metadados") or {}
+    return SimpleNamespace(
+        id=linha["origem_id"], tenant_id=linha["tenant_id"], titulo=linha["titulo"], objeto=linha["descricao"],
+        orgao_nome=linha["emissor_nome"], orgao_cnpj=linha["emissor_cnpj"], conta_id=linha["conta_id"], oferta_id=linha["oferta_id"],
+        modalidade=extras.get("modalidade"), fonte=linha["fonte"], fonte_id_externo=linha["fonte_id_externo"], fonte_url=linha["fonte_url"],
+        data_publicacao=linha["publicado_em"], prazo_proposta=linha["prazo"], prazo_esclarecimento=_data(extras.get("prazo_esclarecimento")),
+        valor_estimado=_float(linha["valor_estimado"]), status=linha["status"], responsavel_usuario_id=linha["responsavel_usuario_id"],
+        concorrentes=extras.get("concorrentes"), parceiros=extras.get("parceiros"), vencedor=extras.get("vencedor"),
+        valor_proposta=_float(extras.get("valor_proposta")), motivo_resultado=extras.get("motivo_resultado"), criado_em=linha["criado_em"],
+    )
+
+
+def documento_de(linha: dict, licitacao_id: int) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=linha["origem_id"], tenant_id=linha["tenant_id"], licitacao_id=licitacao_id, tipo=linha["tipo_documento"],
+        nome_arquivo=linha["nome_arquivo"], tipo_mime=linha["tipo_mime"], tamanho_bytes=linha["tamanho_bytes"], sha256=linha["sha256"],
+        paginas=linha["paginas"], fonte=linha["fonte"], fonte_url=linha["fonte_url"], status_analise=linha["status_extracao"],
+        analisado_em=linha["analisado_em"], enviado_por_usuario_id=linha["enviado_por_usuario_id"], criado_em=linha["criado_em"],
+    )
+
+
+def requisito_de(linha: dict, licitacao_id: int, documento_id: int | None) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=linha["origem_id"], tenant_id=linha["tenant_id"], licitacao_id=licitacao_id, documento_id=documento_id,
+        categoria=linha["categoria"], descricao=linha["texto"], evidencia=linha["trecho"], pagina=linha["pagina"],
+        clausula=linha["clausula"], obrigatorio=linha["obrigatorio"], resposta=linha["resposta"],
+        origem="ia" if linha["fonte"] == "AI" else "manual", status=linha["status_revisao"],
+        conformidade_manual=linha["conformidade_manual"], justificativa_manual=linha["justificativa_manual"],
+        revisado_por_usuario_id=linha["revisado_por_usuario_id"], revisado_em=linha["revisado_em"],
+        correlation_id=linha["correlation_id"], criado_em=linha["criado_em"],
+    )
+
+
 MAPA = {
     Licitacao: ("processo", "licitacao", processo),
     DocumentoLicitacao: ("documento", "documento_licitacao", documento),

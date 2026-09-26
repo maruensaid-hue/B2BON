@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     # Sourcing S3 (D-055): leitura dupla das tabelas unificadas.
     # DESLIGADA | COMPARAR (loga SOURCING_DIVERGENCIA) | ESTRITA (erro; usada nos testes)
     sourcing_leitura_dupla: str = "COMPARAR"
+    # Phase J1 (preparação da S6): de onde vêm as leituras de listagem dos repositórios por lado.
+    # ANTIGA (padrão) | UNIFICADA — ligar só depois do backfill em produção e de uma release sem
+    # SOURCING_DIVERGENCIA (portão TD-087/088). Escritas e `obter_processo` continuam nas tabelas antigas.
+    sourcing_leitura_fonte: str = "ANTIGA"
     ai_margem_alvo: float = 0.80
     ai_margem_alerta: float = 0.75
     ai_margem_critica: float = 0.65

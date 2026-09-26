@@ -6,6 +6,10 @@ Go/No-Go e contratos ganhos (FinOps, Analytics).
 S3 (expand): as tabelas antigas continuam respondendo; cada leitura de
 processo, documento e requisito é conferida com as tabelas unificadas
 (`sourcing.paridade`, só lado SELL). A troca de fonte é a S6.
+
+Phase J1 (preparação da S6): com `sourcing_leitura_fonte = UNIFICADA`, as leituras de listagem
+(processos, documentos, requisitos, tipos de documento) vêm das tabelas unificadas no formato antigo.
+`obter_processo` continua na tabela antiga: o registro devolvido é alterado por quem chama.
 """
 
 from datetime import datetime
@@ -15,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.contexts.shared import paginacao
 from app.contexts.bids import espelho
-from app.contexts.sourcing.contract import paridade
+from app.contexts.sourcing.contract import leitura, paridade
 from app.contexts.sourcing.contract import tipos as tipos_sourcing
 from app.models.contrato_venda_publica import ContratoVendaPublica
 from app.models.decisao_go_no_go import DecisaoGoNoGo
@@ -38,6 +42,11 @@ class RepositorioVenda:
         """Prazo mais próximo primeiro (sem prazo no fim), depois id decrescente.
         Keyset: a posição é (prazo, id) da última linha."""
         quantidade = paginacao.limite(limite)
+        if leitura.unificada():
+            linhas = [espelho.licitacao_de(linha) for linha in leitura.processos_por_prazo(
+                db, self.lado, tenant_id, "licitacao", quantidade, paginacao.decodificar(cursor), status)]
+            return paginacao.fatiar(linhas, quantidade, lambda lic: {
+                "prazo": lic.prazo_proposta.isoformat() if lic.prazo_proposta else None, "id": lic.id})
         consulta = db.query(Licitacao).filter_by(tenant_id=tenant_id)
         if status:
             consulta = consulta.filter_by(status=status)
@@ -67,12 +76,26 @@ class RepositorioVenda:
         return licitacao
 
     def documentos(self, db: Session, tenant_id: str, processo_id: int) -> list[DocumentoLicitacao]:
+        if leitura.unificada():
+            return [espelho.documento_de(linha, processo_id)
+                    for linha in leitura.filhas(db, "documento", self.lado, tenant_id, ("licitacao", processo_id), "documento_licitacao")]
         documentos = (db.query(DocumentoLicitacao).filter_by(tenant_id=tenant_id, licitacao_id=processo_id)
                       .order_by(DocumentoLicitacao.id).all())
         self._conferir(db, tenant_id, "documento", "documento_licitacao", documentos, espelho.documento, "documentos")
         return documentos
 
     def requisitos(self, db: Session, tenant_id: str, processo_id: int, incluir_descartados: bool = False) -> list[RequisitoLicitacao]:
+        if leitura.unificada():
+            linhas = [linha for linha in leitura.filhas(db, "requisito", self.lado, tenant_id, ("licitacao", processo_id),
+                                                        "requisito_licitacao")
+                      if incluir_descartados or linha["status_revisao"] != "descartado"]
+            docs = leitura.origens(db, "documento", {linha["documento_id"] for linha in linhas if linha["documento_id"]})
+            requisitos = [espelho.requisito_de(linha, processo_id, docs[linha["documento_id"]][1] if linha["documento_id"] else None)
+                          for linha in linhas]
+            # mesma ordem da consulta antiga (documento, página, id); vazio fica onde o banco o põe (SQLite primeiro, Postgres por último)
+            vazio_por_ultimo = db.get_bind().dialect.name == "postgresql"
+            return sorted(requisitos, key=lambda r: ((r.documento_id is None) == vazio_por_ultimo, r.documento_id or 0,
+                                                     (r.pagina is None) == vazio_por_ultimo, r.pagina or 0, r.id))
         consulta = db.query(RequisitoLicitacao).filter_by(tenant_id=tenant_id, licitacao_id=processo_id)
         if not incluir_descartados:
             consulta = consulta.filter(RequisitoLicitacao.status != "descartado")
@@ -81,6 +104,8 @@ class RepositorioVenda:
         return requisitos
 
     def tipos_de_documento(self, db: Session, tenant_id: str) -> dict[int, set[str]]:
+        if leitura.unificada():
+            return paridade.tipos_de_documento(db, self.lado, tenant_id, "licitacao")
         resultado: dict[int, set[str]] = {}
         for processo_id, tipo in db.query(DocumentoLicitacao.licitacao_id, DocumentoLicitacao.tipo).filter(
                 DocumentoLicitacao.tenant_id == tenant_id):

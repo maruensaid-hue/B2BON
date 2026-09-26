@@ -59,7 +59,7 @@ def _linhas(db: Session, tabela: str, lado: Lado, tenant_id: str, origem_tabela:
     return resultado
 
 
-def _origens(db: Session, tabela: str, ids: set[int]) -> dict[int, tuple[str, int]]:
+def origens(db: Session, tabela: str, ids: set[int]) -> dict[int, tuple[str, int]]:
     """id novo → (origem_tabela, origem_id), numa consulta por tabela referenciada."""
     if not ids:
         return {}
@@ -75,7 +75,7 @@ def comparar(db: Session, tabela: str, lado: Lado, tenant_id: str, origem_tabela
     novos = _linhas(db, tabela, lado, tenant_id, origem_tabela, list(esperados))
     referencias_usadas = {chave for valores in esperados.values() for item in (valores if isinstance(valores, list) else [valores])
                           for chave in item if chave in REFERENCIAS}
-    origens = {chave: _origens(db, REFERENCIAS[chave][0], {linha[REFERENCIAS[chave][1]] for linhas in novos.values() for linha in linhas
+    por_referencia = {chave: origens(db, REFERENCIAS[chave][0], {linha[REFERENCIAS[chave][1]] for linhas in novos.values() for linha in linhas
                                                             if linha[REFERENCIAS[chave][1]] is not None})
                for chave in referencias_usadas}
     divergencias: list[str] = []
@@ -91,7 +91,7 @@ def comparar(db: Session, tabela: str, lado: Lado, tenant_id: str, origem_tabela
                     continue
                 if campo in REFERENCIAS:
                     coluna = REFERENCIAS[campo][1]
-                    obtido = None if novo[coluna] is None else origens[campo].get(novo[coluna], ("?", novo[coluna]))
+                    obtido = None if novo[coluna] is None else por_referencia[campo].get(novo[coluna], ("?", novo[coluna]))
                     esperado_ref = tuple(valor) if valor and valor[1] is not None else None
                     if obtido != esperado_ref:
                         divergencias.append(f"{tabela} {origem_tabela}:{origem_id}.{coluna}: {obtido} != {esperado_ref}")

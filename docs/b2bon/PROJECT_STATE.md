@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **Plano A–I concluído** em 2026-09-26 (Phase I — Commercialization concluída). Próximas fases dependem de nova autorização do PO. Fases seguintes pré-autorizadas pelo PO, executadas uma por vez |
+| **CURRENT PHASE** | **PHASE J** — pós-plano A–I, autorizada pelo PO em 2026-09-26, em sequência: **J1** preparar a troca S6 (leitura unificada atrás de configuração, desligada); **J2** débitos técnicos de baixo risco; **J3** OI-023 (Bid Intelligence com 10 usuários por entitlement). Plano A–I concluído. Fases seguintes pré-autorizadas pelo PO, executadas uma por vez |
 | Última fase concluída | PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION (2026-09-25) |
 | Fase 15 | Desbloqueada pelo PO em 2026-09-25 com o prompt "PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION" (substitui o escopo "Public Procurement Pricing") e concluída no mesmo dia. Preço-base do Public Procurement e franquias do Procurement/Full Suite continuam PENDING_FINAL_DEFINITION por decisão do PO |
 | Branch de trabalho | `staging` |
