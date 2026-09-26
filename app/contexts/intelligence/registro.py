@@ -93,6 +93,12 @@ FEATURES: dict[str, Feature] = {
         Feature("procurement.analise_documento", "procurement", "procurement_intelligence_agent", ClasseModelo.C3, Gatilho.USUARIO,
                 "Extrai obrigações, prazos e riscos de documento de compras, com citação literal (uso interno do órgão).",
                 conteudo_externo=True),
+        # Phase G: Requirement AI e Evaluation AI do comprador privado (Strategic Sourcing)
+        Feature("sourcing.analise_especificacao", "sourcing", "procurement_intelligence_agent", ClasseModelo.C3, Gatilho.USUARIO,
+                "Extrai requisitos da especificação do comprador, com citação literal (vai para revisão).", conteudo_externo=True),
+        Feature("sourcing.avaliacao_propostas", "sourcing", "procurement_intelligence_agent", ClasseModelo.C3, Gatilho.USUARIO,
+                "Sugere o status de cada requisito por proposta, ancorado no texto da própria proposta (decisão humana).",
+                conteudo_externo=True),
         Feature("intelligence.orquestrador", "intelligence", "b2bon_intelligence_agent", ClasseModelo.C1, Gatilho.USUARIO,
                 "Escolhe a ferramenta quando o roteamento por palavras-chave não encontra uma."),
         Feature("plataforma.faq", "plataforma", "help_agent", ClasseModelo.C1, Gatilho.USUARIO, "Ajuda sobre como usar a plataforma."),
@@ -119,6 +125,8 @@ WORKLOAD_POR_FEATURE: dict[str, str] = {
     "bids.analise_edital": "tender_analysis",
     "bids.analise_tr": "tender_terms_of_reference",
     "procurement.analise_documento": "procurement_document_intelligence",
+    "sourcing.analise_especificacao": "procurement_document_intelligence",
+    "sourcing.avaliacao_propostas": "procurement_complex_comparison",
     "intelligence.orquestrador": "classification_simple",
     "plataforma.faq": "short_summary",
 }
@@ -150,6 +158,13 @@ FERRAMENTAS: dict[str, Ferramenta] = {
                    "Contratos com fornecedores perto do fim e sem processo sucessor (lado comprador)."),
         Ferramenta("procurement.pca_atrasado", Sensibilidade.READ, "procurement",
                    "Itens do PCA sem processo e processos atrasados (lado comprador)."),
+        # Phase G: Strategic Sourcing (lado comprador privado), determinísticas
+        Ferramenta("sourcing.comparar_propostas", Sensibilidade.READ, "sourcing",
+                   "Compara as propostas de um processo de sourcing (técnico, comercial, risco); não escolhe vencedor."),
+        Ferramenta("sourcing.historico_fornecedor", Sensibilidade.READ, "sourcing",
+                   "Histórico do fornecedor nos processos de sourcing do próprio comprador."),
+        Ferramenta("sourcing.pendencias", Sensibilidade.READ, "sourcing",
+                   "Processos de sourcing em aberto com alertas de risco e a próxima ação."),
         Ferramenta("predator.rascunho_mensagem", Sensibilidade.EXTERNAL_ACTION, "predator",
                    "Cria rascunho de mensagem na fila de aprovação (nunca envia)."),
         Ferramenta("crm.mover_estagio", Sensibilidade.WRITE, "crm", "Move negócio de estágio."),
@@ -177,12 +192,15 @@ AGENTES: dict[str, Agente] = {
         Agente("opportunity_agent", "Opportunity Agent", "intelligence", StatusAgente.ATIVO, ("opportunity.analisar_oportunidade",)),
         Agente("tender_analyzer", "Tender Analyzer", "bids", StatusAgente.ATIVO),
         Agente("tr_analyzer", "Term of Reference Analyzer", "bids", StatusAgente.ATIVO),
-        Agente("procurement_intelligence_agent", "Procurement Intelligence Agent", "procurement", StatusAgente.ATIVO),
+        # D-055: capability, não agente novo — o Strategic Sourcing (Phase G) usa este agente existente
+        Agente("procurement_intelligence_agent", "Procurement Intelligence Agent", "procurement", StatusAgente.ATIVO,
+               ("sourcing.comparar_propostas", "sourcing.historico_fornecedor", "sourcing.pendencias")),
         Agente("pipeline_agent", "Pipeline Agent", "crm", StatusAgente.ATIVO, ("crm.listar_oportunidades", "crm.mover_estagio")),
         Agente("revenue_agent", "Revenue Agent", "map", StatusAgente.ATIVO, ("opportunity.clientes_expansao",)),
         Agente("bid_qualification_agent", "Bid Qualification Agent", "bids", StatusAgente.ATIVO, ("bids.analisar_licitacao", "bids.prazos")),
         Agente("contract_intelligence_agent", "Contract Intelligence Agent", "procurement", StatusAgente.ATIVO, ("bids.contratos_vencendo", "procurement.contratos_vencendo")),
         Agente("procurement_planning_agent", "Procurement Planning Agent", "procurement", StatusAgente.ATIVO, ("procurement.pca_atrasado",)),
+
         # §19 — ainda planejados
         Agente("icp_agent", "ICP Agent", "predator", StatusAgente.PLANEJADO),
         Agente("stakeholder_agent", "Stakeholder Agent", "intelligence", StatusAgente.PLANEJADO),

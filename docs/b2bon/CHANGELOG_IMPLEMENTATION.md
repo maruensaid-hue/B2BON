@@ -1,5 +1,14 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Phase G — Intelligence do Strategic Sourcing (2026-09-26, autorizada pelo PO)
+
+- Especificação do processo: envio do documento e sugestão de requisitos pela IA, cada um com o trecho e a página; o comprador confirma ou descarta antes de valer.
+- Avaliação assistida: a IA sugere o status de cada requisito por proposta, só com o trecho da própria proposta; o avaliador aplica ou não.
+- Custo em AI Credits estimado e confirmado antes, uma cobrança por operação.
+- Visão geral com a próxima ação e alertas (prazo, participação, proposta única, obrigatório não atendido, preço fora da mediana, histórico do fornecedor); histórico de cada fornecedor na aba Fornecedores. Sem IA.
+- Assistente: "Compare as propostas", "Histórico do fornecedor X" e "Processos de sourcing que precisam de atenção".
+- Migração `f2c4e6a8b0d1`: texto e arquivo do documento de especificação.
+
 ## Phase F — Business Network e acesso do fornecedor (2026-09-26, autorizada pelo PO)
 
 - Link de acesso por participante (mostrado uma vez; só o hash é guardado) para o fornecedor responder sem login e sem ocupar assento.

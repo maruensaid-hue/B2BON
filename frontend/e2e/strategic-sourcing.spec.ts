@@ -16,6 +16,10 @@ test("RFQ: cotação, comparação, aprovação e contrato", async ({ page }) =>
   await page.getByRole("button", { name: "Criar" }).click();
 
   const ws = page.getByTestId("sourcing-workspace");
+  // Phase G: próxima ação determinística vinda do servidor
+  await expect(ws.getByTestId("proxima-acao")).toContainText(
+    "Cadastre requisitos ou itens",
+  );
   await ws.getByRole("tab", { name: "Itens e requisitos" }).click();
   await ws.getByPlaceholder("Item").fill("Cadeira ergonômica");
   await ws.getByPlaceholder("Qtd.").fill("10");
@@ -47,6 +51,9 @@ test("RFQ: cotação, comparação, aprovação e contrato", async ({ page }) =>
   ).toBeVisible();
 
   await ws.getByRole("tab", { name: "Visão geral" }).click();
+  await expect(ws.getByTestId("proxima-acao")).toContainText(
+    "compare as propostas e solicite a aprovação",
+  );
   await ws
     .getByPlaceholder("Justificativa da escolha")
     .fill("Único cotado dentro do prazo");

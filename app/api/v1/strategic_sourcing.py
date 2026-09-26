@@ -2,19 +2,21 @@
 
 Gate: módulo "sourcing" (B2B ON Strategic Sourcing). Recursos compartilhados
 sob `/sourcing` (§30). Só o próprio tenant; nenhuma resposta vai para o lado
-vendedor, para a rede ou para a IA.
+vendedor ou para a rede. IA só nas rotas da Phase G, pelo AI Gateway, com
+crédito medido e sugestão sujeita a revisão humana.
 """
 
 from datetime import date, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_tenant_id, get_usuario_atual
+from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
 from app.contexts.procurement import contract as compras
+from app.llm.base import LLMProvider
 from app.models.usuario import Usuario
 
 router = APIRouter(prefix="/sourcing", tags=["strategic-sourcing"])
@@ -251,3 +253,63 @@ def baixar_anexo(anexo_id: int, tenant_id: str = Depends(get_tenant_id), db: Ses
     anexo = compras.portal.baixar_anexo(db, tenant_id, anexo_id)
     return Response(content=anexo.conteudo, media_type=anexo.tipo_mime,
                     headers={"Content-Disposition": f'attachment; filename="anexo-{anexo.id}"', "X-Content-SHA256": anexo.sha256})
+
+
+# --- Phase G: Requirement AI, Evaluation AI e inteligência C0 --------------------------------
+ia = compras.estrategico_ia
+
+
+class RevisaoRequisito(BaseModel):
+    confirmar: bool
+    peso: float | None = None
+    obrigatorio: bool | None = None
+
+
+@router.post("/processos/{processo_id}/documentos", status_code=201)
+async def enviar_documento(processo_id: int, arquivo: UploadFile = File(...), classificacao: str = Form("CONFIDENTIAL"),
+                           tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
+                           db: Session = Depends(get_db)) -> dict:
+    documento = ia.enviar_documento(db, tenant_id, _usuario_id(ator_id), processo_id, arquivo.filename or "especificacao",
+                                    arquivo.content_type or "", await arquivo.read(), classificacao)
+    return ia.documento_dict(documento)
+
+
+@router.get("/documentos/{documento_id}/arquivo")
+def baixar_documento(documento_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> Response:
+    documento = ia.obter_documento(db, tenant_id, documento_id)
+    return Response(content=documento.conteudo or b"", media_type=documento.tipo_mime,
+                    headers={"Content-Disposition": f'attachment; filename="documento-{documento.id}"', "X-Content-SHA256": documento.sha256})
+
+
+@router.get("/documentos/{documento_id}/estimativa")
+def estimar_analise(documento_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    """AI Credits estimados antes de analisar."""
+    return ia.estimar_analise(db, tenant_id, documento_id)
+
+
+@router.post("/documentos/{documento_id}/analisar", dependencies=[Depends(limitar_ia_por_tenant())])
+def analisar_documento(documento_id: int, confirmar: bool = False, tenant_id: str = Depends(get_tenant_id),
+                       ator_id: str | None = Depends(get_ator_id), llm: LLMProvider = Depends(get_llm_provider),
+                       db: Session = Depends(get_db)) -> dict:
+    """Requisitos sugeridos, cada um com o trecho literal e a página; valem só depois da revisão."""
+    return ia.analisar_documento(db, llm, tenant_id, _usuario_id(ator_id), documento_id, confirmado=confirmar)
+
+
+@router.put("/requisitos/{requisito_id}/revisao")
+def revisar_requisito(requisito_id: int, dados: RevisaoRequisito, tenant_id: str = Depends(get_tenant_id),
+                      ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
+    requisito = ia.revisar_requisito(db, tenant_id, _usuario_id(ator_id), requisito_id, dados.confirmar, dados.peso, dados.obrigatorio)
+    return estrategico.serializar(requisito, estrategico.CAMPOS_REQUISITO)
+
+
+@router.get("/processos/{processo_id}/avaliacao-ia/estimativa")
+def estimar_avaliacao(processo_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    return ia.estimar_avaliacao(db, tenant_id, processo_id)
+
+
+@router.post("/processos/{processo_id}/avaliacao-ia", dependencies=[Depends(limitar_ia_por_tenant())])
+def sugerir_avaliacoes(processo_id: int, confirmar: bool = False, tenant_id: str = Depends(get_tenant_id),
+                       ator_id: str | None = Depends(get_ator_id), llm: LLMProvider = Depends(get_llm_provider),
+                       db: Session = Depends(get_db)) -> dict:
+    """Sugestões ancoradas no texto de cada proposta; nada é gravado como avaliação."""
+    return ia.sugerir_avaliacoes(db, llm, tenant_id, _usuario_id(ator_id), processo_id, confirmado=confirmar)

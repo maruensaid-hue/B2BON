@@ -145,6 +145,9 @@ class DocumentoSourcing(Base):
     status_extracao: Mapped[str] = mapped_column(String)
     analisado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     enviado_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
+    # Phase G: só documento nativo (especificação do comprador privado) guarda texto e arquivo
+    paginas_texto: Mapped[list | None] = mapped_column(JSON, nullable=True, deferred=True)
+    conteudo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     origem_tabela: Mapped[str] = mapped_column(String)
     origem_id: Mapped[int] = mapped_column(Integer)
     criado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -123,7 +123,7 @@ def visao(db: Session, participante) -> dict:
         "processo": {"titulo": processo.titulo, "descricao": processo.descricao, "tipo_processo": processo.tipo_processo,
                      "prazo": processo.prazo, "moeda": processo.moeda, "situacao": _situacao_publica(processo, participante)},
         "requisitos": [{"id": r.id, "categoria": r.categoria, "texto": r.texto, "obrigatorio": r.obrigatorio}
-                       for r in nativo.listar(db, "requisito", LADO, tenant, processo_id=processo.id)],
+                       for r in estrategico.requisitos_vigentes(db, tenant, processo.id)],
         "itens": [{"id": i.id, "descricao": i.descricao, "quantidade": float(i.quantidade), "unidade": i.unidade,
                    "especificacao": i.especificacao} for i in nativo.listar(db, "item", LADO, tenant, processo_id=processo.id)],
         "esclarecimentos": [{"pergunta": e.pergunta, "resposta": e.resposta, "respondido_em": e.respondido_em}

@@ -43,9 +43,9 @@ repassa amostragem a modelos que aceitam (OI-010).
 
 ## 3. Registro de features, agentes e ferramentas (§19, §72)
 
-`registro.py`: 19 features (cada uma → módulo, agente, classe, gatilho),
-28 agentes (21 ATIVOS, 7 PLANEJADOS após a Fase 12 do §19, marcados como tal na UI),
-6 ferramentas com sensibilidade READ / WRITE / EXTERNAL_ACTION /
+`registro.py`: 21 features após a Phase G (cada uma → módulo, agente, classe, gatilho),
+28 agentes (22 ATIVOS, 6 PLANEJADOS, marcados como tal na UI),
+16 ferramentas com sensibilidade READ / WRITE / EXTERNAL_ACTION /
 SENSITIVE_ACTION. `agente_pode_usar(agente, ferramenta)` é a checagem
 que o orquestrador da Fase 12 usa.
 
@@ -116,6 +116,7 @@ pergunta ──► ferramentas PERMITIDAS ao usuário (declarada + agente autori
 | `bids.contratos_vencendo` | contract_intelligence_agent | bids | READ | SELL |
 | `procurement.contratos_vencendo` | contract_intelligence_agent | procurement | READ | BUY |
 | `procurement.pca_atrasado` | procurement_planning_agent | procurement | READ | BUY |
+| `sourcing.comparar_propostas`, `sourcing.historico_fornecedor`, `sourcing.pendencias` (Phase G) | procurement_intelligence_agent | sourcing | READ (C0) | BUY |
 | `brain.buscar` | sales_strategy_agent | — | READ | NEUTRO |
 | `predator.rascunho_mensagem` | cadence_agent | predator | EXTERNAL_ACTION (proposta, vai para aprovação) | SELL |
 | `plataforma.alterar_plano` | b2bon_intelligence_agent | — | SENSITIVE_ACTION (recusada) | NEUTRO |
@@ -138,3 +139,11 @@ PLANEJADOS que só repetem uma capability não serão construídos. Toda capabil
 "compra × venda → esclarecer" (D-040) continua. Contexto mínimo: intenção → permissão → recuperação só
 do processo/documento → blocos ancorados → modelo; regras, SQL e scoring antes de IA. Códigos de feature
 e workloads de crédito (Fase 15) **não mudam**, para o histórico continuar reproduzível.
+
+**Phase G (D-067)** segue esta regra: nenhum agente novo. Requirement AI do comprador privado é mais um
+perfil (`especificacao_compra`) do mesmo extrator; Evaluation AI, Supplier Intelligence, Risco e
+Recomendação do Strategic Sourcing ficam na capability Procurement Intelligence
+(`procurement_intelligence_agent`). Duas features novas (`sourcing.analise_especificacao`,
+`sourcing.avaliacao_propostas`) usam workloads que já existiam no catálogo
+(`procurement_document_intelligence`, `procurement_complex_comparison`); histórico, riscos e próxima
+ação são C0 (0 créditos).

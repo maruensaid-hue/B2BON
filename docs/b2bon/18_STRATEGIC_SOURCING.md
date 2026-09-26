@@ -432,7 +432,7 @@ O plano A–I substitui a sequência S5–S8 como ordem de execução. O que S0�
 | **D · Public buy side** | demanda, PCA, processo, fornecedor, avaliação, contrato, risco | Procurement atual sobre os engines; TD-090 resolvido; workflow + ruleset na tela; cadastro 422 (D-064) | ✅ 2026-09-26 (`PHASE_D_COMPLETION.md`) |
 | **E · Enterprise buy side** | Strategic Sourcing, descoberta, RFI/RFP/RFQ, qualificação, comparação, shortlist, negociação | S8: nativo no modelo unificado; participante, item, proposta, avaliação; 3 workflows por tipo; aprovação humana (D-065) | ✅ 2026-09-26 (`PHASE_E_COMPLETION.md`) |
 | **F · Business Network** | publicação/convite, matching, visibilidade, acesso do fornecedor | convite (sem vitrine), link secreto sem assento, convites na conta da rede, visão restrita, esclarecimentos, anexos (D-066) | ✅ 2026-09-26 (`PHASE_F_COMPLETION.md`) |
-| G · Intelligence | IA de requisitos, avaliação, bids, procurement, fornecedor, risco | capabilities pelo AI Gateway | aguardando o PO |
+| **G · Intelligence** | IA de requisitos, avaliação, bids, procurement, fornecedor, risco | capabilities pelo AI Gateway, sem agente novo: Requirement AI (perfil `especificacao_compra`) e Evaluation AI ancorada na própria proposta, medidas; histórico, riscos e próxima ação C0 (D-067) | ✅ 2026-09-26 (`PHASE_G_COMPLETION.md`) |
 | H · Optimization | duplicação, bundle, latência, consultas, memória, custo de IA | usa `scripts/qualidade/duplicacao.py` e `tests/desempenho` | aguardando o PO |
 | I · Commercialization | planos, módulos, entitlements, AI Credits, página de vendas, assinatura | OI-021 (autorizada; executa na vez dela) | aguardando a vez |
 

@@ -11,6 +11,14 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { api, getBlob, mensagemErro } from "@/lib/api";
 import {
+  EspecificacaoIA,
+  PainelInteligencia,
+  SugerirAvaliacao,
+  type DocumentoSourcing,
+  type Inteligencia,
+  type Sugestao,
+} from "@/pages/sourcing/InteligenciaSourcing";
+import {
   CATEGORIAS_SOURCING,
   ROTULO_PARTICIPANTE,
   ROTULO_STATUS_SOURCING,
@@ -24,6 +32,11 @@ interface Requisito {
   texto: string;
   obrigatorio: boolean | null;
   peso: number | null;
+  fonte: string;
+  status_revisao: string;
+  pagina: number | null;
+  clausula: string | null;
+  trecho: string | null;
 }
 interface Item {
   id: number;
@@ -37,6 +50,13 @@ interface Participante {
   origem_descoberta: string;
   status: string;
   motivo: string | null;
+  historico: {
+    processos: number;
+    respondeu: number;
+    declinou: number;
+    adjudicado: number;
+    desqualificado: number;
+  } | null;
 }
 interface Avaliacao {
   requisito_id: number;
@@ -91,6 +111,8 @@ interface Workspace {
     resposta: string | null;
   }[];
   anexos: { id: number; proposta_id: number; nome_arquivo: string }[];
+  documentos: DocumentoSourcing[];
+  inteligencia: Inteligencia;
 }
 interface Candidato {
   origem: string;
@@ -147,6 +169,7 @@ export function SourcingWorkspace() {
     participanteId: number;
     url: string;
   } | null>(null);
+  const [sugestoes, setSugestoes] = useState<Sugestao[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const url = `/sourcing/processos/${id}`;
@@ -195,6 +218,9 @@ export function SourcingWorkspace() {
     );
   const { processo, fluxo } = ws;
   const editavel = ["RASCUNHO", "PUBLICADO"].includes(processo.status);
+  const vigentes = ws.requisitos.filter(
+    (r) => r.status_revisao === "confirmado",
+  );
   const nomeParticipante = (pid: number) =>
     ws.participantes.find((p) => p.id === pid)?.nome ?? `#${pid}`;
   const texto = (form: FormData, campo: string) =>
@@ -331,14 +357,14 @@ export function SourcingWorkspace() {
       <Card>
         <SectionLabel>Requisitos e critérios</SectionLabel>
         <div className="flex flex-col gap-1 text-[11px]">
-          {ws.requisitos.map((r) => (
+          {vigentes.map((r) => (
             <div key={r.id} className="border-b border-border py-1">
               <span className="text-muted">{r.categoria}:</span> {r.texto}{" "}
               {r.obrigatorio && <Badge tone="violet">Obrigatório</Badge>}{" "}
               {r.peso !== null && <Badge>peso {r.peso}</Badge>}
             </div>
           ))}
-          {ws.requisitos.length === 0 && (
+          {vigentes.length === 0 && (
             <div className="text-muted">Nenhum requisito.</div>
           )}
         </div>
@@ -385,6 +411,14 @@ export function SourcingWorkspace() {
           </form>
         )}
       </Card>
+      <EspecificacaoIA
+        url={url}
+        documentos={ws.documentos}
+        sugeridos={ws.requisitos.filter((r) => r.status_revisao === "sugerido")}
+        editavel={editavel}
+        ocupado={ocupado}
+        executar={executar}
+      />
       {fluxo.com_itens && (
         <Card>
           <SectionLabel>Itens da cotação</SectionLabel>
@@ -539,6 +573,15 @@ export function SourcingWorkspace() {
               <span className="flex-1 text-text">
                 {p.nome}{" "}
                 <Badge>{ROTULO_PARTICIPANTE[p.status] ?? p.status}</Badge>
+                {p.historico && p.historico.processos > 0 && (
+                  <span className="block text-[10px] text-muted">
+                    Histórico: {p.historico.processos} processo(s), respondeu{" "}
+                    {p.historico.respondeu}, venceu {p.historico.adjudicado},
+                    declinou {p.historico.declinou}
+                    {p.historico.desqualificado > 0 &&
+                      `, desqualificado ${p.historico.desqualificado}`}
+                  </span>
+                )}
               </span>
               {!fluxo.final && (
                 <>
@@ -653,10 +696,21 @@ export function SourcingWorkspace() {
     </div>
   );
 
-  const perguntas = ws.requisitos.filter((r) => r.categoria === "PERGUNTA");
-  const avaliaveis = ws.requisitos.filter((r) => r.categoria !== "PERGUNTA");
+  const perguntas = vigentes.filter((r) => r.categoria === "PERGUNTA");
+  const avaliaveis = vigentes.filter((r) => r.categoria !== "PERGUNTA");
+  const emAvaliacao = ["EM_AVALIACAO", "EM_NEGOCIACAO"].includes(
+    processo.status,
+  );
   const propostas = (
     <div className="flex flex-col gap-3.5">
+      {emAvaliacao && avaliaveis.length > 0 && ws.propostas.length > 0 && (
+        <SugerirAvaliacao
+          url={url}
+          ocupado={ocupado}
+          executar={executar}
+          aoReceber={setSugestoes}
+        />
+      )}
       {fluxo.recebe_propostas && (
         <Card>
           <SectionLabel>
@@ -733,6 +787,9 @@ export function SourcingWorkspace() {
               ))}
             {avaliaveis.map((r) => {
               const atual = p.avaliacoes.find((a) => a.requisito_id === r.id);
+              const sugestao = sugestoes.find(
+                (x) => x.proposta_id === p.id && x.requisito_id === r.id,
+              );
               return (
                 <form
                   key={r.id}
@@ -749,6 +806,35 @@ export function SourcingWorkspace() {
                   <span className="flex-1">
                     {r.texto}{" "}
                     {r.obrigatorio && <Badge tone="violet">Obrigatório</Badge>}
+                    {sugestao && (
+                      <span
+                        className="block text-muted"
+                        data-testid="sugestao-ia"
+                      >
+                        IA sugere <Badge tone="cyan">{sugestao.status}</Badge> “
+                        {sugestao.citacao}”{" "}
+                        <button
+                          type="button"
+                          className="text-cyan"
+                          disabled={ocupado}
+                          onClick={() =>
+                            executar(() =>
+                              api.put(
+                                `/sourcing/propostas/${p.id}/avaliacoes`,
+                                {
+                                  requisito_id: r.id,
+                                  status: sugestao.status,
+                                  nota: null,
+                                  justificativa: `Evidência na proposta: “${sugestao.citacao}”`,
+                                },
+                              ),
+                            )
+                          }
+                        >
+                          Aplicar
+                        </button>
+                      </span>
+                    )}
                   </span>
                   <Select
                     name="status"
@@ -853,7 +939,19 @@ export function SourcingWorkspace() {
       subtitulo={`${TIPOS_SOURCING[processo.tipo_processo] ?? processo.tipo_processo} · ${ROTULO_STATUS_SOURCING[processo.status] ?? processo.status}`}
       avisos={erro && <div className="text-[12px] text-red">{erro}</div>}
       abas={[
-        { id: "visao", rotulo: "Visão geral", conteudo: andamento },
+        {
+          id: "visao",
+          rotulo: "Visão geral",
+          conteudo: (
+            <div className="flex flex-col gap-3.5">
+              <PainelInteligencia
+                inteligencia={ws.inteligencia}
+                nomeParticipante={nomeParticipante}
+              />
+              {andamento}
+            </div>
+          ),
+        },
         {
           id: "requisitos",
           rotulo: fluxo.com_itens ? "Itens e requisitos" : "Requisitos",

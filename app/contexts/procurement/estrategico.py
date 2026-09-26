@@ -16,7 +16,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.contexts.network.contract import privacidade
-from app.contexts.procurement import fluxo
+from app.contexts.procurement import estrategico_sinais, fluxo
 from app.contexts.shared import matching
 from app.contexts.sourcing.contract import nativo, tipos
 from app.models.fornecedor_compras import FornecedorCompras
@@ -75,7 +75,7 @@ def _fluxo(processo):
 def mudar_status(db: Session, tenant_id: str, usuario_id: int | None, processo_id: int, status: str):
     processo = obter(db, tenant_id, processo_id)
     _fluxo(processo).validar(status, "status", de=processo.status)
-    if status == "PUBLICADO" and not nativo.listar(db, "requisito", LADO, tenant_id, processo_id=processo.id) \
+    if status == "PUBLICADO" and not requisitos_vigentes(db, tenant_id, processo.id) \
             and not nativo.listar(db, "item", LADO, tenant_id, processo_id=processo.id):
         raise RegraNegocioViolada("Cadastre ao menos um requisito ou item antes de publicar.")
     anterior = processo.status
@@ -83,6 +83,20 @@ def mudar_status(db: Session, tenant_id: str, usuario_id: int | None, processo_i
     _auditar(db, tenant_id, usuario_id, "sourcing_status", processo.id, {"de": anterior, "para": status})
     db.commit()
     return processo
+
+
+def requisitos_vigentes(db: Session, tenant_id: str, processo_id: int) -> list:
+    """Requisitos que valem no processo: os confirmados. Sugestão da IA (Phase G) só entra depois da revisão humana."""
+    return nativo.listar(db, "requisito", LADO, tenant_id, processo_id=processo_id, status_revisao="confirmado")
+
+
+def ultimas_rodadas(propostas: list) -> dict:
+    """Participante → proposta da última rodada."""
+    ultimas: dict = {}
+    for p in propostas:
+        if p.participante_id not in ultimas or p.rodada > ultimas[p.participante_id].rodada:
+            ultimas[p.participante_id] = p
+    return ultimas
 
 
 def _editavel(processo) -> None:
@@ -213,7 +227,7 @@ def registrar_proposta(db: Session, tenant_id: str, usuario_id: int | None, proc
         raise RegraNegocioViolada("Na negociação, só quem está na shortlist envia nova rodada.")
     anteriores = nativo.listar(db, "proposta", LADO, tenant_id, processo_id=processo.id, participante_id=participante.id)
     itens = {i.id: i for i in nativo.listar(db, "item", LADO, tenant_id, processo_id=processo.id)}
-    requisitos = {r.id for r in nativo.listar(db, "requisito", LADO, tenant_id, processo_id=processo.id)}
+    requisitos = {r.id for r in requisitos_vigentes(db, tenant_id, processo.id)}
     precos = dados.get("itens") or []
     if any(p["item_id"] not in itens for p in precos) or any(r["requisito_id"] not in requisitos for r in dados.get("respostas") or []):
         raise ValidacaoFalhou("Item ou requisito de outro processo.")
@@ -248,6 +262,8 @@ def avaliar(db: Session, tenant_id: str, usuario_id: int | None, proposta_id: in
     requisito = nativo.obter(db, "requisito", LADO, tenant_id, requisito_id)
     if requisito.processo_id != proposta.processo_id:
         raise ValidacaoFalhou("Requisito de outro processo.")
+    if requisito.status_revisao != "confirmado":
+        raise RegraNegocioViolada("Requisito sugerido: confirme-o antes de avaliar.")
     if status not in tipos.STATUS_CONFORMIDADE:
         raise ValidacaoFalhou(f"Status de conformidade inválido: {status}")
     if nota is not None and not 0 <= nota <= 10:
@@ -266,14 +282,10 @@ def avaliar(db: Session, tenant_id: str, usuario_id: int | None, proposta_id: in
 # --- Comparação (§20): C0, a decisão é humana -----------------------------------------------
 def comparar(db: Session, tenant_id: str, processo_id: int) -> dict:
     processo = obter(db, tenant_id, processo_id)
-    requisitos = nativo.listar(db, "requisito", LADO, tenant_id, processo_id=processo.id)
+    requisitos = requisitos_vigentes(db, tenant_id, processo.id)
     itens = nativo.listar(db, "item", LADO, tenant_id, processo_id=processo.id)
     participantes = {p.id: p for p in nativo.listar(db, "participante", LADO, tenant_id, processo_id=processo.id)}
-    propostas = nativo.listar(db, "proposta", LADO, tenant_id, processo_id=processo.id)
-    ultimas = {}
-    for p in propostas:  # última rodada de cada participante
-        if p.participante_id not in ultimas or p.rodada > ultimas[p.participante_id].rodada:
-            ultimas[p.participante_id] = p
+    ultimas = ultimas_rodadas(nativo.listar(db, "proposta", LADO, tenant_id, processo_id=processo.id))
     ids = [p.id for p in ultimas.values()]
     avaliacoes = nativo.listar(db, "avaliacao", LADO, tenant_id, proposta_id=ids) if ids else []
     precos = nativo.listar(db, "proposta_item", LADO, tenant_id, proposta_id=ids) if ids else []
@@ -406,7 +418,8 @@ def serializar(registro, campos: tuple[str, ...]) -> dict:
 
 CAMPOS_PROCESSO = ("id", "tipo_processo", "titulo", "descricao", "status", "workflow", "ruleset", "prazo", "valor_estimado", "moeda",
                    "publicado_em", "criado_em")
-CAMPOS_REQUISITO = ("id", "categoria", "texto", "obrigatorio", "peso")
+CAMPOS_REQUISITO = ("id", "categoria", "texto", "obrigatorio", "peso", "fonte", "status_revisao", "documento_id", "pagina", "clausula",
+                    "trecho")
 CAMPOS_ITEM = ("id", "descricao", "quantidade", "unidade", "especificacao")
 CAMPOS_PARTICIPANTE = ("id", "nome", "cnpj", "origem_descoberta", "status", "motivo", "fornecedor_id", "empresa_rede_tenant_id", "email",
                        "token_gerado_em")
@@ -425,6 +438,12 @@ def workspace(db: Session, tenant_id: str, processo_id: int) -> dict:
     propostas = nativo.listar(db, "proposta", LADO, tenant_id, processo_id=processo.id)
     ids = [p.id for p in propostas]
     avaliacoes = nativo.listar(db, "avaliacao", LADO, tenant_id, proposta_id=ids) if ids else []
+    requisitos = [r for r in nativo.listar(db, "requisito", LADO, tenant_id, processo_id=processo.id) if r.status_revisao != "descartado"]
+    itens = nativo.listar(db, "item", LADO, tenant_id, processo_id=processo.id)
+    participantes = nativo.listar(db, "participante", LADO, tenant_id, processo_id=processo.id)
+    esclarecimentos = nativo.listar(db, "esclarecimento", LADO, tenant_id, processo_id=processo.id)
+    hist = estrategico_sinais.historico(db, tenant_id, participantes, excluir_processo_id=processo.id) if participantes else {}
+    agora = _agora()
     return {
         "processo": como_dict(processo),
         "fluxo": {
@@ -437,10 +456,9 @@ def workspace(db: Session, tenant_id: str, processo_id: int) -> dict:
             "com_itens": processo.tipo_processo == "RFQ",
         },
         "aprovacao": (processo.metadados or {}).get("aprovacao"),
-        "requisitos": [serializar(r, CAMPOS_REQUISITO) for r in nativo.listar(db, "requisito", LADO, tenant_id, processo_id=processo.id)],
-        "itens": [serializar(i, CAMPOS_ITEM) for i in nativo.listar(db, "item", LADO, tenant_id, processo_id=processo.id)],
-        "participantes": [serializar(p, CAMPOS_PARTICIPANTE)
-                          for p in nativo.listar(db, "participante", LADO, tenant_id, processo_id=processo.id)],
+        "requisitos": [serializar(r, CAMPOS_REQUISITO) for r in requisitos],
+        "itens": [serializar(i, CAMPOS_ITEM) for i in itens],
+        "participantes": [{**serializar(p, CAMPOS_PARTICIPANTE), "historico": hist.get(p.id)} for p in participantes],
         "propostas": [{**serializar(p, CAMPOS_PROPOSTA), "avaliacoes": [
             {"requisito_id": a.requisito_id, "resposta": a.resposta, "status": a.status,
              "nota": float(a.nota) if a.nota is not None else None, "justificativa": a.justificativa}
@@ -448,7 +466,18 @@ def workspace(db: Session, tenant_id: str, processo_id: int) -> dict:
         "contratos": [serializar(c, CAMPOS_CONTRATO) for c in nativo.listar(db, "contrato", LADO, tenant_id, processo_id=processo.id)],
         # Phase F: perguntas dos fornecedores (o comprador vê quem perguntou) e anexos das propostas (sem o arquivo)
         "esclarecimentos": [{"id": e.id, "participante_id": e.participante_id, "pergunta": e.pergunta, "resposta": e.resposta}
-                            for e in nativo.listar(db, "esclarecimento", LADO, tenant_id, processo_id=processo.id)],
+                            for e in esclarecimentos],
         "anexos": [{"id": a.id, "proposta_id": a.proposta_id, "nome_arquivo": a.nome_arquivo, "tamanho_bytes": a.tamanho_bytes}
                    for a in (nativo.listar(db, "anexo", LADO, tenant_id, proposta_id=ids) if ids else [])],
+        # Phase G: especificações enviadas (Requirement AI) e inteligência C0 (alertas com evidência, próxima ação)
+        "documentos": [{"id": d.id, "nome_arquivo": d.nome_arquivo, "paginas": d.paginas, "classificacao": d.classificacao,
+                        "status_extracao": d.status_extracao, "analisado_em": d.analisado_em}
+                       for d in nativo.listar(db, "documento", LADO, tenant_id, processo_id=processo.id)],
+        "inteligencia": {
+            "alertas": estrategico_sinais.alertas(processo, requisitos, participantes, propostas, avaliacoes, esclarecimentos, hist,
+                                                  agora),
+            "proxima_acao": estrategico_sinais.proxima_acao(processo, fluxo_processo, requisitos, itens,
+                                                            participantes, propostas, avaliacoes, esclarecimentos, agora),
+            "aviso": "Sinais determinísticos a partir dos dados do processo; a decisão é do comprador.",
+        },
     }

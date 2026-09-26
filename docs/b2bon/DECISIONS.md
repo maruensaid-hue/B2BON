@@ -708,3 +708,28 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - **Tabelas novas**: `esclarecimento_sourcing`, `anexo_sourcing` (lado imutável); acesso e e-mail no participante.
   - Nada disso usa IA nem escreve no CRM, no Bid Intelligence ou no Corporate Brain da empresa convidada.
 - **Status**: ACEITA.
+
+## D-067 · 2026-09-26 · Phase G · Intelligence do Strategic Sourcing pela arquitetura de IA existente
+- **Contexto**: Phase G (§43, §18–§20, §25, §32): Requirement AI, Evaluation AI, Bid Intelligence, Procurement Intelligence,
+  Supplier Intelligence, Risk e Recommendation, tudo pela arquitetura de IA existente, com teste de grounding. Bid
+  Intelligence (Fases 9 e C) e Procurement Intelligence público (Fases 10 e D) já existiam; faltava o comprador privado.
+- **Decisão**:
+  - **Sem agente novo (D-055)**: tudo é capability do `procurement_intelligence_agent` existente; os agentes PLANEJADOS
+    continuam planejados.
+  - **Requirement AI**: especificação enviada ao processo (`documento_sourcing` nativo, com texto por página e arquivo)
+    → Requirement Engine, perfil `especificacao_compra` → requisito **sugerido** (`fonte=AI`, trecho, página calculada,
+    cláusula só se estiver na página, obrigatoriedade lida do trecho). Sugestão não publica, não aparece ao fornecedor,
+    não entra em proposta, avaliação nem comparação até um humano confirmar. RESTRICTED não vai para IA.
+  - **Evaluation AI**: sugestão de status por requisito, **uma chamada por proposta só com o texto dela** (respostas,
+    observações, condições, anexos). A citação tem de estar no que o fornecedor escreveu (o rótulo com o texto do
+    requisito não conta); sem trecho, a sugestão cai (falta de evidência é UNKNOWN, nunca "não atende"). Nada é gravado
+    como avaliação: o avaliador aplica, e a justificativa leva o trecho.
+  - **Medição**: uma execução de crédito por operação, pelo AI Gateway; workloads já existentes no catálogo
+    (`procurement_document_intelligence`, `procurement_complex_comparison`); nenhum peso de crédito novo, nenhum preço.
+  - **C0 (0 créditos)**: Supplier Intelligence (histórico do mesmo fornecedor por cadastro, rede, CNPJ ou nome nos
+    outros processos do comprador), alertas com a evidência que os gerou (sugestões pendentes, perguntas sem resposta,
+    prazo, participação baixa, proposta única, obrigatório não atendido, preço fora da mediana, histórico) e próxima
+    ação por etapa do workflow. Três ferramentas READ do lado BUY no orquestrador.
+  - **Barreira**: dados do comprador privado nunca vão para o lado vendedor; entre fornecedores, a IA nunca vê a
+    proposta de um ao avaliar a de outro.
+- **Status**: ACEITA.

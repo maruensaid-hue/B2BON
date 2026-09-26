@@ -5,13 +5,14 @@ direto em `*_sourcing`. Só o núcleo toca essas tabelas (barreira); cada lado
 chama estas funções com o **seu** lado, e toda leitura filtra por tenant e
 lado — um lado nunca lê linha do outro, nem por id.
 
-Processo, requisito, contrato e evento, que também recebem o espelho das
+Processo, requisito, contrato, evento e documento (Phase G), que também recebem o espelho das
 tabelas antigas, são marcados com `origem_tabela = "nativo"` (o backfill e a
 leitura dupla só olham as origens antigas, então nunca os tocam).
 """
 
 import secrets
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.contexts.sourcing.tipos import Lado
@@ -19,6 +20,7 @@ from app.models.sourcing import (
     AnexoSourcing,
     AvaliacaoSourcing,
     ContratoSourcing,
+    DocumentoSourcing,
     EsclarecimentoSourcing,
     EventoSourcing,
     ItemSourcing,
@@ -35,12 +37,12 @@ MODELOS = {
     "processo": ProcessoSourcing, "requisito": RequisitoSourcing, "contrato": ContratoSourcing, "evento": EventoSourcing,
     "participante": ParticipanteSourcing, "item": ItemSourcing, "proposta": PropostaSourcing,
     "proposta_item": PropostaItemSourcing, "avaliacao": AvaliacaoSourcing, "esclarecimento": EsclarecimentoSourcing,
-    "anexo": AnexoSourcing,
+    "anexo": AnexoSourcing, "documento": DocumentoSourcing,
 }
-_COM_ORIGEM = {"processo", "requisito", "contrato", "evento"}
+_COM_ORIGEM = {"processo", "requisito", "contrato", "evento", "documento"}
 _NOMES = {"processo": "Processo", "requisito": "Requisito", "participante": "Participante", "item": "Item", "proposta": "Proposta",
           "contrato": "Contrato", "evento": "Evento", "proposta_item": "Item da proposta", "avaliacao": "Avaliação",
-          "esclarecimento": "Esclarecimento", "anexo": "Anexo"}
+          "esclarecimento": "Esclarecimento", "anexo": "Anexo", "documento": "Documento"}
 
 
 def criar(db: Session, entidade: str, lado: Lado, tenant_id: str, **campos):
@@ -81,6 +83,13 @@ def listar(db: Session, entidade: str, lado: Lado, tenant_id: str, ordem: str = 
         consulta = consulta.filter(coluna.in_(valor) if isinstance(valor, list | tuple | set) else coluna == valor)
     consulta = consulta.order_by(getattr(modelo, ordem.lstrip("-")).desc() if ordem.startswith("-") else getattr(modelo, ordem))
     return consulta.limit(limite).all() if limite else consulta.all()
+
+
+def listar_qualquer(db: Session, entidade: str, lado: Lado, tenant_id: str, **alternativas) -> list:
+    """Linhas em que QUALQUER campo está no conjunto informado (ex.: mesmo fornecedor por cadastro, rede ou CNPJ)."""
+    modelo = MODELOS[entidade]
+    condicoes = [getattr(modelo, campo).in_(valores) for campo, valores in alternativas.items() if valores]
+    return _consulta(db, entidade, lado, tenant_id).filter(or_(*condicoes)).all() if condicoes else []
 
 
 def atualizar(db: Session, registro, **campos):

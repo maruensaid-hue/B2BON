@@ -5,8 +5,8 @@ contexto; só executa estas ferramentas para quem tem o módulo procurement,
 sempre no tenant do próprio usuário.
 """
 
-from app.contexts.shared.ferramentas import FerramentaExecutavel, registrar
-from app.contexts.procurement import contratos, riscos
+from app.contexts.shared.ferramentas import FerramentaExecutavel, Parametro, registrar
+from app.contexts.procurement import contratos, estrategico, estrategico_sinais, riscos
 from app.models.contrato_compra import ContratoCompra
 
 DIAS = 120
@@ -41,4 +41,55 @@ registrar(FerramentaExecutavel(
     "procurement.pca_atrasado", agente="procurement_planning_agent", lado="BUY",
     palavras_chave=("compras do pca atrasadas", "pca atrasado", "plano de contratações atrasado", "processos atrasados"),
     executar=_pca, exemplo="Quais compras do PCA estão atrasadas?",
+))
+
+
+# --- Phase G: Strategic Sourcing (módulo sourcing), determinísticas ------------------------------
+def _comparar(db, ctx, parametros: dict) -> dict:
+    processo_id = parametros.get("processo_id")
+    if processo_id is None:  # sem número: o processo em decisão mais recente
+        processo_id = next((p.id for p in estrategico.listar(db, ctx.tenant_id)
+                            if p.status in ("EM_AVALIACAO", "EM_NEGOCIACAO", "EM_APROVACAO")), None)
+        if processo_id is None:
+            return {"resumo": "Nenhum processo de sourcing em avaliação. Informe o número do processo."}
+    comparacao = estrategico.comparar(db, ctx.tenant_id, int(processo_id))
+    nomes = {linha["participante_id"]: linha["participante"] for linha in comparacao["linhas"]}
+    destaques = comparacao["destaques"]
+    partes = [f"{len(comparacao['linhas'])} proposta(s) no processo {comparacao['processo_id']}"]
+    if destaques["menor_valor"]:
+        partes.append(f"menor valor entre as que atendem os obrigatórios: {nomes[destaques['menor_valor']]}")
+    if destaques["maior_nota"]:
+        partes.append(f"maior nota técnica: {nomes[destaques['maior_nota']]}")
+    return {"resumo": "; ".join(partes) + ". A escolha é sua.", **comparacao}
+
+
+def _historico(db, ctx, parametros: dict) -> dict:
+    achados = estrategico_sinais.historico_por_nome(db, ctx.tenant_id, parametros.get("pergunta") or "")
+    if not achados:
+        return {"resumo": "Não encontrei esse fornecedor nos seus processos de sourcing. Cite o nome como está cadastrado.", "fornecedores": []}
+    return {"resumo": "; ".join(f"{a['fornecedor']}: {a['processos']} processo(s), respondeu {a['respondeu']}, venceu {a['adjudicado']}"
+                                for a in achados), "fornecedores": achados}
+
+
+def _pendencias(db, ctx, parametros: dict) -> dict:
+    itens = estrategico_sinais.pendencias(db, ctx.tenant_id)
+    com_alerta = sum(1 for i in itens if i["alertas"])
+    return {"resumo": f"{len(itens)} processo(s) de sourcing em aberto; {com_alerta} com alerta.", "processos": itens}
+
+
+registrar(FerramentaExecutavel(
+    "sourcing.comparar_propostas", agente="procurement_intelligence_agent", lado="BUY",
+    palavras_chave=("compare as propostas", "comparar propostas", "comparação das propostas", "melhor proposta recebida"),
+    parametros=(Parametro("processo_id", r"processo\s*#?\s*(\d+)", obrigatorio=False),), executar=_comparar,
+    exemplo="Compare as três propostas do processo 12.",
+))
+registrar(FerramentaExecutavel(
+    "sourcing.historico_fornecedor", agente="procurement_intelligence_agent", lado="BUY",
+    palavras_chave=("histórico do fornecedor", "desempenho do fornecedor", "como foi o fornecedor"),
+    parametros=(Parametro("pergunta"),), executar=_historico, exemplo="Qual o histórico do fornecedor Móveis Delta?",
+))
+registrar(FerramentaExecutavel(
+    "sourcing.pendencias", agente="procurement_intelligence_agent", lado="BUY",
+    palavras_chave=("processos de sourcing", "pendências de sourcing", "riscos do sourcing", "cotações em aberto"),
+    executar=_pendencias, exemplo="Quais processos de sourcing precisam de atenção?",
 ))
