@@ -12,6 +12,11 @@ export class ApiError extends Error {
   }
 }
 
+/** Mensagem para a tela: a do servidor quando é um erro da API, senão o texto padrão. */
+export function mensagemErro(error: unknown, padrao: string): string {
+  return error instanceof ApiError ? error.message : padrao;
+}
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }

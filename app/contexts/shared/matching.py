@@ -60,3 +60,31 @@ def criterios_icp(icp_cnaes: Iterable[str], icp_ufs: Iterable[str], icp_porte: s
         Criterio("porte", PESO_PORTE, None if not porte else bool(icp_porte) and porte == icp_porte,
                  f"Porte ({porte}) corresponde ao porte do ICP."),
     ]
+
+
+# --- Estratégia: aderência de fornecedor a uma necessidade (Phase E, descoberta) ------------
+PESO_OFERTA = 0.6
+PESO_REGIAO = 0.2
+PESO_CERTIFICACOES = 0.2
+
+
+def criterios_fornecedor(necessidade: str, ufs: Iterable[str], certificacoes_exigidas: Iterable[str],
+                         oferta: Iterable[str], uf: str | None, certificacoes: Iterable[str]) -> list[Criterio]:
+    """Oferta declarada × necessidade (0,6), região (0,2, só se o comprador pediu) e certificações
+    exigidas (0,2, só se pediu). Sem dado do fornecedor, o critério fica `None` (faltante), nunca "não atende"."""
+    from app.contexts.shared.texto import termos, termos_em_comum
+
+    oferta = [o for o in oferta if o]
+    procurados = termos(necessidade)
+    casados = [item for item in oferta if termos(item) & procurados]  # qualquer termo em comum; a evidência é o item
+    criterios = [Criterio("oferta", PESO_OFERTA, None if not oferta else bool(casados),
+                          f"Oferta declarada casa com a necessidade: {'; '.join(casados[:3])}.")]
+    ufs = {u.upper() for u in ufs if u}
+    if ufs:
+        criterios.append(Criterio("regiao", PESO_REGIAO, None if not uf else uf.upper() in ufs, f"Sede em {uf}."))
+    exigidas = [c for c in certificacoes_exigidas if c]
+    if exigidas:
+        tem = [c for c in certificacoes if c]
+        atende = None if not tem else all(any(termos_em_comum(e, c) for c in tem) for e in exigidas)
+        criterios.append(Criterio("certificacoes", PESO_CERTIFICACOES, atende, f"Declara as certificações exigidas ({', '.join(exigidas)})."))
+    return criterios

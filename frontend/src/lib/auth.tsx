@@ -30,6 +30,7 @@ export interface RecursosPlano {
   modulo_bids?: boolean;
   /** Fase 10: Public Procurement (lado comprador). */
   modulo_procurement?: boolean;
+  modulo_sourcing?: boolean;
 }
 
 export interface Usuario {

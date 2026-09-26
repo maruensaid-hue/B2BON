@@ -22,6 +22,7 @@ class RecursosPlanoSchema(BaseModel):
     modulo_crm: bool = False
     modulo_bids: bool = False
     modulo_procurement: bool = False
+    modulo_sourcing: bool = False
 
 
 class UsuarioSchema(BaseModel):

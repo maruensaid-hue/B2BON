@@ -32,7 +32,7 @@ TABELAS = {
         "tabelas": {"orgao_publico", "unidade_compras", "plano_contratacao", "item_pca", "demanda_compra", "processo_contratacao",
                     "evento_processo", "fornecedor_compras", "contrato_compra", "evento_contrato_compra", "pesquisa_preco",
                     "documento_compras"},
-        "permitidos": (APP / "contexts" / "procurement", APP / "api" / "v1" / "procurement.py", APP / "models"),
+        "permitidos": (APP / "contexts" / "procurement", APP / "api" / "v1" / "procurement.py", APP / "api" / "v1" / "strategic_sourcing.py", APP / "models"),
     },
 }
 
@@ -84,7 +84,7 @@ def test_tabelas_unificadas_so_pelo_nucleo():
     """S3: as tabelas `*_sourcing` guardam os dois lados; só o núcleo (que
     sempre recebe o lado de quem chama) as lê ou escreve."""
     permitidos = (APP / "contexts" / "sourcing", APP / "models")
-    tabelas = r"\b(processo|contrato|documento|requisito|evento|evento_contrato)_sourcing\b"
+    tabelas = r"\b(processo|contrato|documento|requisito|evento|evento_contrato|participante|item|proposta|proposta_item|avaliacao)_sourcing\b"
     violacoes = []
     for arquivo in _arquivos(permitidos):
         if "app.models.sourcing" in _imports(arquivo):
@@ -98,7 +98,7 @@ def test_tabelas_unificadas_so_pelo_nucleo():
 
 def test_cada_lado_so_usa_o_proprio_lado_com_o_nucleo():
     """Quem passa `Lado.COMPRA` ao núcleo é só o comprador; `Lado.VENDA`, só o vendedor."""
-    donos = {"COMPRA": (APP / "contexts" / "procurement", APP / "api" / "v1" / "procurement.py"),
+    donos = {"COMPRA": (APP / "contexts" / "procurement", APP / "api" / "v1" / "procurement.py", APP / "api" / "v1" / "strategic_sourcing.py"),
              "VENDA": (APP / "contexts" / "bids", APP / "api" / "v1" / "bids.py")}
     nucleo = (APP / "contexts" / "sourcing",)
     violacoes = []
@@ -112,7 +112,7 @@ def test_cada_lado_so_usa_o_proprio_lado_com_o_nucleo():
 
 
 def test_repositorio_de_compra_so_no_lado_comprador():
-    permitidos = (APP / "contexts" / "procurement", APP / "api" / "v1" / "procurement.py")
+    permitidos = (APP / "contexts" / "procurement", APP / "api" / "v1" / "procurement.py", APP / "api" / "v1" / "strategic_sourcing.py")
     def referencia(arquivo: Path) -> bool:
         for no in ast.walk(ast.parse(arquivo.read_text(encoding="utf-8"))):
             if (isinstance(no, ast.Name) and no.id == "RepositorioCompra") or (

@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
 import { ProcessWorkspace } from "@/components/sourcing/ProcessWorkspace";
+import { ProximosStatus } from "@/components/sourcing/ProximosStatus";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { confirmarConsumo } from "@/lib/aiCredits";
-import { api, ApiError, postFile } from "@/lib/api";
+import { api, ApiError, mensagemErro, postFile } from "@/lib/api";
 import { PropostaAba } from "@/pages/bids/PropostaAba";
 import { MODALIDADES, ROTULO_STATUS, type Licitacao } from "@/pages/bids/tipos";
 
@@ -117,11 +118,7 @@ export function LicitacaoWorkspace() {
     try {
       setWs(await api.get<Workspace>(`/bids/licitacoes/${id}/workspace`));
     } catch (error) {
-      setErro(
-        error instanceof ApiError
-          ? error.message
-          : "Não foi possível carregar a licitação.",
-      );
+      setErro(mensagemErro(error, "Não foi possível carregar a licitação."));
     }
   }, [id]);
 
@@ -141,11 +138,7 @@ export function LicitacaoWorkspace() {
       if (sucesso) setAviso(sucesso(resultado));
       await carregar();
     } catch (error) {
-      setErro(
-        error instanceof ApiError
-          ? error.message
-          : "Não foi possível concluir a ação.",
-      );
+      setErro(mensagemErro(error, "Não foi possível concluir a ação."));
     } finally {
       setOcupado(false);
     }
@@ -209,25 +202,14 @@ export function LicitacaoWorkspace() {
         <b className="text-text">{ROTULO_STATUS[lic.status] ?? lic.status}</b> ·
         fluxo {fluxo.codigo}
       </div>
-      {fluxo.proximos_status.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {fluxo.proximos_status.map((status) => (
-            <Button
-              key={status}
-              size="sm"
-              variant="ghost"
-              disabled={ocupado}
-              onClick={() =>
-                executar(() =>
-                  api.post(`/bids/licitacoes/${id}/status`, { status }),
-                )
-              }
-            >
-              {ROTULO_STATUS[status] ?? status}
-            </Button>
-          ))}
-        </div>
-      )}
+      <ProximosStatus
+        proximos={fluxo.proximos_status}
+        rotulos={ROTULO_STATUS}
+        ocupado={ocupado}
+        aoEscolher={(status) =>
+          executar(() => api.post(`/bids/licitacoes/${id}/status`, { status }))
+        }
+      />
       {fluxo.aceita_resultado && (
         <form
           onSubmit={registrarResultado}

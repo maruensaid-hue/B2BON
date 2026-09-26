@@ -47,8 +47,9 @@ def test_toda_modalidade_resolve_pelo_ponto_central_com_o_fluxo_de_antes():
         assert (workflow.codigo, regras.codigo) == ("PUBLIC_PROCUREMENT_BUY@1", "PUBLIC_PROCUREMENT_BR_14133@1")
 
 
-def test_sem_vinculo_falha_fechado():
-    """Enterprise Strategic Sourcing (comprador privado) ainda não tem fluxo: Phase E."""
+def test_sem_vinculo_falha_fechado(monkeypatch):
+    """Sem vínculo não há fluxo por omissão (desde a Phase E todos os lados e segmentos têm vínculo)."""
+    monkeypatch.setattr(sourcing.workflow, "_VINCULOS", {})
     with pytest.raises(LookupError):
         sourcing.workflow.resolver(Lado.COMPRA, Segmento.EMPRESA, "RFP")
 

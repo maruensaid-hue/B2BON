@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { ProcessWorkspace } from "@/components/sourcing/ProcessWorkspace";
+import { ProximosStatus } from "@/components/sourcing/ProximosStatus";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
-import { api, ApiError } from "@/lib/api";
+import { api, mensagemErro } from "@/lib/api";
 
 interface Documento {
   id: number;
@@ -82,11 +82,7 @@ export function ProcessoWorkspace() {
     try {
       setWs(await api.get<Workspace>(`/procurement/processos/${id}/workspace`));
     } catch (error) {
-      setErro(
-        error instanceof ApiError
-          ? error.message
-          : "Não foi possível carregar o processo.",
-      );
+      setErro(mensagemErro(error, "Não foi possível carregar o processo."));
     }
   }, [id]);
 
@@ -101,11 +97,7 @@ export function ProcessoWorkspace() {
       await api.patch(`/procurement/processos/${id}`, { status });
       await carregar();
     } catch (error) {
-      setErro(
-        error instanceof ApiError
-          ? error.message
-          : "Não foi possível mudar a etapa.",
-      );
+      setErro(mensagemErro(error, "Não foi possível mudar a etapa."));
     } finally {
       setOcupado(false);
     }
@@ -136,21 +128,12 @@ export function ProcessoWorkspace() {
           ))}
         </div>
       )}
-      {ws.fluxo.proximos_status.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {ws.fluxo.proximos_status.map((status) => (
-            <Button
-              key={status}
-              size="sm"
-              variant="ghost"
-              disabled={ocupado}
-              onClick={() => avancar(status)}
-            >
-              {ETAPAS[status] ?? status}
-            </Button>
-          ))}
-        </div>
-      )}
+      <ProximosStatus
+        proximos={ws.fluxo.proximos_status}
+        rotulos={ETAPAS}
+        ocupado={ocupado}
+        aoEscolher={avancar}
+      />
       {ws.fluxo.ruleset && (
         <div className="mt-2 text-[10px] text-muted">
           Fonte das regras: {ws.fluxo.ruleset.fonte}

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
-import { api, ApiError, getBlob } from "@/lib/api";
+import { api, getBlob, mensagemErro } from "@/lib/api";
 
 interface Esboco {
   itens: {
@@ -37,11 +37,7 @@ export function PropostaAba({
       .get<Esboco>(`/bids/licitacoes/${licitacaoId}/proposta`)
       .then(setEsboco)
       .catch((error) =>
-        setErro(
-          error instanceof ApiError
-            ? error.message
-            : "Não foi possível montar o esboço.",
-        ),
+        setErro(mensagemErro(error, "Não foi possível montar o esboço.")),
       );
   }, [licitacaoId, versao]);
 

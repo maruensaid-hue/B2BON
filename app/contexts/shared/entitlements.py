@@ -17,9 +17,10 @@ from app.providers.plan_limits.base import PlanLimitsProvider
 # novo; catálogo na Fase 14).
 # "procurement" (Fase 10): B2B ON Public Procurement, lado comprador. Preço
 # PENDING_DEFINITION (§71): nenhum plano o inclui até o PO definir.
-MODULOS = ("map", "predator", "crm", "bids", "procurement")
+MODULOS = ("map", "predator", "crm", "bids", "procurement", "sourcing")
 NOMES_MODULO = {
     "map": "MAP", "predator": "PREDATOR", "crm": "CRM", "bids": "Bid Intelligence", "procurement": "Public Procurement",
+    "sourcing": "Strategic Sourcing",
 }
 
 _FEATURES: dict[str, Callable[[PlanLimitsProvider, str], bool]] = {

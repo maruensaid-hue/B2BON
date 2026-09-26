@@ -84,6 +84,9 @@ const NAV_ITEM_BIDS: NavItem = { path: "/bids", label: "Licitações", icon: "�
 // Public Procurement (Fase 10) — só com o módulo "procurement" (lado comprador).
 const NAV_ITEM_COMPRAS: NavItem = { path: "/compras", label: "Compras públicas", icon: "🧾", end: false };
 
+// Strategic Sourcing (Phase E) — só com o módulo "sourcing" (comprador privado).
+const NAV_ITEM_SOURCING: NavItem = { path: "/sourcing", label: "Strategic Sourcing", icon: "🧭", end: false };
+
 // RO (Registro de Oportunidade) — deal registration: qualquer papel
 // registra/vê as próprias oportunidades; "Aprovar Descontos" é só de
 // quem decide desconto pra toda a rede (admin do tenant raiz/distribuidor,
@@ -608,6 +611,7 @@ export function AppShell() {
   const temModuloCrm = temLicencaAtiva && (usuario?.recursos_plano.modulo_crm ?? false);
   const temModuloBids = temLicencaAtiva && (usuario?.recursos_plano.modulo_bids ?? false);
   const temModuloCompras = temLicencaAtiva && (usuario?.recursos_plano.modulo_procurement ?? false);
+  const temModuloSourcing = temLicencaAtiva && (usuario?.recursos_plano.modulo_sourcing ?? false);
   const navItems = temLicencaAtiva
     ? [
         NAV_ITEMS_PAGOS[0],
@@ -616,6 +620,7 @@ export function AppShell() {
         ...(temModuloPredator ? PREDATOR_NAV_ITEMS : []),
         ...(temModuloBids ? [NAV_ITEM_BIDS] : []),
         ...(temModuloCompras ? [NAV_ITEM_COMPRAS] : []),
+        ...(temModuloSourcing ? [NAV_ITEM_SOURCING] : []),
         NAV_ITEM_REDE_SOCIAL,
         NAV_ITEM_CEREBRO,
       ]
@@ -758,6 +763,10 @@ export function AppShell() {
               />
             </div>
           )}
+
+          {temModuloBids && <NavButton {...NAV_ITEM_BIDS} collapsed={collapsed} />}
+          {temModuloCompras && <NavButton {...NAV_ITEM_COMPRAS} collapsed={collapsed} />}
+          {temModuloSourcing && <NavButton {...NAV_ITEM_SOURCING} collapsed={collapsed} />}
 
           <div data-tour-id="rede-social">
             <NavButton {...NAV_ITEM_REDE_SOCIAL} collapsed={collapsed} />

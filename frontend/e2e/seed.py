@@ -45,7 +45,7 @@ def main() -> None:
                 # isso, o tenant de E2E não vê CRM/MAP/PREDATOR (nenhum
                 # módulo liberado é o default seguro pra plano novo, mas
                 # o E2E precisa da suíte inteira, igual um cliente real).
-                modulos_contratados=["map", "predator", "crm", "bids", "procurement"],
+                modulos_contratados=["map", "predator", "crm", "bids", "procurement", "sourcing"],
             )
             db.add(plano)
             db.flush()

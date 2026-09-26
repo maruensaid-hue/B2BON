@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Phase E — Enterprise Strategic Sourcing (2026-09-26, autorizada pelo PO)
+
+- Novo módulo Strategic Sourcing (`/sourcing`, menu próprio): RFP, RFQ, RFI, EOI, concorrência privada, qualificação e evento estratégico.
+- Descoberta de fornecedores (cadastro interno + perfis públicos da rede), convite, respostas e propostas por rodada, avaliação por requisito com peso, comparação sem vencedor automático, shortlist, negociação, aprovação por administrador, adjudicação e contrato.
+- Migração `d8a0c2e4f6b7`: participante, item, proposta, preço por item e avaliação no modelo unificado, com lado imutável; peso no requisito.
+- Correção: o menu lateral de desktop agora mostra Licitações e Compras públicas (antes só no menu mobile).
+
 ## Phase D — Public buy side (2026-09-26, autorizada pelo PO)
 
 - Sinais de risco, workspace do processo, Supplier 360, ranking e ferramenta do agente sem uma consulta por processo/contrato (TD-090).

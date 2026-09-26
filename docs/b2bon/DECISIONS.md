@@ -652,3 +652,34 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Barreira**: testes estendidos às superfícies novas (esboço de proposta JSON/Markdown, resposta do vendedor,
   bloco `fluxo`) nos dois sentidos, no mesmo tenant com os dois módulos.
 - **Status**: ACEITA.
+
+## D-065 · 2026-09-26 · Phase E · Enterprise Strategic Sourcing nativo no modelo unificado
+- **Contexto**: Phase E (§41): Strategic Sourcing, descoberta, RFI/RFP/RFQ, qualificação, comparação, shortlist,
+  negociação, contrato — produto novo, sem tabela antiga.
+- **Decisão**:
+  - **Nativo no modelo unificado**: o comprador privado grava direto em `*_sourcing` (processo, requisito, contrato
+    com `origem_tabela = "nativo"`; espelho, backfill e leitura dupla nunca tocam essas linhas). Só o núcleo acessa as
+    tabelas: `sourcing/nativo.py` (criar/obter/listar/atualizar por nome de entidade, **sempre filtrando tenant e
+    lado**). A lógica de compra fica no lado comprador (`procurement/estrategico.py`, `Lado.COMPRA`).
+  - **Entidades que nascem aqui** (D-058/D-061): participante, item, proposta (uma linha por rodada), preço por
+    item e avaliação (proposta × requisito: resposta do fornecedor + status/nota/justificativa do comprador), todas
+    com `lado` em CHECK e imutável (trigger + ORM); `peso` no requisito.
+  - **Um workflow por natureza** (§21), escolhido pelo vínculo (lado, segmento, tipo): `ENTERPRISE_SOURCING_BUY@1`
+    (RFP, concorrência privada, evento estratégico), `ENTERPRISE_RFQ_BUY@1` (cotação leve: sem avaliação técnica nem
+    shortlist, §15), `ENTERPRISE_RFI_BUY@1` (RFI, EOI, qualificação: coleta e encerra, sem adjudicação). Ruleset
+    `ENTERPRISE_SOURCING_POLICY@1` (política do próprio cliente, sem parâmetro inventado).
+  - **Aprovação humana antes da adjudicação**: pedido com justificativa → administrador aprova (adjudica e marca os
+    demais como não selecionados) ou recusa com motivo (volta à etapa anterior). Decisão sempre humana.
+  - **Descoberta (§16)** pelo Matching Engine (estratégia nova `criterios_fornecedor`): cadastro interno do comprador
+    e perfis da Business Network **que ele pode ver** (diretório ou conexões, sem bloqueados; só campos públicos).
+    Empresa oculta não aparece nem pode ser convidada. Nada do processo vai para a rede.
+  - **Comparação (§20)** determinística (C0): obrigatórios atendidos, nota ponderada pelos pesos, valor, prazo,
+    pagamento, risco; destaques (menor valor, maior nota) só entre quem não falhou obrigatório. Sem vencedor automático.
+  - **Gate** `sourcing` (Strategic Sourcing); API em `/sourcing` (§30). O preço e o plano comercial ficam na Phase I.
+  - **Fitness**: `app/api/v1/strategic_sourcing.py` declarado como API do lado comprador; regex das tabelas unificadas
+    inclui as novas.
+  - Provisório de `origem_id` na inserção nativa é negativo e único (não zero), para inserções concorrentes não
+    esperarem umas pelas outras no índice único (provado em Postgres).
+- **Fora do escopo**: portal do fornecedor (Phase F), IA de avaliação/comparação (Phase G), documentos anexados às
+  propostas (fica para a Phase F, com o acesso do fornecedor).
+- **Status**: ACEITA.

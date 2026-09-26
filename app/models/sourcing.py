@@ -170,6 +170,7 @@ class RequisitoSourcing(Base):
     trecho: Mapped[str | None] = mapped_column(Text, nullable=True)
     obrigatorio: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # None = UNKNOWN
     resposta: Mapped[str | None] = mapped_column(Text, nullable=True)  # resposta de quem responde ao processo
+    peso: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)  # critério ponderado (Phase E); None = peso 1
     confianca: Mapped[str] = mapped_column(String)  # grounded | manual
     status_revisao: Mapped[str] = mapped_column(String)  # sugerido | confirmado | descartado
     conformidade_manual: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -236,7 +237,113 @@ class EventoContratoSourcing(Base):
     espelhado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-TABELAS_SOURCING = (ProcessoSourcing, ContratoSourcing, DocumentoSourcing, RequisitoSourcing, EventoSourcing, EventoContratoSourcing)
+# --- Phase E: entidades que nascem com o primeiro fluxo que grava nelas (D-058/D-061) --------------------
+# Sem tabela de origem: são nativas do modelo unificado (Enterprise Strategic Sourcing).
+
+
+class ParticipanteSourcing(Base):
+    """Fornecedor convidado/descoberto para um processo (quem responde)."""
+
+    __tablename__ = "participante_sourcing"
+    __table_args__ = (CheckConstraint(_CHECK_LADO, name="ck_participante_sourcing_lado"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, index=True)
+    lado: Mapped[str] = mapped_column(String)
+    processo_id: Mapped[int] = mapped_column(ForeignKey("processo_sourcing.id"), index=True)
+    fornecedor_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # cadastro interno do comprador
+    empresa_rede_tenant_id: Mapped[str | None] = mapped_column(String, nullable=True)  # empresa da Business Network
+    nome: Mapped[str] = mapped_column(String)
+    cnpj: Mapped[str | None] = mapped_column(String, nullable=True)
+    origem_descoberta: Mapped[str] = mapped_column(String)  # INTERNAL | NETWORK | MANUAL
+    status: Mapped[str] = mapped_column(String)
+    motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ItemSourcing(Base):
+    """Item cotado (RFQ): quantidade e especificação."""
+
+    __tablename__ = "item_sourcing"
+    __table_args__ = (CheckConstraint(_CHECK_LADO, name="ck_item_sourcing_lado"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, index=True)
+    lado: Mapped[str] = mapped_column(String)
+    processo_id: Mapped[int] = mapped_column(ForeignKey("processo_sourcing.id"), index=True)
+    descricao: Mapped[str] = mapped_column(String)
+    quantidade: Mapped[float] = mapped_column(Numeric(18, 4))
+    unidade: Mapped[str | None] = mapped_column(String, nullable=True)
+    especificacao: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class PropostaSourcing(Base):
+    """Resposta (RFI) ou proposta (RFP/RFQ) de um participante; cada rodada de negociação é uma nova linha."""
+
+    __tablename__ = "proposta_sourcing"
+    __table_args__ = (
+        CheckConstraint(_CHECK_LADO, name="ck_proposta_sourcing_lado"),
+        Index("ix_proposta_sourcing_processo_participante", "processo_id", "participante_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, index=True)
+    lado: Mapped[str] = mapped_column(String)
+    processo_id: Mapped[int] = mapped_column(ForeignKey("processo_sourcing.id"))
+    participante_id: Mapped[int] = mapped_column(ForeignKey("participante_sourcing.id"), index=True)
+    rodada: Mapped[int] = mapped_column(Integer, default=1)
+    tipo: Mapped[str] = mapped_column(String)  # RESPOSTA | PROPOSTA
+    valor_total: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    moeda: Mapped[str] = mapped_column(String, default="BRL")
+    prazo_entrega_dias: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    condicoes_pagamento: Mapped[str | None] = mapped_column(String, nullable=True)
+    impostos_inclusos: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    validade: Mapped[date | None] = mapped_column(Date, nullable=True)
+    observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    criado_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
+    recebida_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class PropostaItemSourcing(Base):
+    __tablename__ = "proposta_item_sourcing"
+    __table_args__ = (
+        CheckConstraint(_CHECK_LADO, name="ck_proposta_item_sourcing_lado"),
+        UniqueConstraint("proposta_id", "item_id", name="uq_proposta_item_sourcing"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, index=True)
+    lado: Mapped[str] = mapped_column(String)
+    proposta_id: Mapped[int] = mapped_column(ForeignKey("proposta_sourcing.id"), index=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("item_sourcing.id"), index=True)
+    preco_unitario: Mapped[float] = mapped_column(Numeric(18, 4))
+
+
+class AvaliacaoSourcing(Base):
+    """Proposta × requisito: o que o participante respondeu e como o comprador avaliou (Evaluation Engine, direção PROPOSTA)."""
+
+    __tablename__ = "avaliacao_sourcing"
+    __table_args__ = (
+        CheckConstraint(_CHECK_LADO, name="ck_avaliacao_sourcing_lado"),
+        UniqueConstraint("proposta_id", "requisito_id", name="uq_avaliacao_sourcing"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, index=True)
+    lado: Mapped[str] = mapped_column(String)
+    proposta_id: Mapped[int] = mapped_column(ForeignKey("proposta_sourcing.id"), index=True)
+    requisito_id: Mapped[int] = mapped_column(ForeignKey("requisito_sourcing.id"), index=True)
+    resposta: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str | None] = mapped_column(String, nullable=True)  # STATUS_CONFORMIDADE; None = não avaliado
+    nota: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)  # 0–10
+    justificativa: Mapped[str | None] = mapped_column(Text, nullable=True)
+    revisado_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
+    revisado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+TABELAS_NATIVAS = (ParticipanteSourcing, ItemSourcing, PropostaSourcing, PropostaItemSourcing, AvaliacaoSourcing)
+TABELAS_SOURCING = (ProcessoSourcing, ContratoSourcing, DocumentoSourcing, RequisitoSourcing, EventoSourcing, EventoContratoSourcing,
+                    *TABELAS_NATIVAS)
 
 
 class LadoImutavel(Exception):

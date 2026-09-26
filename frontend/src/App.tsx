@@ -40,6 +40,12 @@ const ComprasPublicas = lazy(() => import("@/pages/compras/ComprasPublicas").the
 const ProcessoWorkspace = lazy(() =>
   import("@/pages/compras/ProcessoWorkspace").then((m) => ({ default: m.ProcessoWorkspace })),
 );
+const SourcingProcessos = lazy(() =>
+  import("@/pages/sourcing/SourcingProcessos").then((m) => ({ default: m.SourcingProcessos })),
+);
+const SourcingWorkspace = lazy(() =>
+  import("@/pages/sourcing/SourcingWorkspace").then((m) => ({ default: m.SourcingWorkspace })),
+);
 const CerebroCorporativo = lazy(() =>
   import("@/pages/inteligencia/CerebroCorporativo").then((m) => ({ default: m.CerebroCorporativo })),
 );
@@ -317,6 +323,22 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <ProcessoWorkspace />
+              </Suspense>
+            }
+          />
+          <Route
+            path="sourcing"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <SourcingProcessos />
+              </Suspense>
+            }
+          />
+          <Route
+            path="sourcing/:id"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <SourcingWorkspace />
               </Suspense>
             }
           />

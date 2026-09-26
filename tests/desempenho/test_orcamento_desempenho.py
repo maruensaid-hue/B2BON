@@ -73,6 +73,21 @@ def _semear(client) -> dict:
         proc = client.post(f"{P}/processos", json={"orgao_id": orgao["id"], "objeto": f"Limpeza predial {i}", "valor_estimado": 90000}).json()
         client.patch(f"{P}/processos/{proc['id']}", json={"status": "PESQUISA_PRECOS"})
         ids.setdefault("processo", proc["id"])
+    # Phase E: RFP privado com 10 participantes e propostas avaliadas
+    S = "/api/v1/sourcing"
+    rfp = client.post(f"{S}/processos", json={"tipo_processo": "RFP", "titulo": "Notebooks corporativos"}).json()
+    requisitos = [client.post(f"{S}/processos/{rfp['id']}/requisitos", json={"categoria": "REQUISITO_TECNICO", "texto": f"Critério {i}",
+                                                                           "obrigatorio": i == 0, "peso": 1 + i}).json() for i in range(5)]
+    participantes = [client.post(f"{S}/processos/{rfp['id']}/participantes", json={"nome": f"Fornecedor {i}"}).json() for i in range(10)]
+    for status in ("PUBLICADO", "RECEBENDO_PROPOSTAS"):
+        client.post(f"{S}/processos/{rfp['id']}/status", json={"status": status})
+    for i, participante in enumerate(participantes):
+        proposta = client.post(f"{S}/processos/{rfp['id']}/propostas", json={"participante_id": participante["id"],
+                                                                            "valor_total": 1000 + i}).json()
+        for requisito in requisitos:
+            client.put(f"{S}/propostas/{proposta['id']}/avaliacoes", json={"requisito_id": requisito["id"], "status": "COMPLIANT",
+                                                                          "nota": 7})
+    ids["sourcing"] = rfp["id"]
     return ids
 
 
@@ -90,6 +105,8 @@ def _rotas(ids: dict) -> dict[str, str]:
         "comprador · processos": f"{P}/processos",
         "comprador · workspace": f"{P}/processos/{ids['processo']}/workspace",
         "comprador · riscos": f"{P}/riscos",
+        "comprador privado · workspace": f"/api/v1/sourcing/processos/{ids['sourcing']}/workspace",
+        "comprador privado · comparação": f"/api/v1/sourcing/processos/{ids['sourcing']}/comparacao",
     }
 
 
