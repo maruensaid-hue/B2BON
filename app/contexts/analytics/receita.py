@@ -15,9 +15,9 @@ from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.contexts.bids import contract as bids
 from app.models.alerta_detrator import AlertaDetrator
 from app.models.conta import Conta
-from app.models.contrato_venda_publica import ContratoVendaPublica
 from app.models.estagio_funil import EstagioFunil
 from app.models.necessidade_oportunidade import NecessidadeOportunidade
 from app.models.negocio import Negocio
@@ -179,7 +179,7 @@ def _prevencao_churn(db: Session, tenant_id: str, negocios: _Negocios, inicio: d
 
 
 def _renovacao_contratos_publicos(db: Session, tenant_id: str, hoje: date) -> dict:
-    vigentes = db.query(ContratoVendaPublica).filter_by(tenant_id=tenant_id, status="VIGENTE").all()
+    vigentes = bids.repositorio.VENDA.contratos_vigentes(db, tenant_id)  # só lado vendedor (S2)
     sem_fim = [c for c in vigentes if c.vigencia_fim is None]
     vencendo = [c for c in vigentes if c.vigencia_fim and 0 <= (c.vigencia_fim - hoje).days <= DIAS_RENOVACAO]
     vencidos = [c for c in vigentes if c.vigencia_fim and c.vigencia_fim < hoje]

@@ -12,11 +12,10 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.contexts.procurement import contratos as contratos_intel
-from app.contexts.procurement import precos
+from app.contexts.procurement import precos, repositorio
 from app.contexts.procurement.tipos import DOCUMENTOS_ESPERADOS, STATUS_PROCESSO_FINAIS
 from app.contexts.shared.texto import termos_em_comum
 from app.models.contrato_compra import ContratoCompra
-from app.models.documento_compras import DocumentoCompras
 from app.models.evento_contrato_compra import EventoContratoCompra
 from app.models.item_pca import ItemPca
 from app.models.orgao_publico import OrgaoPublico
@@ -44,11 +43,7 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
     abertos = [p for p in processos if p.status not in STATUS_PROCESSO_FINAIS]
     contratos = db.query(ContratoCompra).filter_by(tenant_id=tenant_id).all()
     orgaos = {o.id: o for o in db.query(OrgaoPublico).filter_by(tenant_id=tenant_id).all()}
-    # Fase S0: uma consulta só para os tipos de documento de todos os processos (antes, uma por processo, com o arquivo).
-    tipos_por_processo: dict[int, set[str]] = {}
-    for doc_processo, doc_tipo in db.query(DocumentoCompras.processo_id, DocumentoCompras.tipo).filter(
-            DocumentoCompras.tenant_id == tenant_id, DocumentoCompras.processo_id.isnot(None)):
-        tipos_por_processo.setdefault(doc_processo, set()).add(doc_tipo)
+    tipos_por_processo = repositorio.COMPRA.tipos_de_documento(db, tenant_id)  # uma consulta, sem arquivo (S0/S2)
 
     for i, a in enumerate(abertos):
         for b in abertos[i + 1:]:

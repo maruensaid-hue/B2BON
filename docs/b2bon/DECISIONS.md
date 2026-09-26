@@ -464,3 +464,20 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   Fases S0–S8 propostas, nenhuma autorizada.
 - **Status**: ACEITA como arquitetura-alvo; implementação depende do PO.
 
+## D-056 · 2026-09-26 · Sourcing S0 · Paginação por cursor com a resposta ainda em lista
+- **Contexto**: `/bids/licitacoes` e `/procurement/{recurso}` devolviam tudo. Trocar o formato da resposta
+  quebraria as telas e integrações existentes.
+- **Decisão**: cursor opaco *keyset* (posição da última linha), `limite` 1–500 (padrão 100), próximo cursor no
+  header `X-Proximo-Cursor` (exposto no CORS). A resposta continua uma lista; as telas ganham "Carregar mais".
+  Listas pequenas usadas em seletores (órgãos, planos) pedem `limite=500`.
+- **Status**: ACEITA.
+
+## D-057 · 2026-09-26 · Sourcing S2 · Barreira por repositório convive com a barreira por tabela
+- **Decisão**: cada lado implementa `sourcing.repositorio.RepositorioSourcing` com o lado fixo
+  (`RepositorioVenda` em `bids`, `RepositorioCompra` em `procurement`). Quem está fora de um lado lê por ele
+  (FinOps e Analytics já leem a venda assim). A fitness `test_barreira_sourcing.py` roda junto com a antiga
+  (`test_barreira_buy_sell.py`): tabelas de cada lado só no próprio contexto, núcleo `sourcing` neutro,
+  `RepositorioCompra` só no comprador, ferramentas do agente com o lado de quem as registra.
+- **Consequência**: na S3 só a implementação dos repositórios troca de tabela; chamadores e fitness não mudam.
+- **Status**: ACEITA.
+

@@ -3,13 +3,11 @@
 - Requirement Engine: um laço, perfis diferentes (edital × RFP privado).
 - Evaluation Engine: mesma regra de decisão nas duas direções.
 - Matching Engine: estratégia de ICP com paridade com a fórmula anterior.
-- Núcleo não conhece modelos de nenhum dos lados (não vira ponte Buy/Sell).
+- Neutralidade do núcleo: `test_barreira_sourcing.py` (S2).
 """
 
-import ast
 import itertools
 import json
-from pathlib import Path
 
 import pytest
 
@@ -20,7 +18,6 @@ from app.models.creditos_ia import ExecucaoIa
 from app.services.errors import RegraNegocioViolada
 from tests.fakes import FakeLLMProvider
 
-RAIZ = Path(__file__).resolve().parents[2]
 PAGINAS = [
     "EDITAL 1/2026\n1. OBJETO: plataforma de atendimento.",
     "4.2 A contratada deve manter SLA de 99,5% de disponibilidade.\n5.1 Apresentar certificação ISO 27001.",
@@ -141,11 +138,3 @@ def test_fit_da_rede_passa_a_casar_cnae_pontuado_com_digitos():
     digitado e o fit da rede comparava sem normalizar ("8610-1/01" ≠ "8610101")."""
     resultado = matching.combinar(matching.criterios_icp(["8610-1/01"], ["SP"], "grande", "8610101", None, "grande"))
     assert resultado.pontuacao == 0.7 and resultado.faltantes == ["sede_uf"] and resultado.confianca == "media"
-
-
-def test_nucleo_nao_importa_modelos_de_nenhum_dos_lados():
-    proibidos = ("app.models.", "app.contexts.bids", "app.contexts.procurement")
-    for arquivo in (RAIZ / "app" / "contexts" / "sourcing").glob("*.py"):
-        for no in ast.walk(ast.parse(arquivo.read_text(encoding="utf-8"))):
-            if isinstance(no, ast.ImportFrom) and no.module:
-                assert not no.module.startswith(proibidos), f"{arquivo.name} importa {no.module}"

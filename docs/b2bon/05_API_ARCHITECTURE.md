@@ -86,3 +86,7 @@ nunca do corpo**. Análise de documento vira assíncrona (202 + status). `/bids/
 (46 rotas) ficam como fachada durante a migração; permanecem só as rotas de comportamento exclusivo
 (Go/No-Go, cofre, concorrentes, PCA, demandas, pesquisa de preço). Nada implementado ainda:
 `18_STRATEGIC_SOURCING.md` §5.2.
+
+**Executado (S0, D-056)**: `/bids/licitacoes` e `/procurement/{recurso}` já paginam por cursor keyset
+(`cursor`, `limite` 1–500, próximo cursor em `X-Proximo-Cursor`), mantendo a resposta em lista.
+

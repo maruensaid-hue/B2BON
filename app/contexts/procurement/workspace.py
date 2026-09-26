@@ -5,21 +5,20 @@ Insights (sinais + próxima ação)."""
 
 from sqlalchemy.orm import Session
 
-from app.contexts.procurement import cadastros, contratos, documentos, nba, precos, riscos
+from app.contexts.procurement import cadastros, contratos, documentos, nba, precos, repositorio, riscos
 from app.models.auditoria import AuditLog
 from app.models.contrato_compra import ContratoCompra
 from app.models.demanda_compra import DemandaCompra
-from app.models.documento_compras import DocumentoCompras
 from app.models.evento_processo import EventoProcesso
 
 
 def montar(db: Session, tenant_id: str, processo_id: int) -> dict:
-    processo = cadastros.obter(db, tenant_id, "processo_contratacao", processo_id)
+    processo = repositorio.COMPRA.obter_processo(db, tenant_id, processo_id)
     demandas = (
         db.query(DemandaCompra).filter(DemandaCompra.tenant_id == tenant_id, DemandaCompra.id.in_(processo.demanda_ids or [-1])).all()
     )
     item = cadastros.obter(db, tenant_id, "item_pca", processo.item_pca_id) if processo.item_pca_id else None
-    docs = db.query(DocumentoCompras).filter_by(tenant_id=tenant_id, processo_id=processo.id).order_by(DocumentoCompras.id).all()
+    docs = repositorio.COMPRA.documentos(db, tenant_id, processo.id)
     eventos = db.query(EventoProcesso).filter_by(tenant_id=tenant_id, processo_id=processo.id).order_by(EventoProcesso.id).all()
     contratos_do_processo = db.query(ContratoCompra).filter_by(tenant_id=tenant_id, processo_id=processo.id).all()
     sinais = riscos.sinais(db, tenant_id, processo_id=processo.id)

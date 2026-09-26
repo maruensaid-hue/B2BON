@@ -21,11 +21,10 @@ from decimal import Decimal
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.contexts.bids import contract as bids
 from app.contexts.finops import carteira, catalogos, comercial
 from app.models.carteira_creditos import MovimentoCredito
 from app.models.creditos_ia import AlertaCreditos, CompraCreditos, ConfiguracaoCreditosTenant, ExecucaoIa, LoteCreditos
-from app.models.decisao_go_no_go import DecisaoGoNoGo
-from app.models.licitacao import Licitacao
 from app.models.negocio import Negocio
 from app.models.plano import Plano
 from app.models.qualificacao import QualificacaoScore
@@ -341,7 +340,8 @@ def economia_unitaria(db: Session, inicio: datetime, fim: datetime, tenant_id: s
                                                  "Sem leads qualificados no período."),
         "ai_cost_per_cadence": _custo_por(*custo_workloads(("cadence_generation", "prospecting_message")),
                                           "Sem geração de cadência/mensagem no período."),
-        "ai_cost_per_bid": _custo_por(custo_tender, contar(Licitacao), "Sem licitações no período."),
+        "ai_cost_per_bid": _custo_por(custo_tender, bids.repositorio.VENDA.contar_processos(db, inicio, fim, tenant_id),
+                                      "Sem licitações no período."),
         "ai_cost_per_tender_analysis": _custo_por(custo_tender, n_tender, "Sem análise de edital no período."),
         "ai_cost_per_procurement_process": {"valor": None, "motivo": "Exibido no painel de Compras públicas (barreira Buy/Sell)."},
         "ai_cost_per_churn_prediction": _custo_por(custo_churn, n_churn, "Sem previsão de churn por IA no período."),
@@ -360,9 +360,8 @@ def valor_de_negocio(db: Session, tenant_id: str, inicio: datetime, fim: datetim
 
     negocios = db.query(Negocio).filter(Negocio.tenant_id == tenant_id, Negocio.criado_em >= inicio, Negocio.criado_em < fim).all()
     ganhos = db.query(Negocio).filter(Negocio.tenant_id == tenant_id, Negocio.ganho_em >= inicio, Negocio.ganho_em < fim).all()
-    decisoes = db.query(DecisaoGoNoGo).filter(DecisaoGoNoGo.tenant_id == tenant_id, DecisaoGoNoGo.criado_em >= inicio,
-                                              DecisaoGoNoGo.criado_em < fim).all()
-    licitacoes = db.query(Licitacao).filter(Licitacao.tenant_id == tenant_id, Licitacao.criado_em >= inicio, Licitacao.criado_em < fim).all()
+    decisoes = bids.repositorio.VENDA.decisoes_go_no_go(db, tenant_id, inicio, fim)
+    licitacoes = bids.repositorio.VENDA.processos_criados(db, tenant_id, inicio, fim)
     return {
         "aviso": "Relaciona consumo de IA a resultados registrados no mesmo período; não prova causalidade.",
         "prospeccao": {

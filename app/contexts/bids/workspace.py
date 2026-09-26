@@ -2,10 +2,9 @@
 
 from sqlalchemy.orm import Session
 
-from app.contexts.bids import conformidade, contratos, documentos, go_no_go, grafo, licitacoes, prazos
+from app.contexts.bids import conformidade, contratos, documentos, go_no_go, grafo, licitacoes, prazos, repositorio
 from app.models.contrato_venda_publica import ContratoVendaPublica
 from app.models.decisao_go_no_go import DecisaoGoNoGo
-from app.models.documento_licitacao import DocumentoLicitacao
 
 
 def montar(db: Session, tenant_id: str, licitacao_id: int) -> dict:
@@ -18,7 +17,7 @@ def montar(db: Session, tenant_id: str, licitacao_id: int) -> dict:
         "licitacao": licitacoes.como_dict(lic),
         "documentos": [
             documentos.como_dict(d)
-            for d in db.query(DocumentoLicitacao).filter_by(tenant_id=tenant_id, licitacao_id=lic.id).order_by(DocumentoLicitacao.id)
+            for d in repositorio.VENDA.documentos(db, tenant_id, lic.id)
         ],
         "requisitos": [licitacoes.requisito_dict(r) for r in licitacoes.listar_requisitos(db, tenant_id, lic.id)],
         "matriz_conformidade": matriz,

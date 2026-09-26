@@ -58,3 +58,8 @@ tabelas compartilhadas; PCA, demanda e pesquisa de preço ficam aqui (regulatór
 fixas (`DOCUMENTOS_ESPERADOS`, sigilo, fragmentação) viram o ruleset `PUBLIC_PROCUREMENT_BR_14133`.
 **A barreira Buy/Sell não muda de garantia**: muda de mecanismo (repositório por lado + fitness function
 reescrita antes da migração), `18_STRATEGIC_SOURCING.md` §2.3.
+
+**Executado (S2, D-057)**: `RepositorioCompra` (lado fixo BUY) atende workspace e sinais de risco; a fitness
+nova `tests/unit/test_barreira_sourcing.py` roda junto com a antiga e cobre também as tabelas do vendedor e a
+neutralidade do núcleo `sourcing`.
+

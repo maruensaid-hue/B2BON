@@ -353,4 +353,5 @@ S0–S2 não mudam schema nem comportamento e podem ir primeiro. S3–S6 são o 
 |---|---|---|
 | S0 | ✅ 2026-09-26 | colunas deferidas nos 3 modelos de documento; riscos com 1 consulta; cursor keyset + "Carregar mais"; `test_sourcing_desempenho.py` |
 | S1 | ✅ 2026-09-26 | `contexts/sourcing/{requisitos,documentos,avaliacao,tipos}.py`, `shared/matching.py`; `bids` e `procurement` usam os engines; ICP (PREDATOR e rede) na estratégia única; `test_sourcing_nucleo.py`. Única mudança de resultado: o fit de ICP da rede passa a casar CNAE pontuado com dígitos (bug) |
-| S2 | ver abaixo | — |
+| S2 | ✅ 2026-09-26 | protocolo `sourcing/repositorio.py`; `RepositorioVenda` (`bids`) e `RepositorioCompra` (`procurement`) com lado fixo; FinOps e Analytics leem venda só pelo repositório; fitness `test_barreira_sourcing.py` junto com `test_barreira_buy_sell.py`; `test_sourcing_repositorio.py` |
+| S3–S8 | aguardando o PO (OI-020) | — |

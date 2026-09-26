@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Sourcing S0–S2 (2026-09-26, autorizadas pelo PO)
+
+- S0: documentos sem carregar arquivo/texto em listagens (colunas deferidas); sinais de risco sem N+1; paginação por cursor keyset em licitações e cadastros do comprador, com "Carregar mais".
+- S1: núcleo `contexts/sourcing` (Requirement Engine com perfis, Document Engine, Evaluation Engine com direção) usado por Bids e Procurement; `shared/matching` com a estratégia de ICP única (corrige o fit da rede com CNAE pontuado).
+- S2: repositórios por lado com lado fixo; FinOps e Analytics leem a venda pelo repositório; fitness nova da barreira junto com a antiga.
+- Nenhuma mudança de schema.
+
 ## Correção arquitetural — Strategic Sourcing & Bids (2026-09-26, só documentação)
 
 - Quatro segmentos explícitos (B2B Sales · Public Sector Bids · Public Procurement · Enterprise Strategic Sourcing; Enterprise Bids como metade vendedora do Enterprise), entregues por engines compartilhados.
