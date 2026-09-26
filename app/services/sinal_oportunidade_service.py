@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.contexts.intelligence import contract as intel
 from app.contexts.network.contract import conversao, grafo, privacidade
 from app.contexts.network.contract import relacionamento as inteligencia_relacionamento
+from app.contexts.shared import matching
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.atividade import Atividade
@@ -36,48 +37,19 @@ _PALAVRAS_IGNORADAS = {
     "uns", "umas", "não", "nao", "mais", "menos", "the", "and", "for", "com", "seu", "sua",
 }
 
-_PESO_CNAE = 0.5
-_PESO_UF = 0.3
-_PESO_PORTE = 0.2
 
 
 def calcular_fit_icp(icp: ICP, perfil_candidato: PerfilEmpresa) -> dict:
-    """ICP Agent (master prompt §25, §60 ICP+Network, Fase 3B) — mesmos
-    pesos de `predator.prospeccao._score_aderencia` (CNAE 0.5 + UF 0.3 +
-    porte 0.2), aplicados contra o perfil de outro tenant da Rede
+    """ICP Agent (master prompt §25, §60 ICP+Network, Fase 3B) — a mesma
+    estratégia de ICP do PREDATOR (`shared/matching.criterios_icp`: CNAE 0.5 +
+    UF 0.3 + porte 0.2), aplicada contra o perfil de outro tenant da Rede
     Social em vez de uma `ContaCandidata` raspada. Nunca devolve um
     score isolado (§48) — sempre com `reasons`/`missing_data`."""
-    pontuacao = 0.0
-    reasons: list[str] = []
-    missing_data: list[str] = []
-
-    if perfil_candidato.cnae_principal:
-        if perfil_candidato.cnae_principal in icp.cnae_codigos:
-            pontuacao += _PESO_CNAE
-            reasons.append(f"CNAE principal ({perfil_candidato.cnae_principal}) está entre os CNAEs do ICP.")
-    else:
-        missing_data.append("cnae_principal")
-
-    if perfil_candidato.sede_uf:
-        if perfil_candidato.sede_uf.upper() in {uf.upper() for uf in icp.ufs}:
-            pontuacao += _PESO_UF
-            reasons.append(f"Sede em {perfil_candidato.sede_uf} está entre as UFs do ICP.")
-    else:
-        missing_data.append("sede_uf")
-
-    if perfil_candidato.porte:
-        if icp.porte and perfil_candidato.porte == icp.porte:
-            pontuacao += _PESO_PORTE
-            reasons.append(f"Porte ({perfil_candidato.porte}) corresponde ao porte do ICP.")
-    else:
-        missing_data.append("porte")
-
-    if len(missing_data) == 0:
-        confidence = "alta"
-    elif len(missing_data) == 1:
-        confidence = "media"
-    else:
-        confidence = "baixa"
+    resultado = matching.combinar(matching.criterios_icp(
+        icp.cnae_codigos, icp.ufs, icp.porte, perfil_candidato.cnae_principal, perfil_candidato.sede_uf,
+        perfil_candidato.porte))
+    pontuacao, reasons, missing_data, confidence = (
+        resultado.pontuacao, resultado.motivos, resultado.faltantes, resultado.confianca)
 
     return {
         "tenant_id_candidato": perfil_candidato.tenant_id,

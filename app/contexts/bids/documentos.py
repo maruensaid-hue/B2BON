@@ -1,4 +1,5 @@
-"""Ingestão de documentos da licitação com proveniência (GATE da Fase 9).
+"""Ingestão de documentos da licitação com proveniência (GATE da Fase 9),
+sobre o Document Engine compartilhado (`sourcing.documentos`, S1).
 
 Cada documento guarda fonte, URL (se houver), hash SHA-256 do arquivo e o
 texto por página. O mesmo arquivo (mesmo hash) na mesma licitação não
@@ -8,7 +9,8 @@ não há OCR, e isso é declarado em vez de analisado às cegas.
 
 from sqlalchemy.orm import Session
 
-from app.contexts.shared.documentos import TAMANHO_MAXIMO, extrair_paginas, sha256, validar
+from app.contexts.shared.documentos import TAMANHO_MAXIMO, extrair_paginas
+from app.contexts.sourcing import contract as sourcing
 from app.models.documento_licitacao import DocumentoLicitacao
 from app.services.errors import RegraNegocioViolada
 
@@ -27,18 +29,14 @@ def registrar(
     fonte: str = "UPLOAD",
     fonte_url: str | None = None,
 ) -> DocumentoLicitacao:
-    validar(conteudo, tipo_mime)
-    hash_arquivo = sha256(conteudo)
-    if db.query(DocumentoLicitacao).filter_by(licitacao_id=licitacao_id, sha256=hash_arquivo).first() is not None:
+    arquivo = sourcing.documentos.preparar(conteudo, tipo_mime)
+    if db.query(DocumentoLicitacao.id).filter_by(licitacao_id=licitacao_id, sha256=arquivo.sha256).first() is not None:
         raise RegraNegocioViolada("Este arquivo já foi enviado para esta licitação.")
-
-    paginas = extrair_paginas(conteudo, tipo_mime)
-    tem_texto = any(p.strip() for p in paginas)
     documento = DocumentoLicitacao(
         tenant_id=tenant_id, licitacao_id=licitacao_id, tipo=tipo, nome_arquivo=nome_arquivo[:255],
-        tipo_mime=tipo_mime, tamanho_bytes=len(conteudo), sha256=hash_arquivo, conteudo=conteudo,
-        paginas_texto=paginas, paginas=len(paginas), fonte=fonte, fonte_url=fonte_url,
-        status_analise="PENDENTE" if tem_texto else "SEM_TEXTO", enviado_por_usuario_id=usuario_id,
+        tipo_mime=tipo_mime, tamanho_bytes=arquivo.tamanho_bytes, sha256=arquivo.sha256, conteudo=conteudo,
+        paginas_texto=arquivo.paginas, paginas=len(arquivo.paginas), fonte=fonte, fonte_url=fonte_url,
+        status_analise=arquivo.status_inicial, enviado_por_usuario_id=usuario_id,
     )
     db.add(documento)
     db.flush()

@@ -16,6 +16,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
+from app.contexts.shared import matching
 from app.contexts.shared.organizations import decisores_da_conta, normalizar_dominio, obter_conta
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.integrations.brasilapi_client import BrasilApiClient
@@ -29,7 +30,6 @@ from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
 from app.models.icp import ICP
 from app.models.lista_prospeccao import ListaProspeccao
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, DecisorCandidato, FiltroBusca
-from app.providers.account_data.receita_federal_downloader import normalizar_cnae
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
@@ -38,18 +38,10 @@ from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 
 def _score_aderencia(db: Session, tenant_id: str, icp: ICP, candidato: ContaCandidata) -> float:
-    pontuacao = 0.0
-    # `candidato.cnae_principal` vem sempre em dígitos puros (Receita
-    # Federal, via `buscar_candidatos`) — `icp.cnae_codigos` fica como a
-    # pessoa digitou (ver `icp_service.criar`), então normaliza aqui pro
-    # mesmo formato antes de comparar, senão um ICP com CNAE pontuado
-    # nunca pontua o critério mesmo achando a conta certa.
-    if candidato.cnae_principal in {normalizar_cnae(c) for c in icp.cnae_codigos}:
-        pontuacao += 0.5
-    if candidato.uf.upper() in {uf.upper() for uf in icp.ufs}:
-        pontuacao += 0.3
-    if icp.porte and candidato.porte == icp.porte:
-        pontuacao += 0.2
+    # Estratégia de ICP do Matching Engine compartilhado (S1): CNAE comparado
+    # em dígitos puros dos dois lados (o ICP guarda o CNAE como foi digitado).
+    pontuacao = matching.combinar(matching.criterios_icp(
+        icp.cnae_codigos, icp.ufs, icp.porte, candidato.cnae_principal, candidato.uf, candidato.porte)).pontuacao
 
     penalidade = descarte_service.penalidade_para(
         db, tenant_id, candidato.cnae_principal, candidato.porte, candidato.uf

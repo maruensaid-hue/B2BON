@@ -346,3 +346,11 @@ Resultado: evita-se ≈ **4.000 linhas** de código paralelo e ≈ 600 de testes
 | **S8 · Enterprise Strategic Sourcing (buy)** | `ENTERPRISE_RFP_BUY@1` + `ENTERPRISE_SOURCING`, convite, propostas, avaliação, negociação | depende de OI-019 e de preço definido pelo PO |
 
 S0–S2 não mudam schema nem comportamento e podem ir primeiro. S3–S6 são o Strangler. S7–S8 são produto novo.
+
+### Execução
+
+| Fase | Estado | Evidência |
+|---|---|---|
+| S0 | ✅ 2026-09-26 | colunas deferidas nos 3 modelos de documento; riscos com 1 consulta; cursor keyset + "Carregar mais"; `test_sourcing_desempenho.py` |
+| S1 | ✅ 2026-09-26 | `contexts/sourcing/{requisitos,documentos,avaliacao,tipos}.py`, `shared/matching.py`; `bids` e `procurement` usam os engines; ICP (PREDATOR e rede) na estratégia única; `test_sourcing_nucleo.py`. Única mudança de resultado: o fit de ICP da rede passa a casar CNAE pontuado com dígitos (bug) |
+| S2 | ver abaixo | — |
