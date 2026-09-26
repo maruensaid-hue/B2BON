@@ -127,6 +127,18 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      # Sourcing S3 (D-058): backfill idempotente das tabelas unificadas e rede
+      # de segurança do espelho. Rodar à mão (workflow_dispatch) logo após o
+      # deploy da S3; depois, 1x/dia.
+      - name: Chamar POST /cron/sourcing-sincronizar (tabelas unificadas de sourcing, 1x/dia)
+        if: always() && (github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch')
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${API_BASE_URL}/cron/sourcing-sincronizar" \
+            -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
   atualizar-recorte-cnpj:
     runs-on: ubuntu-latest

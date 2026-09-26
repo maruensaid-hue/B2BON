@@ -354,4 +354,11 @@ S0–S2 não mudam schema nem comportamento e podem ir primeiro. S3–S6 são o 
 | S0 | ✅ 2026-09-26 | colunas deferidas nos 3 modelos de documento; riscos com 1 consulta; cursor keyset + "Carregar mais"; `test_sourcing_desempenho.py` |
 | S1 | ✅ 2026-09-26 | `contexts/sourcing/{requisitos,documentos,avaliacao,tipos}.py`, `shared/matching.py`; `bids` e `procurement` usam os engines; ICP (PREDATOR e rede) na estratégia única; `test_sourcing_nucleo.py`. Única mudança de resultado: o fit de ICP da rede passa a casar CNAE pontuado com dígitos (bug) |
 | S2 | ✅ 2026-09-26 | protocolo `sourcing/repositorio.py`; `RepositorioVenda` (`bids`) e `RepositorioCompra` (`procurement`) com lado fixo; FinOps e Analytics leem venda só pelo repositório; fitness `test_barreira_sourcing.py` junto com `test_barreira_buy_sell.py`; `test_sourcing_repositorio.py` |
-| S3–S8 | aguardando o PO (OI-020) | — |
+| S3 | ✅ 2026-09-26 | migração `a3d5f7b9c1e2`: 6 tabelas `*_sourcing` com `lado` em CHECK e imutável (ORM + trigger SQLite/Postgres); espelho por eventos do ORM (`bids/espelho.py`, `procurement/espelho.py` → núcleo neutro `sourcing/espelho.py`); backfill idempotente em lotes (`/cron/sourcing-sincronizar`); leitura dupla nos repositórios (`SOURCING_LEITURA_DUPLA`: COMPARAR em produção, ESTRITA na suíte inteira); `test_sourcing_s3.py`, `test_sourcing_s3_pg.py`, `test_alembic_upgrade.py` |
+| S4–S8 | aguardando o PO (OI-020) | — |
+
+**Desvios do desenho na S3 (registrados em D-058):**
+- 6 tabelas, não 9: participante, proposta e avaliação só ganham tabela quando o primeiro fluxo gravar nelas (S7/S8). Hoje não há dado para elas, e a regra é não criar abstração sem uso.
+- Versão de workflow e de ruleset vai no próprio nome (`PUBLIC_TENDER_SELL@1`), sem coluna separada.
+- O arquivo e o texto das páginas continuam só na tabela de origem até a S6, sem duplicar blobs.
+- Sem `ON DELETE CASCADE`, pela convenção do projeto (falha fechado): o núcleo apaga as filhas explicitamente.

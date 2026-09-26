@@ -97,7 +97,7 @@ def test_sinais_de_risco_sem_n_mais_1_e_sem_arquivo(client, db_session):
     orgao = client.post("/api/v1/procurement/orgaos", json={"nome": "Prefeitura"}).json()
     for i in range(12):
         processo = client.post("/api/v1/procurement/processos", json={"orgao_id": orgao["id"], "objeto": f"Objeto distinto {i}"}).json()
-        db_session.query(ProcessoContratacao).filter_by(id=processo["id"]).update({"status": "APROVACAO"})
+        db_session.get(ProcessoContratacao, processo["id"]).status = "APROVACAO"
         client.post("/api/v1/procurement/documentos", data={"tipo": "ETP", "processo_id": str(processo["id"])},
                     files={"arquivo": (f"etp{i}.txt", f"ETP do processo {i}.".encode(), "text/plain")})
     db_session.commit()

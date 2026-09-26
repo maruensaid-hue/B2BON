@@ -21,6 +21,7 @@ from app.api.deps import (
 )
 from app.contexts.finops import contract as finops
 from app.contexts.platform.contract import webhooks
+from app.contexts.sourcing import contract as sourcing
 from app.contexts.shared import events
 from app.core.config import settings
 from app.graph.client import Neo4jClient
@@ -314,3 +315,11 @@ def creditos_ia(db: Session = Depends(get_db)) -> dict:
     franquia do mês, libera reservas órfãs, registra alertas de uso
     (80/95/100%), anomalias de consumo e alertas de margem."""
     return finops.creditos_ia_rotina(db)
+
+
+@router.post("/sourcing-sincronizar", dependencies=[Depends(_exigir_segredo_cron)])
+def sourcing_sincronizar(db: Session = Depends(get_db)) -> dict:
+    """Sourcing S3 (expand): backfill idempotente das tabelas unificadas a
+    partir das antigas (a fonte da verdade), em lotes, e remoção de órfãos.
+    Rodar uma vez após o deploy e depois diariamente como rede de segurança."""
+    return sourcing.espelho.sincronizar_todos(db)

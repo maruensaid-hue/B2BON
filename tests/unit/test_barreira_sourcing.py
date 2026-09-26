@@ -69,13 +69,45 @@ def test_tabelas_de_cada_lado_so_pelo_proprio_lado_ou_pelo_repositorio():
 
 
 def test_nucleo_de_sourcing_nao_importa_nenhum_dos_lados():
+    """O núcleo só conhece as próprias tabelas unificadas (S3)."""
     proibidos = ("app.models", "app.contexts.bids", "app.contexts.procurement")
     violacoes = [
         f"{arquivo.relative_to(RAIZ)} importa {modulo}"
         for arquivo in (APP / "contexts" / "sourcing").rglob("*.py")
         for modulo in _imports(arquivo)
-        if modulo.startswith(proibidos)
+        if modulo.startswith(proibidos) and modulo != "app.models.sourcing"
     ]
+    assert violacoes == [], "\n".join(violacoes)
+
+
+def test_tabelas_unificadas_so_pelo_nucleo():
+    """S3: as tabelas `*_sourcing` guardam os dois lados; só o núcleo (que
+    sempre recebe o lado de quem chama) as lê ou escreve."""
+    permitidos = (APP / "contexts" / "sourcing", APP / "models")
+    tabelas = r"\b(processo|contrato|documento|requisito|evento|evento_contrato)_sourcing\b"
+    violacoes = []
+    for arquivo in _arquivos(permitidos):
+        if "app.models.sourcing" in _imports(arquivo):
+            violacoes.append(f"{arquivo.relative_to(RAIZ)} importa app.models.sourcing")
+        for no in ast.walk(ast.parse(arquivo.read_text(encoding="utf-8"))):
+            if isinstance(no, ast.Constant) and isinstance(no.value, str) and re.search(tabelas, no.value) and (
+                    "select" in no.value.lower() or " from " in no.value.lower() or "update" in no.value.lower()):
+                violacoes.append(f"{arquivo.relative_to(RAIZ)} cita tabela unificada em SQL: {no.value[:60]!r}")
+    assert violacoes == [], "\n".join(violacoes)
+
+
+def test_cada_lado_so_usa_o_proprio_lado_com_o_nucleo():
+    """Quem passa `Lado.COMPRA` ao núcleo é só o comprador; `Lado.VENDA`, só o vendedor."""
+    donos = {"COMPRA": (APP / "contexts" / "procurement", APP / "api" / "v1" / "procurement.py"),
+             "VENDA": (APP / "contexts" / "bids", APP / "api" / "v1" / "bids.py")}
+    nucleo = (APP / "contexts" / "sourcing",)
+    violacoes = []
+    for membro, permitidos in donos.items():
+        for arquivo in _arquivos(permitidos + nucleo):
+            for no in ast.walk(ast.parse(arquivo.read_text(encoding="utf-8"))):
+                if isinstance(no, ast.Attribute) and no.attr == membro and isinstance(no.value, ast.Attribute | ast.Name) and (
+                        getattr(no.value, "attr", None) == "Lado" or getattr(no.value, "id", None) == "Lado"):
+                    violacoes.append(f"{arquivo.relative_to(RAIZ)} usa Lado.{membro}")
     assert violacoes == [], "\n".join(violacoes)
 
 

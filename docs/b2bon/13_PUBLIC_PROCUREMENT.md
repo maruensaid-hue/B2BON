@@ -63,3 +63,7 @@ reescrita antes da migração), `18_STRATEGIC_SOURCING.md` §2.3.
 nova `tests/unit/test_barreira_sourcing.py` roda junto com a antiga e cobre também as tabelas do vendedor e a
 neutralidade do núcleo `sourcing`.
 
+**Executado (S3, D-058)**: os dados do comprador são espelhados em `*_sourcing` com `lado = BUY` (imutável),
+incluindo os achados de documento como requisitos; leituras conferidas contra as tabelas novas. Só o núcleo
+`sourcing` acessa as tabelas unificadas e só o comprador passa `Lado.COMPRA` a ele (fitness).
+

@@ -81,6 +81,14 @@ from app.models.politica_creditos_ia import PoliticaCreditosIa
 from app.models.carteira_creditos import CarteiraCreditos
 from app.models.carteira_creditos import MovimentoCredito
 from app.models.orcamento_ia import OrcamentoIa
+from app.models.sourcing import (
+    ContratoSourcing,
+    DocumentoSourcing,
+    EventoContratoSourcing,
+    EventoSourcing,
+    ProcessoSourcing,
+    RequisitoSourcing,
+)
 from app.models.creditos_ia import (
     AlertaCreditos,
     CacheRespostaIa,
@@ -282,6 +290,12 @@ __all__ = [
     "LoteCreditos",
     "PacoteCreditos",
     "WorkloadIa",
+    "ContratoSourcing",
+    "DocumentoSourcing",
+    "EventoContratoSourcing",
+    "EventoSourcing",
+    "ProcessoSourcing",
+    "RequisitoSourcing",
 ]
 
 # Fase 17: índices das chaves estrangeiras (depois de todos os modelos carregados).

@@ -65,3 +65,52 @@ def test_migracao_fase15_preserva_saldo_legado_e_reconcilia(monkeypatch):
         engine.dispose()
         if os.path.exists(caminho_db):
             os.remove(caminho_db)
+
+
+def test_s3_tabelas_unificadas_backfill_sobre_dados_anteriores(monkeypatch):
+    """Sourcing S3: dados criados antes da migração chegam às tabelas
+    unificadas pelo backfill, com paridade conferida pela leitura dupla
+    estrita, e o trigger da migração impede mudar o lado."""
+    import pytest
+    import sqlalchemy as sa
+    from sqlalchemy.orm import Session
+
+    import app.contexts.bids.contract  # noqa: F401 — registra o espelho do vendedor
+    import app.contexts.procurement.contract  # noqa: F401 — e o do comprador
+    from app.contexts.bids import contract as bids
+    from app.contexts.procurement.repositorio import COMPRA
+    from app.contexts.sourcing import contract as sourcing
+
+    fd, caminho_db = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(caminho_db)
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{caminho_db}")
+    engine = sa.create_engine(f"sqlite:///{caminho_db}")
+    try:
+        config = Config("alembic.ini")
+        command.upgrade(config, "e7b3c1a9f5d2")
+        with engine.begin() as conexao:
+            conexao.execute(sa.text("INSERT INTO tenant (id, razao_social) VALUES ('t-s3', 't')"))
+            conexao.execute(sa.text(
+                "INSERT INTO licitacao (id, tenant_id, titulo, modalidade, fonte, status) "
+                "VALUES (1, 't-s3', 'Edital antigo', 'PUBLIC_TENDER', 'MANUAL', 'IDENTIFICADA')"))
+            conexao.execute(sa.text(
+                "INSERT INTO documento_licitacao (tenant_id, licitacao_id, tipo, nome_arquivo, tipo_mime, tamanho_bytes, sha256, "
+                "paginas, fonte, status_analise) VALUES ('t-s3', 1, 'EDITAL', 'e.pdf', 'application/pdf', 10, 'abc', 2, 'UPLOAD', 'PENDENTE')"))
+            conexao.execute(sa.text(
+                "INSERT INTO processo_contratacao (id, tenant_id, orgao_id, objeto, status, valor_sigiloso) "
+                "VALUES (1, 't-s3', 1, 'Compra antiga', 'PLANEJAMENTO', 0)"))
+        command.upgrade(config, "head")
+        with Session(engine) as db:
+            assert db.execute(sa.text("SELECT count(*) FROM processo_sourcing")).scalar() == 0  # expand não copia sozinho
+            relatorio = sourcing.espelho.sincronizar_todos(db)
+            assert relatorio["SELL"]["licitacao"]["espelhados"] == 1 and relatorio["BUY"]["processo_contratacao"]["espelhados"] == 1
+            assert bids.repositorio.VENDA.obter_processo(db, "t-s3", 1).titulo == "Edital antigo"  # leitura dupla ESTRITA
+            assert [d.tipo for d in bids.repositorio.VENDA.documentos(db, "t-s3", 1)] == ["EDITAL"]
+            assert COMPRA.obter_processo(db, "t-s3", 1).objeto == "Compra antiga"
+            with pytest.raises(sa.exc.IntegrityError):
+                db.execute(sa.text("UPDATE processo_sourcing SET lado = 'BUY' WHERE origem_tabela = 'licitacao'"))
+    finally:
+        engine.dispose()
+        if os.path.exists(caminho_db):
+            os.remove(caminho_db)

@@ -100,6 +100,16 @@ def _modo_creditos_medicao(monkeypatch):
     monkeypatch.setattr(settings, "ai_creditos_modo", "MEASURE")
 
 
+@pytest.fixture(autouse=True)
+def _sourcing_leitura_dupla_estrita(monkeypatch):
+    """Sourcing S3: toda leitura de licitação/processo/documento/requisito na
+    suíte confere as tabelas unificadas e falha em qualquer divergência — é
+    assim que a paridade é provada teste a teste."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "sourcing_leitura_dupla", "ESTRITA")
+
+
 @pytest.fixture()
 def cobranca_ativa(monkeypatch):
     from app.core.config import settings

@@ -28,3 +28,6 @@ __all__ = [
 
 # Fase 12: registra as ferramentas deste contexto no B2B ON Intelligence Agent.
 from app.contexts.procurement import ferramentas as _ferramentas  # noqa: E402, F401
+
+# Sourcing S3: espelho nas tabelas unificadas (eventos do ORM + backfill).
+from app.contexts.procurement import espelho as _espelho  # noqa: E402, F401

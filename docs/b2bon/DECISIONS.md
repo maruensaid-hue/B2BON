@@ -481,3 +481,25 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Consequência**: na S3 só a implementação dos repositórios troca de tabela; chamadores e fitness não mudam.
 - **Status**: ACEITA.
 
+## D-058 · 2026-09-26 · Sourcing S3 · Expand com espelho por eventos do ORM e leitura dupla
+- **Contexto**: S3 cria as tabelas unificadas sem trocar a fonte da verdade (Strangler).
+- **Decisão**:
+  - **Tabelas**: 6 tabelas `*_sourcing` (processo, documento, requisito, contrato, evento, evento_contrato) com
+    `lado` em CHECK e imutável (evento do ORM e trigger no banco) e mapa de origem único.
+  - **Espelho**: cada lado copia as próprias escritas pelos eventos do ORM (`after_insert/update/delete`), com o
+    lado fixo, chamando o núcleo neutro. Roda em SAVEPOINT: falha vira log `SOURCING_ESPELHO_FALHOU` e não derruba
+    a escrita do usuário.
+  - **Backfill**: idempotente, em lotes, com remoção de órfãos, por `/cron/sourcing-sincronizar`. Serve para os
+    dados anteriores e como rede de segurança.
+  - **Leitura dupla**: os repositórios continuam respondendo pelas tabelas antigas e conferem as novas
+    (`SOURCING_LEITURA_DUPLA`: COMPARAR em produção, ESTRITA na suíte).
+  - **Barreira**: só o núcleo acessa as tabelas novas. Quem passa `Lado.COMPRA` ao núcleo é só o comprador;
+    `Lado.VENDA`, só o vendedor (fitness).
+- **Alternativas**:
+  - dual-write espalhado pelos serviços: dezenas de pontos de escrita;
+  - backfill periódico apenas: janela de divergência;
+  - triggers de banco para copiar: regra de mapeamento duplicada em SQL por dialeto.
+- **Consequência**: S6 troca a leitura para as tabelas novas sem mudar os chamadores; a duplicação de escrita
+  some junto com as tabelas antigas.
+- **Status**: ACEITA.
+

@@ -128,10 +128,7 @@ def registrar_resultado(
 
 def listar_requisitos(db: Session, tenant_id: str, licitacao_id: int, incluir_descartados: bool = False) -> list[RequisitoLicitacao]:
     obter(db, tenant_id, licitacao_id)
-    consulta = db.query(RequisitoLicitacao).filter_by(tenant_id=tenant_id, licitacao_id=licitacao_id)
-    if not incluir_descartados:
-        consulta = consulta.filter(RequisitoLicitacao.status != "descartado")
-    return consulta.order_by(RequisitoLicitacao.documento_id, RequisitoLicitacao.pagina, RequisitoLicitacao.id).all()
+    return repositorio.VENDA.requisitos(db, tenant_id, licitacao_id, incluir_descartados)
 
 
 def criar_requisito_manual(

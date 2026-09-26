@@ -73,3 +73,7 @@ Engine com `confidence = grounded | manual`), Evaluation (com `direction` SELF |
 Proposal, Lot, Item, Task, Deadline, Clarification, Approval, Evidence (`EvidenceRef`), RiskSignal,
 Contract, Deliverable. `PublicOrganization` continua; o emissor Enterprise é `Organization`.
 Nenhum tipo novo foi adicionado ao código nesta correção. Especificação: `18_STRATEGIC_SOURCING.md` §3.
+
+**Executado (S3, D-058)**: `SourcingProcess` e filhos já têm tabela (`app/models/sourcing.py`), preenchida por
+espelho das tabelas antigas; participante, proposta, avaliação e lote/item ganham tabela no primeiro uso.
+

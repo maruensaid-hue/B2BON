@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     conectores_crm_habilitados: str = ""
     # Fase 15 — B2B ON AI Credits. Regras comerciais configuráveis por ambiente;
     # lidas SÓ por `app/contexts/finops/comercial.py` (fonte única).
+    # Sourcing S3 (D-055): leitura dupla das tabelas unificadas.
+    # DESLIGADA | COMPARAR (loga SOURCING_DIVERGENCIA) | ESTRITA (erro; usada nos testes)
+    sourcing_leitura_dupla: str = "COMPARAR"
     ai_margem_alvo: float = 0.80
     ai_margem_alerta: float = 0.75
     ai_margem_critica: float = 0.65

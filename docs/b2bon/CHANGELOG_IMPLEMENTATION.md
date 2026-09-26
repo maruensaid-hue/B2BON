@@ -1,5 +1,13 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Sourcing S3 — schema unificado (expand) (2026-09-26, autorizada pelo PO)
+
+- Migração `a3d5f7b9c1e2`: `processo_sourcing`, `documento_sourcing`, `requisito_sourcing`, `contrato_sourcing`, `evento_sourcing`, `evento_contrato_sourcing`; `lado` imutável (trigger SQLite/Postgres + ORM).
+- Espelho das tabelas antigas por eventos do ORM, em SAVEPOINT; backfill idempotente em lotes por `/cron/sourcing-sincronizar`.
+- Leitura dupla com comparação nos repositórios (`SOURCING_LEITURA_DUPLA`); a suíte inteira roda em modo ESTRITO.
+- Fitness: tabelas unificadas só pelo núcleo; `Lado.COMPRA` só no comprador e `Lado.VENDA` só no vendedor.
+- Tabelas antigas continuam a fonte da verdade.
+
 ## Sourcing S0–S2 (2026-09-26, autorizadas pelo PO)
 
 - S0: documentos sem carregar arquivo/texto em listagens (colunas deferidas); sinais de risco sem N+1; paginação por cursor keyset em licitações e cadastros do comprador, com "Carregar mais".
