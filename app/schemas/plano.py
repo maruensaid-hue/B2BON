@@ -1,4 +1,9 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
+
+# Phase I (D-059): FIXED vai para o checkout; STARTING_AT ("a partir de") é venda assistida.
+TipoPreco = Literal["FIXED", "STARTING_AT"]
 
 
 class PlanoSchema(BaseModel):
@@ -24,6 +29,7 @@ class PlanoSchema(BaseModel):
     retencao_dias_auditoria: int | None
     modulos_contratados: list[str]
     categoria: str
+    tipo_preco: str
 
 
 class CriarPlanoRequestSchema(BaseModel):
@@ -46,6 +52,7 @@ class CriarPlanoRequestSchema(BaseModel):
     retencao_dias_auditoria: int | None = None
     modulos_contratados: list[str] = ["map", "predator", "crm"]
     categoria: str = "suite"
+    tipo_preco: TipoPreco = "FIXED"
 
 
 class AtualizarPlanoRequestSchema(CriarPlanoRequestSchema):

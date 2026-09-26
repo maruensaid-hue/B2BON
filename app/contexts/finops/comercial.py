@@ -69,6 +69,9 @@ FRANQUIAS: dict[str, Franquia] = {
     "business_network": Franquia("business_network", 10_000, "ADDON",
                                  observacao="Concedida quando a Business Network Intelligence for contratada como add-on"),
     "bids": Franquia("bids", 25_000),
+    # Phase I (D-059): Strategic Sourcing 50K; o tier Enterprise substitui (não soma) com 100K
+    "sourcing": Franquia("sourcing", 50_000),
+    "sourcing_enterprise": Franquia("sourcing_enterprise", 100_000, observacao="Tier Enterprise: substitui a franquia do Strategic Sourcing"),
     "procurement": Franquia("procurement", None, PENDENTE, faixa="50.000–100.000"),
     "full_suite": Franquia("full_suite", None, PENDENTE, faixa="75.000–100.000",
                            observacao="Até a definição, a suíte recebe a soma das franquias dos módulos que contém"),
@@ -158,6 +161,8 @@ def franquia_mensal(modulos: list[str], personalizada: int | None = None) -> tup
         return personalizada, [{"produto": "enterprise", "creditos": personalizada, "status": "CUSTOM"}]
     detalhe = []
     total = 0
+    if "sourcing_enterprise" in modulos:  # tier Enterprise substitui a franquia do Strategic Sourcing
+        modulos = [m for m in modulos if m != "sourcing"]
     for modulo in modulos:
         franquia = FRANQUIAS.get(modulo)
         if franquia is None:

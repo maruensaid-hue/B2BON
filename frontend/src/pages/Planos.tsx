@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { CatalogoProdutos } from "@/components/CatalogoProdutos";
+import { LinhasComerciais } from "@/components/LinhasComerciais";
 import { SecaoAiCredits } from "@/components/SecaoAiCredits";
 
 interface Modulo {
@@ -238,8 +239,13 @@ export function Planos() {
           </div>
         </div>
 
-        <div className="mb-8 text-center">
-          <div className="text-[10px] font-semibold tracking-widest text-cyan uppercase">O que compõe a licença</div>
+        {/* Phase I (D-059): produtos por job-to-be-done, com preço vindo do catálogo */}
+        <LinhasComerciais />
+
+        <div className="mb-8 text-center" id="planos-suite">
+          <div className="text-[10px] font-semibold tracking-widest text-cyan uppercase">
+            B2B ON Revenue Intelligence · o que compõe a licença
+          </div>
           <div className="mt-1.5 font-head text-xl font-bold text-text">Módulos</div>
         </div>
 

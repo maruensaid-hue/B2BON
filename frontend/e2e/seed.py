@@ -82,7 +82,28 @@ def main() -> None:
         from app.main import semear_catalogos
 
         semear_catalogos()
+        _semear_planos_d059()
         print(f"Seed OK - tenant={TENANT_ID} email={EMAIL}")
+    finally:
+        db.close()
+
+
+def _semear_planos_d059() -> None:
+    """Phase I: os planos aprovados (D-059) vêm da própria migração (fonte única), porque o E2E não roda Alembic."""
+    import importlib.util
+
+    raiz = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    spec = importlib.util.spec_from_file_location(
+        "migracao_phase_i", os.path.join(raiz, "alembic", "versions", "a3c5e7f9b1d2_phase_i_planos_comerciais.py"))
+    migracao = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migracao)
+    db = SessionLocal()
+    try:
+        for nome, preco, usuarios, modulos, self_service, tipo in migracao.PLANOS:
+            if db.query(Plano).filter_by(nome=nome).one_or_none() is None:
+                db.add(Plano(nome=nome, franquia_contas_mes=0, max_usuarios=usuarios, preco_mensal=preco,
+                             visivel_self_service=self_service, modulos_contratados=modulos, categoria="modulo", tipo_preco=tipo))
+        db.commit()
     finally:
         db.close()
 

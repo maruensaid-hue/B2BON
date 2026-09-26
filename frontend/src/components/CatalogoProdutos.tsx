@@ -51,7 +51,9 @@ export function CatalogoProdutos() {
                 {produto.nome}
               </span>
               <Badge tone={TOM_DISPONIBILIDADE[produto.disponibilidade]}>
-                {ROTULO_DISPONIBILIDADE[produto.disponibilidade]}
+                {produto.status_preco === "A_PARTIR_DE"
+                  ? "Sob consulta · preço a partir de"
+                  : ROTULO_DISPONIBILIDADE[produto.disponibilidade]}
               </Badge>
             </div>
             <div className="text-[12px] leading-relaxed text-muted">

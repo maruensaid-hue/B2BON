@@ -18,10 +18,12 @@ test("página de planos mostra o catálogo sem vender o que não foi lançado", 
   await expect(procurement.getByRole("link", { name: /Assin/ })).toHaveCount(0);
   await expect(procurement.getByText(/R\$/)).toHaveCount(0);
 
+  // Phase I (D-059): Bid Intelligence com preço aprovado passa a ser contratável
   await expect(
     catalogo
       .locator("div.rounded-xl", { hasText: "Bid Intelligence" })
-      .getByText("Sob consulta"),
+      .first()
+      .getByText("Disponível"),
   ).toBeVisible();
   // preços existentes continuam na página
   await expect(page.getByText("R$ 924,50")).toBeVisible();
@@ -50,4 +52,49 @@ test("planos e explicação mostram AI Credits em cards vindos do catálogo", as
   await expect(
     page.getByTestId("ai-credits-cards").getByText("Pacotes adicionais"),
   ).toBeVisible();
+});
+
+// Phase I (D-059): produtos por job-to-be-done com os preços aprovados vindos
+// do catálogo; "a partir de" vai para o comercial; o que não tem preço não
+// mostra valor nem botão de compra.
+test("página de vendas mostra os produtos com os preços aprovados", async ({
+  page,
+}) => {
+  await page.goto("/planos");
+  const linhas = page.getByTestId("linhas-comerciais");
+  const bids = linhas.getByTestId("linha-bid_intelligence");
+  await expect(bids.getByText("R$ 1.490,00")).toBeVisible();
+  await expect(bids.getByText(/25\.000 créditos/)).toBeVisible();
+  await expect(
+    bids.getByText("usuários: a definir", { exact: false }),
+  ).toBeVisible();
+
+  const sourcing = linhas.getByTestId("linha-strategic_sourcing");
+  await expect(sourcing.getByText("R$ 2.990,00")).toBeVisible();
+  await expect(sourcing.getByText(/até 5 usuários/)).toBeVisible();
+  const enterprise = sourcing.getByTestId("plano-da-linha").filter({
+    hasText: "Strategic Sourcing Enterprise",
+  });
+  await expect(enterprise.getByText("a partir de")).toBeVisible();
+  await expect(enterprise.getByText("R$ 5.990,00")).toBeVisible();
+  await expect(
+    enterprise.getByRole("link", { name: /Falar com o comercial/ }),
+  ).toBeVisible();
+  await expect(enterprise.getByRole("link", { name: /Assinar/ })).toHaveCount(
+    0,
+  );
+
+  for (const pendente of ["linha-public_procurement", "linha-suite"]) {
+    const linha = linhas.getByTestId(pendente);
+    await expect(linha.getByText("Preço em definição")).toBeVisible();
+    await expect(linha.getByText(/R\$/)).toHaveCount(0);
+    await expect(linha.getByRole("link", { name: /Assinar/ })).toHaveCount(0);
+  }
+
+  await sourcing
+    .getByTestId("plano-da-linha")
+    .filter({ hasText: "R$ 2.990,00" })
+    .getByRole("link", { name: /Assinar/ })
+    .click();
+  await expect(page).toHaveURL(/criar-conta\?plano=Strategic/);
 });

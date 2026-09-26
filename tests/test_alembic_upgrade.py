@@ -159,3 +159,33 @@ def test_phase_b_obrigatorio_nulo_para_requisito_anterior_e_trigger_preservado(m
         engine.dispose()
         if os.path.exists(caminho_db):
             os.remove(caminho_db)
+
+
+def test_migracao_phase_i_cria_os_planos_aprovados(monkeypatch):
+    """Phase I (D-059): a migração cria só os planos aprovados, com tipo de preço; STARTING_AT fora do self-service."""
+    import sqlalchemy as sa
+
+    fd, caminho_db = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(caminho_db)
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{caminho_db}")
+    engine = sa.create_engine(f"sqlite:///{caminho_db}")
+    try:
+        config = Config("alembic.ini")
+        command.upgrade(config, "head")
+        with engine.connect() as conexao:
+            linhas = conexao.execute(sa.text(
+                "SELECT nome, preco_mensal, max_usuarios, visivel_self_service, tipo_preco FROM plano "
+                "WHERE nome IN ('Bid Intelligence', 'Strategic Sourcing', 'Strategic Sourcing Enterprise') ORDER BY preco_mensal")).fetchall()
+            assert [tuple(linha) for linha in linhas] == [
+                ("Bid Intelligence", 1490.0, None, 1, "FIXED"), ("Strategic Sourcing", 2990.0, 5, 1, "FIXED"),
+                ("Strategic Sourcing Enterprise", 5990.0, None, 0, "STARTING_AT")]
+            assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE tipo_preco <> 'FIXED'")).scalar() == 1
+        command.downgrade(config, "f2c4e6a8b0d1")
+        command.upgrade(config, "head")  # idempotente: não duplica
+        with engine.connect() as conexao:
+            assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE nome LIKE 'Strategic Sourcing%'")).scalar() == 2
+    finally:
+        engine.dispose()
+        if os.path.exists(caminho_db):
+            os.remove(caminho_db)

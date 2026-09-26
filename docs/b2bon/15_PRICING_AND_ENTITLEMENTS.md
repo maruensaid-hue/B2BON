@@ -88,8 +88,11 @@ Public Procurement: preço-base PENDING_DEFINITION, sem botão de compra.
 
 ## 5. Catálogo por job-to-be-done — especificação (D-059, OI-019 resolvido)
 
-> **Especificação, ainda não implementada** (OI-021). Hoje o código vende o que as Fases 14–15 definiram. Os
-> valores abaixo são do PO; nenhum foi criado ou estimado aqui.
+> **Implementada na Phase I (D-069, OI-021 resolvido)**, com estas escolhas de mecanismo: planos na tabela `plano`
+> (migração `a3c5e7f9b1d2`) com `tipo_preco` FIXED/STARTING_AT; `moeda` e `periodo_cobranca` não viraram colunas
+> (tudo é BRL mensal hoje); buyer users = `max_usuarios` do plano; tier Enterprise = chave `sourcing_enterprise` no
+> plano, lida pela feature `SOURCING_ENTERPRISE`; página de vendas pelas **linhas comerciais** do `GET /catalogo`.
+> Os valores abaixo são do PO; nenhum foi criado ou estimado. Usuários do Bid Intelligence: a definir (OI-023).
 
 ### 5.1 Produtos e planos
 

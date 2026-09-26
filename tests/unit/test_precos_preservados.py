@@ -61,3 +61,27 @@ def test_frontend_nao_tem_preco_de_pacote_fixo_no_codigo():
     padrao = re.compile(r"R\$\s?(99|249|449|899|1\.499|2\.999|6\.990)(,00)?\b")
     for arquivo in (RAIZ / "frontend/src").rglob("*.tsx"):
         assert not padrao.search(arquivo.read_text(encoding="utf-8")), f"preço de pacote fixo em {arquivo}"
+
+
+# Phase I (D-059): planos aprovados pelo PO — (preço R$/mês, usuários incluídos, AI Credits/mês, tipo de preço).
+# Public Procurement não tem plano (PENDING_DEFINITION). Usuários do Bid Intelligence: não definido (None).
+PLANOS_D059 = {
+    "Bid Intelligence": (1490.0, None, 25_000, "FIXED"),
+    "Strategic Sourcing": (2990.0, 5, 50_000, "FIXED"),
+    "Strategic Sourcing Enterprise": (5990.0, None, 100_000, "STARTING_AT"),
+}
+
+
+def test_planos_d059_sao_os_aprovados_e_procurement_segue_sem_preco():
+    import importlib.util
+
+    from app.contexts.finops.comercial import FRANQUIAS, franquia_mensal
+
+    caminho = RAIZ / "alembic/versions/a3c5e7f9b1d2_phase_i_planos_comerciais.py"
+    spec = importlib.util.spec_from_file_location("migracao_phase_i", caminho)
+    migracao = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migracao)
+    migrados = {nome: (preco, usuarios, franquia_mensal(modulos)[0], tipo) for nome, preco, usuarios, modulos, _, tipo in migracao.PLANOS}
+    assert migrados == PLANOS_D059
+    assert not any("procurement" in modulos for *_, modulos, _, _ in migracao.PLANOS)
+    assert FRANQUIAS["procurement"].creditos is None and FRANQUIAS["procurement"].status == "PENDING_FINAL_DEFINITION"

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/Badge";
 import { Card, SectionLabel } from "@/components/ui/Card";
+import { brl } from "@/lib/aiCredits";
 import { api, ApiError } from "@/lib/api";
 import {
   formatarLimite,
@@ -18,7 +19,12 @@ interface Uso {
 }
 
 interface AssinaturaResposta {
-  plano: { nome: string; categoria: string; preco_mensal: number } | null;
+  plano: {
+    nome: string;
+    categoria: string;
+    preco_mensal: number;
+    tipo_preco: "FIXED" | "STARTING_AT";
+  } | null;
   licenca: { status: string; expira_em: string | null };
   modulos: {
     id: string;
@@ -123,9 +129,11 @@ export function Assinatura() {
                 {dados.plano.nome}
               </div>
               <div className="text-muted">
-                {dados.plano.preco_mensal > 0
-                  ? `${dados.plano.preco_mensal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} / mês`
-                  : "Sem cobrança"}
+                {dados.plano.tipo_preco === "STARTING_AT"
+                  ? `Condições por contrato (a partir de ${brl(dados.plano.preco_mensal)} / mês)`
+                  : dados.plano.preco_mensal > 0
+                    ? `${brl(dados.plano.preco_mensal)} / mês`
+                    : "Sem cobrança"}
               </div>
               <div>
                 Licença{" "}

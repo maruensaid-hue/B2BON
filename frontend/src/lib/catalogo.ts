@@ -17,7 +17,12 @@ export interface ProdutoCatalogo {
   incluido_com?: string | null;
   recursos?: string[];
   disponibilidade: Disponibilidade;
-  status_preco: "DEFINIDO" | "INCLUIDO" | "GRATUITO" | "PENDING_DEFINITION";
+  status_preco:
+    | "DEFINIDO"
+    | "A_PARTIR_DE"
+    | "INCLUIDO"
+    | "GRATUITO"
+    | "PENDING_DEFINITION";
   planos?: string[];
   conectores?: {
     sistema: string;
@@ -32,16 +37,34 @@ export interface PlanoCatalogo {
   nome: string;
   categoria: string;
   preco_mensal: number;
+  /** Phase I: FIXED vai para o checkout; STARTING_AT é "a partir de" (venda assistida). */
+  tipo_preco: "FIXED" | "STARTING_AT";
+  self_service: boolean;
+  ai_credits_mensais: number;
   max_usuarios: number | null;
   modulos: string[];
   limites: Record<string, number | null>;
   recursos: Record<string, boolean>;
 }
 
+/** Linha comercial (Phase I, D-059): produto como é vendido na página. */
+export interface LinhaComercial {
+  id: string;
+  nome: string;
+  descricao: string;
+  lado: "SELL" | "BUY";
+  produtos: string[];
+  planos: PlanoCatalogo[];
+  /** O que o PO ainda não definiu: a página mostra "a definir", nunca um número. */
+  pendencias: string[];
+  status_preco: "DEFINIDO" | "PENDING_DEFINITION";
+}
+
 export interface Catalogo {
   moeda: string;
   produtos: ProdutoCatalogo[];
   planos: PlanoCatalogo[];
+  linhas: LinhaComercial[];
 }
 
 export const ROTULO_DISPONIBILIDADE: Record<Disponibilidade, string> = {

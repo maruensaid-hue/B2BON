@@ -48,6 +48,7 @@ class Disponibilidade(StrEnum):
 
 class StatusPreco(StrEnum):
     DEFINIDO = "DEFINIDO"  # preço nos planos (tabela `plano`)
+    A_PARTIR_DE = "A_PARTIR_DE"  # Phase I: plano STARTING_AT, venda assistida
     INCLUIDO = "INCLUIDO"
     GRATUITO = "GRATUITO"
     PENDING_DEFINITION = "PENDING_DEFINITION"
@@ -84,12 +85,24 @@ PRODUTOS: tuple[Produto, ...] = (
             gratuito=True, recursos=("Perfil e diretório", "Conexões", "Sinais e intenções", "Salas corporativas")),
     Produto("opportunity_intelligence", "Opportunity Intelligence", "Necessidades, próxima melhor oferta, próxima ação e white space, sempre com evidência.",
             incluido_com="crm", recursos=("Necessidades com evidência", "Next best offer / action", "White space")),
-    Produto("bid_intelligence", "Bid Intelligence", "Licitações do lado vendedor: análise de edital com evidência, conformidade, Go/No-Go e prazos.",
-            modulo="bids", venda_assistida=True, preco_pendente=True,
-            recursos=("Análise de edital e TR", "Matriz de conformidade", "Go/No-Go com decisão humana", "Cofre de documentos")),
+    # Phase I (D-059): Public e Enterprise Bids no mesmo produto, sem cobrança por a oportunidade ser pública ou privada
+    Produto("bid_intelligence", "Bid Intelligence",
+            "Oportunidades públicas e privadas do lado vendedor: edital, TR e RFP com evidência, conformidade, Go/No-Go e proposta.",
+            modulo="bids",
+            recursos=("Licitações e RFI/RFP/RFQ privados", "Análise de edital e TR", "Matriz de conformidade",
+                      "Go/No-Go com decisão humana", "Esboço de proposta", "Cofre de documentos")),
     Produto("public_procurement", "Public Procurement", "Compras públicas do lado comprador: PCA, demandas, processos, contratos e fornecedores.",
             modulo="procurement", preco_pendente=True,
             recursos=("Plano de contratações", "Processos e auditoria", "Supplier 360", "Sinais de risco para revisão")),
+    Produto("strategic_sourcing", "Strategic Sourcing",
+            "Compras privadas do lado comprador: RFI, RFP e RFQ, descoberta de fornecedores, portal do fornecedor, comparação e contrato.",
+            modulo="sourcing",
+            recursos=("RFI, RFP, RFQ e qualificação", "Descoberta na Business Network", "Portal do fornecedor sem assento",
+                      "Comparação e aprovação humana", "IA de requisitos e avaliação com evidência")),
+    Produto("strategic_sourcing_enterprise", "Strategic Sourcing Enterprise",
+            "Strategic Sourcing com condições por contrato e pool de AI Credits do contrato.",
+            modulo="sourcing_enterprise", venda_assistida=True,
+            recursos=("Tudo do Strategic Sourcing", "Pool de AI Credits por contrato", "Condições comerciais por contrato")),
     Produto("api_access", "API Access", "API de produto com chaves por escopo e webhooks de saída, para os módulos contratados.",
             incluido_com="plano", recursos=("Chaves com escopo", "Webhooks assinados", "Idempotência")),
 )
@@ -99,8 +112,16 @@ def _planos_self_service(db: Session) -> list[Plano]:
     return db.query(Plano).filter_by(visivel_self_service=True).order_by(Plano.categoria, Plano.preco_mensal).all()
 
 
-def _estado(produto: Produto, planos: list[Plano]) -> tuple[Disponibilidade, StatusPreco, list[str]]:
-    incluso_em = [p.nome for p in planos if produto.modulo and produto.modulo in (p.modulos_contratados or [])]
+def _planos_a_partir_de(db: Session) -> list[Plano]:
+    """Phase I: planos "a partir de" (venda assistida). Aparecem no catálogo, nunca no checkout."""
+    return db.query(Plano).filter_by(tipo_preco="STARTING_AT").order_by(Plano.preco_mensal).all()
+
+
+def _estado(produto: Produto, planos: list[Plano], a_partir_de: list[Plano] = ()) -> tuple[Disponibilidade, StatusPreco, list[str]]:
+    def contendo(lista: list[Plano]) -> list[str]:
+        return [p.nome for p in lista if produto.modulo and produto.modulo in (p.modulos_contratados or [])]
+
+    incluso_em = contendo([p for p in planos if p.tipo_preco == "FIXED"])
     if produto.preco_pendente and not produto.venda_assistida:
         return Disponibilidade.EM_DEFINICAO, StatusPreco.PENDING_DEFINITION, []
     if produto.gratuito:
@@ -109,6 +130,8 @@ def _estado(produto: Produto, planos: list[Plano]) -> tuple[Disponibilidade, Sta
         return Disponibilidade.INCLUIDO, StatusPreco.INCLUIDO, []
     if incluso_em and not produto.preco_pendente:
         return Disponibilidade.DISPONIVEL, StatusPreco.DEFINIDO, incluso_em
+    if contendo(list(a_partir_de)) and not produto.preco_pendente:  # Phase I: "a partir de", venda assistida
+        return Disponibilidade.SOB_CONSULTA, StatusPreco.A_PARTIR_DE, contendo(list(a_partir_de))
     if produto.venda_assistida:
         return Disponibilidade.SOB_CONSULTA, StatusPreco.PENDING_DEFINITION, []
     return Disponibilidade.EM_DEFINICAO, StatusPreco.PENDING_DEFINITION, []
@@ -150,6 +173,7 @@ def _creditos_ia(db: Session) -> dict:
 def _plano_publico(plano: Plano) -> dict:
     return {
         "id": plano.id, "nome": plano.nome, "categoria": plano.categoria, "preco_mensal": plano.preco_mensal,
+        "tipo_preco": plano.tipo_preco, "self_service": plano.visivel_self_service and plano.tipo_preco == "FIXED",
         "ai_credits_mensais": finops.comercial.franquia_mensal(list(plano.modulos_contratados or []))[0],
         "max_usuarios": plano.max_usuarios, "modulos": list(plano.modulos_contratados or []),
         "limites": {
@@ -165,11 +189,57 @@ def _plano_publico(plano: Plano) -> dict:
     }
 
 
+# --- Linhas comerciais (Phase I, D-059): o que a página de vendas oferece --------------------------
+@dataclass(frozen=True)
+class LinhaComercial:
+    id: str
+    nome: str
+    descricao: str
+    lado: str  # SELL | BUY
+    produtos: tuple[str, ...]  # ids de PRODUTOS
+    modulos: tuple[str, ...]  # um plano entra na linha se contém algum destes e nenhum de fora dela
+    pendencias: tuple[str, ...] = ()  # o que o PO ainda não definiu: aparece "a definir", nunca um número
+
+
+LINHAS: tuple[LinhaComercial, ...] = (
+    LinhaComercial("revenue_intelligence", "B2B ON Revenue Intelligence",
+                   "Prospectar, vender e expandir: CRM, MAP, PREDATOR e Opportunity Intelligence.", "SELL",
+                   ("crm", "map", "predator", "opportunity_intelligence"), ("crm", "map", "predator")),
+    LinhaComercial("bid_intelligence", "B2B ON Bid Intelligence",
+                   "Encontrar, qualificar, analisar e responder oportunidades públicas e privadas.", "SELL",
+                   ("bid_intelligence",), ("bids",), pendencias=("usuarios_incluidos",)),
+    LinhaComercial("public_procurement", "B2B ON Public Procurement",
+                   "Planejar e executar contratações públicas.", "BUY", ("public_procurement",), ("procurement",),
+                   pendencias=("preco", "creditos_ia")),
+    LinhaComercial("strategic_sourcing", "B2B ON Strategic Sourcing",
+                   "Encontrar, qualificar, comparar e contratar fornecedores.", "BUY",
+                   ("strategic_sourcing", "strategic_sourcing_enterprise"), ("sourcing", "sourcing_enterprise")),
+    LinhaComercial("suite", "B2B ON Suite", "Todos os produtos B2B ON numa assinatura.", "SELL",
+                   (), (), pendencias=("preco", "creditos_ia")),
+)
+
+
+def _linhas(planos: list[Plano], a_partir_de: list[Plano]) -> list[dict]:
+    resultado = []
+    for linha in LINHAS:
+        dela = [p for p in [*planos, *a_partir_de] if linha.modulos and set(p.modulos_contratados or []) & set(linha.modulos)
+                and set(p.modulos_contratados or []) <= set(linha.modulos) and p.preco_mensal > 0]
+        if "preco" in linha.pendencias:
+            dela = []  # preço em definição: nenhum plano é oferecido, mesmo que exista por engano
+        resultado.append({
+            "id": linha.id, "nome": linha.nome, "descricao": linha.descricao, "lado": linha.lado, "produtos": list(linha.produtos),
+            "planos": [_plano_publico(p) for p in dela], "pendencias": list(linha.pendencias),
+            "status_preco": StatusPreco.PENDING_DEFINITION if "preco" in linha.pendencias or not dela else StatusPreco.DEFINIDO,
+        })
+    return resultado
+
+
 def catalogo(db: Session) -> dict:
     planos = _planos_self_service(db)
+    a_partir_de = _planos_a_partir_de(db)
     produtos = []
     for produto in PRODUTOS:
-        disponibilidade, status_preco, incluso_em = _estado(produto, planos)
+        disponibilidade, status_preco, incluso_em = _estado(produto, planos, a_partir_de)
         item = {
             "id": produto.id, "nome": produto.nome, "descricao": produto.descricao, "modulo": produto.modulo,
             "incluido_com": produto.incluido_com, "recursos": list(produto.recursos), "disponibilidade": disponibilidade,
@@ -180,7 +250,8 @@ def catalogo(db: Session) -> dict:
         produtos.append(item)
     produtos.append(_conectores())
     produtos.append(_creditos_ia(db))
-    return {"moeda": "BRL", "produtos": produtos, "planos": [_plano_publico(p) for p in planos]}
+    return {"moeda": "BRL", "produtos": produtos, "planos": [_plano_publico(p) for p in planos],
+            "linhas": _linhas(planos, a_partir_de)}
 
 
 # --- Assinatura do tenant -------------------------------------------------------------
@@ -212,7 +283,8 @@ def assinatura(db: Session, tenant_id: str, plan_limits: PlanLimitsProvider) -> 
     campanhas = db.query(Campanha).filter(Campanha.tenant_id == tenant_id, Campanha.criado_em >= inicio).count()
     ia = finops.dashboard.resumo(db, inicio, datetime.now(UTC), tenant_id=tenant_id)
     return {
-        "plano": {"nome": plano.nome, "categoria": plano.categoria, "preco_mensal": plano.preco_mensal} if plano else None,
+        "plano": {"nome": plano.nome, "categoria": plano.categoria, "preco_mensal": plano.preco_mensal, "tipo_preco": plano.tipo_preco,
+                  "ai_credits_mensais": finops.comercial.franquia_mensal(list(plano.modulos_contratados or []))[0]} if plano else None,
         "licenca": {"status": licenca.status, "expira_em": licenca.data_expiracao.isoformat() if licenca and licenca.data_expiracao else None}
         if licenca else {"status": "sem_licenca", "expira_em": None},
         "modulos": modulos,

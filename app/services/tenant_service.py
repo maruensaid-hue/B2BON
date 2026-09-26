@@ -55,7 +55,7 @@ def listar_planos(db: Session, apenas_self_service: bool = False) -> list[Plano]
     listagem sozinha não impede alguém de mandar o `plano_id` direto)."""
     query = db.query(Plano)
     if apenas_self_service:
-        query = query.filter_by(visivel_self_service=True)
+        query = query.filter_by(visivel_self_service=True, tipo_preco="FIXED")
     return query.order_by(Plano.preco_mensal).all()
 
 
@@ -832,7 +832,7 @@ def criar_tenant_vitrine(
         plano = db.query(Plano).filter_by(id=plano_id).one_or_none() if plano_id is not None else None
         if plano is None:
             raise NaoEncontrado(f"Plano {plano_id} não encontrado")
-        if not plano.visivel_self_service:
+        if not plano.visivel_self_service or plano.tipo_preco != "FIXED":  # Phase I: "a partir de" é venda assistida
             raise RegraNegocioViolada("Este plano não está disponível para cadastro self-service.")
 
     if db.query(Usuario).filter_by(email=email_admin).one_or_none() is not None:
@@ -946,7 +946,7 @@ def criar_tenant_publico(
     plano = db.query(Plano).filter_by(id=plano_id).one_or_none()
     if plano is None:
         raise NaoEncontrado(f"Plano {plano_id} não encontrado")
-    if not plano.visivel_self_service:
+    if not plano.visivel_self_service or plano.tipo_preco != "FIXED":  # Phase I: "a partir de" é venda assistida
         raise RegraNegocioViolada("Este plano não está disponível para cadastro self-service.")
 
     representante_service.obter_ativo(db, representante_id)

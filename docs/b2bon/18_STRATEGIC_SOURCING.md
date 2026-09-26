@@ -434,7 +434,7 @@ O plano A–I substitui a sequência S5–S8 como ordem de execução. O que S0�
 | **F · Business Network** | publicação/convite, matching, visibilidade, acesso do fornecedor | convite (sem vitrine), link secreto sem assento, convites na conta da rede, visão restrita, esclarecimentos, anexos (D-066) | ✅ 2026-09-26 (`PHASE_F_COMPLETION.md`) |
 | **G · Intelligence** | IA de requisitos, avaliação, bids, procurement, fornecedor, risco | capabilities pelo AI Gateway, sem agente novo: Requirement AI (perfil `especificacao_compra`) e Evaluation AI ancorada na própria proposta, medidas; histórico, riscos e próxima ação C0 (D-067) | ✅ 2026-09-26 (`PHASE_G_COMPLETION.md`) |
 | **H · Optimization** | duplicação, bundle, latência, consultas, memória, custo de IA | duplicação real eliminada (46→43 blocos, −14% linhas), entrada do bundle −13%, backfill −39% consultas, TD-091 resolvido (D-068) | ✅ 2026-09-26 (`PHASE_H_COMPLETION.md`) |
-| I · Commercialization | planos, módulos, entitlements, AI Credits, página de vendas, assinatura | OI-021 (autorizada; executa na vez dela) | aguardando a vez |
+| **I · Commercialization** | planos, módulos, entitlements, AI Credits, página de vendas, assinatura | planos D-059 com `tipo_preco`, tier Enterprise como feature, franquias 25K/50K/100K, linhas comerciais no catálogo; Procurement e Suite sem preço (D-069) | ✅ 2026-09-26 (`PHASE_I_COMPLETION.md`) |
 
 **Entidades compartilhadas (§6) — onde cada uma vive hoje, sem tabela nova na Phase A:**
 

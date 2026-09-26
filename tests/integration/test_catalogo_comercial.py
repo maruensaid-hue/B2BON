@@ -12,7 +12,8 @@ from app.providers.plan_limits.stub import StubPlanLimitsProvider
 
 TENANT = "tenant-teste"
 PRODUTOS_DO_PROMPT = {"crm", "map", "predator", "business_network", "opportunity_intelligence", "bid_intelligence",
-                      "public_procurement", "api_access", "connectors", "ai_credits"}
+                      "public_procurement", "api_access", "connectors", "ai_credits",
+                      "strategic_sourcing", "strategic_sourcing_enterprise"}  # Phase I (D-059)
 
 
 def _produtos(client) -> dict:
@@ -39,8 +40,9 @@ def test_public_procurement_nunca_tem_preco_nem_fica_disponivel(client, db_sessi
     pendente = procurement["precificacao_pendente"]
     assert {"preco_mensal", "preco_anual", "usuarios_incluidos", "creditos_ia", "regras_de_excedente"} <= set(pendente)
     assert set(pendente.values()) == {None}  # estrutura pronta, nenhum valor inventado
+    # Phase I (D-059): Bid Intelligence tem preço aprovado; fica disponível quando um plano self-service o inclui
     bids = _produtos(client)["bid_intelligence"]
-    assert (bids["disponibilidade"], bids["status_preco"]) == ("SOB_CONSULTA", "PENDING_DEFINITION")
+    assert (bids["disponibilidade"], bids["status_preco"], bids["planos"]) == ("DISPONIVEL", "DEFINIDO", ["Plano Errado"])
 
 
 def test_nada_nao_lancado_aparece_como_disponivel(client, monkeypatch):
@@ -73,7 +75,7 @@ def test_plano_sem_self_service_nao_entra_no_catalogo_publico(client, db_session
 def test_assinatura_mostra_plano_modulos_uso_e_ia_do_proprio_tenant(client, db_session, criar_usuario_autenticado, monkeypatch):
     # o stub dos testes libera tudo; aqui ele espelha o plano (sem bids/procurement)
     monkeypatch.setitem(app.dependency_overrides, get_plan_limits_provider,
-                        lambda: StubPlanLimitsProvider(modulos_bloqueados={TENANT: {"bids", "procurement"}}))
+                        lambda: StubPlanLimitsProvider(modulos_bloqueados={TENANT: {"bids", "procurement", "sourcing", "sourcing_enterprise"}}))
     db_session.add(Cadencia(tenant_id=TENANT, nome="Cadência do mês", status="rascunho"))
     db_session.add(RegistroUsoIa(tenant_id=TENANT, agente="crm_meeting_agent", feature="crm.teste", modulo="crm", status="sucesso",
                                tokens_entrada=10, tokens_saida=5, latencia_ms=100))

@@ -39,6 +39,12 @@ banco antes de qualquer decisão comercial.**
 | MAP Starter / Professional / Enterprise | modulo | map | 5 / 10 / 20 | 149,50 / 269,10 / 478,40 | sim |
 | PREDATOR Starter / Professional / Enterprise | modulo | predator | 5 / 10 / 20 | 475,50 / 855,90 / 1.521,60 | sim |
 | CRM Starter / Professional / Enterprise | modulo | crm | 5 / 10 / 20 | 299,50 / 539,10 / 958,40 | sim |
+| Bid Intelligence (Phase I, D-059, migração `a3c5e7f9b1d2`) | modulo | bids | a definir (OI-023) | 1.490,00 · FIXED | sim |
+| Strategic Sourcing (idem) | modulo | sourcing | 5 | 2.990,00 · FIXED | sim |
+| Strategic Sourcing Enterprise (idem) | modulo | sourcing + tier `sourcing_enterprise` | por contrato | a partir de 5.990,00 · STARTING_AT | **não** (venda assistida) |
+
+Public Procurement e a B2B ON Suite continuam **sem plano** (PENDING_DEFINITION). AI Credits por plano ficam em
+`finops/comercial.FRANQUIAS`: Bid Intelligence 25.000, Strategic Sourcing 50.000, Enterprise 100.000 (substitui).
 
 Os valores da página pública batem com o banco na data desta
 auditoria (conferido linha a linha em `Planos.tsx`).

@@ -65,3 +65,5 @@ class Plano(Base):
     # papel na checagem de acesso, que olha só `modulos_contratados`.
     modulos_contratados: Mapped[list] = mapped_column(JSON, default=list)
     categoria: Mapped[str] = mapped_column(String, default="suite", server_default="suite")
+    # Phase I (D-059): FIXED vai para o checkout; STARTING_AT é "a partir de", venda assistida (nunca self-service).
+    tipo_preco: Mapped[str] = mapped_column(String, default="FIXED", server_default="FIXED")

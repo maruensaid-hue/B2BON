@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Phase I — Comercialização (2026-09-26, autorizada pelo PO)
+
+- Novos planos: B2B ON Bid Intelligence (R$ 1.490/mês, 25.000 AI Credits), B2B ON Strategic Sourcing (R$ 2.990/mês, 5 usuários, 50.000 AI Credits) e Strategic Sourcing Enterprise (a partir de R$ 5.990/mês, 100.000 AI Credits, com o comercial).
+- Página de planos organizada por produto (vender × comprar), com preços, créditos e usuários vindos do catálogo; Public Procurement e a Suite aparecem com preço em definição.
+- Bid Intelligence e Strategic Sourcing podem ser assinados no cadastro; o plano Enterprise nunca vai para o checkout.
+- Tela de assinatura mostra "condições por contrato" nos planos a partir de.
+
 ## Phase H — Otimização (2026-09-26, autorizada pelo PO)
 
 - Primeira carga menor: páginas públicas (planos, termos, cadastro, convites, senha) carregam só quando abertas.

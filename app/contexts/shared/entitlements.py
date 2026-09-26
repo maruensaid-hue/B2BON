@@ -30,6 +30,9 @@ _FEATURES: dict[str, Callable[[PlanLimitsProvider, str], bool]] = {
     "API_PARCEIROS": lambda p, t: p.permite_api_parceiros(t),
     "SUBTENANTS": lambda p, t: p.permite_subtenants(t),
     "REGISTRO_OPORTUNIDADE": lambda p, t: p.permite_registro_oportunidade(t),
+    # Phase I (D-059): tier Enterprise do Strategic Sourcing é feature do módulo `sourcing`, marcada no plano
+    # pela chave `sourcing_enterprise` (não é módulo à parte nem entra em `MODULOS`).
+    "SOURCING_ENTERPRISE": lambda p, t: p.permite_modulo(t, "sourcing") and p.permite_modulo(t, "sourcing_enterprise"),
 }
 FEATURES = tuple(_FEATURES)
 

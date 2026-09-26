@@ -753,3 +753,24 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - **Custo de IA**: nenhuma mudança de política; toda chamada segue pelo AI Gateway (fitness do caminho único), C0
     antes de IA, uma execução de crédito por operação. Custo real por feature só com uso de produção (UNKNOWN aqui).
 - **Status**: ACEITA.
+
+## D-069 · 2026-09-26 · Phase I · Implementação comercial de D-059 sobre os mecanismos existentes
+- **Contexto**: Phase I (§45, OI-021): planos, módulos, entitlements, AI Credits, página de vendas e assinatura para
+  Revenue Intelligence, Bid Intelligence, Public Procurement, Strategic Sourcing e Suite; preservar preços aprovados e
+  não inventar os pendentes.
+- **Decisão**:
+  - **Planos** (tabela `plano`, migração de dados idempotente): Bid Intelligence R$ 1.490 (FIXED); Strategic Sourcing
+    R$ 2.990 com 5 usuários (FIXED); Strategic Sourcing Enterprise a partir de R$ 5.990 (**STARTING_AT**, fora do
+    self-service). Public Procurement e Suite **sem plano**. Revenue Intelligence = os planos de suíte e avulsos que já
+    existem (preços da Fase 14 inalterados).
+  - **`tipo_preco`**: só FIXED vai para cadastro e checkout; STARTING_AT aparece como "a partir de" com contato comercial
+    e é recusado no servidor mesmo se marcado self-service por engano.
+  - **Entitlements**: `sourcing` é o módulo; o tier Enterprise é a feature `SOURCING_ENTERPRISE` (chave
+    `sourcing_enterprise` no plano), sem módulo novo. Supplier Guest segue como acesso por link, sem assento (D-066).
+  - **AI Credits**: `FRANQUIAS` ganha `sourcing` 50.000 e `sourcing_enterprise` 100.000, que **substitui** a do
+    Strategic Sourcing; carteira única do tenant (D-050). Nenhum workload ou peso novo.
+  - **Página de vendas**: `GET /catalogo` devolve `linhas` (produto por job-to-be-done, lado, planos com preço, tipo de
+    preço, AI Credits e usuários, e `pendencias`). O que está pendente aparece "a definir"/"preço em definição", sem
+    número e sem botão de compra. **Assinatura** mostra "condições por contrato (a partir de …)" para STARTING_AT.
+  - **Pendência nova**: limite de usuários do Bid Intelligence não foi definido pelo PO (OI-023); hoje sem limite.
+- **Status**: ACEITA. Resolve OI-021.
