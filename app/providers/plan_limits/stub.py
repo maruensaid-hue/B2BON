@@ -23,7 +23,9 @@ class StubPlanLimitsProvider(PlanLimitsProvider):
         retencao_dias_relatorio: dict[str, int | None] | None = None,
         retencao_dias_auditoria: dict[str, int | None] | None = None,
         modulos_bloqueados: dict[str, set[str]] | None = None,
+        limite_usuarios: dict[str, int | None] | None = None,
     ) -> None:
+        self._limite_usuarios = limite_usuarios or {}
         self._franquia_padrao = (
             franquia_padrao if franquia_padrao is not None else settings.franquia_contas_mes_stub_default
         )
@@ -93,6 +95,9 @@ class StubPlanLimitsProvider(PlanLimitsProvider):
 
     def obter_retencao_dias_auditoria(self, tenant_id: str) -> int | None:
         return self._retencao_auditoria.get(tenant_id)
+
+    def obter_limite_usuarios(self, tenant_id: str) -> int | None:
+        return self._limite_usuarios.get(tenant_id)
 
     def permite_modulo(self, tenant_id: str, modulo: str) -> bool:
         return modulo not in self._modulos_bloqueados.get(tenant_id, set())

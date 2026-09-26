@@ -92,13 +92,14 @@ Public Procurement: preço-base PENDING_DEFINITION, sem botão de compra.
 > (migração `a3c5e7f9b1d2`) com `tipo_preco` FIXED/STARTING_AT; `moeda` e `periodo_cobranca` não viraram colunas
 > (tudo é BRL mensal hoje); buyer users = `max_usuarios` do plano; tier Enterprise = chave `sourcing_enterprise` no
 > plano, lida pela feature `SOURCING_ENTERPRISE`; página de vendas pelas **linhas comerciais** do `GET /catalogo`.
-> Os valores abaixo são do PO; nenhum foi criado ou estimado. Usuários do Bid Intelligence: a definir (OI-023).
+> Os valores abaixo são do PO; nenhum foi criado ou estimado. Usuários do Bid Intelligence: 10 incluídos (D-071, OI-023
+> resolvido); limite de assentos = incluídos + `licenca.usuarios_adicionais`, pelo entitlement; papel externo não conta.
 
 ### 5.1 Produtos e planos
 
 | Produto | Plano | Lado | Módulo (chave) | Tipo de preço | Preço | Período | Buyer users incluídos | AI Credits/mês | Estado comercial |
 |---|---|---|---|---|---|---|---|---|---|
-| B2B ON Bid Intelligence | Bid Intelligence | SELL | `bids` (existente) | FIXED | R$ 1.490 | mensal | — (segue `max_usuarios` do plano) | 25.000 (franquia `bids` já existente) | vendável quando o plano existir |
+| B2B ON Bid Intelligence | Bid Intelligence | SELL | `bids` (existente) | FIXED | R$ 1.490 | mensal | 10 incluídos (D-071); adicionais suportados, preço PENDING_DEFINITION | 25.000 (franquia `bids` já existente; pool do tenant) | vendável |
 | B2B ON Strategic Sourcing | Strategic Sourcing | BUY privado | `sourcing` (novo) | FIXED | R$ 2.990 | mensal | 5 | 50.000 | COMING_SOON até a S8 entregar o fluxo |
 | B2B ON Strategic Sourcing | Strategic Sourcing Enterprise | BUY privado | `sourcing` + tier ENTERPRISE | **STARTING_AT** | a partir de R$ 5.990 | mensal | por contrato | 100.000 (pool por contrato, D-050) | CONTACT_SALES |
 | B2B ON Public Procurement | — | BUY público | `procurement` (existente) | PENDING_DEFINITION | — | — | — | PENDING_FINAL_DEFINITION (OI-017) | EM_DEFINICAO (inalterado) |

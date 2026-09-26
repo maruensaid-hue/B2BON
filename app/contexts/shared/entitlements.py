@@ -36,6 +36,11 @@ _FEATURES: dict[str, Callable[[PlanLimitsProvider, str], bool]] = {
 }
 FEATURES = tuple(_FEATURES)
 
+# Phase J3 (OI-023): papéis de quem é de fora da empresa (ex.: fornecedor convidado a responder um processo)
+# nunca ocupam assento interno. Hoje o Supplier Guest entra por link, sem usuário; se um papel externo passar a
+# existir como usuário, ele é declarado aqui e continua fora da contagem.
+PAPEIS_EXTERNOS = frozenset({"supplier_guest"})
+
 
 class Entitlements:
     def __init__(self, plan_limits: PlanLimitsProvider, tenant_id: str) -> None:
@@ -49,6 +54,10 @@ class Entitlements:
 
     def has_any_module(self, *modulos: str) -> bool:
         return any(self.has_module(modulo) for modulo in modulos)
+
+    def limite_usuarios(self) -> int | None:
+        """Assentos internos: incluídos no plano + adicionais da licença; `None` = sem limite."""
+        return self._plan_limits.obter_limite_usuarios(self._tenant_id)
 
     def has_feature(self, feature: str) -> bool:
         verificar = _FEATURES.get(feature)

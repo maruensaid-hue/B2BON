@@ -99,7 +99,14 @@ def _semear_planos_d059() -> None:
     spec.loader.exec_module(migracao)
     db = SessionLocal()
     try:
+        # Phase J3 (OI-023): usuários incluídos definidos depois, na migração seguinte
+        spec_j3 = importlib.util.spec_from_file_location(
+            "migracao_phase_j3", os.path.join(raiz, "alembic", "versions", "c5e7a9b1d3f4_phase_j3_usuarios_bid_intelligence.py"))
+        j3 = importlib.util.module_from_spec(spec_j3)
+        spec_j3.loader.exec_module(j3)
         for nome, preco, usuarios, modulos, self_service, tipo in migracao.PLANOS:
+            if nome == j3.PLANO and usuarios is None:
+                usuarios = j3.USUARIOS_INCLUIDOS
             if db.query(Plano).filter_by(nome=nome).one_or_none() is None:
                 db.add(Plano(nome=nome, franquia_contas_mes=0, max_usuarios=usuarios, preco_mensal=preco,
                              visivel_self_service=self_service, modulos_contratados=modulos, categoria="modulo", tipo_preco=tipo))

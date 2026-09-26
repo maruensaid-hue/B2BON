@@ -39,7 +39,7 @@ banco antes de qualquer decisão comercial.**
 | MAP Starter / Professional / Enterprise | modulo | map | 5 / 10 / 20 | 149,50 / 269,10 / 478,40 | sim |
 | PREDATOR Starter / Professional / Enterprise | modulo | predator | 5 / 10 / 20 | 475,50 / 855,90 / 1.521,60 | sim |
 | CRM Starter / Professional / Enterprise | modulo | crm | 5 / 10 / 20 | 299,50 / 539,10 / 958,40 | sim |
-| Bid Intelligence (Phase I, D-059, migração `a3c5e7f9b1d2`) | modulo | bids | a definir (OI-023) | 1.490,00 · FIXED | sim |
+| Bid Intelligence (Phase I, D-059, migração `a3c5e7f9b1d2`) | modulo | bids | 10 incluídos (D-071, `c5e7a9b1d3f4`); adicionais: preço PENDING_DEFINITION | 1.490,00 · FIXED | sim |
 | Strategic Sourcing (idem) | modulo | sourcing | 5 | 2.990,00 · FIXED | sim |
 | Strategic Sourcing Enterprise (idem) | modulo | sourcing + tier `sourcing_enterprise` | por contrato | a partir de 5.990,00 · STARTING_AT | **não** (venda assistida) |
 

@@ -45,6 +45,11 @@ function PlanoDaLinha({
               ? "usuários por contrato"
               : ""}
       </div>
+      {pendencias.includes("preco_usuario_adicional") && (
+        <div className="text-[11px] text-muted">
+          Usuário adicional: preço em definição
+        </div>
+      )}
       {plano.self_service ? (
         <Link
           to={`/criar-conta?plano=${encodeURIComponent(plano.nome)}`}

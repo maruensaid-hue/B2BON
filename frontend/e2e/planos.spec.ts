@@ -65,8 +65,10 @@ test("página de vendas mostra os produtos com os preços aprovados", async ({
   const bids = linhas.getByTestId("linha-bid_intelligence");
   await expect(bids.getByText("R$ 1.490,00")).toBeVisible();
   await expect(bids.getByText(/25\.000 créditos/)).toBeVisible();
+  // Phase J3 (OI-023): 10 usuários incluídos; usuário adicional sem preço
+  await expect(bids.getByText(/até 10 usuários/)).toBeVisible();
   await expect(
-    bids.getByText("usuários: a definir", { exact: false }),
+    bids.getByText("Usuário adicional: preço em definição"),
   ).toBeVisible();
 
   const sourcing = linhas.getByTestId("linha-strategic_sourcing");

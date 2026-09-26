@@ -2,11 +2,11 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **PHASE J** — pós-plano A–I, autorizada pelo PO em 2026-09-26, em sequência: **J1** preparar a troca S6 (leitura unificada atrás de configuração, desligada); **J2** débitos técnicos de baixo risco; **J3** OI-023 (Bid Intelligence com 10 usuários por entitlement). Plano A–I concluído. Fases seguintes pré-autorizadas pelo PO, executadas uma por vez |
+| **CURRENT PHASE** | **PHASE J concluída** em 2026-09-26 (J1 troca S6 preparada e desligada; J2 TD-040/089/092; J3 OI-023). Próximas fases dependem de nova autorização do PO. Fases seguintes pré-autorizadas pelo PO, executadas uma por vez |
 | Última fase concluída | PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION (2026-09-25) |
 | Fase 15 | Desbloqueada pelo PO em 2026-09-25 com o prompt "PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION" (substitui o escopo "Public Procurement Pricing") e concluída no mesmo dia. Preço-base do Public Procurement e franquias do Procurement/Full Suite continuam PENDING_FINAL_DEFINITION por decisão do PO |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/PHASE_I_COMPLETION.md` (aceite final §46–§47 incluído; antes: `PHASE_H_COMPLETION.md`, `PHASE_G_COMPLETION.md`, `PHASE_F_COMPLETION.md`, `PHASE_E_COMPLETION.md`, `PHASE_D_COMPLETION.md`, `PHASE_C_COMPLETION.md`, `PHASE_B_COMPLETION.md`, `PHASE_A_COMPLETION.md`, `SOURCING_S4_COMPLETION.md`, `SOURCING_S3_COMPLETION.md`, `SOURCING_S0_S2_COMPLETION.md`, `PHASE_15_COMPLETION.md`) |
+| Relatório da última fase | `phases/PHASE_J_COMPLETION.md` (antes: `PHASE_I_COMPLETION.md` com o aceite final §46–§47, `PHASE_H_COMPLETION.md`, `PHASE_G_COMPLETION.md`, `PHASE_F_COMPLETION.md`, `PHASE_E_COMPLETION.md`, `PHASE_D_COMPLETION.md`, `PHASE_C_COMPLETION.md`, `PHASE_B_COMPLETION.md`, `PHASE_A_COMPLETION.md`, `SOURCING_S4_COMPLETION.md`, `SOURCING_S3_COMPLETION.md`, `SOURCING_S0_S2_COMPLETION.md`, `PHASE_15_COMPLETION.md`) |
 | Correção arquitetural | 2026-09-26 — Strategic Sourcing & Bids (D-055, `18_STRATEGIC_SOURCING.md`). Plano S0–S8; **S0–S4 autorizadas e concluídas** em 2026-09-26 (OI-020); S5–S8 não autorizadas. Após o deploy da S3: rodar o backfill (`/cron/sourcing-sincronizar`) uma vez |
 
 ## Autorizações
@@ -28,7 +28,7 @@
 - **OI-001** (crítica): limites 0 nos planos PREDATOR avulsos. Depende de valores do PO.
 - **OI-017** (comercial): franquias de AI Credits do Public Procurement (50–100K) e da Full Suite (75–100K) e preço-base do Public Procurement — decisão futura do PO; hoje nada concedido por elas.
 - **OI-018** (financeiro): câmbio USD→BRL para a margem de IA (sem ele a margem aparece indisponível).
-- **OI-023** (comercial): limite de usuários do plano Bid Intelligence (hoje sem limite; página mostra "a definir").
+- **Troca S6**: pronta atrás de `sourcing_leitura_fonte` (D-070); ligar só após o portão TD-087/088.
 - **OI-022** (comercial): preço do buyer seat adicional e dos bundles futuros.
 - **Plano A–I**: A–I concluídas, uma por vez (`18_STRATEGIC_SOURCING.md` §10).
 - **Portão operacional S6** (TD-087/088): trocar a leitura para as tabelas unificadas só depois do backfill em produção e de uma release sem `SOURCING_DIVERGENCIA`.
@@ -38,11 +38,11 @@
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
 - Conectores de CRM (Fase 13) estão BETA e desligados: habilitar em produção só após validar contra contas reais (TD-069).
 
-## Baseline de qualidade (após a Phase I)
+## Baseline de qualidade (após a Phase J)
 
 - Desempenho: `docs/b2bon/perf/baseline.json` (antes da expansão) e `fase_a.json` … `fase_i.json`; repetir com `tests/desempenho` a cada fase (§36).
-- Duplicação: `scripts/qualidade/duplicacao.py` — 43 blocos / ~1.889 linhas repetidas (janela 8).
+- Duplicação: `scripts/qualidade/duplicacao.py` — 42 blocos / ~1.877 linhas repetidas (janela 8).
 
-- Backend: 2.086 passed, 8 skipped (medição de desempenho sob demanda + 7 testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 7/7 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `a3c5e7f9b1d2`).
+- Backend: 2.094 passed, 9 skipped (medição de desempenho sob demanda + 8 testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 8/8 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `c5e7a9b1d3f4`).
 - Ruff: 40 (sem novos). Frontend: lint OK (25 warnings), build OK.
 - E2E: 12/12 (setup de login + 11 specs).

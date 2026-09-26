@@ -26,6 +26,13 @@ class NucleoPlanLimitsProvider(PlanLimitsProvider):
             return None
         return self._db.query(Plano).filter_by(id=licenca.plano_id).one_or_none()
 
+    def obter_limite_usuarios(self, tenant_id: str) -> int | None:
+        licenca = self._db.query(Licenca).filter_by(tenant_id=tenant_id, status="ativa").one_or_none()
+        plano = self._db.query(Plano).filter_by(id=licenca.plano_id).one_or_none() if licenca is not None else None
+        if plano is None or plano.max_usuarios is None:
+            return None
+        return plano.max_usuarios + (licenca.usuarios_adicionais or 0)
+
     def obter_limite_enriquecimento_site_semanal(self, tenant_id: str) -> int | None:
         # Sem licença ativa, sem plano nenhum — bloqueia (0), não libera
         # sem limite (None é só pra "tem plano, mas plano não tem teto").

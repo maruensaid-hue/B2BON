@@ -13,7 +13,7 @@ from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
 
 TENANT = "tenant-teste"
 D059 = (
-    ("Bid Intelligence", 1490.0, None, ["bids"], True, "FIXED"),
+    ("Bid Intelligence", 1490.0, 10, ["bids"], True, "FIXED"),  # 10 usuários: OI-023 (Phase J3)
     ("Strategic Sourcing", 2990.0, 5, ["sourcing"], True, "FIXED"),
     ("Strategic Sourcing Enterprise", 5990.0, None, ["sourcing", "sourcing_enterprise"], False, "STARTING_AT"),
 )
@@ -52,7 +52,7 @@ def test_pagina_de_vendas_mostra_as_linhas_com_os_precos_aprovados(client, db_se
         5990.0, "STARTING_AT", 100_000, False)  # substitui os 50K, não soma
     bids = linhas["bid_intelligence"]
     assert [(p["preco_mensal"], p["ai_credits_mensais"]) for p in bids["planos"]] == [(1490.0, 25_000)]
-    assert bids["pendencias"] == ["usuarios_incluidos"]  # o PO não definiu: a página mostra "a definir"
+    assert bids["pendencias"] == ["preco_usuario_adicional"]  # Phase J3: 10 incluídos; usuário adicional sem preço
     for pendente in ("public_procurement", "suite"):
         assert (linhas[pendente]["planos"], linhas[pendente]["status_preco"]) == ([], "PENDING_DEFINITION")
     assert "R$" not in str(linhas["public_procurement"]) and "preco" in linhas["public_procurement"]["pendencias"]

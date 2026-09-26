@@ -18,6 +18,9 @@ class Licenca(Base):
     status: Mapped[str] = mapped_column(String)  # ativa | suspensa | expirada
     data_inicio: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     data_expiracao: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Phase J3 (OI-023): usuários além dos incluídos no plano (additional_user_quantity). Preço por usuário
+    # adicional: PENDING_DEFINITION — só a quantidade existe, nenhum valor é cobrado por ela.
+    usuarios_adicionais: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # Momento em que o usuário se autodeclarou pagador ainda suspenso (raio-X
     # 2026-09-09) — reinicia uma carência própria de 3 dias a partir daqui,
     # independente da carência original de `data_expiracao`.

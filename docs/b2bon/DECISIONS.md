@@ -789,3 +789,18 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - Prova: a mesma API responde igual nos dois modos depois do backfill (SQLite e Postgres 16); em UNIFICADA a leitura
     dupla dessas rotas some (workspace do vendedor 26 → 22 consultas).
 - **Status**: ACEITA. Não liga a troca em produção.
+
+## D-071 · 2026-09-26 · Phase J3 · Usuários do B2B ON Bid Intelligence (resolve OI-023)
+- **Contexto**: D-059 definiu preço (R$ 1.490/mês) e AI Credits (25.000/mês) do Bid Intelligence, não os usuários.
+  Decisão do PO em 2026-09-26.
+- **Decisão**:
+  - **10 usuários incluídos por tenant** (`plano.max_usuarios` = included_users), Public Sector Bids + Enterprise Bids.
+  - **Usuários adicionais suportados** pela arquitetura: `licenca.usuarios_adicionais` (additional_user_quantity). O
+    limite de assentos = incluídos + adicionais, lido pelo **entitlement** (`PlanLimitsProvider.obter_limite_usuarios`,
+    `Entitlements.limite_usuarios`), sem número no código. **Preço por usuário adicional: PENDING_DEFINITION** — nenhum
+    valor criado; a página mostra "Usuário adicional: preço em definição".
+  - **AI Credits** continuam um pool do tenant (D-050), não multiplicado por usuário.
+  - **Papéis externos não ocupam assento** (`PAPEIS_EXTERNOS`, hoje `supplier_guest`); o Supplier Guest segue entrando por
+    link, sem usuário (D-066).
+  - Migração `c5e7a9b1d3f4` preenche os 10 só onde ainda estava indefinido (não sobrescreve edição do Admin).
+- **Status**: ACEITA. Resolve OI-023.

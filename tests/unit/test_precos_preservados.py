@@ -64,9 +64,10 @@ def test_frontend_nao_tem_preco_de_pacote_fixo_no_codigo():
 
 
 # Phase I (D-059): planos aprovados pelo PO — (preço R$/mês, usuários incluídos, AI Credits/mês, tipo de preço).
-# Public Procurement não tem plano (PENDING_DEFINITION). Usuários do Bid Intelligence: não definido (None).
+# Public Procurement não tem plano (PENDING_DEFINITION). Usuários do Bid Intelligence: 10 (OI-023, Phase J3,
+# migração c5e7a9b1d3f4); preço de usuário adicional: PENDING_DEFINITION (nenhum valor em lugar nenhum).
 PLANOS_D059 = {
-    "Bid Intelligence": (1490.0, None, 25_000, "FIXED"),
+    "Bid Intelligence": (1490.0, 10, 25_000, "FIXED"),
     "Strategic Sourcing": (2990.0, 5, 50_000, "FIXED"),
     "Strategic Sourcing Enterprise": (5990.0, None, 100_000, "STARTING_AT"),
 }
@@ -81,7 +82,12 @@ def test_planos_d059_sao_os_aprovados_e_procurement_segue_sem_preco():
     spec = importlib.util.spec_from_file_location("migracao_phase_i", caminho)
     migracao = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migracao)
-    migrados = {nome: (preco, usuarios, franquia_mensal(modulos)[0], tipo) for nome, preco, usuarios, modulos, _, tipo in migracao.PLANOS}
+    spec_j3 = importlib.util.spec_from_file_location(
+        "migracao_phase_j3", RAIZ / "alembic/versions/c5e7a9b1d3f4_phase_j3_usuarios_bid_intelligence.py")
+    j3 = importlib.util.module_from_spec(spec_j3)
+    spec_j3.loader.exec_module(j3)
+    migrados = {nome: (preco, j3.USUARIOS_INCLUIDOS if nome == j3.PLANO and usuarios is None else usuarios,
+                       franquia_mensal(modulos)[0], tipo) for nome, preco, usuarios, modulos, _, tipo in migracao.PLANOS}
     assert migrados == PLANOS_D059
     assert not any("procurement" in modulos for *_, modulos, _, _ in migracao.PLANOS)
     assert FRANQUIAS["procurement"].creditos is None and FRANQUIAS["procurement"].status == "PENDING_FINAL_DEFINITION"

@@ -15,7 +15,9 @@ from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.redefinicao_senha import RedefinicaoSenha
 from app.models.usuario import Usuario
+from app.contexts.shared.entitlements import PAPEIS_EXTERNOS, Entitlements
 from app.providers.channels.email.base import EmailProvider
+from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
 from app.services import auditoria_service
 from app.services.errors import NaoAutenticado, NaoAutorizado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
@@ -200,6 +202,17 @@ def _gerar_codigo_convite() -> str:
     return secrets.token_hex(8).upper()
 
 
+def contar_assentos(db: Session, tenant_id: str) -> int:
+    """Usuários ativos que ocupam assento interno (Phase J3): papéis externos (`PAPEIS_EXTERNOS`) não contam."""
+    return (db.query(Usuario).filter(Usuario.tenant_id == tenant_id, Usuario.ativo.is_(True),
+                                     Usuario.papel.notin_(PAPEIS_EXTERNOS)).count())
+
+
+def limite_de_usuarios(db: Session, tenant_id: str) -> int | None:
+    """Assentos do tenant pelo entitlement (plano + adicionais da licença), não por número fixo no código."""
+    return Entitlements(NucleoPlanLimitsProvider(db), tenant_id).limite_usuarios()
+
+
 def _verificar_limite_de_usuarios(db: Session, tenant_id: str) -> None:
     """Bloqueia convite/aceite quando o tenant já está no limite de
     usuários do plano da sua licença ativa.
@@ -209,18 +222,18 @@ def _verificar_limite_de_usuarios(db: Session, tenant_id: str) -> None:
     aqui — a ausência de licença já restringe esse tenant a outros
     módulos, e criar uma segunda regra de bloqueio para o mesmo caso só
     duplicaria a intenção original.
-    """
-    licenca = db.query(Licenca).filter_by(tenant_id=tenant_id, status="ativa").one_or_none()
-    if licenca is None:
-        return
-    plano = db.query(Plano).filter_by(id=licenca.plano_id).one_or_none()
-    if plano is None or plano.max_usuarios is None:
-        return
 
-    usuarios_ativos = db.query(Usuario).filter_by(tenant_id=tenant_id, ativo=True).count()
-    if usuarios_ativos >= plano.max_usuarios:
+    Phase J3 (OI-023): o limite vem do entitlement (incluídos no plano +
+    usuários adicionais da licença) e só usuários internos ocupam assento.
+    """
+    limite = limite_de_usuarios(db, tenant_id)
+    if limite is None:
+        return
+    if contar_assentos(db, tenant_id) >= limite:
+        licenca = db.query(Licenca).filter_by(tenant_id=tenant_id, status="ativa").one()
+        plano = db.query(Plano).filter_by(id=licenca.plano_id).one()
         raise RegraNegocioViolada(
-            f"Limite de usuários do plano '{plano.nome}' atingido ({plano.max_usuarios}). "
+            f"Limite de usuários do plano '{plano.nome}' atingido ({limite}). "
             "Desative um usuário ou faça upgrade do plano antes de convidar outro."
         )
 

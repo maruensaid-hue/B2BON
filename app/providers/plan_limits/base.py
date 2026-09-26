@@ -15,6 +15,13 @@ class PlanLimitsProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def obter_limite_usuarios(self, tenant_id: str) -> int | None:
+        """Assentos internos do tenant (Phase J3, OI-023): usuários incluídos no plano (`max_usuarios`) +
+        usuários adicionais contratados na licença (`usuarios_adicionais`, preço PENDING_DEFINITION).
+        `None` = sem limite (plano sem teto ou tenant sem licença ativa, como antes)."""
+        raise NotImplementedError
+
+    @abstractmethod
     def obter_limite_enriquecimento_site_semanal(self, tenant_id: str) -> int | None:
         """`None` = sem limite — todo plano hoje tem valor configurado,
         proporcional à franquia mensal (raio-X 2026-08-28); `None` fica

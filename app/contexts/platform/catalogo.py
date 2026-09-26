@@ -23,7 +23,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.contexts.finops import contract as finops
@@ -33,8 +32,8 @@ from app.models.campanha import Campanha
 from app.models.conta_franquia_consumo import ContaFranquiaConsumo
 from app.models.licenca import Licenca
 from app.models.plano import Plano
-from app.models.usuario import Usuario
 from app.providers.plan_limits.base import PlanLimitsProvider
+from app.services import auth_service
 
 
 class Disponibilidade(StrEnum):
@@ -174,6 +173,7 @@ def _plano_publico(plano: Plano) -> dict:
     return {
         "id": plano.id, "nome": plano.nome, "categoria": plano.categoria, "preco_mensal": plano.preco_mensal,
         "tipo_preco": plano.tipo_preco, "self_service": plano.visivel_self_service and plano.tipo_preco == "FIXED",
+        "usuarios_incluidos": plano.max_usuarios,  # Phase J3: included_users do plano; adicionais ficam na licença
         "ai_credits_mensais": finops.comercial.franquia_mensal(list(plano.modulos_contratados or []))[0],
         "max_usuarios": plano.max_usuarios, "modulos": list(plano.modulos_contratados or []),
         "limites": {
@@ -207,7 +207,7 @@ LINHAS: tuple[LinhaComercial, ...] = (
                    ("crm", "map", "predator", "opportunity_intelligence"), ("crm", "map", "predator")),
     LinhaComercial("bid_intelligence", "B2B ON Bid Intelligence",
                    "Encontrar, qualificar, analisar e responder oportunidades públicas e privadas.", "SELL",
-                   ("bid_intelligence",), ("bids",), pendencias=("usuarios_incluidos",)),
+                   ("bid_intelligence",), ("bids",), pendencias=("preco_usuario_adicional",)),  # J3: 10 incluídos (OI-023)
     LinhaComercial("public_procurement", "B2B ON Public Procurement",
                    "Planejar e executar contratações públicas.", "BUY", ("public_procurement",), ("procurement",),
                    pendencias=("preco", "creditos_ia")),
@@ -277,7 +277,7 @@ def assinatura(db: Session, tenant_id: str, plan_limits: PlanLimitsProvider) -> 
          "contratado": plan_limits.permite_modulo(tenant_id, p["modulo"])}
         for p in catalogo_atual["produtos"] if p.get("modulo")
     ]
-    usuarios = db.query(func.count(Usuario.id)).filter(Usuario.tenant_id == tenant_id, Usuario.ativo.is_(True)).scalar() or 0
+    usuarios = auth_service.contar_assentos(db, tenant_id)  # Phase J3: só assentos internos
     franquia = db.query(ContaFranquiaConsumo).filter_by(tenant_id=tenant_id, ano_mes=inicio.strftime("%Y-%m")).count()
     cadencias = db.query(Cadencia).filter(Cadencia.tenant_id == tenant_id, Cadencia.criado_em >= inicio).count()
     campanhas = db.query(Campanha).filter(Campanha.tenant_id == tenant_id, Campanha.criado_em >= inicio).count()
@@ -290,7 +290,7 @@ def assinatura(db: Session, tenant_id: str, plan_limits: PlanLimitsProvider) -> 
         "modulos": modulos,
         "uso": {
             "periodo": inicio.strftime("%Y-%m"),
-            "usuarios": _uso(usuarios, plano.max_usuarios if plano else None),
+            "usuarios": _uso(usuarios, auth_service.limite_de_usuarios(db, tenant_id)),  # plano + adicionais
             "franquia_contas": _uso(franquia, plan_limits.obter_franquia_contas_mes(tenant_id)),
             "cadencias": _uso(cadencias, plan_limits.obter_limite_cadencias_mes(tenant_id)),
             "campanhas": _uso(campanhas, plan_limits.obter_limite_campanhas_mes(tenant_id)),

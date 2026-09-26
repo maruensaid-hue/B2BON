@@ -178,9 +178,12 @@ def test_migracao_phase_i_cria_os_planos_aprovados(monkeypatch):
                 "SELECT nome, preco_mensal, max_usuarios, visivel_self_service, tipo_preco FROM plano "
                 "WHERE nome IN ('Bid Intelligence', 'Strategic Sourcing', 'Strategic Sourcing Enterprise') ORDER BY preco_mensal")).fetchall()
             assert [tuple(linha) for linha in linhas] == [
-                ("Bid Intelligence", 1490.0, None, 1, "FIXED"), ("Strategic Sourcing", 2990.0, 5, 1, "FIXED"),
+                ("Bid Intelligence", 1490.0, 10, 1, "FIXED"), ("Strategic Sourcing", 2990.0, 5, 1, "FIXED"),
                 ("Strategic Sourcing Enterprise", 5990.0, None, 0, "STARTING_AT")]
             assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE tipo_preco <> 'FIXED'")).scalar() == 1
+        command.downgrade(config, "a3c5e7f9b1d2")  # Phase J3 volta: usuários do Bid Intelligence de novo indefinidos
+        with engine.connect() as conexao:
+            assert conexao.execute(sa.text("SELECT max_usuarios FROM plano WHERE nome = 'Bid Intelligence'")).scalar() is None
         command.downgrade(config, "f2c4e6a8b0d1")
         command.upgrade(config, "head")  # idempotente: não duplica
         with engine.connect() as conexao:
