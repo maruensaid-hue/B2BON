@@ -170,3 +170,13 @@ UI: painel da sala (tarefas, reuniões, documentos, comitê) no modal da Sala Co
 Testes: `tests/integration/test_salas_corporativas.py` (4) + testes das
 Fases 4A/5A/8 ajustados (o de sala de compra agora exige que o comprador
 **não** veja o nome do negócio).
+
+## Correção 2026-09-26 — rede e sourcing (D-055)
+
+- **Supplier Discovery** (Enterprise Sourcing) e **Opportunity Radar** (Bids) usam a identidade e o
+  perfil público da rede como fonte, na direção permitida: público → comprador. Nunca comprador → vendedor.
+- O match da rede (intenção, `network.explicar_match`) passa a ser uma estratégia do Matching Engine
+  compartilhado (`shared/matching.py`), junto com ICP, oferta e fornecedor.
+- O emissor de um RFP Enterprise é uma `Organization`/identidade da rede, não um órgão público.
+- Salas de compra (D-037) continuam o canal vendedor↔comprador e passam a referenciar `SourcingProcess`.
+Ver `18_STRATEGIC_SOURCING.md`.

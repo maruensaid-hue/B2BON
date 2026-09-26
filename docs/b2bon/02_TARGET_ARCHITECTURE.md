@@ -57,3 +57,14 @@ app/
 `sinal_oportunidade_service` (lê `Negocio` direto) e a maior parte dos
 serviços do PREDATOR (cadência, aprovação, envio) ainda vivem em
 `app/services/`. Ver `TECHNICAL_DEBT.md` TD-001/TD-005.
+
+## 6. Correção 2026-09-26 — Strategic Sourcing & Bids (D-055)
+
+Novo contexto-núcleo **`app/contexts/sourcing/`** (a criar na fase S1), compartilhado por Sell e Buy:
+processo, documentos, requisitos, avaliação, participantes, eventos, contratos, workflow, rulesets e
+um repositório com lado obrigatório. `bids` (SELL) e `procurement` (BUY público) continuam como contextos
+e guardam só o que é específico do lado. Enterprise Sourcing (BUY privado) é configuração de `sourcing`
++ ruleset; vira contexto próprio só se surgir regra que não caiba em ruleset. `shared/matching.py`
+passa a ser a base de aderência (ICP, oferta, intenção, fornecedor). Continua monólito modular (D-002):
+nenhum dos critérios de extração (escala, segurança, deploy, disponibilidade, ownership, performance)
+se aplica hoje. Regras de fronteira novas (repositório por lado) em `18_STRATEGIC_SOURCING.md` §2.3.

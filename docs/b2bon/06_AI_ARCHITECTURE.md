@@ -126,3 +126,15 @@ o lado se ambíguo), "Quais compras do PCA estão atrasadas?", "Quais
 clientes possuem oportunidade de expansão?".
 
 Agentes: 28 (21 ATIVOS, 7 PLANEJADOS). O orquestrador é o 28º.
+
+## 10. Correção 2026-09-26 — capabilities, não agentes (D-055)
+
+Estrutura mantida: **B2B ON Intelligence Agent → orquestrador → capabilities**, todas pelo AI Gateway.
+Capabilities: Research, Extraction, Requirement Analysis, Matching, Evaluation, Recommendation, Risk
+Analysis, Document Intelligence, Meeting Intelligence, Revenue Intelligence, Procurement Intelligence.
+`tender_analyzer`, `tr_analyzer` e `procurement_intelligence_agent` viram **perfis** de Requirement
+Analysis (um extrator, perfis por tipo de documento). Nenhum agente novo para o Enterprise; agentes
+PLANEJADOS que só repetem uma capability não serão construídos. Toda capability declara o lado; a regra
+"compra × venda → esclarecer" (D-040) continua. Contexto mínimo: intenção → permissão → recuperação só
+do processo/documento → blocos ancorados → modelo; regras, SQL e scoring antes de IA. Códigos de feature
+e workloads de crédito (Fase 15) **não mudam**, para o histórico continuar reproduzível.

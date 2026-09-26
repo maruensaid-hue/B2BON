@@ -83,3 +83,12 @@ pncp.gov.br). Não é apresentado como disponível enquanto não for validado (T
 
 OCR; embeddings (D-017); lado comprador e barreira Buy/Sell (Fase 10);
 preço e empacotamento comercial (Fase 14/OI-015).
+
+## 7. Correção 2026-09-26 — Sell Side em dois segmentos (D-055)
+
+Bid Intelligence cobre **Public Sector Bids** (implementado) e **Enterprise Bids** (RFP/RFI/RFQ
+privados, vendor questionnaire): hoje só existe como valor de `modalidade`, com modelo, textos e UI do
+setor público (gap G1). Alvo: o mesmo contexto `bids` sobre o núcleo `sourcing`, com workflow
+`ENTERPRISE_RFP_SELL` e ruleset `PRIVATE_RFP`. A matriz de conformidade vira a direção SELF do
+Evaluation Engine; o analisador de edital/TR vira perfil do Requirement Engine. Go/No-Go e cofre
+continuam do `bids`. Plano: `18_STRATEGIC_SOURCING.md` §8 (S1, S7).

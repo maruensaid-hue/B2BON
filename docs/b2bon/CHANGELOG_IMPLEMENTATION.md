@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Correção arquitetural — Strategic Sourcing & Bids (2026-09-26, só documentação)
+
+- Quatro segmentos explícitos (B2B Sales · Public Sector Bids · Public Procurement · Enterprise Strategic Sourcing; Enterprise Bids como metade vendedora do Enterprise), entregues por engines compartilhados.
+- Auditoria: gaps de negócio (Enterprise só como enum; buy side privado inexistente), 7 duplicações entre `bids` e `procurement`, regras fixas, 5 problemas de performance.
+- Desenho: `SourcingProcess` + filhos compartilhados, Requirement/Evaluation/Matching/Workflow/Ruleset, barreira por repositório com lado, API `/sourcing/{sell|buy}`, UI `ProcessWorkspace`, capabilities de IA.
+- Novo `18_STRATEGIC_SOURCING.md`; seções de correção em 00, 02–06, 10, 12–14; D-055; OI-019/020; TD-081–086. Nenhum código, schema, UI, workflow, agente ou integração alterado.
+
 ## Fase 17 — Scale, Security & Hardening (2026-09-25)
 
 - Varredura de isolamento sobre todas as rotas GET (tenant × tenant e Buy × Sell).

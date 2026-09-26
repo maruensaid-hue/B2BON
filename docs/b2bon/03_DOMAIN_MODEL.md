@@ -56,3 +56,14 @@ Ainda em `app/services/`: cadência, aprovação, envio, qualificação
 ## Shoal (Business Network)
 
 Ainda sem contexto próprio. Entra em `app/contexts/network/` na Fase 7.
+
+## Strategic Sourcing & Bids (correção 2026-09-26, D-055)
+
+| Contexto | Dono de (alvo) | Hoje |
+|---|---|---|
+| `sourcing` (núcleo) | `SourcingProcess` e filhos: Document, Requirement, Evaluation, Participant, Proposal, Lot/Item, Task/Deadline/Clarification/Approval, Contract/Deliverable | não existe; os mesmos conceitos estão duplicados em `bids` e `procurement` |
+| `bids` (SELL) | Go/No-Go, cofre de documentos, radar/fontes, inteligência competitiva, proposta | `licitacao`, `documento_licitacao`, `requisito_licitacao`, `contrato_venda_publica`, `decisao_go_no_go`, `documento_cofre` |
+| `procurement` (BUY público) | PCA, demanda, pesquisa de preço, sinais de risco regulatório, fornecedor do comprador | `orgao_publico`, `unidade_compras`, `plano_contratacao`, `item_pca`, `demanda_compra`, `processo_contratacao`, `documento_compras`, `contrato_compra`, `fornecedor_compras`, `pesquisa_preco` |
+| Enterprise Sourcing (BUY privado) | configuração de `sourcing` + ruleset `ENTERPRISE_SOURCING` | não existe |
+
+Mapa campo a campo e o que migra: `18_STRATEGIC_SOURCING.md` §3 e §5.1.

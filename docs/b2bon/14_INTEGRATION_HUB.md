@@ -152,3 +152,9 @@ recusada (401/403) marca a conexão como `erro` até reconectar.
 | Task | Activity | call/email/meeting/visit/task; outros tipos (ex.: whatsapp) OTHER com o tipo preservado; conta pela negociação |
 | Task concluída de negociação com organização | Interaction `contato` | lida uma vez por execução |
 | Product | Offer | nome, descrição, visível |
+
+## Correção 2026-09-26 — fontes de sourcing (D-055)
+
+Adapters de fonte de oportunidade (PNCP hoje, experimental; portais de RFP privados no futuro) passam a
+gravar `SourcingProcess` com `source` e `external_id`, de forma idempotente, pelo repositório do lado
+correspondente (fonte pública de editais → SELL). Nenhuma integração nova nesta correção.

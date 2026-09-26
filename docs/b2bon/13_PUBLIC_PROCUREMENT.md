@@ -47,3 +47,14 @@ recebem dado do lado comprador.
 Publicação de processos para fornecedores (projeção pública), integração
 com sistemas oficiais de compras, OCR, precificação do módulo (Fase 15,
 depende do PO).
+
+## 4. Correção 2026-09-26 — Buy Side em dois segmentos (D-055)
+
+Public Procurement é o segmento público do Buy Side. **Enterprise Strategic Sourcing** (RFI/RFP/RFQ
+emitidos por empresa, convite, propostas, comparação, qualificação e negociação) é o segmento privado:
+não existe hoje (gap G2) e será configuração do mesmo núcleo `sourcing` com ruleset
+`ENTERPRISE_SOURCING`. Documentos, achados (hoje JSON), processo, eventos e contrato migram para as
+tabelas compartilhadas; PCA, demanda e pesquisa de preço ficam aqui (regulatórios). As regras hoje
+fixas (`DOCUMENTOS_ESPERADOS`, sigilo, fragmentação) viram o ruleset `PUBLIC_PROCUREMENT_BR_14133`.
+**A barreira Buy/Sell não muda de garantia**: muda de mecanismo (repositório por lado + fitness function
+reescrita antes da migração), `18_STRATEGIC_SOURCING.md` §2.3.

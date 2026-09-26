@@ -422,3 +422,45 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   Business Network (+10K) são add-ons não vendidos hoje: não concedem.
   O preço-base do Public Procurement segue PENDING_DEFINITION.
 - **Status**: ACEITA.
+
+## D-055 · 2026-09-26 · Correção arquitetural · Unified Strategic Sourcing Engine instead of separate Public/Private engines
+- **Contexto**: a plataforma cobre quatro segmentos: B2B Sales, Public Sector Bids, Public Procurement e
+  Enterprise Strategic Sourcing. Enterprise Bids também existe, como metade vendedora do Enterprise. As
+  Fases 9 e 10 construíram o lado vendedor público (`bids`) e o comprador público (`procurement`) em
+  paralelo: há duas tabelas de documento, dois pipelines de extração, requisito em tabela × JSON, dois
+  contratos e dois workspaces (backend e UI). Enterprise RFP/RFI/RFQ ficou só como valor de `modalidade`,
+  e o buy side privado não existe. Copiar cada lado para o Enterprise dobraria essa duplicação
+  (≈ 4.600 linhas estimadas, `18_STRATEGIC_SOURCING.md` §6).
+- **Decisão**: um núcleo `sourcing` compartilhado por Sell e Buy, Público e Enterprise, com:
+  - entidade canônica `SourcingProcess` (`segment`, `side` imutável, `process_type`, `ruleset`,
+    `workflow`, `metadata`) e filhos compartilhados (Document, Requirement, Evaluation, Participant,
+    Proposal, Lot/Item, eventos, Contract);
+  - Requirement Engine com perfis por tipo de documento;
+  - Evaluation Engine com direção (SELF/PROPOSAL);
+  - Matching Engine com estratégias;
+  - Workflow declarativo em código e rulesets versionados separados do processo.
+
+  Os segmentos são configuração. `bids` e `procurement` continuam como contextos para o que é
+  exclusivo de cada lado. Sem tabela por tipo de processo e sem microserviço (D-002).
+- **Benefícios**:
+  - a lógica comum é escrita e testada uma vez;
+  - Enterprise sell e buy passam a exigir só as capacidades realmente novas (convite, propostas,
+    comparação, qualificação, negociação), não uma cópia;
+  - regras regulatórias ficam num lugar;
+  - uma UI de workspace e um conjunto de recursos de API.
+- **Tradeoffs**:
+  - a barreira Buy/Sell deixa de vir de "tabelas diferentes" e passa a exigir repositório com lado
+    obrigatório, `side` imutável e fitness function reescrita (mais disciplina, mais testes);
+  - a migração de dados precisa de Strangler (expand/backfill/leitura dupla/switch);
+  - existe o risco de generalizar cedo demais, mitigado por workflow em código sem editor e por
+    criar cada workflow só quando o fluxo for construído.
+- **Impacto de migração**:
+  - 9 tabelas migram para 9 `*_sourcing` (lote/item quando houver uso);
+  - 46 rotas `/bids` e `/procurement` viram fachada e depois só ficam as de comportamento exclusivo;
+  - duas telas de workspace viram `ProcessWorkspace` com painéis;
+  - features de IA e workloads de crédito mantêm os códigos;
+  - `audit_log`/`execucao_ia` antigos não são reescritos (mapa de ids).
+
+  Fases S0–S8 propostas, nenhuma autorizada.
+- **Status**: ACEITA como arquitetura-alvo; implementação depende do PO.
+

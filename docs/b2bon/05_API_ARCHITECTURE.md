@@ -77,3 +77,12 @@ A B2B ON já consome os próprios contratos internamente (`map.contract`,
 PT, não a API de produto (TD-043): migrar as telas para a API de
 produto exigiria autenticação por chave no navegador, o que não é
 desejável. O princípio é atendido no nível de contrato, não de HTTP.
+
+## 9. Correção 2026-09-26 — recursos canônicos de sourcing (D-055)
+
+Alvo: `/sourcing/{sell|buy}/processes` e sub-recursos `requirements`, `documents`, `participants`,
+`evaluations`, `tasks`, `contracts`, paginados por cursor, com **o lado vindo da rota e do módulo,
+nunca do corpo**. Análise de documento vira assíncrona (202 + status). `/bids/*` e `/procurement/*`
+(46 rotas) ficam como fachada durante a migração; permanecem só as rotas de comportamento exclusivo
+(Go/No-Go, cofre, concorrentes, PCA, demandas, pesquisa de preço). Nada implementado ainda:
+`18_STRATEGIC_SOURCING.md` §5.2.

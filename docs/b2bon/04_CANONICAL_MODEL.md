@@ -61,3 +61,15 @@ relevante (datas de cliente, estágio ganho, valor, NPS, interações),
 os números do MAP divergiriam.
 
 Ver também: `ENTITY_MAPPING.md`, `EVENT_MODEL.md`, `ADAPTER_CONTRACT.md`.
+
+## 5. Correção 2026-09-26 — SourcingProcess (D-055)
+
+`ProcurementProcess` e `BidOpportunity` passam a ser **visões** de uma entidade canônica única,
+`SourcingProcess` (`segment` PUBLIC|ENTERPRISE, `side` BUY|SELL imutável, `process_type` entre
+PUBLIC_TENDER, RFP, RFI, RFQ, EOI, DIRECT_AWARD, PRICE_REGISTRATION, FRAMEWORK_AGREEMENT,
+PRIVATE_TENDER, STRATEGIC_SOURCING_EVENT, VENDOR_QUALIFICATION), com `ruleset` e `workflow` versionados
+e `metadata` validado pelo ruleset. Filhos canônicos compartilhados: Requirement (saída do Requirement
+Engine com `confidence = grounded | manual`), Evaluation (com `direction` SELF | PROPOSAL), Participant,
+Proposal, Lot, Item, Task, Deadline, Clarification, Approval, Evidence (`EvidenceRef`), RiskSignal,
+Contract, Deliverable. `PublicOrganization` continua; o emissor Enterprise é `Organization`.
+Nenhum tipo novo foi adicionado ao código nesta correção. Especificação: `18_STRATEGIC_SOURCING.md` §3.

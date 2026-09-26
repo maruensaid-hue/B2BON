@@ -35,7 +35,23 @@ para a **Business, Revenue & Procurement Intelligence Platform**
 | `PRICING_CURRENT_STATE.md` | preços, planos, entitlements, billing | 0 |
 | `SECURITY_BOUNDARIES.md` | fronteiras e riscos | 0 |
 | `02`–`17` | arquitetura alvo por tema (placeholders até a fase dona) | 1–17 |
+| `18_STRATEGIC_SOURCING.md` | correção: 4 segmentos, engines de sourcing compartilhados, plano S0–S8 | correção 2026-09-26 |
 | `phases/` | `PHASE_X_COMPLETION.md` e planos de fase | toda |
+
+## Segmentos da plataforma (correção 2026-09-26, D-055)
+
+```
+B2B ON PLATFORM
+├── REVENUE INTELLIGENCE ........ (1) B2B Sales: CRM · PREDATOR · MAP · Opportunity · Business Network
+└── STRATEGIC SOURCING & BIDS
+    ├── SELL ... (2) Public Sector Bids · Enterprise Bids (RFP/RFI/RFQ privados)
+    └── BUY .... (3) Public Procurement · (4) Enterprise Strategic Sourcing
+```
+
+Os segmentos são experiências configuradas sobre engines compartilhados (Workflow, Document,
+Requirement, Evaluation, Matching, Supplier, Contract, Graph, Intelligence, AI Gateway, Notification,
+Audit, Integration Hub), não sistemas separados. Enterprise Bids e Enterprise Strategic Sourcing estão
+**desenhados, não implementados**. Detalhe, gaps e plano: `18_STRATEGIC_SOURCING.md`.
 
 ## Arquitetura em uma frase (estado atual)
 
