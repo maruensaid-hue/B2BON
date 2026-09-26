@@ -22,7 +22,9 @@
 |---|---|
 | `test_sourcing_s4.py`: retrato do código anterior; **todas** as combinações origem × destino × ação comparadas com o workflow (mesmo aceite, mesma exceção, mesma mensagem) — 130 por fluxo de venda, 156 no de compra; aliases iguais aos valores antigos; ruleset com padrão e configuração por órgão; todo código gravado pelo espelho existe no registro; lado do workflow = lado de quem grava; redefinição recusada; restrição de origem suportada pelo motor | ✅ 10/10 |
 | `test_sourcing_s4_api.py`: mesmas respostas HTTP e mensagens pela API, em licitação pública e RFP privado, e no processo de compra | ✅ 3/3 |
-| Suíte completa (leitura dupla ESTRITA) | ver `PROJECT_STATE.md` (baseline) |
+| Suíte completa (leitura dupla ESTRITA) | ✅ **2.040 passed** (+4 skipped: Postgres) |
+| Postgres 16 (`test_sourcing_s3_pg.py`, concorrência da Fase 15) | ✅ 4/4 |
+| Ruff 40 (sem novos) · frontend sem mudança · E2E | ✅ 6/6 |
 | Barreira antiga + nova + fronteiras de contexto | ✅ (o núcleo não importa nenhum lado; `Lado.COMPRA` só no comprador) |
 
 ## Desvio de comportamento (único, D-060)

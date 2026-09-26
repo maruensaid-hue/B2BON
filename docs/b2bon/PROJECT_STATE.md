@@ -35,8 +35,8 @@
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
 - Conectores de CRM (Fase 13) estão BETA e desligados: habilitar em produção só após validar contra contas reais (TD-069).
 
-## Baseline de qualidade (após a Fase 15)
+## Baseline de qualidade (após a Sourcing S4)
 
-- Backend: 2.027 passed, 4 skipped (4 testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 4/4 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `a3d5f7b9c1e2`).
+- Backend: 2.040 passed, 4 skipped (4 testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 4/4 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `a3d5f7b9c1e2`).
 - Ruff: 40 (sem novos). Frontend: lint OK (25 warnings), build OK.
 - E2E: 6/6.
