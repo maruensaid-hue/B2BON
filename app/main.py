@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 import sentry_sdk
 from fastapi import FastAPI, Request
@@ -12,7 +13,7 @@ from app.core.config import settings
 from app.core.logging import configure_logging
 from app.core.observability import CorrelationIdMiddleware
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import SessionLocal, engine
 from app.services.errors import (
     ConfirmacaoNecessaria,
     CreditosInsuficientes,
@@ -49,7 +50,29 @@ if settings.sentry_dsn:
 if settings.database_url.startswith("sqlite"):
     Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="B2B ON — PREDATOR", version="0.1.0")
+
+
+def semear_catalogos() -> None:
+    """Phase H (TD-091): o catálogo de AI Credits é semeado na subida, antes da primeira requisição, em vez de
+    na primeira leitura pública (chamadas paralelas disputavam a escrita). A semente preguiçosa continua como
+    rede de segurança e é idempotente; banco ainda sem migração não impede a subida."""
+    from app.contexts.finops import contract as finops
+
+    try:
+        with SessionLocal() as db:
+            finops.catalogos.garantir_semente(db)
+            db.commit()
+    except Exception:  # noqa: BLE001 — subir sem semente é melhor que não subir
+        logger.warning("CATALOGO_SEMENTE_NA_SUBIDA_FALHOU", exc_info=True)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    semear_catalogos()
+    yield
+
+
+app = FastAPI(title="B2B ON — PREDATOR", version="0.1.0", lifespan=lifespan)
 
 # Adicionado antes do CORS = roda por dentro dele: toda resposta (inclusive
 # erro) sai com `X-Request-ID`.

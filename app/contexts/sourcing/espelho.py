@@ -70,11 +70,16 @@ def modo_leitura_dupla() -> str:
     return (settings.sourcing_leitura_dupla or "COMPARAR").upper()
 
 
-def _id_por_origem(conn: Connection, tabela: str, lado: Lado, origem: tuple[str, int] | None) -> int | None:
+def _id_por_origem(conn: Connection, tabela: str, lado: Lado, origem: tuple[str, int] | None, memo: dict | None = None) -> int | None:
     if origem is None or origem[1] is None:
         return None
-    t = TABELAS[tabela]
-    linha = conn.execute(select(t.c.id, t.c.lado).where(t.c.origem_tabela == origem[0], t.c.origem_id == origem[1])).first()
+    if memo is not None and (tabela, origem) in memo:
+        linha = memo[(tabela, origem)]
+    else:
+        t = TABELAS[tabela]
+        linha = conn.execute(select(t.c.id, t.c.lado).where(t.c.origem_tabela == origem[0], t.c.origem_id == origem[1])).first()
+        if memo is not None:
+            memo[(tabela, origem)] = linha
     if linha is None:
         return None
     if linha.lado != lado.value:  # nunca liga filha de um lado a pai do outro
@@ -83,17 +88,21 @@ def _id_por_origem(conn: Connection, tabela: str, lado: Lado, origem: tuple[str,
 
 
 def gravar(conn: Connection, tabela: str, lado: Lado, origem_tabela: str, origem_id: int, valores: dict,
-           origem_indice: int | None = None) -> int:
-    """Upsert pela origem. Nunca altera `lado` de uma linha existente."""
+           origem_indice: int | None = None, lote: "LoteBackfill | None" = None) -> int:
+    """Upsert pela origem. Nunca altera `lado` de uma linha existente. `lote` (backfill, Phase H) traz as
+    linhas existentes do lote numa consulta só e memoriza os pais já resolvidos."""
     t = TABELAS[tabela]
     dados = {k: v for k, v in valores.items() if k not in REFERENCIAS and not (k == "criado_em" and v is None)}
     for chave, (tabela_pai, coluna) in REFERENCIAS.items():
         if chave in valores:
-            dados[coluna] = _id_por_origem(conn, tabela_pai, lado, valores[chave])
-    filtro = [t.c.origem_tabela == origem_tabela, t.c.origem_id == origem_id]
-    if origem_indice is not None:
-        filtro.append(t.c.origem_indice == origem_indice)
-    existente = conn.execute(select(t.c.id, t.c.lado).where(and_(*filtro))).first()
+            dados[coluna] = _id_por_origem(conn, tabela_pai, lado, valores[chave], lote.pais if lote else None)
+    if lote is not None and origem_indice is None and lote.cobre(tabela, origem_tabela):
+        existente = lote.existentes.get(origem_id)
+    else:
+        filtro = [t.c.origem_tabela == origem_tabela, t.c.origem_id == origem_id]
+        if origem_indice is not None:
+            filtro.append(t.c.origem_indice == origem_indice)
+        existente = conn.execute(select(t.c.id, t.c.lado).where(and_(*filtro))).first()
     dados["espelhado_em"] = datetime.now(UTC).replace(tzinfo=None)
     if existente is not None:
         if existente.lado != lado.value:
@@ -106,6 +115,22 @@ def gravar(conn: Connection, tabela: str, lado: Lado, origem_tabela: str, origem
     elif "origem_indice" in t.c:
         dados["origem_indice"] = 0
     return conn.execute(insert(t).values(**dados)).inserted_primary_key[0]
+
+
+class LoteBackfill:
+    """Um lote do backfill: as linhas unificadas que já existem para as origens do lote (uma consulta) e o
+    memo dos pais resolvidos. Só vale para a tabela e a origem carregadas; o resto consulta como antes."""
+
+    def __init__(self, conn: Connection, tabela: str, origem_tabela: str, origem_ids: list[int]) -> None:
+        t = TABELAS[tabela]
+        self.tabela, self.origem_tabela, self.pais = tabela, origem_tabela, {}
+        self.existentes: dict[int, object] = {}
+        for linha in conn.execute(select(t.c.id, t.c.lado, t.c.origem_id).where(
+                t.c.origem_tabela == origem_tabela, t.c.origem_id.in_(origem_ids)).order_by(t.c.id)):
+            self.existentes.setdefault(linha.origem_id, linha)
+
+    def cobre(self, tabela: str, origem_tabela: str) -> bool:
+        return (tabela, origem_tabela) == (self.tabela, self.origem_tabela)
 
 
 def _apagar_ids(conn: Connection, tabela: str, ids: list[int]) -> None:
@@ -177,9 +202,9 @@ def sincronizar_todos(db, tenant_id: str | None = None) -> dict:
 # `complemento` grava o que uma linha de origem gera além dela (ex.: achados em JSON →
 # requisitos); `orfaos_extras` diz que origem derivada limpar junto: {modelo: (tabela, origem)}.
 def instalar(lado: Lado, mapa: dict, complemento: Callable | None = None, orfaos_extras: dict | None = None) -> Callable:
-    def gravar_linha(conexao: Connection, alvo) -> None:
+    def gravar_linha(conexao: Connection, alvo, lote: LoteBackfill | None = None) -> None:
         tabela, origem, mapear = mapa[type(alvo)]
-        gravar(conexao, tabela, lado, origem, alvo.id, mapear(alvo))
+        gravar(conexao, tabela, lado, origem, alvo.id, mapear(alvo), lote=lote)
         if complemento is not None:
             complemento(conexao, alvo)
 
@@ -206,8 +231,9 @@ def instalar(lado: Lado, mapa: dict, complemento: Callable | None = None, orfaos
             ids, ultimo = set(), 0
             while linhas := consulta.filter(modelo.id > ultimo).order_by(modelo.id).limit(lote).all():
                 conexao = db.connection()
+                em_lote = LoteBackfill(conexao, tabela, origem, [linha.id for linha in linhas])
                 for linha in linhas:
-                    gravar_linha(conexao, linha)
+                    gravar_linha(conexao, linha, em_lote)
                     ids.add(linha.id)
                 ultimo = linhas[-1].id
                 db.commit()

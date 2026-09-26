@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_email_provider, get_tenant_id, get_usuario_atual
+from app.api.respostas import arquivo_com_hash
 from app.contexts.network.contract import grafo, identidade, membership, salas
 from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
@@ -726,8 +727,7 @@ async def enviar_documento_sala(
 @router.get("/salas/documentos/{documento_id}/arquivo")
 def baixar_documento_sala(documento_id: int, usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> Response:
     documento = salas.obter_documento(db, documento_id, usuario)
-    return Response(content=documento.conteudo, media_type=documento.tipo_mime,
-                    headers={"Content-Disposition": f'attachment; filename="documento-{documento.id}"', "X-Content-SHA256": documento.sha256})
+    return arquivo_com_hash(documento.conteudo, documento.tipo_mime, f"documento-{documento.id}", documento.sha256)
 
 
 @router.post("/salas/{sala_id}/tarefas", status_code=201)

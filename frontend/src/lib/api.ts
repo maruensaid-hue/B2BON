@@ -65,16 +65,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 /** Chamada com cabeçalhos próprios (ex.: `X-Convite-Token` do portal do fornecedor, Phase F). */
 export const requisitar = request;
 
-async function requestComHeaders<T>(path: string, options: RequestInit = {}): Promise<{ dados: T; headers: Headers }> {
-  const token = getToken();
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...options.headers,
-  };
-
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
-
+/** Resposta de erro vira `ApiError` com a mensagem do backend. */
+async function exigirSucesso(response: Response, token: string | null, mensagemPadrao: string): Promise<void> {
   if (response.status === 401) {
     // Só é "sessão expirada" se havia um token sendo usado — um 401 numa
     // chamada sem token (ex.: a própria tentativa de login) é só
@@ -90,11 +82,23 @@ async function requestComHeaders<T>(path: string, options: RequestInit = {}): Pr
     const corpo = await response.json().catch(() => ({}));
     throw new ApiError(401, corpo.detalhe ?? "Não foi possível autenticar.");
   }
-
   if (!response.ok) {
     const corpo = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, corpo.detalhe ?? "Erro inesperado ao chamar a API.");
+    throw new ApiError(response.status, corpo.detalhe ?? mensagemPadrao);
   }
+}
+
+async function requestComHeaders<T>(path: string, options: RequestInit = {}): Promise<{ dados: T; headers: Headers }> {
+  const token = getToken();
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...options.headers,
+  };
+
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+
+  await exigirSucesso(response, token, "Erro inesperado ao chamar a API.");
 
   if (response.status === 204) return { dados: undefined as T, headers: response.headers };
   return { dados: (await response.json()) as T, headers: response.headers };
@@ -147,22 +151,7 @@ async function _enviarMultipart<T>(path: string, formData: FormData): Promise<T>
     body: formData,
   });
 
-  if (response.status === 401) {
-    if (token) {
-      limparSessao();
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
-      }
-      throw new ApiError(401, "Sessão expirada — faça login novamente.");
-    }
-    const corpo = await response.json().catch(() => ({}));
-    throw new ApiError(401, corpo.detalhe ?? "Não foi possível autenticar.");
-  }
-
-  if (!response.ok) {
-    const corpo = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, corpo.detalhe ?? "Não foi possível enviar o arquivo.");
-  }
+  await exigirSucesso(response, token, "Não foi possível enviar o arquivo.");
 
   return (await response.json()) as T;
 }

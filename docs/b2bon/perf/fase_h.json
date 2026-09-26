@@ -1,0 +1,91 @@
+{
+  "medido_em": "2026-09-26T20:00:11+00:00",
+  "volume_por_entidade": 40,
+  "repeticoes": 25,
+  "rotas": {
+    "painel · métrica norte": {
+      "p50_ms": 10.6,
+      "p95_ms": 13.4,
+      "consultas": 5
+    },
+    "painel · funil": {
+      "p50_ms": 13.5,
+      "p95_ms": 15.2,
+      "consultas": 5
+    },
+    "painel · economia": {
+      "p50_ms": 15.6,
+      "p95_ms": 18.5,
+      "consultas": 10
+    },
+    "crm · negócios": {
+      "p50_ms": 15.5,
+      "p95_ms": 19.2,
+      "consultas": 6
+    },
+    "crm · contas": {
+      "p50_ms": 13.1,
+      "p95_ms": 14.0,
+      "consultas": 4
+    },
+    "vendedor · licitações": {
+      "p50_ms": 16.8,
+      "p95_ms": 18.0,
+      "consultas": 5
+    },
+    "vendedor · workspace": {
+      "p50_ms": 20.3,
+      "p95_ms": 25.1,
+      "consultas": 26
+    },
+    "vendedor · go/no-go": {
+      "p50_ms": 15.0,
+      "p95_ms": 20.2,
+      "consultas": 10
+    },
+    "comprador · processos": {
+      "p50_ms": 14.0,
+      "p95_ms": 16.6,
+      "consultas": 4
+    },
+    "comprador · workspace": {
+      "p50_ms": 25.9,
+      "p95_ms": 28.8,
+      "consultas": 19
+    },
+    "comprador · riscos": {
+      "p50_ms": 21.7,
+      "p95_ms": 26.7,
+      "consultas": 10
+    },
+    "comprador privado · workspace": {
+      "p50_ms": 18.5,
+      "p95_ms": 22.9,
+      "consultas": 14
+    },
+    "comprador privado · comparação": {
+      "p50_ms": 16.0,
+      "p95_ms": 19.7,
+      "consultas": 10
+    }
+  },
+  "fluxos": {
+    "vendedor · criar → requisito → status → go/no-go": {
+      "p50_ms": 72.0,
+      "p95_ms": 82.4,
+      "consultas": 55
+    },
+    "comprador · criar → 3 etapas → workspace": {
+      "p50_ms": 101.2,
+      "p95_ms": 107.1,
+      "consultas": 63
+    }
+  },
+  "inicializacao_ms": 3225.5,
+  "memoria_pico_mb": 251.1,
+  "bundle": {
+    "total_kb": 1339.6,
+    "arquivos": 80,
+    "maior_kb": 322.7
+  }
+}

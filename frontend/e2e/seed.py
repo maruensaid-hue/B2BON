@@ -77,6 +77,11 @@ def main() -> None:
             usuario.ativo = True
 
         db.commit()
+        # Phase H (TD-091): a API semeia o catálogo de AI Credits na subida, mas o Playwright sobe o
+        # servidor antes deste globalSetup (que recria o banco) — então o seed do E2E faz o mesmo.
+        from app.main import semear_catalogos
+
+        semear_catalogos()
         print(f"Seed OK - tenant={TENANT_ID} email={EMAIL}")
     finally:
         db.close()

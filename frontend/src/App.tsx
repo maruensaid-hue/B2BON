@@ -1,20 +1,9 @@
 import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { CapturaLead } from "@/pages/CapturaLead";
-import { ConviteVitrine } from "@/pages/ConviteVitrine";
-import { CriarConta } from "@/pages/CriarConta";
-import { EsqueciSenha } from "@/pages/EsqueciSenha";
 import { Login } from "@/pages/Login";
-import { PagamentoRetorno } from "@/pages/PagamentoRetorno";
-import { Planos } from "@/pages/Planos";
-import { ComoFuncionamAiCredits } from "@/pages/ComoFuncionamAiCredits";
-import { RedefinirSenha } from "@/pages/RedefinirSenha";
-import { RegistrarConvite } from "@/pages/RegistrarConvite";
-import { Privacidade } from "@/pages/Privacidade";
-import { Termos } from "@/pages/Termos";
 
 // Rotas fora do bundle principal — cada uma vira seu próprio chunk, buscado
 // só quando o usuário realmente navega até ali (ex.: Admin, que só existe
@@ -100,6 +89,19 @@ const RegistroOportunidade = lazy(() =>
 );
 const AprovarDescontos = lazy(() => import("@/pages/ro/AprovarDescontos").then((m) => ({ default: m.AprovarDescontos })));
 
+// Páginas públicas além do login (Phase H): fora do bundle principal, que fica só com o que a entrada precisa.
+const CapturaLead = lazy(() => import("@/pages/CapturaLead").then((m) => ({ default: m.CapturaLead })));
+const ConviteVitrine = lazy(() => import("@/pages/ConviteVitrine").then((m) => ({ default: m.ConviteVitrine })));
+const CriarConta = lazy(() => import("@/pages/CriarConta").then((m) => ({ default: m.CriarConta })));
+const EsqueciSenha = lazy(() => import("@/pages/EsqueciSenha").then((m) => ({ default: m.EsqueciSenha })));
+const PagamentoRetorno = lazy(() => import("@/pages/PagamentoRetorno").then((m) => ({ default: m.PagamentoRetorno })));
+const Planos = lazy(() => import("@/pages/Planos").then((m) => ({ default: m.Planos })));
+const ComoFuncionamAiCredits = lazy(() => import("@/pages/ComoFuncionamAiCredits").then((m) => ({ default: m.ComoFuncionamAiCredits })));
+const RedefinirSenha = lazy(() => import("@/pages/RedefinirSenha").then((m) => ({ default: m.RedefinirSenha })));
+const RegistrarConvite = lazy(() => import("@/pages/RegistrarConvite").then((m) => ({ default: m.RegistrarConvite })));
+const Privacidade = lazy(() => import("@/pages/Privacidade").then((m) => ({ default: m.Privacidade })));
+const Termos = lazy(() => import("@/pages/Termos").then((m) => ({ default: m.Termos })));
+
 function CarregandoPagina() {
   return <div className="p-5.5 text-[12px] text-muted">Carregando...</div>;
 }
@@ -108,13 +110,25 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/esqueci-senha" element={<EsqueciSenha />} />
-      <Route path="/redefinir-senha/:token" element={<RedefinirSenha />} />
-      <Route path="/convite-vitrine/:codigo" element={<ConviteVitrine />} />
-      <Route path="/captura-lead/:codigo" element={<CapturaLead />} />
-      <Route path="/criar-conta" element={<CriarConta />} />
-      <Route path="/planos" element={<Planos />} />
-      <Route path="/como-funcionam-ai-credits" element={<ComoFuncionamAiCredits />} />
+      <Route
+        element={
+          <Suspense fallback={<CarregandoPagina />}>
+            <Outlet />
+          </Suspense>
+        }
+      >
+        <Route path="/esqueci-senha" element={<EsqueciSenha />} />
+        <Route path="/redefinir-senha/:token" element={<RedefinirSenha />} />
+        <Route path="/convite-vitrine/:codigo" element={<ConviteVitrine />} />
+        <Route path="/captura-lead/:codigo" element={<CapturaLead />} />
+        <Route path="/criar-conta" element={<CriarConta />} />
+        <Route path="/planos" element={<Planos />} />
+        <Route path="/como-funcionam-ai-credits" element={<ComoFuncionamAiCredits />} />
+        <Route path="/convite/:codigo" element={<RegistrarConvite />} />
+        <Route path="/privacidade" element={<Privacidade />} />
+        <Route path="/termos" element={<Termos />} />
+        <Route path="/pagamento/retorno" element={<PagamentoRetorno />} />
+      </Route>
       <Route
         path="/central-de-negocios"
         element={
@@ -123,10 +137,6 @@ export default function App() {
           </Suspense>
         }
       />
-      <Route path="/convite/:codigo" element={<RegistrarConvite />} />
-      <Route path="/privacidade" element={<Privacidade />} />
-      <Route path="/termos" element={<Termos />} />
-      <Route path="/pagamento/retorno" element={<PagamentoRetorno />} />
       <Route
         path="/portal-fornecedor"
         element={

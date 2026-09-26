@@ -13,6 +13,7 @@ from sqlalchemy import Boolean, Date, DateTime, Float, Integer
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
+from app.api.respostas import arquivo_com_hash
 from app.contexts.intelligence import contract as intel
 from app.contexts.procurement import contract as compras
 from app.contexts.shared import paginacao
@@ -177,8 +178,7 @@ def _documento(db: Session, tenant_id: str, documento_id: int) -> DocumentoCompr
 @router.get("/documentos/{documento_id}/arquivo")
 def baixar_documento(documento_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> Response:
     documento = _documento(db, tenant_id, documento_id)
-    return Response(content=documento.conteudo or b"", media_type=documento.tipo_mime,
-                    headers={"Content-Disposition": f'attachment; filename="documento-{documento.id}"', "X-Content-SHA256": documento.sha256})
+    return arquivo_com_hash(documento.conteudo, documento.tipo_mime, f"documento-{documento.id}", documento.sha256)
 
 
 @router.get("/documentos/{documento_id}/estimativa")

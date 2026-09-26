@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Phase H — Otimização (2026-09-26, autorizada pelo PO)
+
+- Primeira carga menor: páginas públicas (planos, termos, cadastro, convites, senha) carregam só quando abertas.
+- Página de planos e tabela de AI Credits não falham mais no primeiro acesso em ambiente de desenvolvimento (catálogo semeado na subida).
+- Sincronização diária do sourcing com ~40% menos consultas ao banco.
+- MAP de contas e de tenants usam o mesmo painel de risco; regras de convite e downloads de evidência num lugar só.
+
 ## Phase G — Intelligence do Strategic Sourcing (2026-09-26, autorizada pelo PO)
 
 - Especificação do processo: envio do documento e sugestão de requisitos pela IA, cada um com o trecho e a página; o comprador confirma ou descarta antes de valer.

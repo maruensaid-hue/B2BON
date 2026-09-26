@@ -783,22 +783,7 @@ def obter_info_convite_vitrine(db: Session, codigo: str) -> ConviteVitrine:
 def _validar_convite_vitrine_disponivel(
     db: Session, convite: ConviteVitrine | None, codigo: str
 ) -> ConviteVitrine:
-    if convite is None:
-        raise NaoEncontrado(f"Convite {codigo} não encontrado")
-    if convite.status == "revogado":
-        raise RegraNegocioViolada("Convite revogado.")
-    if convite.status == "usado":
-        raise RegraNegocioViolada("Convite já utilizado.")
-
-    validade = convite.validade_em
-    if validade is not None:
-        if validade.tzinfo is None:
-            validade = validade.replace(tzinfo=UTC)
-        if validade < datetime.now(UTC):
-            convite.status = "expirado"
-            db.commit()
-            raise RegraNegocioViolada("Convite expirado.")
-    return convite
+    return auth_service.validar_convite_disponivel(db, convite, codigo)
 
 
 def criar_tenant_vitrine(

@@ -1,6 +1,7 @@
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import TypeVar
 
 import bcrypt
 import jwt
@@ -308,7 +309,16 @@ def listar_convites(db: Session, tenant_id: str) -> list[ConviteCadastro]:
     return db.query(ConviteCadastro).filter_by(tenant_id=tenant_id).order_by(ConviteCadastro.id.desc()).all()
 
 
+_Convite = TypeVar("_Convite")
+
+
 def _validar_convite_disponivel(db: Session, convite: ConviteCadastro | None, codigo: str) -> ConviteCadastro:
+    return validar_convite_disponivel(db, convite, codigo)
+
+
+def validar_convite_disponivel(db: Session, convite: _Convite | None, codigo: str) -> _Convite:
+    """Regra única de convite utilizável (cadastro de usuário e convite de vitrine): existe, não foi
+    revogado nem usado e não venceu — vencido é marcado como expirado."""
     if convite is None:
         raise NaoEncontrado(f"Convite {codigo} não encontrado")
     if convite.status == "revogado":

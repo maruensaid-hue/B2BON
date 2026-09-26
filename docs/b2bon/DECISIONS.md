@@ -733,3 +733,23 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - **Barreira**: dados do comprador privado nunca vão para o lado vendedor; entre fornecedores, a IA nunca vê a
     proposta de um ao avaliar a de outro.
 - **Status**: ACEITA.
+
+## D-068 · 2026-09-26 · Phase H · Otimização medida, sem refactor cosmético
+- **Contexto**: Phase H (§44): medir duplicação, bundle, latência, consultas, memória, custo de IA, cache e jobs;
+  eliminar duplicação real; não fazer refactor sem benefício.
+- **Decisão**:
+  - **Duplicação real eliminada**: detalhe de risco do MAP (contas × tenants: score, script de resgate, histórico,
+    modal de interação) → `DetalheRisco`; regra de convite utilizável (revogado, usado, vencido) → uma função em
+    `auth_service` usada também pela vitrine; resposta de download de evidência com hash → `api/respostas.py` (5 rotas);
+    tratamento de erro/401 da API no frontend → `exigirSucesso`.
+  - **Mantido de propósito**: blocos que só se parecem (handlers de formulário, listas de import dos conectores,
+    marcação de telas diferentes). Os 12 linhas repetidas nos conectores BETA desligados ficam como TD-092.
+  - **Bundle**: páginas públicas além do login saem do chunk de entrada (lazy, um `Suspense` só).
+  - **Jobs**: o backfill do sourcing carrega as linhas unificadas existentes do lote numa consulta e memoriza os pais
+    resolvidos (`LoteBackfill`); semântica do upsert inalterada.
+  - **Cache/semente (TD-091)**: catálogo de AI Credits semeado na subida (lifespan); a semente preguiçosa continua
+    idempotente como rede de segurança; o seed do E2E faz o mesmo, porque o Playwright recria o banco depois de subir
+    o servidor.
+  - **Custo de IA**: nenhuma mudança de política; toda chamada segue pelo AI Gateway (fitness do caminho único), C0
+    antes de IA, uma execução de crédito por operação. Custo real por feature só com uso de produção (UNKNOWN aqui).
+- **Status**: ACEITA.

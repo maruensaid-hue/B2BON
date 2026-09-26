@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
+from app.api.respostas import arquivo_com_hash
 from app.contexts.procurement import contract as compras
 from app.llm.base import LLMProvider
 from app.models.usuario import Usuario
@@ -251,8 +252,7 @@ def responder_esclarecimento(esclarecimento_id: int, dados: RespostaEsclarecimen
 @router.get("/anexos/{anexo_id}")
 def baixar_anexo(anexo_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> Response:
     anexo = compras.portal.baixar_anexo(db, tenant_id, anexo_id)
-    return Response(content=anexo.conteudo, media_type=anexo.tipo_mime,
-                    headers={"Content-Disposition": f'attachment; filename="anexo-{anexo.id}"', "X-Content-SHA256": anexo.sha256})
+    return arquivo_com_hash(anexo.conteudo, anexo.tipo_mime, f"anexo-{anexo.id}", anexo.sha256)
 
 
 # --- Phase G: Requirement AI, Evaluation AI e inteligência C0 --------------------------------
@@ -277,8 +277,7 @@ async def enviar_documento(processo_id: int, arquivo: UploadFile = File(...), cl
 @router.get("/documentos/{documento_id}/arquivo")
 def baixar_documento(documento_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> Response:
     documento = ia.obter_documento(db, tenant_id, documento_id)
-    return Response(content=documento.conteudo or b"", media_type=documento.tipo_mime,
-                    headers={"Content-Disposition": f'attachment; filename="documento-{documento.id}"', "X-Content-SHA256": documento.sha256})
+    return arquivo_com_hash(documento.conteudo, documento.tipo_mime, f"documento-{documento.id}", documento.sha256)
 
 
 @router.get("/documentos/{documento_id}/estimativa")

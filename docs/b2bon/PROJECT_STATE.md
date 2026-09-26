@@ -2,11 +2,11 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **PHASE H** — Optimization, próxima. Phase G concluída em 2026-09-26. Fases seguintes pré-autorizadas pelo PO, executadas uma por vez |
+| **CURRENT PHASE** | **PHASE I** — Commercialization (OI-021), próxima. Phase H concluída em 2026-09-26. Fases seguintes pré-autorizadas pelo PO, executadas uma por vez |
 | Última fase concluída | PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION (2026-09-25) |
 | Fase 15 | Desbloqueada pelo PO em 2026-09-25 com o prompt "PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION" (substitui o escopo "Public Procurement Pricing") e concluída no mesmo dia. Preço-base do Public Procurement e franquias do Procurement/Full Suite continuam PENDING_FINAL_DEFINITION por decisão do PO |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/PHASE_G_COMPLETION.md` (antes: `PHASE_F_COMPLETION.md`, `PHASE_E_COMPLETION.md`, `PHASE_D_COMPLETION.md`, `PHASE_C_COMPLETION.md`, `PHASE_B_COMPLETION.md`, `PHASE_A_COMPLETION.md`, `SOURCING_S4_COMPLETION.md`, `SOURCING_S3_COMPLETION.md`, `SOURCING_S0_S2_COMPLETION.md`, `PHASE_15_COMPLETION.md`) |
+| Relatório da última fase | `phases/PHASE_H_COMPLETION.md` (antes: `PHASE_G_COMPLETION.md`, `PHASE_F_COMPLETION.md`, `PHASE_E_COMPLETION.md`, `PHASE_D_COMPLETION.md`, `PHASE_C_COMPLETION.md`, `PHASE_B_COMPLETION.md`, `PHASE_A_COMPLETION.md`, `SOURCING_S4_COMPLETION.md`, `SOURCING_S3_COMPLETION.md`, `SOURCING_S0_S2_COMPLETION.md`, `PHASE_15_COMPLETION.md`) |
 | Correção arquitetural | 2026-09-26 — Strategic Sourcing & Bids (D-055, `18_STRATEGIC_SOURCING.md`). Plano S0–S8; **S0–S4 autorizadas e concluídas** em 2026-09-26 (OI-020); S5–S8 não autorizadas. Após o deploy da S3: rodar o backfill (`/cron/sourcing-sincronizar`) uma vez |
 
 ## Autorizações
@@ -30,20 +30,19 @@
 - **OI-018** (financeiro): câmbio USD→BRL para a margem de IA (sem ele a margem aparece indisponível).
 - **OI-021** (priorização): autorizada; executa como Phase I do plano A–I.
 - **OI-022** (comercial): preço do buyer seat adicional e dos bundles futuros.
-- **Plano A–I**: A–G concluídas; H–I pré-autorizadas, uma por vez (`18_STRATEGIC_SOURCING.md` §10).
+- **Plano A–I**: A–H concluídas; I pré-autorizada, uma por vez (`18_STRATEGIC_SOURCING.md` §10).
 - **Portão operacional S6** (TD-087/088): trocar a leitura para as tabelas unificadas só depois do backfill em produção e de uma release sem `SOURCING_DIVERGENCIA`.
-- **TD-091**: semente preguiçosa dos catálogos disputa escrita no SQLite (500 em dev/E2E no primeiro acesso à página de planos).
 - **OI-014** (produto): visibilidade padrão de empresas novas no diretório da rede.
 - **OI-010** (alta): verificar em produção se as features de IA falhavam por `temperature` com `claude-sonnet-5` (corrigido no código).
 - **OI-016** (operação): metas de RPO/RTO.
 - OI-003, OI-006 a OI-009: ver `OPEN_ISSUES.md`.
 - Conectores de CRM (Fase 13) estão BETA e desligados: habilitar em produção só após validar contra contas reais (TD-069).
 
-## Baseline de qualidade (após a Phase G)
+## Baseline de qualidade (após a Phase H)
 
-- Desempenho: `docs/b2bon/perf/baseline.json` (antes da expansão) e `fase_a.json` … `fase_g.json`; repetir com `tests/desempenho` a cada fase (§36).
-- Duplicação: `scripts/qualidade/duplicacao.py` — 46 blocos / ~2.193 linhas repetidas (janela 8).
+- Desempenho: `docs/b2bon/perf/baseline.json` (antes da expansão) e `fase_a.json` … `fase_h.json`; repetir com `tests/desempenho` a cada fase (§36).
+- Duplicação: `scripts/qualidade/duplicacao.py` — 43 blocos / ~1.889 linhas repetidas (janela 8).
 
-- Backend: 2.078 passed, 8 skipped (medição de desempenho sob demanda + 7 testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 7/7 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `f2c4e6a8b0d1`).
+- Backend: 2.080 passed, 8 skipped (medição de desempenho sob demanda + 7 testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 7/7 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `f2c4e6a8b0d1`).
 - Ruff: 40 (sem novos). Frontend: lint OK (25 warnings), build OK.
-- E2E: 10/10 (setup de login + 9 specs).
+- E2E: 11/11 (setup de login + 10 specs).
