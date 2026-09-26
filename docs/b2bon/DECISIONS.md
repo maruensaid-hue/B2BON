@@ -503,3 +503,34 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   some junto com as tabelas antigas.
 - **Status**: ACEITA.
 
+## D-059 · 2026-09-26 · Comercial · Commercial separation by job-to-be-done while sharing the Unified Strategic Sourcing Engine
+- **Contexto**: OI-019 (empacotamento Enterprise) e OI-015 (empacotamento e preço do Bid Intelligence). Resolução
+  do PO em 2026-09-26.
+- **Decisão**: produtos organizados por job-to-be-done, tecnologia compartilhada.
+
+  | Lado | Produto | Job-to-be-done | Preço | AI Credits/mês |
+  |---|---|---|---|---|
+  | SELL | **B2B ON Bid Intelligence** (Public Sector Bids + Enterprise Bids) | encontrar, qualificar, analisar e responder oportunidades públicas e privadas | R$ 1.490/mês | 25.000 |
+  | BUY privado | **B2B ON Strategic Sourcing** | encontrar, qualificar, comparar e contratar fornecedores | R$ 2.990/mês, 5 buyer users | 50.000 |
+  | BUY privado | **B2B ON Strategic Sourcing Enterprise** | idem, com condições enterprise | a partir de R$ 5.990/mês (STARTING_AT) | 100.000 |
+  | BUY público | **B2B ON Public Procurement** | planejar e executar contratações públicas | PENDING_DEFINITION (inalterado) | PENDING_FINAL_DEFINITION (OI-017) |
+
+  - Enterprise Bids **não** é módulo à parte: entra no Bid Intelligence sem cobrança adicional por a oportunidade
+    ser pública ou privada.
+  - Sem plano "Strategic Sourcing Pro" por ora.
+  - Bundles futuros (Revenue & Bids; Procurement Intelligence) preparados no catálogo, sem preço.
+  - Supplier Guest é papel, não consome buyer seat e só acessa o que o comprador autorizou.
+  - Todos os créditos vão para a carteira única do tenant (D-050); nada de carteira por módulo.
+- **Justificativa**:
+  - Bid Intelligence atende o SELL SIDE; Public e Enterprise Bids são o mesmo problema do fornecedor.
+  - Strategic Sourcing atende o BUY SIDE privado.
+  - Public Procurement tem requisitos e rulesets próprios, mas reutiliza os engines.
+- **Consequência**:
+  - Continua **um** engine de sourcing (D-055). O que difere entre produtos é `segment`, `side`, `process_type`,
+    `ruleset`, `workflow`, entitlement e papel, sem engine por segmento.
+  - Nenhuma capacidade não implementada é exibida como disponível: o catálogo usa AVAILABLE, BETA, COMING_SOON e
+    CONTACT_SALES conforme o estado real (`15_PRICING_AND_ENTITLEMENTS.md` §5).
+  - A implementação comercial (planos, catálogo central, página de vendas, entitlements no código) fica para fase
+    autorizada (OI-021), pela regra de fase da própria resolução.
+- **Status**: ACEITA. Resolve OI-019 e OI-015.
+

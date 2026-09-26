@@ -92,3 +92,13 @@ setor público (gap G1). Alvo: o mesmo contexto `bids` sobre o núcleo `sourcing
 `ENTERPRISE_RFP_SELL` e ruleset `PRIVATE_RFP`. A matriz de conformidade vira a direção SELF do
 Evaluation Engine; o analisador de edital/TR vira perfil do Requirement Engine. Go/No-Go e cofre
 continuam do `bids`. Plano: `18_STRATEGIC_SOURCING.md` §8 (S1, S7).
+
+## 8. Produto comercial (D-059, OI-019 e OI-015 resolvidos)
+
+- **B2B ON Bid Intelligence**, módulo `bids`: R$ 1.490/mês e 25.000 AI Credits/mês na carteira única do tenant.
+- Job-to-be-done: *encontrar, qualificar, analisar e responder oportunidades públicas e privadas*.
+- Inclui **Public Sector Bids** e **Enterprise Bids** (RFI, RFP, RFQ, EOI, Private Tender, Vendor Qualification,
+  eventos de sourcing recebidos), sem cobrança extra por ser pública ou privada.
+- Mesmo engine; a diferença vem de `segment` e `process_type`.
+- Estado real de cada capacidade (o que pode ser anunciado): `15_PRICING_AND_ENTITLEMENTS.md` §5.4.
+- Plano e página de vendas: OI-021.

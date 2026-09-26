@@ -48,6 +48,12 @@ B2B ON PLATFORM
     └── BUY .... (3) Public Procurement · (4) Enterprise Strategic Sourcing
 ```
 
+Produtos (D-059, por job-to-be-done):
+- **B2B ON Bid Intelligence** (SELL; Public + Enterprise Bids; R$ 1.490/mês; 25K AI Credits);
+- **B2B ON Strategic Sourcing** (BUY privado; R$ 2.990/mês; 5 buyer users; 50K);
+- **Strategic Sourcing Enterprise** (a partir de R$ 5.990/mês; 100K);
+- **B2B ON Public Procurement** (BUY público; preço pendente).
+
 Os segmentos são experiências configuradas sobre engines compartilhados (Workflow, Document,
 Requirement, Evaluation, Matching, Supplier, Contract, Graph, Intelligence, AI Gateway, Notification,
 Audit, Integration Hub), não sistemas separados. Enterprise Bids e Enterprise Strategic Sourcing estão

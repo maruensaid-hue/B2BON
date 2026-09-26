@@ -362,3 +362,54 @@ S0–S2 não mudam schema nem comportamento e podem ir primeiro. S3–S6 são o 
 - Versão de workflow e de ruleset vai no próprio nome (`PUBLIC_TENDER_SELL@1`), sem coluna separada.
 - O arquivo e o texto das páginas continuam só na tabela de origem até a S6, sem duplicar blobs.
 - Sem `ON DELETE CASCADE`, pela convenção do projeto (falha fechado): o núcleo apaga as filhas explicitamente.
+
+## 9. Produtos por job-to-be-done sobre o engine único (D-059, OI-019 resolvido)
+
+```
+                     UNIFIED STRATEGIC SOURCING ENGINE (contexts/sourcing + shared)
+                                       │
+                 ┌─────────────────────┴─────────────────────┐
+             SELL SIDE                                    BUY SIDE
+                 │                                           │
+      B2B ON BID INTELLIGENCE                 ┌──────────────┴──────────────┐
+       (módulo `bids`)                   PRIVADO                         PÚBLICO
+         ┌───────┴───────┐        B2B ON STRATEGIC SOURCING      B2B ON PUBLIC PROCUREMENT
+   PUBLIC BIDS    ENTERPRISE BIDS   (módulo `sourcing`;            (módulo `procurement`;
+   segment=PUBLIC segment=ENTERPRISE tier ENTERPRISE)              ruleset PUBLIC_PROCUREMENT_BR_14133)
+```
+
+- **Diferenciação por configuração, nunca por engine**: `segment` × `side` × `process_type` × `ruleset` ×
+  `workflow` × entitlement × papel. Exemplos:
+  - `PUBLIC/SELL/PUBLIC_TENDER` (edital);
+  - `ENTERPRISE/SELL/RFP` (RFP privado recebido);
+  - `ENTERPRISE/BUY/RFP` (RFP emitido pelo comprador).
+- **Proibidos**: `PublicRfpEngine`, `PrivateRfpEngine`, `TenderEngine`, `EnterpriseTenderEngine`, segundo
+  repositório de venda, carteira de créditos por módulo.
+- **S7 (Enterprise Bids)** acontece **dentro do módulo `bids`**: workflow `ENTERPRISE_RFP_SELL`, ruleset
+  `PRIVATE_RFP`, emissor Organization, vendor questionnaire, negociação e resultado. Sem módulo novo.
+- **S8 (Strategic Sourcing)** é o módulo `sourcing` (lado BUY privado): workflow `ENTERPRISE_RFP_BUY`, ruleset
+  `ENTERPRISE_SOURCING`, convites, Supplier Portal, propostas, Evaluation Engine na direção PROPOSAL, shortlist,
+  negociação, aprovação e contrato. Reutiliza o Supplier 360 e o matching da rede.
+- **Supplier Guest**: papel `supplier_guest`.
+  - Não consome buyer seat.
+  - A identidade vale só dentro do convite: vê os documentos e perguntas que o comprador liberou e responde RFI,
+    RFP e RFQ, propostas, evidências e esclarecimentos.
+  - Nunca vê CRM, notas, notas de avaliação, orçamento nem as propostas dos concorrentes.
+  - Mesmo padrão de "compartilhado explicitamente" das salas de compra (D-037), na direção inversa.
+
+### 9.1 Barreira Buy/Sell por camada (D-034, D-057, D-058)
+
+Dado privado do comprador nunca alimenta inteligência de venda sem autorização e base legítima. Isso inclui
+planejamento de RFP, avaliações e notas de fornecedores, orçamento, negociação, propostas de concorrentes, notas
+internas, decisões e planos futuros.
+
+| Camada | Controle existente | Obrigatório na S8 |
+|---|---|---|
+| Banco | `lado` imutável (CHECK + trigger); tabelas unificadas só pelo núcleo; `Lado.COMPRA` só no comprador (fitness) | tabelas de proposta/avaliação/participante com `lado`, sob a mesma fitness |
+| API | lado derivado da rota/módulo, nunca do corpo; 403 sem o módulo | rotas do Supplier Portal com escopo por convite |
+| Cache | cache de resposta de IA por tenant e só para features cacheáveis (FAQ, orquestrador) | nenhuma feature BUY cacheável |
+| RAG / Context Engine | procurement não escreve no Corporate Brain (fitness); RESTRICTED fora da IA | o mesmo para `sourcing`, e o propósito RESPOSTA_EXTERNA nunca vê BUY |
+| Business Graph | só dado público/declarado da rede | avaliações e decisões do comprador fora do grafo |
+| AI retrieval / orquestrador | ferramentas declaram lado; ambiguidade compra × venda → esclarecer (D-040) | ferramentas de `sourcing` com lado BUY |
+| Analytics | métricas divididas pela barreira (D-046) | métricas de sourcing só no painel do comprador |
+| Logs | sem corpo, query nem headers; espelho loga só origem e id | igual |

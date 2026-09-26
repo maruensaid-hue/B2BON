@@ -67,3 +67,11 @@ Ainda sem contexto próprio. Entra em `app/contexts/network/` na Fase 7.
 | Enterprise Sourcing (BUY privado) | configuração de `sourcing` + ruleset `ENTERPRISE_SOURCING` | não existe |
 
 Mapa campo a campo e o que migra: `18_STRATEGIC_SOURCING.md` §3 e §5.1.
+
+**Produtos × contextos (D-059)**:
+- B2B ON Bid Intelligence = contexto `bids` (SELL; os segmentos PUBLIC e ENTERPRISE);
+- B2B ON Strategic Sourcing = contexto futuro `sourcing` de compra privada, que é configuração do núcleo e não
+  engine novo (S8);
+- B2B ON Public Procurement = contexto `procurement`.
+
+Supplier Guest é papel com escopo de convite, não usuário do tenant comprador.

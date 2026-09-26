@@ -77,3 +77,6 @@ Nenhum tipo novo foi adicionado ao código nesta correção. Especificação: `1
 **Executado (S3, D-058)**: `SourcingProcess` e filhos já têm tabela (`app/models/sourcing.py`), preenchida por
 espelho das tabelas antigas; participante, proposta, avaliação e lote/item ganham tabela no primeiro uso.
 
+**Produtos (D-059)**: `SourcingProcess.segment`/`side`/`process_type` distinguem os três produtos de sourcing
+sem entidade por produto (ex.: ENTERPRISE/SELL/RFP no Bid Intelligence; ENTERPRISE/BUY/RFP no Strategic
+Sourcing).

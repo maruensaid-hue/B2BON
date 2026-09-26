@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## OI-019 resolvido — produtos por job-to-be-done (2026-09-26, documentação)
+
+- D-059: B2B ON Bid Intelligence (Public + Enterprise Bids, R$ 1.490, 25K AI Credits), Strategic Sourcing (R$ 2.990, 5 buyer users, 50K), Strategic Sourcing Enterprise (a partir de R$ 5.990, 100K), Public Procurement (preço pendente).
+- Especificação do catálogo, fonte única, entitlements, estado real das capacidades e barreira por camada. OI-019 e OI-015 resolvidos; OI-021 (implementação comercial) e OI-022 (seat adicional, bundles) abertos.
+- Nenhum código comercial alterado: a fase corrente (S4) só permite documentação.
+
 ## Sourcing S3 — schema unificado (expand) (2026-09-26, autorizada pelo PO)
 
 - Migração `a3d5f7b9c1e2`: `processo_sourcing`, `documento_sourcing`, `requisito_sourcing`, `contrato_sourcing`, `evento_sourcing`, `evento_contrato_sourcing`; `lado` imutável (trigger SQLite/Postgres + ORM).

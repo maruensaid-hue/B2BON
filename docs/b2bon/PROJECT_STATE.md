@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **CURRENT PHASE** | **NENHUMA** — Sourcing S0–S3 concluídas; S4–S8 aguardam autorização do PO |
+| **CURRENT PHASE** | **SOURCING S4** (em execução) — workflow e rulesets declarativos no lugar de tuplas de status e regras fixas; S5–S8 não autorizadas |
 | Última fase concluída | PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION (2026-09-25) |
 | Fase 15 | Desbloqueada pelo PO em 2026-09-25 com o prompt "PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION" (substitui o escopo "Public Procurement Pricing") e concluída no mesmo dia. Preço-base do Public Procurement e franquias do Procurement/Full Suite continuam PENDING_FINAL_DEFINITION por decisão do PO |
 | Branch de trabalho | `staging` |
@@ -17,6 +17,8 @@
 | 15 | Product Owner ("pode prosseguir e concluir a fase") | 2026-09-25 | Franquias do Public Procurement e da Full Suite: decisão futura do PO |
 | S0–S2 (sourcing) | Product Owner ("Autorizado", sobre "S0–S2 são as fases de menor risco para começar") | 2026-09-26 | Sem mudança de schema nem de comportamento; S3–S8 continuam pendentes |
 | S3 (sourcing) | Product Owner ("Autorizado", sobre "S3: criar as tabelas unificadas e migrar os dados aos poucos, mantendo as tabelas antigas até os resultados baterem") | 2026-09-26 | Primeira fase com mudança de schema; S4–S8 continuam pendentes |
+| S4 (sourcing) + master | Product Owner ("S4: pode trocar" · "master: pode atualizar") | 2026-09-26 | `master` só depois de CI verde no `staging` |
+| OI-019 (resolução) | Product Owner ("RESOLUÇÃO OI-019 — ENTERPRISE BIDS & STRATEGIC SOURCING") | 2026-09-26 | Pela regra §25 da própria resolução, a fase corrente (S4) só permite registrar arquitetura, especificação do catálogo, entitlements e documentação; a implementação comercial (planos, catálogo, página de vendas, entitlements no código) depende de fase autorizada (OI-021) |
 | 1–17 | Product Owner ("Siga para a Fase 1 […] seguir para a Fase 2 e assim sucessivamente até o final do projeto, fica previamente autorizado o commit e subir todas as fases seguintes") | 2026-09-25 | **Exceções que continuam valendo, por regra do próprio Master Prompt:** Fase 15 só com valores de preço fornecidos pelo PO; nenhum preço ou valor de plano é alterado ou inventado (inclui OI-001) |
 
 ## Pendências abertas relevantes
@@ -24,9 +26,9 @@
 - **OI-001** (crítica): limites 0 nos planos PREDATOR avulsos. Depende de valores do PO.
 - **OI-017** (comercial): franquias de AI Credits do Public Procurement (50–100K) e da Full Suite (75–100K) e preço-base do Public Procurement — decisão futura do PO; hoje nada concedido por elas.
 - **OI-018** (financeiro): câmbio USD→BRL para a margem de IA (sem ele a margem aparece indisponível).
-- **OI-019** (comercial/produto): empacotamento de Enterprise Bids e Enterprise Strategic Sourcing (módulo, preço, franquia).
+- **OI-021** (priorização): autorizar a implementação comercial de D-059 (planos, catálogo, entitlements, página de vendas).
+- **OI-022** (comercial): preço do buyer seat adicional e dos bundles futuros.
 - **OI-020** (priorização): S0–S3 concluídas; S4 (workflow/rulesets) e seguintes aguardam o PO.
-- **OI-015** (comercial): empacotamento e preço do módulo Bid Intelligence (B2B ON Public Sector). Módulo existe, nenhum plano o inclui.
 - **OI-014** (produto): visibilidade padrão de empresas novas no diretório da rede.
 - **OI-010** (alta): verificar em produção se as features de IA falhavam por `temperature` com `claude-sonnet-5` (corrigido no código).
 - **OI-016** (operação): metas de RPO/RTO.

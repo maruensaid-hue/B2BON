@@ -67,3 +67,9 @@ neutralidade do núcleo `sourcing`.
 incluindo os achados de documento como requisitos; leituras conferidas contra as tabelas novas. Só o núcleo
 `sourcing` acessa as tabelas unificadas e só o comprador passa `Lado.COMPRA` a ele (fitness).
 
+## 5. Posição comercial (D-059)
+
+- **B2B ON Public Procurement** é o produto do comprador público (*planejar e executar contratações públicas*).
+- Preço continua **PENDING_DEFINITION** e a franquia de AI Credits continua PENDING_FINAL_DEFINITION (OI-017).
+- É distinto do **B2B ON Strategic Sourcing** (comprador privado), mas os dois usam os mesmos engines, cada um com
+  ruleset, permissões e barreira próprios.
