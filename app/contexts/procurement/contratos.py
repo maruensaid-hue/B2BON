@@ -9,9 +9,21 @@ from app.models.evento_contrato_compra import EventoContratoCompra
 
 
 def inteligencia(db: Session, tenant_id: str, contrato: ContratoCompra, hoje: date | None = None) -> dict:
-    hoje = hoje or date.today()
-    eventos = db.query(EventoContratoCompra).filter_by(tenant_id=tenant_id, contrato_id=contrato.id).order_by(
-        EventoContratoCompra.data, EventoContratoCompra.id).all()
+    return inteligencia_em_lote(db, tenant_id, [contrato], hoje)[contrato.id]
+
+
+def inteligencia_em_lote(db: Session, tenant_id: str, contratos: list[ContratoCompra], hoje: date | None = None) -> dict[int, dict]:
+    """Inteligência de vários contratos com os eventos numa consulta (Phase D, TD-090)."""
+    eventos: dict[int, list[EventoContratoCompra]] = {c.id: [] for c in contratos}
+    if contratos:
+        consulta = db.query(EventoContratoCompra).filter(EventoContratoCompra.tenant_id == tenant_id,
+                                                         EventoContratoCompra.contrato_id.in_(list(eventos)))
+        for e in consulta.order_by(EventoContratoCompra.data, EventoContratoCompra.id):
+            eventos[e.contrato_id].append(e)
+    return {c.id: _inteligencia(c, eventos[c.id], hoje or date.today()) for c in contratos}
+
+
+def _inteligencia(contrato: ContratoCompra, eventos: list[EventoContratoCompra], hoje: date) -> dict:
     pago = sum(e.valor or 0 for e in eventos if e.tipo == "PAGAMENTO")
     aditivos = [e for e in eventos if e.tipo == "ADITIVO"]
     notas = [e.nota for e in eventos if e.tipo == "FISCALIZACAO" and e.nota is not None]

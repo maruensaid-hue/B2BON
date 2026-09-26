@@ -14,8 +14,22 @@ MINIMO_AMOSTRAS = 3
 
 
 def resumo(db: Session, tenant_id: str, processo_id: int) -> list[dict]:
+    return resumo_por_processo(db, tenant_id, [processo_id]).get(processo_id, [])
+
+
+def resumo_por_processo(db: Session, tenant_id: str, processo_ids: list[int]) -> dict[int, list[dict]]:
+    """Resumo de vários processos numa consulta (Phase D, TD-090: sem uma consulta por processo)."""
+    por_processo: dict[int, list[PesquisaPreco]] = {}
+    if processo_ids:
+        consulta = db.query(PesquisaPreco).filter(PesquisaPreco.tenant_id == tenant_id, PesquisaPreco.processo_id.in_(processo_ids))
+        for p in consulta.order_by(PesquisaPreco.id):
+            por_processo.setdefault(p.processo_id, []).append(p)
+    return {processo_id: _resumir(itens) for processo_id, itens in por_processo.items()}
+
+
+def _resumir(pesquisas: list[PesquisaPreco]) -> list[dict]:
     grupos: dict[str, list[PesquisaPreco]] = {}
-    for p in db.query(PesquisaPreco).filter_by(tenant_id=tenant_id, processo_id=processo_id).order_by(PesquisaPreco.id):
+    for p in pesquisas:
         grupos.setdefault(normalizar(p.item_descricao), []).append(p)
     resultado = []
     for itens in grupos.values():

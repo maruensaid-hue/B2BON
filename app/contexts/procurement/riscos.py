@@ -45,6 +45,12 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
     contratos = db.query(ContratoCompra).filter_by(tenant_id=tenant_id).all()
     orgaos = {o.id: o for o in db.query(OrgaoPublico).filter_by(tenant_id=tenant_id).all()}
     tipos_por_processo = repositorio.COMPRA.tipos_de_documento(db, tenant_id)  # uma consulta, sem arquivo (S0/S2)
+    # Phase D (TD-090): itens do PCA, pesquisas de preço e eventos de contrato em uma consulta cada
+    ids_item = {p.item_pca_id for p in abertos if p.item_pca_id}
+    itens_pca = {i.id: i for i in db.query(ItemPca).filter(ItemPca.tenant_id == tenant_id, ItemPca.id.in_(ids_item))} if ids_item else {}
+    precos_por_processo = precos.resumo_por_processo(
+        db, tenant_id, [p.id for p in abertos if p.status in ("PESQUISA_PRECOS", "APROVACAO", "PUBLICADO")])
+    intel_contratos = contratos_intel.inteligencia_em_lote(db, tenant_id, contratos, hoje)
 
     for i, a in enumerate(abertos):
         for b in abertos[i + 1:]:
@@ -58,7 +64,7 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
             resultado.append(_sinal("PROCESS_DELAY", "ATENCAO",
                                     f"Processo {p.numero or p.id} além do prazo previsto ({p.prazo_previsto:%d/%m/%Y}). Requer revisão.",
                                     "processo_contratacao", p.id, {"prazo_previsto": p.prazo_previsto, "status": p.status}))
-        item = db.get(ItemPca, p.item_pca_id) if p.item_pca_id else None
+        item = itens_pca.get(p.item_pca_id) if p.item_pca_id else None
         if item is None and p.valor_estimado:
             resultado.append(_sinal("BUDGET_MISMATCH", "INFO", "Sinal analítico: processo sem vínculo com item do PCA. Requer revisão.",
                                     "processo_contratacao", p.id, {"valor_estimado": p.valor_estimado}))
@@ -76,7 +82,7 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
                                         f"Documentação possivelmente incompleta para a etapa {p.status}: {', '.join(faltam)}. Requer revisão.",
                                         "processo_contratacao", p.id, {"faltam": faltam, "etapa": p.status}))
         if p.status in ("PESQUISA_PRECOS", "APROVACAO", "PUBLICADO"):
-            for item_preco in precos.resumo(db, tenant_id, p.id):
+            for item_preco in precos_por_processo.get(p.id, []):
                 if not item_preco["suficiente"] or item_preco["fora_da_faixa"]:
                     resultado.append(_sinal("PRICE_DEVIATION", "ATENCAO",
                                             f"Sinal analítico na pesquisa de preços de \"{item_preco['item']}\": "
@@ -84,7 +90,7 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
                                             + ". Requer revisão.", "processo_contratacao", p.id, item_preco))
 
     for c in contratos:
-        intel = contratos_intel.inteligencia(db, tenant_id, c, hoje)
+        intel = intel_contratos[c.id]
         dias_param = LEI_14133.parametro("dias_alerta_contrato", orgaos[c.orgao_id].parametros if orgaos.get(c.orgao_id) else None)
         if c.status == "VIGENTE" and intel["dias_para_fim"] is not None and 0 <= intel["dias_para_fim"] <= dias_param and c.necessidade_continuada:
             sucessor = next((p for p in abertos if termos_em_comum(c.objeto, p.objeto)), None)

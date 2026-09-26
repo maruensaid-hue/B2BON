@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { ProcessWorkspace } from "@/components/sourcing/ProcessWorkspace";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { api, ApiError } from "@/lib/api";
 
@@ -21,7 +22,31 @@ interface Documento {
   }[];
 }
 
+interface Fluxo {
+  codigo: string;
+  proximos_status: string[];
+  final: boolean;
+  ruleset: { codigo: string; fonte: string } | null;
+  documentos_da_etapa: { tipo: string; presente: boolean }[];
+}
+
+/** Rótulos das etapas do processo (as etapas em si vêm do workflow). */
+const ETAPAS: Record<string, string> = {
+  PLANEJAMENTO: "Planejamento",
+  ESTUDOS_TECNICOS: "Estudos técnicos",
+  TERMO_REFERENCIA: "Termo de referência",
+  PESQUISA_PRECOS: "Pesquisa de preços",
+  APROVACAO: "Aprovação",
+  PUBLICADO: "Publicado",
+  SELECAO: "Seleção",
+  HOMOLOGADO: "Homologado",
+  CONTRATADO: "Contratado",
+  FRACASSADO: "Fracassado",
+  CANCELADO: "Cancelado",
+};
+
 interface Workspace {
+  fluxo: Fluxo;
   overview: {
     objeto: string;
     status: string;
@@ -51,24 +76,88 @@ export function ProcessoWorkspace() {
   const { id } = useParams<{ id: string }>();
   const [ws, setWs] = useState<Workspace | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  const carregar = useCallback(async () => {
+    try {
+      setWs(await api.get<Workspace>(`/procurement/processos/${id}/workspace`));
+    } catch (error) {
+      setErro(
+        error instanceof ApiError
+          ? error.message
+          : "Não foi possível carregar o processo.",
+      );
+    }
+  }, [id]);
 
   useEffect(() => {
-    api
-      .get<Workspace>(`/procurement/processos/${id}/workspace`)
-      .then(setWs)
-      .catch((error) =>
-        setErro(
-          error instanceof ApiError
-            ? error.message
-            : "Não foi possível carregar o processo.",
-        ),
+    carregar();
+  }, [carregar]);
+
+  async function avancar(status: string) {
+    setErro(null);
+    setOcupado(true);
+    try {
+      await api.patch(`/procurement/processos/${id}`, { status });
+      await carregar();
+    } catch (error) {
+      setErro(
+        error instanceof ApiError
+          ? error.message
+          : "Não foi possível mudar a etapa.",
       );
-  }, [id]);
+    } finally {
+      setOcupado(false);
+    }
+  }
 
   if (!ws)
     return (
       <div className="text-[12px] text-muted">{erro ?? "Carregando..."}</div>
     );
+
+  const andamento = (
+    <Card>
+      <SectionLabel>Andamento</SectionLabel>
+      <div className="text-[11px] text-muted">
+        Etapa atual{" "}
+        <b className="text-text">
+          {ETAPAS[ws.overview.status] ?? ws.overview.status}
+        </b>{" "}
+        · fluxo {ws.fluxo.codigo}
+        {ws.fluxo.ruleset && ` · regras ${ws.fluxo.ruleset.codigo}`}
+      </div>
+      {ws.fluxo.documentos_da_etapa.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {ws.fluxo.documentos_da_etapa.map((d) => (
+            <Badge key={d.tipo} tone={d.presente ? "green" : "amber"}>
+              {d.tipo} {d.presente ? "✓" : "pendente"}
+            </Badge>
+          ))}
+        </div>
+      )}
+      {ws.fluxo.proximos_status.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {ws.fluxo.proximos_status.map((status) => (
+            <Button
+              key={status}
+              size="sm"
+              variant="ghost"
+              disabled={ocupado}
+              onClick={() => avancar(status)}
+            >
+              {ETAPAS[status] ?? status}
+            </Button>
+          ))}
+        </div>
+      )}
+      {ws.fluxo.ruleset && (
+        <div className="mt-2 text-[10px] text-muted">
+          Fonte das regras: {ws.fluxo.ruleset.fonte}
+        </div>
+      )}
+    </Card>
+  );
 
   const documentosCard = (
     <Card>
@@ -175,12 +264,18 @@ export function ProcessoWorkspace() {
       testId="processo-workspace"
       voltar={{ para: "/compras", rotulo: "Compras públicas" }}
       titulo={ws.overview.objeto}
-      subtitulo={`${ws.overview.numero ?? "sem número"} · status ${ws.overview.status}`}
+      subtitulo={`${ws.overview.numero ?? "sem número"} · etapa ${ETAPAS[ws.overview.status] ?? ws.overview.status}`}
+      avisos={erro && <div className="text-[12px] text-red">{erro}</div>}
       abas={[
         {
           id: "visao",
           rotulo: "Visão geral",
-          conteudo: insightsCard,
+          conteudo: (
+            <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
+              {andamento}
+              {insightsCard}
+            </div>
+          ),
           contador: ws.ai_insights.sinais.sinais.length,
         },
         { id: "documentos", rotulo: "Documentos", conteudo: documentosCard },

@@ -281,6 +281,38 @@ def test_mesmo_tenant_com_bids_e_procurement_nao_cruza_dados_no_lado_vendedor(cl
     fake_llm.definir_respostas(["[]"])
     client.post(f"/api/v1/bids/documentos/{doc['id']}/analisar")
 
-    textos = [client.get(f"/api/v1/bids/licitacoes/{licitacao['id']}/{p}").text for p in ("workspace", "matriz", "go-no-go")]
+    textos = [client.get(f"/api/v1/bids/licitacoes/{licitacao['id']}/{p}").text
+              for p in ("workspace", "matriz", "go-no-go", "proposta", "proposta?formato=markdown")]  # Phase C/D: novas superfícies
     assert all(SEGREDO not in (c.prompt + (c.system or "")) for c in fake_llm.chamadas)
-    assert all(SEGREDO not in t and "777777" not in t for t in textos)
+    assert all(SEGREDO not in t and "777777" not in t and "4321" not in t for t in textos)
+
+
+def test_phase_d_resposta_do_vendedor_nao_aparece_no_lado_comprador(client, base):
+    """Barreira no sentido inverso, com as superfícies novas: a resposta que a
+    empresa escreve numa licitação (Sell) não vaza para o workspace, os riscos
+    ou o fluxo do comprador (Buy) do mesmo tenant; cada lado vê o próprio workflow."""
+    _, processo = _dados_sigilosos(client, base)
+    licitacao = client.post("/api/v1/bids/licitacoes", json={"titulo": "Venda privada", "modalidade": "PRIVATE_RFI"}).json()
+    req = client.post(f"/api/v1/bids/licitacoes/{licitacao['id']}/requisitos", json={"categoria": "PERGUNTA", "descricao": "Equipe"}).json()
+    resposta_venda = "RESPOSTA-COMERCIAL-RESERVADA-9981"
+    client.put(f"/api/v1/bids/requisitos/{req['id']}/resposta", json={"resposta": resposta_venda})
+
+    comprador = client.get(f"{P}/processos/{processo['id']}/workspace").json()
+    textos_compra = [json.dumps(comprador, default=str), client.get(f"{P}/riscos").text, client.get(f"{P}/processos").text]
+    assert all(resposta_venda not in t for t in textos_compra)
+    assert comprador["fluxo"]["codigo"] == "PUBLIC_PROCUREMENT_BUY@1"
+    assert client.get(f"/api/v1/bids/licitacoes/{licitacao['id']}/workspace").json()["fluxo"]["codigo"] == "ENTERPRISE_RFP_SELL@2"
+
+
+def test_phase_d_workspace_mostra_proximas_etapas_e_documentos_esperados_pela_regra(client, base):
+    processo = _post(client, "processos", {"orgao_id": base["orgao"]["id"], "objeto": "Notebooks"})
+    client.patch(f"{P}/processos/{processo['id']}", json={"status": "PESQUISA_PRECOS"})
+    client.post(f"{P}/documentos", data={"tipo": "ETP", "processo_id": str(processo["id"])},
+                files={"arquivo": ("etp.txt", b"Estudo tecnico preliminar.", "text/plain")})
+
+    fluxo = client.get(f"{P}/processos/{processo['id']}/workspace").json()["fluxo"]
+
+    assert fluxo["ruleset"]["codigo"] == "PUBLIC_PROCUREMENT_BR_14133@1" and "14.133" in fluxo["ruleset"]["fonte"]
+    assert fluxo["documentos_da_etapa"] == [{"tipo": "ETP", "presente": True}, {"tipo": "TR", "presente": False}]
+    assert "PESQUISA_PRECOS" not in fluxo["proximos_status"] and "APROVACAO" in fluxo["proximos_status"]
+    assert fluxo["final"] is False

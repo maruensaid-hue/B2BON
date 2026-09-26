@@ -109,3 +109,48 @@ def test_sinais_de_risco_sem_n_mais_1_e_sem_arquivo(client, db_session):
     documentos = [q for q in sql.consultas if "documento_compras" in q]
     assert len(documentos) == 1, f"{len(documentos)} consultas de documento para 12 processos"
     assert not sql.leu_conteudo(DocumentoCompras.__tablename__)
+
+
+def test_phase_d_sinais_e_workspace_do_comprador_nao_crescem_com_o_volume(client, db_session):
+    """TD-090: pesquisa de preços, item do PCA e eventos de contrato em uma consulta
+    cada — o número de consultas é o mesmo com 3 ou 15 processos e contratos."""
+    P = "/api/v1/procurement"
+    orgao = client.post(f"{P}/orgaos", json={"nome": "Prefeitura"}).json()
+    fornecedor = client.post(f"{P}/fornecedores", json={"razao_social": "Fornecedor X"}).json()
+    plano = client.post(f"{P}/planos", json={"orgao_id": orgao["id"], "ano": 2026, "nome": "PCA 2026"}).json()
+
+    def semear(quantidade: int) -> int:
+        ultimo = None
+        for i in range(quantidade):
+            item = client.post(f"{P}/itens-pca", json={"plano_id": plano["id"], "descricao": f"Item {i}",
+                                                           "valor_estimado": 1000}).json()
+            proc = client.post(f"{P}/processos", json={"orgao_id": orgao["id"], "objeto": f"Objeto único {i} {quantidade}",
+                                                       "item_pca_id": item["id"], "valor_estimado": 900}).json()
+            client.patch(f"{P}/processos/{proc['id']}", json={"status": "PESQUISA_PRECOS"})
+            for preco in (10, 11, 30):
+                client.post(f"{P}/precos", json={"processo_id": proc["id"], "item_descricao": "Caneta", "preco_unitario": preco,
+                                                 "fonte_tipo": "SITE", "fonte_descricao": "loja"})
+            contrato = client.post(f"{P}/contratos", json={"fornecedor_id": fornecedor["id"], "objeto": f"Contrato {i}", "orgao_id": orgao["id"],
+                                                          "valor_inicial": 100, "processo_id": proc["id"]}).json()
+            client.post(f"{P}/eventos-contrato", json={"contrato_id": contrato["id"], "tipo": "PAGAMENTO", "valor": 10})
+            ultimo = proc["id"]
+        return ultimo
+
+    def consultas(caminho: str) -> int:
+        with _Sql(db_session.get_bind()) as sql:
+            assert client.get(caminho).status_code == 200
+        return len(sql.consultas)
+
+    processo = semear(3)
+    poucos = {c: consultas(c) for c in (f"{P}/riscos", f"{P}/processos/{processo}/workspace", f"{P}/fornecedores/{fornecedor['id']}/360")}
+    processo = semear(12)
+    muitos = {c: consultas(c) for c in (f"{P}/riscos", f"{P}/processos/{processo}/workspace", f"{P}/fornecedores/{fornecedor['id']}/360")}
+    assert list(muitos.values()) == list(poucos.values()), (poucos, muitos)
+
+
+def test_phase_d_cadastro_sem_campo_obrigatorio_responde_422_e_nao_500(client):
+    P = "/api/v1/procurement"
+    for recurso, corpo, campo in (("itens-pca", {"descricao": "Item"}, "plano_id"),
+                                  ("contratos", {"objeto": "Contrato", "valor_inicial": 1}, "orgao_id")):
+        resposta = client.post(f"{P}/{recurso}", json=corpo)
+        assert resposta.status_code == 422 and campo in resposta.json()["detalhe"], (recurso, resposta.text)

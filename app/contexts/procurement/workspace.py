@@ -5,7 +5,7 @@ Insights (sinais + próxima ação)."""
 
 from sqlalchemy.orm import Session
 
-from app.contexts.procurement import cadastros, contratos, documentos, nba, precos, repositorio, riscos
+from app.contexts.procurement import cadastros, contratos, documentos, fluxo, nba, precos, repositorio, riscos
 from app.models.auditoria import AuditLog
 from app.models.contrato_compra import ContratoCompra
 from app.models.demanda_compra import DemandaCompra
@@ -29,8 +29,20 @@ def montar(db: Session, tenant_id: str, processo_id: int) -> dict:
         .all()
     )
     por_tipo = {t: [cadastros.como_dict(e) for e in eventos if e.tipo == t] for t in ("APROVACAO", "ESCLARECIMENTO", "TAREFA")}
+    fluxo_processo, regras = fluxo.configuracao(processo.modalidade)
+    segmento, tipo_processo = fluxo.classificar(processo.modalidade)
+    tipos_presentes = {d.tipo for d in docs}
     return {
         "overview": cadastros.como_dict(processo),
+        # Phase D: o que dá para fazer agora e o que a regra espera nesta etapa (workflow + ruleset, sem estado fixo na tela)
+        "fluxo": {
+            "codigo": fluxo_processo.codigo, "segmento": segmento.value, "tipo_processo": tipo_processo,
+            "proximos_status": list(fluxo_processo.proximos(processo.status, "status")),
+            "final": processo.status in fluxo_processo.finais,
+            "ruleset": {"codigo": regras.codigo, "fonte": regras.fonte, "vigente_desde": regras.vigente_desde} if regras else None,
+            "documentos_da_etapa": [{"tipo": t, "presente": t in tipos_presentes}
+                                    for t in (regras.documentos(processo.status) if regras else ())],
+        },
         "demandas": [cadastros.como_dict(d) for d in demandas],
         "planejamento": cadastros.como_dict(item) if item else None,
         "documentos": [documentos.como_dict(d) for d in docs],
@@ -42,7 +54,7 @@ def montar(db: Session, tenant_id: str, processo_id: int) -> dict:
         "tarefas": por_tipo["TAREFA"],
         "timeline": [cadastros.como_dict(e) for e in eventos],
         "fornecedores": sorted({c.fornecedor_id for c in contratos_do_processo}),
-        "contrato": [contratos.inteligencia(db, tenant_id, c) for c in contratos_do_processo],
+        "contrato": list(contratos.inteligencia_em_lote(db, tenant_id, contratos_do_processo).values()),
         "auditoria": [
             {"evento": a.evento_tipo, "ator_id": a.ator_id, "detalhes": a.detalhes, "em": a.criado_em} for a in auditoria
         ],

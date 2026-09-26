@@ -86,6 +86,17 @@ def _validar(entidade: str, dados: dict, parcial: bool = False) -> None:
             raise ValidacaoFalhou("Todo preço precisa de fonte descrita.")
 
 
+def _exigir_obrigatorios(entidade: str, dados: dict) -> None:
+    """Coluna NOT NULL sem padrão tem de vir no corpo: 422 com o nome do campo, não 500 do banco (Phase D)."""
+    faltam = [
+        coluna.name for coluna in ENTIDADES[entidade].__table__.columns
+        if not coluna.nullable and not coluna.primary_key and coluna.name != "tenant_id"
+        and coluna.default is None and coluna.server_default is None and dados.get(coluna.name) is None
+    ]
+    if faltam:
+        raise ValidacaoFalhou(f"Campo(s) obrigatório(s): {', '.join(faltam)}.")
+
+
 def criar(db: Session, tenant_id: str, usuario_id: int | None, entidade: str, dados: dict):
     _validar(entidade, dados)
     _conferir_referencias(db, tenant_id, dados)
@@ -96,6 +107,7 @@ def criar(db: Session, tenant_id: str, usuario_id: int | None, entidade: str, da
     if entidade == "evento_contrato_compra" and dados.get("contrato_id") is not None:
         contrato = obter(db, tenant_id, "contrato_compra", dados["contrato_id"])
         dados["fornecedor_id"] = contrato.fornecedor_id
+    _exigir_obrigatorios(entidade, dados)
     registro = ENTIDADES[entidade](tenant_id=tenant_id, **dados)
     db.add(registro)
     db.flush()

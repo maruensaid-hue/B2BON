@@ -1,0 +1,81 @@
+{
+  "medido_em": "2026-09-26T15:01:53+00:00",
+  "volume_por_entidade": 40,
+  "repeticoes": 25,
+  "rotas": {
+    "painel · métrica norte": {
+      "p50_ms": 11.3,
+      "p95_ms": 16.6,
+      "consultas": 5
+    },
+    "painel · funil": {
+      "p50_ms": 14.3,
+      "p95_ms": 21.6,
+      "consultas": 5
+    },
+    "painel · economia": {
+      "p50_ms": 21.2,
+      "p95_ms": 29.1,
+      "consultas": 10
+    },
+    "crm · negócios": {
+      "p50_ms": 19.4,
+      "p95_ms": 23.2,
+      "consultas": 6
+    },
+    "crm · contas": {
+      "p50_ms": 15.0,
+      "p95_ms": 18.1,
+      "consultas": 4
+    },
+    "vendedor · licitações": {
+      "p50_ms": 18.7,
+      "p95_ms": 26.9,
+      "consultas": 5
+    },
+    "vendedor · workspace": {
+      "p50_ms": 23.4,
+      "p95_ms": 28.6,
+      "consultas": 26
+    },
+    "vendedor · go/no-go": {
+      "p50_ms": 17.0,
+      "p95_ms": 19.6,
+      "consultas": 10
+    },
+    "comprador · processos": {
+      "p50_ms": 16.4,
+      "p95_ms": 26.1,
+      "consultas": 4
+    },
+    "comprador · workspace": {
+      "p50_ms": 33.0,
+      "p95_ms": 45.7,
+      "consultas": 19
+    },
+    "comprador · riscos": {
+      "p50_ms": 26.0,
+      "p95_ms": 30.8,
+      "consultas": 10
+    }
+  },
+  "fluxos": {
+    "vendedor · criar → requisito → status → go/no-go": {
+      "p50_ms": 79.3,
+      "p95_ms": 104.2,
+      "consultas": 55
+    },
+    "comprador · criar → 3 etapas → workspace": {
+      "p50_ms": 122.4,
+      "p95_ms": 137.1,
+      "consultas": 63
+    }
+  },
+  "inicializacao_ms": 3531.8,
+  "memoria_pico_mb": 244.4,
+  "bundle": {
+    "total_kb": 1306.5,
+    "arquivos": 59,
+    "maior_kb": 363.0
+  }
+}

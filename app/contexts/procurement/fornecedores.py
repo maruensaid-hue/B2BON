@@ -17,7 +17,7 @@ from app.models.fornecedor_compras import FornecedorCompras
 
 def visao_360(db: Session, tenant_id: str, fornecedor: FornecedorCompras) -> dict:
     contratos = db.query(ContratoCompra).filter_by(tenant_id=tenant_id, fornecedor_id=fornecedor.id).order_by(ContratoCompra.id).all()
-    intel = [contratos_intel.inteligencia(db, tenant_id, c) for c in contratos]
+    intel = list(contratos_intel.inteligencia_em_lote(db, tenant_id, contratos).values())
     ocorrencias_avulsas = db.query(EventoContratoCompra).filter_by(
         tenant_id=tenant_id, fornecedor_id=fornecedor.id, contrato_id=None).all()
     notas = [i["nota_media"] for i in intel if i["nota_media"] is not None]
@@ -41,8 +41,9 @@ def visao_360(db: Session, tenant_id: str, fornecedor: FornecedorCompras) -> dic
 def ranking_por_categoria(db: Session, tenant_id: str, categoria: str) -> list[dict]:
     contratos = db.query(ContratoCompra).filter_by(tenant_id=tenant_id, categoria=categoria).all()
     por_fornecedor: dict[int, dict] = {}
+    intel_contratos = contratos_intel.inteligencia_em_lote(db, tenant_id, contratos)
     for c in contratos:
-        intel = contratos_intel.inteligencia(db, tenant_id, c)
+        intel = intel_contratos[c.id]
         item = por_fornecedor.setdefault(c.fornecedor_id, {"fornecedor_id": c.fornecedor_id, "contratos": 0, "valor": 0.0,
                                                            "notas": [], "ocorrencias": 0})
         item["contratos"] += 1

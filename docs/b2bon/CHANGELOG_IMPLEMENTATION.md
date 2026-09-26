@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Phase D — Public buy side (2026-09-26, autorizada pelo PO)
+
+- Sinais de risco, workspace do processo, Supplier 360, ranking e ferramenta do agente sem uma consulta por processo/contrato (TD-090).
+- Workspace do processo mostra as próximas etapas pelo workflow e os documentos que a Lei 14.133 espera na etapa atual.
+- Cadastro do comprador sem campo obrigatório responde 422 com o nome do campo.
+- Barreira Buy/Sell testada nas superfícies novas, nos dois sentidos.
+
 ## Phase C — Sell side: Public Bid + Enterprise Bid (2026-09-26, autorizada pelo PO)
 
 - Enterprise Bid por configuração: RFI, RFQ e concorrência privadas, além do RFP privado.

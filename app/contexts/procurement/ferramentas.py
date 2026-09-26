@@ -14,8 +14,10 @@ DIAS = 120
 
 def _contratos(db, ctx, parametros: dict) -> dict:
     itens = []
-    for c in db.query(ContratoCompra).filter_by(tenant_id=ctx.tenant_id, status="VIGENTE").all():
-        intel = contratos.inteligencia(db, ctx.tenant_id, c)
+    vigentes = db.query(ContratoCompra).filter_by(tenant_id=ctx.tenant_id, status="VIGENTE").all()
+    intel_contratos = contratos.inteligencia_em_lote(db, ctx.tenant_id, vigentes)
+    for c in vigentes:
+        intel = intel_contratos[c.id]
         if intel["dias_para_fim"] is not None and intel["dias_para_fim"] <= DIAS:
             itens.append({"contrato_id": c.id, "objeto": c.objeto, "vigencia_fim": c.vigencia_fim, "dias_para_fim": intel["dias_para_fim"],
                           "necessidade_continuada": c.necessidade_continuada, "saldo": intel["saldo"]})

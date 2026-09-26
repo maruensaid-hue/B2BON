@@ -633,3 +633,22 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - **E2E**: um login real por rodada (`auth.setup.ts`) reaproveitado pelas specs que não testam o login, porque o
     `/auth/login` tem rate limit por IP (5/5min) e a suíte já estava no limite. O limite não foi afrouxado.
 - **Status**: ACEITA.
+
+## D-064 · 2026-09-26 · Phase D · Lado comprador público sobre os engines, sem N+1 e com a regra à vista
+- **Contexto**: Phase D (§40): demanda, planejamento, PCA, processo, fornecedor, avaliação, contrato e risco sobre os
+  engines compartilhados; testar a barreira. Quase tudo existia desde a Fase 10.
+- **Decisão**:
+  - **TD-090 resolvido**: `precos.resumo_por_processo` e `contratos.inteligencia_em_lote` (uma consulta cada) usados
+    por riscos, workspace, Supplier 360, ranking e ferramenta do agente; itens do PCA carregados de uma vez. As funções
+    antigas viram atalhos para as versões em lote.
+  - **Workflow e ruleset na tela do comprador**: o workspace do processo devolve `fluxo` (próximas etapas pelo
+    workflow, ruleset com fonte e os **documentos que a Lei 14.133 espera na etapa atual**, presentes ou não); a aba
+    Visão geral mostra o andamento com os botões vindos do servidor.
+  - **Cadastro sem campo obrigatório** responde 422 com o nome do campo (derivado das colunas NOT NULL sem padrão do
+    modelo), não mais 500 do banco.
+  - **Avaliação**: do fornecedor, já existe (fiscalização, ocorrências, nota, Supplier 360, ranking). A avaliação de
+    propostas usa a entidade compartilhada que nasce na Phase E (lado comprador) e vale também para o processo
+    público — nada criado aqui para não haver duas.
+- **Barreira**: testes estendidos às superfícies novas (esboço de proposta JSON/Markdown, resposta do vendedor,
+  bloco `fluxo`) nos dois sentidos, no mesmo tenant com os dois módulos.
+- **Status**: ACEITA.
