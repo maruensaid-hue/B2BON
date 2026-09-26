@@ -22,4 +22,20 @@ export const MODALIDADES: Record<string, string> = {
   PRICE_REGISTRATION: "Registro de preços",
   FRAMEWORK_AGREEMENT: "Acordo-quadro",
   PRIVATE_RFP: "RFP privada",
+  PRIVATE_RFI: "RFI privada",
+  PRIVATE_RFQ: "RFQ privada (cotação)",
+  PRIVATE_TENDER: "Concorrência privada",
+};
+
+/** Rótulos dos estados do workflow (os estados em si vêm do servidor). */
+export const ROTULO_STATUS: Record<string, string> = {
+  IDENTIFICADA: "Identificada",
+  EM_ANALISE: "Em análise",
+  GO: "GO",
+  NO_GO: "NO GO",
+  PROPOSTA_ENVIADA: "Proposta enviada",
+  EM_NEGOCIACAO: "Em negociação",
+  GANHA: "Ganha",
+  PERDIDA: "Perdida",
+  CANCELADA: "Cancelada",
 };

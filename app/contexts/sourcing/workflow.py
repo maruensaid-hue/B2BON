@@ -60,6 +60,10 @@ class Workflow:
     def permite(self, de: str | None, para: str, acao: str) -> bool:
         return any(t.para == para and t.acao == acao and (t.de is QUALQUER or de in t.de) for t in self.transicoes)
 
+    def proximos(self, de: str | None, acao: str) -> tuple[str, ...]:
+        """Estados alcançáveis por esta ação a partir de `de`, na ordem declarada (a tela não fixa estados)."""
+        return tuple(e for e in self.estados if e != de and self.permite(de, e, acao))
+
     def validar(self, para: str, acao: str, de: str | None = None) -> None:
         """Recusa estado desconhecido (`ValidacaoFalhou`) e estado que só se
         alcança por outra ação ou a partir de outro estado (`RegraNegocioViolada`)."""

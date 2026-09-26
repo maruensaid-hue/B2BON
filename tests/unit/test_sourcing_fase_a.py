@@ -38,7 +38,8 @@ def test_toda_modalidade_resolve_pelo_ponto_central_com_o_fluxo_de_antes():
     for modalidade in (*bids.tipos.MODALIDADES, None):
         segmento, tipo = fluxo_venda.classificar(modalidade)
         workflow, regras = sourcing.workflow.resolver(Lado.VENDA, segmento, tipo)
-        esperado = ("ENTERPRISE_RFP_SELL@1", "PRIVATE_RFP@1") if modalidade == "PRIVATE_RFP" else ("PUBLIC_TENDER_SELL@1", None)
+        privada = modalidade is not None and modalidade.startswith("PRIVATE_")
+        esperado = ("ENTERPRISE_RFP_SELL@2", "PRIVATE_RFP@1") if privada else ("PUBLIC_TENDER_SELL@1", None)
         assert (workflow.codigo, regras.codigo if regras else None) == esperado, modalidade
         assert tipo in sourcing.tipos.TIPOS_PROCESSO
     for modalidade in (*sourcing.tipos.TIPOS_PROCESSO, None, "MODALIDADE_ANTIGA"):

@@ -6,9 +6,11 @@ Fonte única dos estados de uma licitação. Reproduz o comportamento anterior
 - GO e NO_GO: só pela decisão Go/No-Go (recomendação + justificativa);
 - GANHA e PERDIDA: só pelo registro de resultado (vencedor e valor).
 
-`ENTERPRISE_RFP_SELL@1` é o mesmo fluxo aplicado ao RFP privado, com código
-próprio para que o fluxo enterprise (S7) nasça como nova versão sem
-reescrever o histórico. `PRIVATE_RFP@1` não tem regra regulatória: é
+`ENTERPRISE_RFP_SELL@1` foi o mesmo fluxo aplicado ao RFP privado (S4). A
+Phase C criou a v2 para todo processo privado recebido pelo fornecedor
+(RFP, RFI, RFQ, concorrência privada): igual à v1 mais a **negociação**
+(`EM_NEGOCIACAO`), que só vem depois da proposta enviada. A v1 continua
+registrada (histórico). `PRIVATE_RFP@1` não tem regra regulatória: é
 contratação privada.
 
 Classificação única da modalidade em (segmento, tipo de processo), usada
@@ -39,20 +41,28 @@ def _fluxo(codigo: str) -> workflow.Workflow:
 
 
 LICITACAO_PUBLICA = _fluxo("PUBLIC_TENDER_SELL@1")
-RFP_PRIVADO = _fluxo("ENTERPRISE_RFP_SELL@1")
+_fluxo("ENTERPRISE_RFP_SELL@1")  # histórico (S3/S4); vínculo atual é a v2
+PROCESSO_PRIVADO = workflow.registrar(workflow.Workflow(
+    codigo="ENTERPRISE_RFP_SELL@2", lado=tipos.Lado.VENDA,
+    estados=(*ESTADOS[:5], "EM_NEGOCIACAO", *ESTADOS[5:]), inicial="IDENTIFICADA",
+    finais=("NO_GO", "GANHA", "PERDIDA", "CANCELADA"), mensagens=_MENSAGENS,
+    transicoes=(*_TRANSICOES, T("EM_NEGOCIACAO", "status", frozenset({"PROPOSTA_ENVIADA"}))),
+))
 REGRAS_RFP_PRIVADO = ruleset.registrar(ruleset.Ruleset(
     codigo="PRIVATE_RFP@1", descricao="RFP privado: sem regime legal de contratação pública.",
     fonte="Regras do próprio comprador privado (edital/RFP do emissor)",
 ))
 LADO = tipos.Lado.VENDA
 workflow.vincular(LADO, tipos.Segmento.PUBLICO, LICITACAO_PUBLICA)
-workflow.vincular(LADO, tipos.Segmento.EMPRESA, RFP_PRIVADO, REGRAS_RFP_PRIVADO)
+workflow.vincular(LADO, tipos.Segmento.EMPRESA, PROCESSO_PRIVADO, REGRAS_RFP_PRIVADO)
+# modalidade privada → tipo de processo universal (o prefixo PRIVATE_ marca o segmento Enterprise)
+PRIVADAS = {"PRIVATE_RFP": "RFP", "PRIVATE_RFI": "RFI", "PRIVATE_RFQ": "RFQ", "PRIVATE_TENDER": "PRIVATE_TENDER"}
 
 
 def classificar(modalidade: str | None) -> tuple[tipos.Segmento, str]:
     """Modalidade da licitação → (segmento, tipo de processo)."""
-    if modalidade == "PRIVATE_RFP":
-        return tipos.Segmento.EMPRESA, "RFP"
+    if modalidade in PRIVADAS:
+        return tipos.Segmento.EMPRESA, PRIVADAS[modalidade]
     return tipos.Segmento.PUBLICO, modalidade if modalidade in tipos.TIPOS_PROCESSO else "PUBLIC_TENDER"
 
 

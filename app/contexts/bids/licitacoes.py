@@ -15,7 +15,7 @@ from app.models.documento_licitacao import DocumentoLicitacao
 from app.models.licitacao import Licitacao
 from app.models.requisito_licitacao import RequisitoLicitacao
 from app.services import auditoria_service
-from app.services.errors import NaoEncontrado, ValidacaoFalhou
+from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 CAMPOS_EDITAVEIS = (
     "titulo", "objeto", "orgao_nome", "orgao_cnpj", "conta_id", "oferta_id", "modalidade", "fonte_url",
@@ -221,6 +221,20 @@ def ajustar_conformidade(
     return requisito
 
 
+def responder_requisito(db: Session, tenant_id: str, usuario_id: int | None, requisito_id: int, resposta: str | None) -> RequisitoLicitacao:
+    """Resposta do fornecedor ao requisito ou à pergunta (Phase C). Texto humano:
+    a plataforma não escreve em nome da empresa. Vazio apaga a resposta."""
+    requisito = _obter_requisito(db, tenant_id, requisito_id)
+    if requisito.status == "descartado":
+        raise RegraNegocioViolada("Requisito descartado não recebe resposta.")
+    requisito.resposta = (resposta or "").strip()[:5000] or None
+    auditoria_service.registrar(db, tenant_id, "requisito_respondido", "requisito_licitacao", requisito.id, _ator(usuario_id),
+                                {"tamanho": len(requisito.resposta or "")})  # sem o texto no log
+    db.commit()
+    db.refresh(requisito)
+    return requisito
+
+
 # --- Go/No-Go e contratos ---------------------------------------------------------
 
 
@@ -284,6 +298,6 @@ def requisito_dict(r: RequisitoLicitacao) -> dict:
     return {
         "id": r.id, "licitacao_id": r.licitacao_id, "documento_id": r.documento_id, "categoria": r.categoria,
         "descricao": r.descricao, "evidencia": r.evidencia, "pagina": r.pagina, "clausula": r.clausula,
-        "obrigatorio": r.obrigatorio, "origem": r.origem, "status": r.status, "conformidade_manual": r.conformidade_manual,
+        "obrigatorio": r.obrigatorio, "resposta": r.resposta, "origem": r.origem, "status": r.status, "conformidade_manual": r.conformidade_manual,
         "justificativa_manual": r.justificativa_manual, "criado_em": r.criado_em,
     }

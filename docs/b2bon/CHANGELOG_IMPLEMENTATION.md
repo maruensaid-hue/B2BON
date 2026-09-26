@@ -1,5 +1,14 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Phase C — Sell side: Public Bid + Enterprise Bid (2026-09-26, autorizada pelo PO)
+
+- Enterprise Bid por configuração: RFI, RFQ e concorrência privadas, além do RFP privado.
+- Workflow `ENTERPRISE_RFP_SELL@2` com negociação depois da proposta enviada; a tela pergunta ao workflow o que dá para fazer.
+- Go/No-Go v2: requisito obrigatório não atendido bloqueia.
+- Resposta por requisito/pergunta (migração `c6f8a0b2d4e5`) e esboço de proposta sem IA (JSON/Markdown) com pendências e anexos do cofre.
+- `ProcessWorkspace`: abas compartilhadas por licitação e processo de compra.
+- E2E: sessão de login reaproveitada (rate limit do login preservado) e spec nova do workspace.
+
 ## Phase B — Document & Requirement Engine (2026-09-26, autorizada pelo PO)
 
 - Requisito normalizado com obrigatoriedade (obrigatório / desejável / UNKNOWN) lida da linguagem do trecho literal, igual para edital, TR, RFP e documento do comprador.

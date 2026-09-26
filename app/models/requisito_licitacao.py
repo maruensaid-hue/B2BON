@@ -26,6 +26,8 @@ class RequisitoLicitacao(Base):
     clausula: Mapped[str | None] = mapped_column(String, nullable=True)
     # Phase B: obrigatório pela linguagem do trecho; None = UNKNOWN (sem sinal ou anterior à Phase B)
     obrigatorio: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Phase C: resposta do fornecedor (pergunta de RFI/questionário, ou texto do requisito na proposta)
+    resposta: Mapped[str | None] = mapped_column(Text, nullable=True)
     origem: Mapped[str] = mapped_column(String)  # ia | manual
     status: Mapped[str] = mapped_column(String)  # sugerido | confirmado | descartado
     conformidade_manual: Mapped[str | None] = mapped_column(String, nullable=True)

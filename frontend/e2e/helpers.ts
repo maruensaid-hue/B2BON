@@ -13,3 +13,13 @@ export async function login(page: Page): Promise<void> {
   await expect(page).toHaveURL("/");
   await expect(page.getByText("Visão geral · CRM + MAP")).toBeVisible();
 }
+
+/** Sessão salva pelo `auth.setup.ts` (um login real pela tela, uma vez por
+ * rodada). Specs que não testam o login reaproveitam: o /auth/login tem
+ * rate limit por IP (5 tentativas/5min) e cada login a mais conta. */
+export const SESSAO = "e2e/.auth/sessao.json";
+
+export async function entrarLogado(page: Page): Promise<void> {
+  await page.goto("/");
+  await expect(page.getByText("Visão geral · CRM + MAP")).toBeVisible();
+}

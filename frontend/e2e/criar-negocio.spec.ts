@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-import { login } from "./helpers";
+import { entrarLogado, SESSAO } from "./helpers";
+
+test.use({ storageState: SESSAO });
 
 test("cria negócio para cliente novo direto no Kanban, o card aparece no board e a tela completa traz a inteligência", async ({ page }) => {
-  await login(page);
+  await entrarLogado(page);
   await page.goto("/crm");
   await expect(page.getByText("CRM — Pipeline")).toBeVisible();
 

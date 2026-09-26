@@ -28,3 +28,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Sessão do E2E (auth.setup.ts)
+e2e/.auth/

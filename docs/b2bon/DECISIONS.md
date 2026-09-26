@@ -605,3 +605,31 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Migração**: ADD/DROP COLUMN direto, sem `batch_alter_table`, para o SQLite não recriar `requisito_sourcing` e
   perder o trigger de lado imutável (coberto por teste no upgrade e no downgrade).
 - **Status**: ACEITA.
+
+## D-063 · 2026-09-26 · Phase C · Enterprise Bid por configuração, workflow v2 com negociação e proposta C0
+- **Contexto**: Phase C do plano unificado (§39): concluir Public Bid + Enterprise Bid com qualificação, conformidade,
+  Go/No-Go, workspace e apoio à proposta; e a UI compartilhada (§28, antiga S5).
+- **Decisão**:
+  - **Enterprise Bid é configuração**, não entidade: modalidades `PRIVATE_RFI`, `PRIVATE_RFQ`, `PRIVATE_TENDER` (além de
+    `PRIVATE_RFP`) classificadas em (ENTERPRISE, RFI/RFQ/PRIVATE_TENDER/RFP) num único mapa (`bids/fluxo.PRIVADAS`).
+  - **`ENTERPRISE_RFP_SELL@2`**: a v1 + `EM_NEGOCIACAO`, alcançável só a partir de `PROPOSTA_ENVIADA`. A v1 segue
+    registrada (histórico); o vínculo do segmento aponta para a v2. O público não tem negociação (`Status inválido`).
+    Em produção, as linhas espelhadas de RFP privado passam de `@1` para `@2` no próximo backfill diário; até lá a
+    leitura dupla em COMPARAR pode logar essa divergência (esperada).
+  - **Tela sem estados fixos**: o workspace devolve `fluxo` (código, segmento, tipo, `proximos_status`,
+    `aceita_resultado`, `final`) calculado por `Workflow.proximos`; os botões de andamento vêm daí.
+  - **Qualificação**: continua sendo os fatores do Go/No-Go (dados que faltam aparecem como UNKNOWN com o motivo);
+    nenhuma tela ou entidade nova.
+  - **Go/No-Go v2** (`bids.go_no_go.v2`): requisito técnico/comercial **obrigatório** NON_COMPLIANT é bloqueio;
+    desejável ou UNKNOWN não bloqueia. Documental segue igual.
+  - **Resposta por requisito** (`resposta`, texto humano; categoria nova `PERGUNTA` para RFI/questionário). A
+    plataforma não escreve em nome da empresa. Log de auditoria sem o texto.
+  - **Proposta C0** (`bids/proposta.py`): esboço determinístico com itens, pendências (REVISAR, RESPONDER,
+    COMPROVAR), documentos do cofre a anexar e prontidão; JSON ou Markdown. Sem IA, 0 AI Credits. Proposal como
+    entidade (versões, envio) fica para quando houver fluxo que grave (Phase E, lado comprador).
+  - **`ProcessWorkspace`** (frontend): moldura de abas compartilhada, aba ativa na URL; licitação (Visão geral,
+    Documentos, Requisitos, Conformidade, Proposta/Resposta) e processo de compra (Visão geral, Documentos, Pesquisa
+    de preços, Timeline) usam o mesmo componente.
+  - **E2E**: um login real por rodada (`auth.setup.ts`) reaproveitado pelas specs que não testam o login, porque o
+    `/auth/login` tem rate limit por IP (5/5min) e a suíte já estava no limite. O limite não foi afrouxado.
+- **Status**: ACEITA.

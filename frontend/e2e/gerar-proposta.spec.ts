@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-import { E2E_EMAIL, E2E_SENHA, login } from "./helpers";
+import { E2E_EMAIL, E2E_SENHA, entrarLogado, SESSAO } from "./helpers";
+
+test.use({ storageState: SESSAO });
 
 const API_BASE = "http://localhost:8000/api/v1";
 
@@ -44,7 +46,7 @@ async function seedNegocio(request: import("@playwright/test").APIRequestContext
 
 test("gera proposta em PDF para uma oportunidade e confirma sucesso na tela", async ({ page, request }) => {
   await seedNegocio(request);
-  await login(page);
+  await entrarLogado(page);
 
   await page.goto("/crm/propostas/nova");
   await expect(page.getByText("Gera uma nova versão de proposta em PDF")).toBeVisible();

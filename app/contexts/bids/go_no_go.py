@@ -4,7 +4,9 @@ Nove fatores do §35 + prazo. Cada fator: status (FAVORAVEL | ATENCAO |
 DESFAVORAVEL | UNKNOWN), motivo e evidência. Fatores sem dado ficam
 UNKNOWN: se metade ou mais estiver UNKNOWN, a recomendação é
 INSUFFICIENT_INFORMATION. Bloqueios (prazo vencido, requisito documental
-NON_COMPLIANT) recomendam NO_GO.
+NON_COMPLIANT e, desde a v2, requisito **obrigatório** NON_COMPLIANT de
+qualquer categoria) recomendam NO_GO. Requisito desejável não atendido pesa
+no Technical Fit, mas não bloqueia; obrigatoriedade UNKNOWN também não.
 """
 
 from datetime import UTC, datetime
@@ -16,7 +18,7 @@ from app.contexts.crm.contract import valor_ganho_por_conta
 from app.models.licitacao import Licitacao
 from app.models.oferta import Oferta
 
-FONTE = "bids.go_no_go.v1"
+FONTE = "bids.go_no_go.v2"  # v2 (Phase C): obrigatório não atendido bloqueia
 F, A, D, U = "FAVORAVEL", "ATENCAO", "DESFAVORAVEL", "UNKNOWN"
 
 
@@ -33,10 +35,15 @@ def recomendar(db: Session, tenant_id: str, licitacao: Licitacao, matriz: dict, 
     tecnicas = [l for l in linhas if l["categoria"] not in CATEGORIAS_DOCUMENTAIS]
     if tecnicas:
         atendidas = sum(1 for l in tecnicas if l["status"] == "COMPLIANT")
+        obrigatorias_nao = [linha for linha in tecnicas if linha.get("obrigatorio") is True and linha["status"] == "NON_COMPLIANT"]
+        if obrigatorias_nao:
+            bloqueios.append(f"{len(obrigatorias_nao)} requisito(s) técnico(s)/comercial(is) obrigatório(s) não atendido(s).")
         pct = atendidas / len(tecnicas)
-        status = F if pct >= 0.7 else A if pct >= 0.4 else D
-        fatores.append(_fator("Technical Fit", status, f"{atendidas} de {len(tecnicas)} requisitos técnicos/comerciais atendidos.",
-                              [l["requisito_id"] for l in tecnicas]))
+        status = D if obrigatorias_nao or pct < 0.4 else F if pct >= 0.7 else A
+        motivo = f"{atendidas} de {len(tecnicas)} requisitos técnicos/comerciais atendidos."
+        if obrigatorias_nao:
+            motivo += f" {len(obrigatorias_nao)} obrigatório(s) não atendido(s)."
+        fatores.append(_fator("Technical Fit", status, motivo, [l["requisito_id"] for l in tecnicas]))
     else:
         fatores.append(_fator("Technical Fit", U, "Nenhum requisito técnico confirmado na matriz."))
 

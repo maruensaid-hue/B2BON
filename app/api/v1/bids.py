@@ -78,6 +78,10 @@ class RevisaoRequisito(BaseModel):
     categoria: Categoria | None = None
 
 
+class RespostaRequisito(BaseModel):
+    resposta: str | None = Field(default=None, max_length=5000)
+
+
 class AjusteConformidade(BaseModel):
     status: StatusConformidade | None
     justificativa: str | None = None
@@ -255,6 +259,25 @@ def ajustar_conformidade(requisito_id: int, dados: AjusteConformidade, tenant_id
     return bids.licitacoes.requisito_dict(bids.licitacoes.ajustar_conformidade(
         db, tenant_id, _usuario_id(ator_id), requisito_id, dados.status, dados.justificativa,
     ))
+
+
+@router.put("/requisitos/{requisito_id}/resposta")
+def responder_requisito(requisito_id: int, dados: RespostaRequisito, tenant_id: str = Depends(get_tenant_id),
+                        ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
+    return bids.licitacoes.requisito_dict(bids.licitacoes.responder_requisito(
+        db, tenant_id, _usuario_id(ator_id), requisito_id, dados.resposta,
+    ))
+
+
+@router.get("/licitacoes/{licitacao_id}/proposta")
+def esboco_proposta(licitacao_id: int, formato: Literal["json", "markdown"] = "json", tenant_id: str = Depends(get_tenant_id),
+                    db: Session = Depends(get_db)):
+    """Esboço determinístico da proposta/resposta (C0, sem IA)."""
+    esboco = bids.proposta.montar(db, tenant_id, bids.licitacoes.obter(db, tenant_id, licitacao_id))
+    if formato == "markdown":
+        return Response(content=bids.proposta.markdown(esboco), media_type="text/markdown; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="proposta-{licitacao_id}.md"'})
+    return esboco
 
 
 @router.get("/licitacoes/{licitacao_id}/matriz")

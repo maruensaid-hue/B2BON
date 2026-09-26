@@ -66,7 +66,7 @@ def test_rfp_privado_vira_segmento_enterprise(client, db_session):
     lic = client.post(f"{B}/licitacoes", json={"titulo": "RFP ACME", "modalidade": "PRIVATE_RFP"}).json()
     novo = db_session.query(ProcessoSourcing).filter_by(origem_tabela="licitacao", origem_id=lic["id"]).one()
     assert (novo.segmento, novo.tipo_processo, novo.workflow, novo.ruleset) == (
-        "ENTERPRISE", "RFP", "ENTERPRISE_RFP_SELL@1", "PRIVATE_RFP@1")
+        "ENTERPRISE", "RFP", "ENTERPRISE_RFP_SELL@2", "PRIVATE_RFP@1")
 
 
 def test_leitura_dupla_detecta_divergencia(client, db_session, monkeypatch, caplog):

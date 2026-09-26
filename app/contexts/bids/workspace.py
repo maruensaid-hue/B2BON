@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 
-from app.contexts.bids import conformidade, contratos, documentos, go_no_go, grafo, licitacoes, prazos, repositorio
+from app.contexts.bids import conformidade, contratos, documentos, fluxo, go_no_go, grafo, licitacoes, prazos, repositorio
 from app.models.contrato_venda_publica import ContratoVendaPublica
 from app.models.decisao_go_no_go import DecisaoGoNoGo
 
@@ -13,8 +13,18 @@ def montar(db: Session, tenant_id: str, licitacao_id: int) -> dict:
     decisoes = (
         db.query(DecisaoGoNoGo).filter_by(tenant_id=tenant_id, licitacao_id=lic.id).order_by(DecisaoGoNoGo.id.desc()).all()
     )
+    fluxo_licitacao, regras = fluxo.configuracao(lic.modalidade)
+    segmento, tipo_processo = fluxo.classificar(lic.modalidade)
     return {
         "licitacao": licitacoes.como_dict(lic),
+        # Phase C: a tela não fixa estados; pergunta ao workflow o que dá para fazer agora
+        "fluxo": {
+            "codigo": fluxo_licitacao.codigo, "ruleset": regras.codigo if regras else None,
+            "segmento": segmento.value, "tipo_processo": tipo_processo,
+            "proximos_status": list(fluxo_licitacao.proximos(lic.status, "status")),
+            "aceita_resultado": bool(fluxo_licitacao.proximos(lic.status, "resultado")),
+            "final": lic.status in fluxo_licitacao.finais,
+        },
         "documentos": [
             documentos.como_dict(d)
             for d in repositorio.VENDA.documentos(db, tenant_id, lic.id)
