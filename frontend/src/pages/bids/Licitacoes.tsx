@@ -73,6 +73,7 @@ function data(valor: string | null): string {
  * cofre de documentos e histórico contra concorrentes. */
 export function Licitacoes() {
   const [licitacoes, setLicitacoes] = useState<Licitacao[]>([]);
+  const [proximo, setProximo] = useState<string | null>(null);
   const [prazos, setPrazos] = useState<Prazo[]>([]);
   const [cofre, setCofre] = useState<DocumentoCofre[]>([]);
   const [concorrentes, setConcorrentes] = useState<Concorrente[]>([]);
@@ -81,12 +82,13 @@ export function Licitacoes() {
   const carregar = useCallback(async () => {
     try {
       const [l, p, c, k] = await Promise.all([
-        api.get<Licitacao[]>("/bids/licitacoes"),
+        api.getPagina<Licitacao>("/bids/licitacoes"),
         api.get<Prazo[]>("/bids/prazos"),
         api.get<DocumentoCofre[]>("/bids/cofre"),
         api.get<Concorrente[]>("/bids/concorrentes"),
       ]);
-      setLicitacoes(l);
+      setLicitacoes(l.itens);
+      setProximo(l.proximoCursor);
       setPrazos(
         p.filter((item) => item.nivel !== "OK" && item.nivel !== "REFERENCIA"),
       );
@@ -104,6 +106,23 @@ export function Licitacoes() {
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  async function carregarMais() {
+    try {
+      const pagina = await api.getPagina<Licitacao>(
+        "/bids/licitacoes",
+        proximo,
+      );
+      setLicitacoes((atuais) => [...atuais, ...pagina.itens]);
+      setProximo(pagina.proximoCursor);
+    } catch (error) {
+      setErro(
+        error instanceof ApiError
+          ? error.message
+          : "Não foi possível carregar mais licitações.",
+      );
+    }
+  }
 
   async function criar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -205,6 +224,16 @@ export function Licitacoes() {
                   </Badge>
                 </Link>
               ))}
+              {proximo && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={carregarMais}
+                >
+                  Carregar mais
+                </Button>
+              )}
             </div>
           )}
           <form

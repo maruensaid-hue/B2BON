@@ -23,8 +23,9 @@ class DocumentoLicitacao(Base):
     tipo_mime: Mapped[str] = mapped_column(String)
     tamanho_bytes: Mapped[int] = mapped_column(Integer)
     sha256: Mapped[str] = mapped_column(String)
-    conteudo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    paginas_texto: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Fase S0: arquivo e texto só carregam quando lidos (download, análise), nunca em listagem.
+    conteudo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
+    paginas_texto: Mapped[list | None] = mapped_column(JSON, nullable=True, deferred=True)
     paginas: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     fonte: Mapped[str] = mapped_column(String)  # UPLOAD | PNCP | URL
     fonte_url: Mapped[str | None] = mapped_column(String, nullable=True)

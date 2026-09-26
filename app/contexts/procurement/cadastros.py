@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.contexts.procurement import tipos
+from app.contexts.shared import paginacao
 from app.models.contrato_compra import ContratoCompra
 from app.models.demanda_compra import DemandaCompra
 from app.models.evento_contrato_compra import EventoContratoCompra
@@ -134,13 +135,20 @@ def aprovar(db: Session, tenant_id: str, usuario_id: int, entidade: str, registr
     return registro
 
 
-def listar(db: Session, tenant_id: str, entidade: str, **filtros) -> list:
+def listar(db: Session, tenant_id: str, entidade: str, cursor: str | None = None, limite: int | None = None,
+           **filtros) -> paginacao.Pagina:
+    """Ordem por id, keyset pelo último id devolvido."""
+    quantidade = paginacao.limite(limite)
     modelo = ENTIDADES[entidade]
     consulta = db.query(modelo).filter_by(tenant_id=tenant_id)
     for campo, valor in filtros.items():
         if valor is not None:
             consulta = consulta.filter(getattr(modelo, campo) == valor)
-    return consulta.order_by(modelo.id).all()
+    posicao = paginacao.decodificar(cursor)
+    if posicao is not None:
+        consulta = consulta.filter(modelo.id > int(posicao["id"]))
+    linhas = consulta.order_by(modelo.id).limit(quantidade + 1).all()
+    return paginacao.fatiar(linhas, quantidade, lambda registro: {"id": registro.id})
 
 
 def como_dict(registro) -> dict:

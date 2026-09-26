@@ -13,8 +13,9 @@ from sqlalchemy import Boolean, Date, DateTime, Float, Integer
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
-from app.contexts.procurement import contract as compras
 from app.contexts.intelligence import contract as intel
+from app.contexts.procurement import contract as compras
+from app.contexts.shared import paginacao
 from app.llm.base import LLMProvider
 from app.models.documento_compras import DocumentoCompras
 from app.models.usuario import Usuario
@@ -203,8 +204,11 @@ def analisar_documento(documento_id: int, confirmar: bool = False, tenant_id: st
 
 
 @router.get("/{recurso}")
-def listar(recurso: str, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
-    return [compras.cadastros.como_dict(r) for r in compras.cadastros.listar(db, tenant_id, _entidade(recurso))]
+def listar(recurso: str, response: Response, cursor: str | None = None, limite: int | None = None,
+           tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
+    """Paginado por cursor (Fase S0): próximo cursor no header `X-Proximo-Cursor`."""
+    pagina = compras.cadastros.listar(db, tenant_id, _entidade(recurso), cursor, limite)
+    return [compras.cadastros.como_dict(r) for r in paginacao.expor(response, pagina)]
 
 
 @router.post("/{recurso}", status_code=201)

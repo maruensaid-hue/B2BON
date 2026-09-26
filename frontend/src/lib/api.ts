@@ -54,6 +54,10 @@ export function limparSessao(): void {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return (await requestComHeaders<T>(path, options)).dados;
+}
+
+async function requestComHeaders<T>(path: string, options: RequestInit = {}): Promise<{ dados: T; headers: Headers }> {
   const token = getToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -84,12 +88,27 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(response.status, corpo.detalhe ?? "Erro inesperado ao chamar a API.");
   }
 
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  if (response.status === 204) return { dados: undefined as T, headers: response.headers };
+  return { dados: (await response.json()) as T, headers: response.headers };
+}
+
+/** Página de uma lista paginada por cursor (Fase S0): o próximo cursor vem
+ * no header `X-Proximo-Cursor`; `null` = última página. */
+export interface Pagina<T> {
+  itens: T[];
+  proximoCursor: string | null;
+}
+
+async function getPagina<T>(path: string, cursor?: string | null): Promise<Pagina<T>> {
+  const separador = path.includes("?") ? "&" : "?";
+  const url = cursor ? `${path}${separador}cursor=${encodeURIComponent(cursor)}` : path;
+  const { dados, headers } = await requestComHeaders<T[]>(url);
+  return { itens: dados, proximoCursor: headers.get("X-Proximo-Cursor") };
 }
 
 export const api = {
   get: <T,>(path: string, options?: { signal?: AbortSignal }) => request<T>(path, options),
+  getPagina,
   post: <T,>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
   put: <T,>(path: string, body?: unknown) =>

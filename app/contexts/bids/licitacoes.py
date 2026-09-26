@@ -2,11 +2,13 @@
 
 from datetime import UTC, datetime
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.contexts.bids import conformidade, go_no_go
 from app.contexts.bids.fontes.base import LicitacaoExterna
 from app.contexts.bids.tipos import CATEGORIAS_REQUISITO, MODALIDADES, STATUS_CONFORMIDADE, STATUS_LICITACAO
+from app.contexts.shared import paginacao
 from app.models.contrato_venda_publica import ContratoVendaPublica
 from app.models.decisao_go_no_go import DecisaoGoNoGo
 from app.models.documento_licitacao import DocumentoLicitacao
@@ -33,11 +35,30 @@ def obter(db: Session, tenant_id: str, licitacao_id: int) -> Licitacao:
     return licitacao
 
 
-def listar(db: Session, tenant_id: str, status: str | None = None) -> list[Licitacao]:
+def listar(db: Session, tenant_id: str, status: str | None = None, cursor: str | None = None,
+           limite: int | None = None) -> paginacao.Pagina[Licitacao]:
+    """Prazo mais próximo primeiro (sem prazo no fim), depois id decrescente.
+    Keyset: a posição é (sem_prazo, prazo, id) da última linha."""
+    quantidade = paginacao.limite(limite)
     consulta = db.query(Licitacao).filter_by(tenant_id=tenant_id)
     if status:
         consulta = consulta.filter_by(status=status)
-    return consulta.order_by(Licitacao.prazo_proposta.is_(None), Licitacao.prazo_proposta, Licitacao.id.desc()).all()
+    posicao = paginacao.decodificar(cursor)
+    if posicao is not None:
+        ultimo_id = int(posicao["id"])
+        if posicao.get("prazo") is None:
+            consulta = consulta.filter(Licitacao.prazo_proposta.is_(None), Licitacao.id < ultimo_id)
+        else:
+            prazo = datetime.fromisoformat(posicao["prazo"])
+            consulta = consulta.filter(or_(
+                Licitacao.prazo_proposta.is_(None),
+                Licitacao.prazo_proposta > prazo,
+                and_(Licitacao.prazo_proposta == prazo, Licitacao.id < ultimo_id),
+            ))
+    linhas = consulta.order_by(Licitacao.prazo_proposta.is_(None), Licitacao.prazo_proposta, Licitacao.id.desc()).limit(
+        quantidade + 1).all()
+    return paginacao.fatiar(linhas, quantidade, lambda lic: {
+        "prazo": lic.prazo_proposta.isoformat() if lic.prazo_proposta else None, "id": lic.id})
 
 
 def _validar(dados: dict) -> None:

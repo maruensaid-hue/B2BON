@@ -77,6 +77,8 @@ export function ComprasPublicas() {
   const [planos, setPlanos] = useState<Registro[]>([]);
   const [processos, setProcessos] = useState<Registro[]>([]);
   const [demandas, setDemandas] = useState<Registro[]>([]);
+  const [proximoProcesso, setProximoProcesso] = useState<string | null>(null);
+  const [maisDemandas, setMaisDemandas] = useState(false);
   const [planoId, setPlanoId] = useState<number | null>(null);
   const [painel, setPainel] = useState<Painel | null>(null);
   const [sinais, setSinais] = useState<{
@@ -94,10 +96,10 @@ export function ComprasPublicas() {
   const carregar = useCallback(async () => {
     try {
       const [o, p, pr, d, s, a, ind] = await Promise.all([
-        api.get<Registro[]>("/procurement/orgaos"),
-        api.get<Registro[]>("/procurement/planos"),
-        api.get<Registro[]>("/procurement/processos"),
-        api.get<Registro[]>("/procurement/demandas"),
+        api.get<Registro[]>("/procurement/orgaos?limite=500"),
+        api.get<Registro[]>("/procurement/planos?limite=500"),
+        api.getPagina<Registro>("/procurement/processos"),
+        api.getPagina<Registro>("/procurement/demandas"),
         api.get<{ aviso: string; sinais: Sinal[]; nao_avaliados: string[] }>(
           "/procurement/riscos",
         ),
@@ -106,8 +108,10 @@ export function ComprasPublicas() {
       ]);
       setOrgaos(o);
       setPlanos(p);
-      setProcessos(pr);
-      setDemandas(d);
+      setProcessos(pr.itens);
+      setProximoProcesso(pr.proximoCursor);
+      setDemandas(d.itens);
+      setMaisDemandas(d.proximoCursor !== null);
       setSinais(s);
       setAcoes(a);
       setIndicadores(ind);
@@ -124,6 +128,23 @@ export function ComprasPublicas() {
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  async function carregarMaisProcessos() {
+    try {
+      const pagina = await api.getPagina<Registro>(
+        "/procurement/processos",
+        proximoProcesso,
+      );
+      setProcessos((atuais) => [...atuais, ...pagina.itens]);
+      setProximoProcesso(pagina.proximoCursor);
+    } catch (error) {
+      setErro(
+        error instanceof ApiError
+          ? error.message
+          : "Não foi possível carregar mais processos.",
+      );
+    }
+  }
 
   useEffect(() => {
     if (planoId === null) return;
@@ -355,6 +376,16 @@ export function ComprasPublicas() {
             {processos.length === 0 && (
               <div className="text-muted">Nenhum processo.</div>
             )}
+            {proximoProcesso && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={carregarMaisProcessos}
+              >
+                Carregar mais
+              </Button>
+            )}
           </div>
           <form onSubmit={novoProcesso} className="mt-3 flex flex-wrap gap-2">
             <Select name="orgao_id" required className="w-48">
@@ -382,7 +413,8 @@ export function ComprasPublicas() {
             </Button>
           </form>
           <div className="mt-2 text-[10px] text-muted">
-            {demandas.length} demanda(s) registrada(s).
+            {demandas.length}
+            {maisDemandas ? "+" : ""} demanda(s) registrada(s).
           </div>
         </Card>
 

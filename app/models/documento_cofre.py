@@ -37,7 +37,8 @@ class DocumentoCofre(Base):
     tipo_mime: Mapped[str | None] = mapped_column(String, nullable=True)
     tamanho_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sha256: Mapped[str | None] = mapped_column(String, nullable=True)
-    conteudo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # Fase S0: arquivo e texto só carregam quando lidos (download, análise), nunca em listagem.
+    conteudo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     enviado_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

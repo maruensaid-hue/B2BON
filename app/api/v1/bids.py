@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
 from app.contexts.bids import contract as bids
 from app.contexts.intelligence import contract as intel
+from app.contexts.shared import paginacao
 from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.models.documento_cofre import DocumentoCofre
@@ -125,8 +126,11 @@ def listar_fontes() -> list[dict]:
 
 
 @router.get("/licitacoes")
-def listar(status: str | None = None, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
-    return [bids.licitacoes.como_dict(lic) for lic in bids.licitacoes.listar(db, tenant_id, status)]
+def listar(response: Response, status: str | None = None, cursor: str | None = None, limite: int | None = None,
+           tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
+    """Paginado por cursor (Fase S0): próximo cursor no header `X-Proximo-Cursor`."""
+    pagina = bids.licitacoes.listar(db, tenant_id, status, cursor, limite)
+    return [bids.licitacoes.como_dict(lic) for lic in paginacao.expor(response, pagina)]
 
 
 @router.post("/licitacoes", status_code=201)

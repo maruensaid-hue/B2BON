@@ -44,6 +44,11 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
     abertos = [p for p in processos if p.status not in STATUS_PROCESSO_FINAIS]
     contratos = db.query(ContratoCompra).filter_by(tenant_id=tenant_id).all()
     orgaos = {o.id: o for o in db.query(OrgaoPublico).filter_by(tenant_id=tenant_id).all()}
+    # Fase S0: uma consulta só para os tipos de documento de todos os processos (antes, uma por processo, com o arquivo).
+    tipos_por_processo: dict[int, set[str]] = {}
+    for doc_processo, doc_tipo in db.query(DocumentoCompras.processo_id, DocumentoCompras.tipo).filter(
+            DocumentoCompras.tenant_id == tenant_id, DocumentoCompras.processo_id.isnot(None)):
+        tipos_por_processo.setdefault(doc_processo, set()).add(doc_tipo)
 
     for i, a in enumerate(abertos):
         for b in abertos[i + 1:]:
@@ -68,7 +73,7 @@ def sinais(db: Session, tenant_id: str, hoje: date | None = None, processo_id: i
                                     {"valor_processo": p.valor_estimado, "valor_pca": item.valor_estimado, "item_pca_id": item.id}))
         esperados = DOCUMENTOS_ESPERADOS.get(p.status, ())
         if esperados:
-            presentes = {d.tipo for d in db.query(DocumentoCompras).filter_by(tenant_id=tenant_id, processo_id=p.id)}
+            presentes = tipos_por_processo.get(p.id, set())
             faltam = [t for t in esperados if t not in presentes]
             if faltam:
                 resultado.append(_sinal("MISSING_DOCUMENTATION", "ATENCAO",
