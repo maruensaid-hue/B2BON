@@ -59,7 +59,7 @@ Como repetir: `B2BON_MEDIR=docs/b2bon/perf/<fase>.json B2BON_BASELINE=docs/b2bon
 | Paridade da S4 (todas as transições) e API | ✅ |
 | Espelho, backfill (instalador novo), leitura dupla ESTRITA, migração e barreiras | ✅ |
 | Postgres 16 (`test_sourcing_s3_pg.py`, concorrência) | ✅ 4/4 |
-| Suíte completa | ver `PROJECT_STATE.md` (baseline de qualidade) |
+| Suíte completa (leitura dupla ESTRITA) | ✅ **2.047 passed** (+5 skipped: 4 Postgres, 1 medição sob demanda) |
 | Ruff | 40 (sem novos) |
 
 ## Fora do escopo (próximas fases)

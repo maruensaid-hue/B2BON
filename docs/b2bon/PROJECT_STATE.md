@@ -42,6 +42,6 @@
 - Desempenho: `docs/b2bon/perf/baseline.json` (antes da expansão) e `fase_a.json`; repetir com `tests/desempenho` a cada fase (§36).
 - Duplicação: `scripts/qualidade/duplicacao.py` — 45 blocos / ~2.185 linhas repetidas (janela 8).
 
-- Backend: 2.040 passed, 4 skipped (4 testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 4/4 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `a3d5f7b9c1e2`).
+- Backend: 2.047 passed, 5 skipped (medição de desempenho sob demanda + 4 testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 4/4 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `a3d5f7b9c1e2`).
 - Ruff: 40 (sem novos). Frontend: lint OK (25 warnings), build OK.
 - E2E: 6/6.
