@@ -44,6 +44,7 @@ const CerebroCorporativo = lazy(() =>
   import("@/pages/inteligencia/CerebroCorporativo").then((m) => ({ default: m.CerebroCorporativo })),
 );
 const Assinatura = lazy(() => import("@/pages/Assinatura").then((m) => ({ default: m.Assinatura })));
+const Valores = lazy(() => import("@/pages/Valores").then((m) => ({ default: m.Valores })));
 const AiCredits = lazy(() => import("@/pages/AiCredits").then((m) => ({ default: m.AiCredits })));
 const FinOpsIa = lazy(() => import("@/pages/admin/FinOpsIa").then((m) => ({ default: m.FinOpsIa })));
 const ApiPlataforma = lazy(() => import("@/pages/admin/ApiPlataforma").then((m) => ({ default: m.ApiPlataforma })));
@@ -380,6 +381,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <Assinatura />
+              </Suspense>
+            }
+          />
+          <Route
+            path="valores"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Valores />
               </Suspense>
             }
           />

@@ -118,6 +118,7 @@ const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
 const ADMIN_NAV_ITEM_INTEGRACOES: NavItem = { path: "/admin/integracoes", label: "Integrações", icon: "🔌" };
 const ADMIN_NAV_ITEM_API: NavItem = { path: "/admin/api", label: "API & Webhooks", icon: "🧩" };
 const ADMIN_NAV_ITEM_IA: NavItem = { path: "/admin/ia", label: "FinOps IA", icon: "📈" };
+const NAV_ITEM_VALORES: NavItem = { path: "/valores", label: "Valores", icon: "💲" };
 const NAV_ITEM_AI_CREDITS: NavItem = { path: "/ai-credits", label: "AI Credits", icon: "💠" };
 const ADMIN_NAV_ITEM_ASSINATURA: NavItem = { path: "/assinatura", label: "Assinatura", icon: "🧾" };
 
@@ -763,6 +764,8 @@ export function AppShell() {
           </div>
 
           {temLicencaAtiva && <NavButton {...NAV_ITEM_CEREBRO} collapsed={collapsed} />}
+
+          <NavButton {...NAV_ITEM_VALORES} collapsed={collapsed} />
 
           {temModuloPredator && (
             <div data-tour-id="leads">

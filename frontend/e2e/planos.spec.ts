@@ -27,23 +27,27 @@ test("página de planos mostra o catálogo sem vender o que não foi lançado", 
   await expect(page.getByText("R$ 924,50")).toBeVisible();
 });
 
-// Fase 15: pacotes de AI Credits vêm da API (catálogo versionado); a
-// franquia do Public Procurement aparece como em definição, sem número.
-test("planos e explicação mostram AI Credits vindos do catálogo", async ({
+// Fase 15: AI Credits em cards (como funciona, incluídos, pacotes e consumo
+// por operação), vindos da API; Public Procurement aparece em definição.
+test("planos e explicação mostram AI Credits em cards vindos do catálogo", async ({
   page,
 }) => {
   await page.goto("/planos");
-  await expect(page.getByText("B2B ON AI Credits")).toBeVisible();
-  await expect(page.getByText("AI 1M", { exact: true })).toBeVisible();
-  await expect(page.getByText("Falar com vendas").first()).toBeVisible();
+  const cards = page.getByTestId("ai-credits-cards");
+  await expect(cards.getByText("B2B ON AI Credits")).toBeVisible();
+  await expect(cards.getByText("Os créditos do plano acumulam?")).toBeVisible();
+  await expect(cards.getByText("AI 1M", { exact: true })).toBeVisible();
+  await expect(cards.getByText("Quanto cada operação consome")).toBeVisible();
+  const procurement = cards.locator("div.rounded-xl", {
+    hasText: "Public Procurement",
+  });
+  await expect(procurement.getByText("Em definição")).toBeVisible();
 
   await page.goto("/como-funcionam-ai-credits");
   await expect(
     page.getByRole("heading", { name: "Como funcionam os AI Credits" }),
   ).toBeVisible();
-  await expect(page.getByText("Os créditos do plano acumulam?")).toBeVisible();
-  const procurement = page.locator("div.rounded-xl", {
-    hasText: "Public Procurement",
-  });
-  await expect(procurement.getByText("Em definição")).toBeVisible();
+  await expect(
+    page.getByTestId("ai-credits-cards").getByText("Pacotes adicionais"),
+  ).toBeVisible();
 });
