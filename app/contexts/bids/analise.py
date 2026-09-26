@@ -71,7 +71,7 @@ def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | No
         requisito = RequisitoLicitacao(
             tenant_id=tenant_id, licitacao_id=documento.licitacao_id, documento_id=documento.id,
             categoria=item.categoria, descricao=item.descricao, evidencia=item.evidencia, pagina=item.pagina,
-            clausula=item.clausula, origem="ia", status="sugerido", correlation_id=correlation_id_atual(),
+            clausula=item.clausula, obrigatorio=item.obrigatorio, origem="ia", status="sugerido", correlation_id=correlation_id_atual(),
         )
         db.add(requisito)
         criados.append(requisito)

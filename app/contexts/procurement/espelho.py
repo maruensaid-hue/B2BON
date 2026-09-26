@@ -69,7 +69,7 @@ def requisitos_do_documento(d: DocumentoCompras) -> list[dict]:
         {"tenant_id": d.tenant_id, "processo_origem": ("processo_contratacao", d.processo_id) if d.processo_id else None,
          "documento_origem": ("documento_compras", d.id), "categoria": a.get("categoria") or "OUTRO",
          "texto": a.get("descricao") or "", "fonte": "AI", "pagina": a.get("pagina"), "clausula": a.get("clausula"),
-         "trecho": a.get("evidencia"), "confianca": "grounded", "status_revisao": a.get("status") or "sugerido",
+         "trecho": a.get("evidencia"), "obrigatorio": a.get("obrigatorio"), "confianca": "grounded", "status_revisao": a.get("status") or "sugerido",
          "correlation_id": a.get("correlation_id")}
         for a in (d.achados or [])
     ]

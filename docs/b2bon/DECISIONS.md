@@ -582,3 +582,26 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Alternativas**: criar as 17 entidades do §6 como tabelas agora (vazias, sem fluxo que grave: contraria §29/§49);
   resolução por `if` em cada contexto (o que §21 pede para evitar).
 - **Status**: ACEITA.
+
+## D-062 · 2026-09-26 · Phase B · Requisito normalizado com obrigatoriedade lida do trecho
+- **Contexto**: Phase B do plano unificado (§38): unificar documentos, extração, requisitos, evidência,
+  proveniência e base de conformidade, validando com edital público e RFP enterprise. Os engines de documento e de
+  extração já eram únicos (S1); faltavam, do §18, a **obrigatoriedade** e a regra de proveniência do requisito digitado
+  por humano fora do contexto de venda.
+- **Decisão**:
+  - `sourcing.requisitos.obrigatoriedade(trecho)`: obrigatório só com linguagem de obrigação no trecho literal
+    ("deverá", "sob pena", "vedado", "must", "shall"…), desejável só com linguagem de preferência ("desejável",
+    "preferencialmente", "poderá", "should"…); nenhuma ou as duas → **UNKNOWN** (`None`). Não se pergunta ao modelo:
+    a obrigatoriedade tem de ser verificável no mesmo trecho que prova o requisito.
+  - `sourcing.requisitos.ancorar_evidencia`: requisito manual que aponta para documento precisa do trecho no texto;
+    a página é calculada. Mesmas mensagens de antes.
+  - Coluna `obrigatorio` (nula) em `requisito_licitacao` e `requisito_sourcing`; chave `obrigatorio` nos achados do
+    comprador. Linhas anteriores ficam UNKNOWN: a migração não infere nada; nova análise classifica.
+  - Humano pode informar a obrigatoriedade no requisito manual (prevalece sobre a dedução).
+  - A matriz de conformidade e a tela mostram o campo. **Go/No-Go não muda** nesta fase: usar a obrigatoriedade na
+    recomendação é decisão de produto da Phase C.
+- **Não feito (e por quê)**: trocar a leitura para as tabelas unificadas (TD-087/088) exige evidência de produção —
+  backfill rodado e zero `SOURCING_DIVERGENCIA` por uma release — que não se obtém daqui. Fica como portão operacional.
+- **Migração**: ADD/DROP COLUMN direto, sem `batch_alter_table`, para o SQLite não recriar `requisito_sourcing` e
+  perder o trigger de lado imutável (coberto por teste no upgrade e no downgrade).
+- **Status**: ACEITA.

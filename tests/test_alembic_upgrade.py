@@ -114,3 +114,48 @@ def test_s3_tabelas_unificadas_backfill_sobre_dados_anteriores(monkeypatch):
         engine.dispose()
         if os.path.exists(caminho_db):
             os.remove(caminho_db)
+
+
+def test_phase_b_obrigatorio_nulo_para_requisito_anterior_e_trigger_preservado(monkeypatch):
+    """Phase B: requisito anterior fica UNKNOWN (nulo), a leitura dupla estrita
+    continua batendo e o trigger de lado de `requisito_sourcing` sobrevive ao
+    upgrade e ao downgrade (ADD/DROP COLUMN sem recriar a tabela)."""
+    import pytest
+    import sqlalchemy as sa
+    from sqlalchemy.orm import Session
+
+    import app.contexts.bids.contract  # noqa: F401 — registra o espelho do vendedor
+    from app.contexts.bids import contract as bids
+    from app.contexts.sourcing import contract as sourcing
+
+    fd, caminho_db = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(caminho_db)
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{caminho_db}")
+    engine = sa.create_engine(f"sqlite:///{caminho_db}")
+
+    def lado_imutavel():
+        with engine.begin() as conexao, pytest.raises(sa.exc.IntegrityError):
+            conexao.execute(sa.text("UPDATE requisito_sourcing SET lado = 'BUY'"))
+
+    try:
+        config = Config("alembic.ini")
+        command.upgrade(config, "a3d5f7b9c1e2")
+        with engine.begin() as conexao:
+            conexao.execute(sa.text("INSERT INTO tenant (id, razao_social) VALUES ('t-b', 't')"))
+            conexao.execute(sa.text("INSERT INTO licitacao (id, tenant_id, titulo, modalidade, fonte, status) "
+                                    "VALUES (1, 't-b', 'Edital', 'PUBLIC_TENDER', 'MANUAL', 'IDENTIFICADA')"))
+            conexao.execute(sa.text("INSERT INTO requisito_licitacao (tenant_id, licitacao_id, categoria, descricao, evidencia, origem, "
+                                    "status) VALUES ('t-b', 1, 'HABILITACAO', 'CND', 'deverá apresentar CND', 'manual', 'confirmado')"))
+        command.upgrade(config, "head")
+        with Session(engine) as db:
+            sourcing.espelho.sincronizar_todos(db)
+            requisito, = bids.repositorio.VENDA.requisitos(db, "t-b", 1)  # leitura dupla ESTRITA
+            assert requisito.obrigatorio is None  # nada inferido retroativamente
+        lado_imutavel()
+        command.downgrade(config, "a3d5f7b9c1e2")
+        lado_imutavel()
+    finally:
+        engine.dispose()
+        if os.path.exists(caminho_db):
+            os.remove(caminho_db)

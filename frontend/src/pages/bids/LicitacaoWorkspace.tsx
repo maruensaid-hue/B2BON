@@ -27,6 +27,7 @@ interface Requisito {
   evidencia: string | null;
   pagina: number | null;
   clausula: string | null;
+  obrigatorio: boolean | null;
   origem: string;
   status: string;
 }
@@ -353,7 +354,11 @@ export function LicitacaoWorkspace() {
                 <div className="flex items-center justify-between gap-2">
                   <span>
                     <span className="text-muted">{r.categoria}:</span>{" "}
-                    <span className="text-text">{r.descricao}</span>
+                    <span className="text-text">{r.descricao}</span>{" "}
+                    {r.obrigatorio === true && (
+                      <Badge tone="violet">Obrigatório</Badge>
+                    )}
+                    {r.obrigatorio === false && <Badge>Desejável</Badge>}
                   </span>
                   {r.status === "sugerido" ? (
                     <span className="flex gap-2">

@@ -71,7 +71,7 @@ def requisito(req: RequisitoLicitacao) -> dict:
         "tenant_id": req.tenant_id, "processo_origem": ("licitacao", req.licitacao_id),
         "documento_origem": ("documento_licitacao", req.documento_id) if req.documento_id else None,
         "categoria": req.categoria, "texto": req.descricao, "fonte": "AI" if req.origem == "ia" else "MANUAL",
-        "pagina": req.pagina, "clausula": req.clausula, "trecho": req.evidencia,
+        "pagina": req.pagina, "clausula": req.clausula, "trecho": req.evidencia, "obrigatorio": req.obrigatorio,
         "confianca": "grounded" if req.origem == "ia" else "manual", "status_revisao": req.status,
         "conformidade_manual": req.conformidade_manual, "justificativa_manual": req.justificativa_manual,
         "revisado_por_usuario_id": req.revisado_por_usuario_id, "revisado_em": req.revisado_em,

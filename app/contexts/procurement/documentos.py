@@ -72,7 +72,7 @@ def analisar(db: Session, llm: LLMProvider, tenant_id: str, usuario_id: int | No
                                            confirmado)
     documento.achados = [
         {"categoria": item.categoria, "descricao": item.descricao, "evidencia": item.evidencia, "pagina": item.pagina,
-         "clausula": item.clausula, "status": "sugerido", "correlation_id": correlation_id_atual()}
+         "clausula": item.clausula, "obrigatorio": item.obrigatorio, "status": "sugerido", "correlation_id": correlation_id_atual()}
         for item in extracao.itens
     ]
     documento.status_analise = "ANALISADO"

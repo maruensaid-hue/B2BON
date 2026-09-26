@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -24,6 +24,8 @@ class RequisitoLicitacao(Base):
     evidencia: Mapped[str | None] = mapped_column(Text, nullable=True)
     pagina: Mapped[int | None] = mapped_column(Integer, nullable=True)
     clausula: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Phase B: obrigatório pela linguagem do trecho; None = UNKNOWN (sem sinal ou anterior à Phase B)
+    obrigatorio: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     origem: Mapped[str] = mapped_column(String)  # ia | manual
     status: Mapped[str] = mapped_column(String)  # sugerido | confirmado | descartado
     conformidade_manual: Mapped[str | None] = mapped_column(String, nullable=True)

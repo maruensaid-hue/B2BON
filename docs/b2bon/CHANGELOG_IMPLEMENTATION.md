@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Phase B — Document & Requirement Engine (2026-09-26, autorizada pelo PO)
+
+- Requisito normalizado com obrigatoriedade (obrigatório / desejável / UNKNOWN) lida da linguagem do trecho literal, igual para edital, TR, RFP e documento do comprador.
+- Regra de proveniência do requisito digitado por humano no engine compartilhado.
+- Migração `b4e6f8a0c2d3`: coluna `obrigatorio` em `requisito_licitacao` e `requisito_sourcing` (anteriores ficam UNKNOWN).
+- Matriz de conformidade e tela de requisitos mostram "Obrigatório"/"Desejável".
+
 ## Phase A — Foundation do plano unificado (2026-09-26, autorizada pelo PO)
 
 - Workflow e ruleset resolvidos num ponto só por (lado, segmento, tipo de processo), com falha fechada sem vínculo.

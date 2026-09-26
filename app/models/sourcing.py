@@ -168,6 +168,7 @@ class RequisitoSourcing(Base):
     pagina: Mapped[int | None] = mapped_column(Integer, nullable=True)
     clausula: Mapped[str | None] = mapped_column(String, nullable=True)
     trecho: Mapped[str | None] = mapped_column(Text, nullable=True)
+    obrigatorio: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # None = UNKNOWN
     confianca: Mapped[str] = mapped_column(String)  # grounded | manual
     status_revisao: Mapped[str] = mapped_column(String)  # sugerido | confirmado | descartado
     conformidade_manual: Mapped[str | None] = mapped_column(String, nullable=True)

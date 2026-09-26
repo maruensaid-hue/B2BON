@@ -60,6 +60,7 @@ def _linha(req, decisao: sourcing.avaliacao.Decisao, documentos) -> dict:
         "requisito_id": req.id,
         "categoria": req.categoria,
         "requisito": req.descricao,
+        "obrigatorio": req.obrigatorio,
         "status": decisao.status,
         "status_calculado": decisao.status,
         "motivo": decisao.motivo,

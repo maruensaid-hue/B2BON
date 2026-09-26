@@ -69,6 +69,7 @@ class RequisitoEntrada(BaseModel):
     pagina: int | None = Field(default=None, ge=1)
     clausula: str | None = None
     evidencia: str | None = None
+    obrigatorio: bool | None = None  # None: deduzido do trecho (ou UNKNOWN)
 
 
 class RevisaoRequisito(BaseModel):
@@ -236,7 +237,7 @@ def criar_requisito(licitacao_id: int, dados: RequisitoEntrada, tenant_id: str =
                     ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
     return bids.licitacoes.requisito_dict(bids.licitacoes.criar_requisito_manual(
         db, tenant_id, _usuario_id(ator_id), licitacao_id, dados.categoria, dados.descricao, dados.documento_id,
-        dados.pagina, dados.clausula, dados.evidencia,
+        dados.pagina, dados.clausula, dados.evidencia, dados.obrigatorio,
     ))
 
 

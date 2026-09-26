@@ -427,8 +427,8 @@ O plano A–I substitui a sequência S5–S8 como ordem de execução. O que S0�
 | Fase nova | Escopo | Relação com S0–S8 | Estado |
 |---|---|---|---|
 | **A · Foundation** | processo canônico, entidades compartilhadas, tipos, lado, segmento, rulesets, fundação de workflow | S1–S4 + fechamento das lacunas (§22 ruleset, §21 resolução central) | ✅ 2026-09-26 (`PHASE_A_COMPLETION.md`) |
-| B · Document & Requirement Engine | documentos, extração, requisitos, evidência, proveniência, conformidade | engines da S1 + troca de leitura da S6 (TD-087/088) | aguardando o PO |
-| C · Sell side | Public Bid + Enterprise Bid (qualificação, conformidade, Go/No-Go, workspace, proposta) | S7 + parte da S5 (`ProcessWorkspace`, §28) | aguardando o PO |
+| **B · Document & Requirement Engine** | documentos, extração, requisitos, evidência, proveniência, conformidade | engines da S1 + obrigatoriedade e proveniência manual no núcleo (D-062); troca de leitura da S6 fica como portão operacional (TD-087/088) | ✅ 2026-09-26 (`PHASE_B_COMPLETION.md`) |
+| C · Sell side | Public Bid + Enterprise Bid (qualificação, conformidade, Go/No-Go, workspace, proposta) | S7 + parte da S5 (`ProcessWorkspace`, §28) | autorizada (execução sequencial) |
 | D · Public buy side | demanda, PCA, processo, fornecedor, avaliação, contrato, risco | Procurement atual sobre os engines; TD-089/090 | aguardando o PO |
 | E · Enterprise buy side | Strategic Sourcing, descoberta, RFI/RFP/RFQ, qualificação, comparação, shortlist, negociação | S8; tabelas de proposta, avaliação, lote e item nascem aqui | aguardando o PO |
 | F · Business Network | publicação/convite, matching, visibilidade, acesso do fornecedor | novo | aguardando o PO |

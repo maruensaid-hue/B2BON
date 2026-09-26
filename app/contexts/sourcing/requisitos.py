@@ -6,16 +6,24 @@ tamanho do bloco). O laço é um só: blocos de páginas → IA via Gateway (uma
 execução de crédito por documento) → cada item só entra se a citação estiver
 literalmente no texto; a página é calculada pelo sistema e a cláusula só vale
 se aparecer na página (D-031). Quem chama decide onde gravar.
+
+Phase B (plano unificado §18): saída normalizada com **obrigatoriedade**,
+lida da própria citação (linguagem de obrigação × de preferência), nunca da
+opinião do modelo; sem sinal claro, UNKNOWN (`None`). A mesma regra de
+proveniência vale para requisito digitado por humano (`ancorar_evidencia`).
 """
+
+import re
 
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence.contract import ContextoIA, execucao, gerar, prompt_seguro
-from app.contexts.shared import grounding
+from app.contexts.shared import grounding, texto
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
+from app.services.errors import ValidacaoFalhou
 
 
 @dataclass(frozen=True)
@@ -36,6 +44,7 @@ class ItemExtraido:
     evidencia: str
     pagina: int
     clausula: str | None
+    obrigatorio: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -76,5 +85,35 @@ def extrair(db: Session, llm: LLMProvider, contexto: ContextoIA, paginas: list[s
                 sem_evidencia += 1
                 continue
             itens.append(ItemExtraido(categoria, descricao, citacao, pagina,
-                                      grounding.clausula_valida(item.get("clausula"), paginas[pagina - 1])))
+                                      grounding.clausula_valida(item.get("clausula"), paginas[pagina - 1]),
+                                      obrigatoriedade(citacao)))
     return Extracao(itens, sem_evidencia, len(blocos), sum(len(b) for b in blocos), len(paginas), len(todos) > perfil.maximo_blocos)
+
+
+# --- Obrigatoriedade: pela linguagem do trecho literal ---------------------------------
+_OBRIGATORIO = re.compile(
+    r"\b(devera|deverao|deve|devem|obrigatori\w*|sob pena|exigid\w*|exige|imprescindive\w*|indispensave\w*|"
+    r"necessariamente|vedad\w*|nao sera aceit\w*|sera (?:des)?classificad\w*|sera inabilitad\w*|"
+    r"must|shall|mandatory|required)\b")
+_DESEJAVEL = re.compile(
+    r"\b(desejave\w*|preferencialmente|preferivel|opcional|opcionalmente|facultativ\w*|podera|poderao|"
+    r"should|optional|preferred|nice to have)\b")
+
+
+def obrigatoriedade(trecho: str | None) -> bool | None:
+    """True se o trecho só tem linguagem de obrigação; False se só de preferência;
+    None (UNKNOWN) se não tem nenhuma ou tem as duas."""
+    normalizado = texto.normalizar(trecho or "")
+    obrigatorio, desejavel = bool(_OBRIGATORIO.search(normalizado)), bool(_DESEJAVEL.search(normalizado))
+    return obrigatorio if obrigatorio != desejavel else None
+
+
+def ancorar_evidencia(paginas: list[str], evidencia: str | None) -> int:
+    """Requisito digitado por humano que aponta para documento: a evidência tem
+    de estar no texto (mesma regra da IA). Devolve a página calculada."""
+    if not evidencia or not evidencia.strip():
+        raise ValidacaoFalhou("Informe o trecho do documento que comprova o requisito.")
+    pagina = texto.localizar_pagina(paginas, evidencia)
+    if pagina is None:
+        raise ValidacaoFalhou("O trecho informado não foi encontrado no documento.")
+    return pagina

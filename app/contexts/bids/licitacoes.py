@@ -8,6 +8,7 @@ from app.contexts.bids import conformidade, fluxo, go_no_go, repositorio
 from app.contexts.bids.fontes.base import LicitacaoExterna
 from app.contexts.bids.tipos import CATEGORIAS_REQUISITO, MODALIDADES, STATUS_CONFORMIDADE
 from app.contexts.shared import paginacao
+from app.contexts.sourcing import contract as sourcing
 from app.models.contrato_venda_publica import ContratoVendaPublica
 from app.models.decisao_go_no_go import DecisaoGoNoGo
 from app.models.documento_licitacao import DocumentoLicitacao
@@ -132,28 +133,24 @@ def listar_requisitos(db: Session, tenant_id: str, licitacao_id: int, incluir_de
 def criar_requisito_manual(
     db: Session, tenant_id: str, usuario_id: int | None, licitacao_id: int, categoria: str, descricao: str,
     documento_id: int | None, pagina: int | None, clausula: str | None, evidencia: str | None,
+    obrigatorio: bool | None = None,
 ) -> RequisitoLicitacao:
     """Requisito digitado por humano. Se aponta para documento, a evidência
-    tem de estar no texto dele (mesma regra de proveniência da IA)."""
+    tem de estar no texto dele (mesma regra de proveniência da IA, no engine
+    compartilhado). Obrigatoriedade: a informada; senão, a do trecho."""
     obter(db, tenant_id, licitacao_id)
     if categoria not in CATEGORIAS_REQUISITO:
         raise ValidacaoFalhou(f"Categoria inválida: {categoria}")
     if documento_id is not None:
-        from app.contexts.shared.texto import localizar_pagina
-
         documento = db.query(DocumentoLicitacao).filter_by(id=documento_id, tenant_id=tenant_id, licitacao_id=licitacao_id).one_or_none()
         if documento is None:
             raise NaoEncontrado(f"Documento {documento_id} não encontrado nesta licitação")
-        if not evidencia:
-            raise ValidacaoFalhou("Informe o trecho do documento que comprova o requisito.")
-        encontrada = localizar_pagina(documento.paginas_texto or [], evidencia)
-        if encontrada is None:
-            raise ValidacaoFalhou("O trecho informado não foi encontrado no documento.")
-        pagina = encontrada
+        pagina = sourcing.requisitos.ancorar_evidencia(documento.paginas_texto or [], evidencia)
     requisito = RequisitoLicitacao(
         tenant_id=tenant_id, licitacao_id=licitacao_id, documento_id=documento_id, categoria=categoria,
         descricao=descricao.strip()[:500], evidencia=evidencia, pagina=pagina if documento_id else None,
-        clausula=clausula, origem="manual", status="confirmado", revisado_por_usuario_id=usuario_id,
+        clausula=clausula, obrigatorio=obrigatorio if obrigatorio is not None else sourcing.requisitos.obrigatoriedade(evidencia),
+        origem="manual", status="confirmado", revisado_por_usuario_id=usuario_id,
         revisado_em=datetime.now(UTC),
     )
     db.add(requisito)
@@ -287,6 +284,6 @@ def requisito_dict(r: RequisitoLicitacao) -> dict:
     return {
         "id": r.id, "licitacao_id": r.licitacao_id, "documento_id": r.documento_id, "categoria": r.categoria,
         "descricao": r.descricao, "evidencia": r.evidencia, "pagina": r.pagina, "clausula": r.clausula,
-        "origem": r.origem, "status": r.status, "conformidade_manual": r.conformidade_manual,
+        "obrigatorio": r.obrigatorio, "origem": r.origem, "status": r.status, "conformidade_manual": r.conformidade_manual,
         "justificativa_manual": r.justificativa_manual, "criado_em": r.criado_em,
     }

@@ -138,3 +138,13 @@ def test_fit_da_rede_passa_a_casar_cnae_pontuado_com_digitos():
     digitado e o fit da rede comparava sem normalizar ("8610-1/01" ≠ "8610101")."""
     resultado = matching.combinar(matching.criterios_icp(["8610-1/01"], ["SP"], "grande", "8610101", None, "grande"))
     assert resultado.pontuacao == 0.7 and resultado.faltantes == ["sede_uf"] and resultado.confianca == "media"
+
+
+def test_obrigatoriedade_vem_so_da_linguagem_do_trecho():
+    o = sourcing.requisitos.obrigatoriedade
+    assert o("A licitante deverá apresentar CND") is True and o("sob pena de desclassificação") is True
+    assert o("The vendor must provide SLA") is True and o("É vedada a subcontratação") is True
+    assert o("É desejável certificação ISO") is False and o("Vendors should have an office") is False
+    assert o("Poderá haver prorrogação") is False
+    assert o("Garantia de cinco anos") is None and o(None) is None  # sem sinal: UNKNOWN
+    assert o("deverá, preferencialmente, ter escritório") is None  # sinais opostos: UNKNOWN, nunca um palpite
