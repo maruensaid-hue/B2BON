@@ -431,7 +431,7 @@ O plano A–I substitui a sequência S5–S8 como ordem de execução. O que S0�
 | **C · Sell side** | Public Bid + Enterprise Bid (qualificação, conformidade, Go/No-Go, workspace, proposta) | S7 + S5 (`ProcessWorkspace`, §28): modalidades privadas, `ENTERPRISE_RFP_SELL@2`, Go/No-Go v2, resposta, proposta C0 (D-063) | ✅ 2026-09-26 (`PHASE_C_COMPLETION.md`) |
 | **D · Public buy side** | demanda, PCA, processo, fornecedor, avaliação, contrato, risco | Procurement atual sobre os engines; TD-090 resolvido; workflow + ruleset na tela; cadastro 422 (D-064) | ✅ 2026-09-26 (`PHASE_D_COMPLETION.md`) |
 | **E · Enterprise buy side** | Strategic Sourcing, descoberta, RFI/RFP/RFQ, qualificação, comparação, shortlist, negociação | S8: nativo no modelo unificado; participante, item, proposta, avaliação; 3 workflows por tipo; aprovação humana (D-065) | ✅ 2026-09-26 (`PHASE_E_COMPLETION.md`) |
-| F · Business Network | publicação/convite, matching, visibilidade, acesso do fornecedor | novo | aguardando o PO |
+| **F · Business Network** | publicação/convite, matching, visibilidade, acesso do fornecedor | convite (sem vitrine), link secreto sem assento, convites na conta da rede, visão restrita, esclarecimentos, anexos (D-066) | ✅ 2026-09-26 (`PHASE_F_COMPLETION.md`) |
 | G · Intelligence | IA de requisitos, avaliação, bids, procurement, fornecedor, risco | capabilities pelo AI Gateway | aguardando o PO |
 | H · Optimization | duplicação, bundle, latência, consultas, memória, custo de IA | usa `scripts/qualidade/duplicacao.py` e `tests/desempenho` | aguardando o PO |
 | I · Commercialization | planos, módulos, entitlements, AI Credits, página de vendas, assinatura | OI-021 (autorizada; executa na vez dela) | aguardando a vez |

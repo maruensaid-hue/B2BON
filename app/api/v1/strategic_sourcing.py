@@ -9,6 +9,7 @@ from datetime import date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -218,3 +219,35 @@ def contratar(processo_id: int, dados: ContratoEntrada, tenant_id: str = Depends
               ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
     return estrategico.serializar(estrategico.contratar(db, tenant_id, _usuario_id(ator_id), processo_id, dados.model_dump()),
                              estrategico.CAMPOS_CONTRATO)
+
+
+# --- Phase F: acesso do fornecedor, esclarecimentos e anexos ----------------------------------
+class AcessoEntrada(BaseModel):
+    email: str | None = Field(default=None, max_length=200)
+
+
+class RespostaEsclarecimento(BaseModel):
+    resposta: str = Field(min_length=1, max_length=5000)
+
+
+@router.post("/processos/{processo_id}/participantes/{participante_id}/acesso")
+def gerar_acesso(processo_id: int, participante_id: int, dados: AcessoEntrada, tenant_id: str = Depends(get_tenant_id),
+                 ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
+    """O segredo aparece só nesta resposta; o link usa fragmento (`#`), que o navegador não envia ao servidor."""
+    token = compras.portal.gerar_acesso(db, tenant_id, _usuario_id(ator_id), processo_id, participante_id, dados.email)
+    return {"token": token, "caminho": f"/portal-fornecedor#{token}",
+            "aviso": "Guarde ou envie agora: o link não é mostrado de novo. Gerar outro invalida este."}
+
+
+@router.put("/esclarecimentos/{esclarecimento_id}")
+def responder_esclarecimento(esclarecimento_id: int, dados: RespostaEsclarecimento, tenant_id: str = Depends(get_tenant_id),
+                             ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
+    esclarecimento = compras.portal.responder_esclarecimento(db, tenant_id, _usuario_id(ator_id), esclarecimento_id, dados.resposta)
+    return {"id": esclarecimento.id, "pergunta": esclarecimento.pergunta, "resposta": esclarecimento.resposta}
+
+
+@router.get("/anexos/{anexo_id}")
+def baixar_anexo(anexo_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> Response:
+    anexo = compras.portal.baixar_anexo(db, tenant_id, anexo_id)
+    return Response(content=anexo.conteudo, media_type=anexo.tipo_mime,
+                    headers={"Content-Disposition": f'attachment; filename="anexo-{anexo.id}"', "X-Content-SHA256": anexo.sha256})

@@ -16,6 +16,7 @@ from app.contexts.procurement import (
     metricas,
     nba,
     planejamento,
+    portal,
     precos,
     repositorio,
     riscos,
@@ -24,7 +25,7 @@ from app.contexts.procurement import (
 )
 
 __all__ = [
-    "cadastros", "contratos", "demandas", "documentos", "estrategico", "fluxo", "fornecedores", "metricas", "nba", "planejamento", "precos", "repositorio", "riscos", "tipos",
+    "cadastros", "contratos", "demandas", "documentos", "estrategico", "fluxo", "fornecedores", "metricas", "nba", "planejamento", "portal", "precos", "repositorio", "riscos", "tipos",
     "workspace",
 ]
 

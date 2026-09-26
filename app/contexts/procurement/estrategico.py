@@ -201,7 +201,7 @@ def definir_participante(db: Session, tenant_id: str, usuario_id: int | None, pr
 
 
 # --- Respostas, propostas e rodadas (§13–§15) -----------------------------------------------
-def registrar_proposta(db: Session, tenant_id: str, usuario_id: int | None, processo_id: int, dados: dict):
+def registrar_proposta(db: Session, tenant_id: str, usuario_id: int | None, processo_id: int, dados: dict, canal: str = "COMPRADOR"):
     """Resposta (RFI) ou proposta (RFP/RFQ) recebida. Cada nova proposta do mesmo participante é uma rodada."""
     processo = obter(db, tenant_id, processo_id)
     if processo.status not in ("RECEBENDO_PROPOSTAS", "RECEBENDO_RESPOSTAS", "EM_NEGOCIACAO"):
@@ -225,7 +225,7 @@ def registrar_proposta(db: Session, tenant_id: str, usuario_id: int | None, proc
         tipo="RESPOSTA" if processo.tipo_processo in ("RFI", "EOI", "VENDOR_QUALIFICATION") else "PROPOSTA",
         valor_total=valor, moeda=dados.get("moeda") or processo.moeda, prazo_entrega_dias=dados.get("prazo_entrega_dias"),
         condicoes_pagamento=dados.get("condicoes_pagamento"), impostos_inclusos=dados.get("impostos_inclusos"),
-        validade=dados.get("validade"), observacoes=dados.get("observacoes"), criado_por_usuario_id=usuario_id,
+        validade=dados.get("validade"), observacoes=dados.get("observacoes"), criado_por_usuario_id=usuario_id, canal=canal,
     )
     for preco in precos:
         nativo.criar(db, "proposta_item", LADO, tenant_id, proposta_id=proposta.id, item_id=preco["item_id"],
@@ -236,7 +236,7 @@ def registrar_proposta(db: Session, tenant_id: str, usuario_id: int | None, proc
     if participante.status == "CONVIDADO":
         nativo.atualizar(db, participante, status="RESPONDEU")
     _auditar(db, tenant_id, usuario_id, "sourcing_proposta_registrada", processo.id,
-             {"participante_id": participante.id, "rodada": proposta.rodada})  # sem valores no log
+             {"participante_id": participante.id, "rodada": proposta.rodada, "canal": canal})  # sem valores no log
     db.commit()
     return proposta
 
@@ -408,9 +408,10 @@ CAMPOS_PROCESSO = ("id", "tipo_processo", "titulo", "descricao", "status", "work
                    "publicado_em", "criado_em")
 CAMPOS_REQUISITO = ("id", "categoria", "texto", "obrigatorio", "peso")
 CAMPOS_ITEM = ("id", "descricao", "quantidade", "unidade", "especificacao")
-CAMPOS_PARTICIPANTE = ("id", "nome", "cnpj", "origem_descoberta", "status", "motivo", "fornecedor_id", "empresa_rede_tenant_id")
+CAMPOS_PARTICIPANTE = ("id", "nome", "cnpj", "origem_descoberta", "status", "motivo", "fornecedor_id", "empresa_rede_tenant_id", "email",
+                       "token_gerado_em")
 CAMPOS_PROPOSTA = ("id", "participante_id", "rodada", "tipo", "valor_total", "moeda", "prazo_entrega_dias", "condicoes_pagamento",
-                   "impostos_inclusos", "validade", "observacoes", "recebida_em")
+                   "impostos_inclusos", "validade", "observacoes", "canal", "recebida_em")
 CAMPOS_CONTRATO = ("id", "contraparte_nome", "numero", "objeto", "valor_inicial", "vigencia_inicio", "vigencia_fim", "status")
 
 
@@ -445,4 +446,9 @@ def workspace(db: Session, tenant_id: str, processo_id: int) -> dict:
              "nota": float(a.nota) if a.nota is not None else None, "justificativa": a.justificativa}
             for a in avaliacoes if a.proposta_id == p.id]} for p in propostas],
         "contratos": [serializar(c, CAMPOS_CONTRATO) for c in nativo.listar(db, "contrato", LADO, tenant_id, processo_id=processo.id)],
+        # Phase F: perguntas dos fornecedores (o comprador vê quem perguntou) e anexos das propostas (sem o arquivo)
+        "esclarecimentos": [{"id": e.id, "participante_id": e.participante_id, "pergunta": e.pergunta, "resposta": e.resposta}
+                            for e in nativo.listar(db, "esclarecimento", LADO, tenant_id, processo_id=processo.id)],
+        "anexos": [{"id": a.id, "proposta_id": a.proposta_id, "nome_arquivo": a.nome_arquivo, "tamanho_bytes": a.tamanho_bytes}
+                   for a in (nativo.listar(db, "anexo", LADO, tenant_id, proposta_id=ids) if ids else [])],
     }

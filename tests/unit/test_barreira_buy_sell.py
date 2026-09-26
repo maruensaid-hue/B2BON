@@ -19,7 +19,7 @@ MODELOS_COMPRADOR = {
     "orgao_publico", "unidade_compras", "plano_contratacao", "item_pca", "demanda_compra", "processo_contratacao",
     "evento_processo", "fornecedor_compras", "contrato_compra", "evento_contrato_compra", "pesquisa_preco", "documento_compras",
 }
-PERMITIDOS = (APP / "contexts" / "procurement", APP / "api" / "v1" / "procurement.py", APP / "api" / "v1" / "strategic_sourcing.py", APP / "models")
+PERMITIDOS = (APP / "contexts" / "procurement", APP / "api" / "v1" / "procurement.py", APP / "api" / "v1" / "strategic_sourcing.py", APP / "api" / "v1" / "portal_fornecedor.py", APP / "models")
 
 
 def _permitido(arquivo: Path) -> bool:

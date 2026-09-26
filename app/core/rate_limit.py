@@ -49,6 +49,9 @@ limitador_ia = LimitadorEmMemoria()
 # API de produto por chave de tenant (Fase 3) — bucket próprio por chave.
 limitador_api = LimitadorEmMemoria()
 
+# Portal do fornecedor por link (Phase F) — rota sem login: bucket por IP.
+limitador_portal = LimitadorEmMemoria()
+
 
 def limitar_por_ip(max_tentativas: int = 5, janela_segundos: int = 300):
     """Dependency factory — protege rotas públicas de autenticação contra

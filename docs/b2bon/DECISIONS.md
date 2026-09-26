@@ -683,3 +683,28 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Fora do escopo**: portal do fornecedor (Phase F), IA de avaliação/comparação (Phase G), documentos anexados às
   propostas (fica para a Phase F, com o acesso do fornecedor).
 - **Status**: ACEITA.
+
+## D-066 · 2026-09-26 · Phase F · Acesso do fornecedor por convite, sem vitrine e sem assento
+- **Contexto**: Phase F (§42, §17, §23): publicação/convite de RFP, matching de fornecedores, visibilidade controlada
+  e acesso do fornecedor para responder, sem transformar a rede em canal de informação restrita.
+- **Decisão**:
+  - **Só por convite**: não há listagem pública de processos na rede. Matching e convite continuam os da Phase E
+    (perfis que o comprador pode ver). O processo só existe para o fornecedor depois de publicado.
+  - **Duas entradas para o mesmo convite** (`procurement/portal.py`):
+    - **link secreto** (Supplier Guest, sem login e **sem assento**): `secrets.token_urlsafe(32)`, só o SHA-256 é
+      guardado; gerar de novo revoga o anterior; o segredo vai no cabeçalho `X-Convite-Token` (o log de acesso
+      registra caminhos) e a página o lê do fragmento `#` (que o navegador não envia a servidor nenhum); rate
+      limit por IP; link inválido ou revogado responde 404 genérico;
+    - **conta da Business Network**: a empresa convidada vê "Convites de compra" e responde logada, só nos convites
+      em que ela é o participante.
+  - **Visão restrita**: título, descrição, tipo, prazo, requisitos **sem peso**, itens, esclarecimentos respondidos
+    **sem dizer quem perguntou**, as próprias perguntas, propostas e situação. Nunca: outros participantes, avaliações,
+    notas, valor estimado, aprovação, comparação. Situação do processo traduzida (ABERTO, EM_ANALISE, EM_NEGOCIACAO só
+    para quem está na shortlist, ENCERRADO, CANCELADO).
+  - **O fornecedor**: pergunta enquanto aberto, envia proposta/resposta (mesma regra da Phase E: negociação só para a
+    shortlist; RFQ para todos), anexa evidência (PDF/texto, validação do Document Engine, até 10 por proposta,
+    arquivo só lido no download), declina. Proposta marcada `canal = PORTAL`.
+  - **O comprador**: gera o link (mostrado uma vez), responde esclarecimentos (resposta vai para todos), baixa anexos.
+  - **Tabelas novas**: `esclarecimento_sourcing`, `anexo_sourcing` (lado imutável); acesso e e-mail no participante.
+  - Nada disso usa IA nem escreve no CRM, no Bid Intelligence ou no Corporate Brain da empresa convidada.
+- **Status**: ACEITA.

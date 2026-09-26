@@ -46,6 +46,10 @@ const SourcingProcessos = lazy(() =>
 const SourcingWorkspace = lazy(() =>
   import("@/pages/sourcing/SourcingWorkspace").then((m) => ({ default: m.SourcingWorkspace })),
 );
+const PortalLink = lazy(() => import("@/pages/portal/PortalLink").then((m) => ({ default: m.PortalLink })));
+const ConvitesRecebidos = lazy(() =>
+  import("@/pages/portal/ConvitesRecebidos").then((m) => ({ default: m.ConvitesRecebidos })),
+);
 const CerebroCorporativo = lazy(() =>
   import("@/pages/inteligencia/CerebroCorporativo").then((m) => ({ default: m.CerebroCorporativo })),
 );
@@ -123,6 +127,14 @@ export default function App() {
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/termos" element={<Termos />} />
       <Route path="/pagamento/retorno" element={<PagamentoRetorno />} />
+      <Route
+        path="/portal-fornecedor"
+        element={
+          <Suspense fallback={<CarregandoPagina />}>
+            <PortalLink />
+          </Suspense>
+        }
+      />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
@@ -331,6 +343,22 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <SourcingProcessos />
+              </Suspense>
+            }
+          />
+          <Route
+            path="convites-compra"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <ConvitesRecebidos />
+              </Suspense>
+            }
+          />
+          <Route
+            path="convites-compra/:id"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <ConvitesRecebidos />
               </Suspense>
             }
           />

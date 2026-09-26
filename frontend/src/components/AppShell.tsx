@@ -87,6 +87,9 @@ const NAV_ITEM_COMPRAS: NavItem = { path: "/compras", label: "Compras públicas"
 // Strategic Sourcing (Phase E) — só com o módulo "sourcing" (comprador privado).
 const NAV_ITEM_SOURCING: NavItem = { path: "/sourcing", label: "Strategic Sourcing", icon: "🧭", end: false };
 
+// Convites de compra recebidos pela empresa na rede (Phase F) — qualquer empresa logada, sem módulo.
+const NAV_ITEM_CONVITES: NavItem = { path: "/convites-compra", label: "Convites de compra", icon: "📨", end: false };
+
 // RO (Registro de Oportunidade) — deal registration: qualquer papel
 // registra/vê as próprias oportunidades; "Aprovar Descontos" é só de
 // quem decide desconto pra toda a rede (admin do tenant raiz/distribuidor,
@@ -771,6 +774,7 @@ export function AppShell() {
           <div data-tour-id="rede-social">
             <NavButton {...NAV_ITEM_REDE_SOCIAL} collapsed={collapsed} />
           </div>
+          <NavButton {...NAV_ITEM_CONVITES} collapsed={collapsed} />
 
           {temLicencaAtiva && <NavButton {...NAV_ITEM_CEREBRO} collapsed={collapsed} />}
 

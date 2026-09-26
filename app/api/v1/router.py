@@ -53,6 +53,8 @@ from app.api.v1.plataforma_api import router as plataforma_api_router
 from app.api.v1.produto.map_api import router as map_api_router
 from app.api.v1.produto.predator_api import router as predator_api_router
 from app.api.v1.procurement import router as procurement_router
+from app.api.v1.portal_fornecedor import router_link as portal_fornecedor_link_router
+from app.api.v1.portal_fornecedor import router_rede as portal_fornecedor_rede_router
 from app.api.v1.strategic_sourcing import router as strategic_sourcing_router
 from app.api.v1.prospeccao_contas import router as prospeccao_contas_router
 from app.api.v1.regras_aprendidas import router as regras_aprendidas_router
@@ -172,6 +174,10 @@ router.include_router(revenue_intelligence_router, dependencies=_exige_crm)
 router.include_router(bids_router, dependencies=_exige_bids)
 router.include_router(procurement_router, dependencies=_exige_procurement)
 router.include_router(strategic_sourcing_router, dependencies=_exige_sourcing)
+# Portal do fornecedor (Phase F): por link, sem login nem licença (Supplier Guest, com rate limit por IP);
+# pela conta da rede, só login — o fornecedor não precisa contratar nada para responder.
+router.include_router(portal_fornecedor_link_router)
+router.include_router(portal_fornecedor_rede_router)
 router.include_router(rede_social_router)
 router.include_router(inteligencia_rede_router, dependencies=_exige_predator)
 router.include_router(inteligencia_rede_crm_router, dependencies=_exige_organizacao)

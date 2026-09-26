@@ -16,8 +16,10 @@ from sqlalchemy.orm import Session
 
 from app.contexts.sourcing.tipos import Lado
 from app.models.sourcing import (
+    AnexoSourcing,
     AvaliacaoSourcing,
     ContratoSourcing,
+    EsclarecimentoSourcing,
     EventoSourcing,
     ItemSourcing,
     ParticipanteSourcing,
@@ -32,11 +34,13 @@ ORIGEM = "nativo"
 MODELOS = {
     "processo": ProcessoSourcing, "requisito": RequisitoSourcing, "contrato": ContratoSourcing, "evento": EventoSourcing,
     "participante": ParticipanteSourcing, "item": ItemSourcing, "proposta": PropostaSourcing,
-    "proposta_item": PropostaItemSourcing, "avaliacao": AvaliacaoSourcing,
+    "proposta_item": PropostaItemSourcing, "avaliacao": AvaliacaoSourcing, "esclarecimento": EsclarecimentoSourcing,
+    "anexo": AnexoSourcing,
 }
 _COM_ORIGEM = {"processo", "requisito", "contrato", "evento"}
 _NOMES = {"processo": "Processo", "requisito": "Requisito", "participante": "Participante", "item": "Item", "proposta": "Proposta",
-          "contrato": "Contrato", "evento": "Evento", "proposta_item": "Item da proposta", "avaliacao": "Avaliação"}
+          "contrato": "Contrato", "evento": "Evento", "proposta_item": "Item da proposta", "avaliacao": "Avaliação",
+          "esclarecimento": "Esclarecimento", "anexo": "Anexo"}
 
 
 def criar(db: Session, entidade: str, lado: Lado, tenant_id: str, **campos):
@@ -89,3 +93,16 @@ def atualizar(db: Session, registro, **campos):
 def apagar(db: Session, registro) -> None:
     db.delete(registro)
     db.flush()
+
+
+def participante_por_token(db: Session, lado: Lado, token_hash: str) -> ParticipanteSourcing | None:
+    """Acesso do fornecedor pelo link (Phase F): o tenant vem da própria linha, achada só pelo hash do segredo."""
+    return db.query(ParticipanteSourcing).filter(ParticipanteSourcing.token_hash == token_hash,
+                                                 ParticipanteSourcing.lado == lado.value).one_or_none()
+
+
+def participantes_da_empresa(db: Session, lado: Lado, empresa_rede_tenant_id: str) -> list[ParticipanteSourcing]:
+    """Convites recebidos por uma empresa da rede, de qualquer comprador (Phase F): só as linhas em que ela é o participante."""
+    return (db.query(ParticipanteSourcing)
+            .filter(ParticipanteSourcing.empresa_rede_tenant_id == empresa_rede_tenant_id, ParticipanteSourcing.lado == lado.value)
+            .order_by(ParticipanteSourcing.id.desc()).all())

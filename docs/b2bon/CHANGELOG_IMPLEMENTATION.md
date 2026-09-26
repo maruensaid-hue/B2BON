@@ -1,5 +1,13 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Phase F — Business Network e acesso do fornecedor (2026-09-26, autorizada pelo PO)
+
+- Link de acesso por participante (mostrado uma vez; só o hash é guardado) para o fornecedor responder sem login e sem ocupar assento.
+- Empresas da rede veem "Convites de compra" na própria conta e respondem por lá.
+- Portal: convite, requisitos, itens, esclarecimentos (publicados sem dizer quem perguntou), perguntas, proposta, anexos e declínio.
+- Comprador responde esclarecimentos, vê propostas enviadas pelo fornecedor e baixa anexos.
+- Migração `e1b3d5f7a9c0`: esclarecimentos, anexos, acesso do participante, canal da proposta.
+
 ## Phase E — Enterprise Strategic Sourcing (2026-09-26, autorizada pelo PO)
 
 - Novo módulo Strategic Sourcing (`/sourcing`, menu próprio): RFP, RFQ, RFI, EOI, concorrência privada, qualificação e evento estratégico.

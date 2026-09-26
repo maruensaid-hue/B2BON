@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
 import { ProcessWorkspace } from "@/components/sourcing/ProcessWorkspace";
+import { CamposProposta } from "@/components/sourcing/CamposProposta";
+import { lerProposta } from "@/components/sourcing/lerProposta";
 import { ProximosStatus } from "@/components/sourcing/ProximosStatus";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
-import { api, mensagemErro } from "@/lib/api";
+import { api, getBlob, mensagemErro } from "@/lib/api";
 import {
   CATEGORIAS_SOURCING,
   ROTULO_PARTICIPANTE,
@@ -50,6 +52,7 @@ interface Proposta {
   valor_total: number | null;
   prazo_entrega_dias: number | null;
   condicoes_pagamento: string | null;
+  canal: string;
   avaliacoes: Avaliacao[];
 }
 interface Workspace {
@@ -81,6 +84,13 @@ interface Workspace {
     valor_inicial: number | null;
     status: string;
   }[];
+  esclarecimentos: {
+    id: number;
+    participante_id: number;
+    pergunta: string;
+    resposta: string | null;
+  }[];
+  anexos: { id: number; proposta_id: number; nome_arquivo: string }[];
 }
 interface Candidato {
   origem: string;
@@ -133,6 +143,10 @@ export function SourcingWorkspace() {
   const [ws, setWs] = useState<Workspace | null>(null);
   const [candidatos, setCandidatos] = useState<Candidato[] | null>(null);
   const [comparacao, setComparacao] = useState<Comparacao | null>(null);
+  const [link, setLink] = useState<{
+    participanteId: number;
+    url: string;
+  } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const url = `/sourcing/processos/${id}`;
@@ -545,6 +559,40 @@ export function SourcingWorkspace() {
                   </Button>
                 </>
               )}
+              {!fluxo.final &&
+                !["DECLINOU", "DESQUALIFICADO"].includes(p.status) && (
+                  <button
+                    type="button"
+                    className="text-cyan"
+                    disabled={ocupado}
+                    onClick={() =>
+                      executar(async () => {
+                        const acesso = await api.post<{ caminho: string }>(
+                          `${url}/participantes/${p.id}/acesso`,
+                          {},
+                        );
+                        setLink({
+                          participanteId: p.id,
+                          url: `${window.location.origin}${acesso.caminho}`,
+                        });
+                      })
+                    }
+                  >
+                    Link de acesso
+                  </button>
+                )}
+              {link?.participanteId === p.id && (
+                <div className="w-full rounded-md border border-border p-1.5 text-[10px]">
+                  Envie ao fornecedor (aparece só agora; gerar outro invalida
+                  este):{" "}
+                  <span
+                    className="break-all text-text"
+                    data-testid="link-acesso"
+                  >
+                    {link.url}
+                  </span>
+                </div>
+              )}
               {p.motivo && (
                 <div className="w-full text-[10px] text-muted">{p.motivo}</div>
               )}
@@ -555,6 +603,53 @@ export function SourcingWorkspace() {
           )}
         </div>
       </Card>
+      {ws.esclarecimentos.length > 0 && (
+        <Card className="lg:col-span-2">
+          <SectionLabel>
+            Esclarecimentos (a resposta vai para todos, sem dizer quem
+            perguntou)
+          </SectionLabel>
+          {ws.esclarecimentos.map((e) => (
+            <form
+              key={e.id}
+              className="flex flex-wrap items-center gap-2 border-b border-border py-1 text-[11px]"
+              onSubmit={formulario((form) =>
+                api.put(`/sourcing/esclarecimentos/${e.id}`, {
+                  resposta: String(form.get("resposta") ?? ""),
+                }),
+              )}
+            >
+              <span className="flex-1">
+                <span className="text-muted">
+                  {nomeParticipante(e.participante_id)}:
+                </span>{" "}
+                {e.pergunta}
+                {e.resposta && (
+                  <div className="text-muted">Resposta: {e.resposta}</div>
+                )}
+              </span>
+              {!e.resposta && (
+                <>
+                  <Input
+                    name="resposta"
+                    required
+                    placeholder="Resposta"
+                    className="w-64"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="ghost"
+                    disabled={ocupado}
+                  >
+                    Responder
+                  </Button>
+                </>
+              )}
+            </form>
+          ))}
+        </Card>
+      )}
     </div>
   );
 
@@ -574,21 +669,7 @@ export function SourcingWorkspace() {
             onSubmit={formulario((form) =>
               api.post(`${url}/propostas`, {
                 participante_id: Number(form.get("participante_id")),
-                valor_total: numero(form, "valor_total"),
-                prazo_entrega_dias: numero(form, "prazo"),
-                condicoes_pagamento: texto(form, "pagamento"),
-                itens: ws.itens
-                  .filter((i) => texto(form, `item-${i.id}`) !== null)
-                  .map((i) => ({
-                    item_id: i.id,
-                    preco_unitario: Number(form.get(`item-${i.id}`)),
-                  })),
-                respostas: perguntas
-                  .filter((r) => texto(form, `req-${r.id}`) !== null)
-                  .map((r) => ({
-                    requisito_id: r.id,
-                    resposta: texto(form, `req-${r.id}`),
-                  })),
+                ...lerProposta(form, ws.itens, perguntas),
               }),
             )}
           >
@@ -599,47 +680,11 @@ export function SourcingWorkspace() {
                 </option>
               ))}
             </Select>
-            {!fluxo.com_itens && (
-              <Input
-                name="valor_total"
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="Valor total"
-                className="w-32"
-              />
-            )}
-            <Input
-              name="prazo"
-              type="number"
-              min={0}
-              placeholder="Prazo (dias)"
-              className="w-28"
+            <CamposProposta
+              itens={ws.itens}
+              respostas={perguntas}
+              valorTotal={!fluxo.com_itens}
             />
-            <Input
-              name="pagamento"
-              placeholder="Condições de pagamento"
-              className="w-44"
-            />
-            {ws.itens.map((i) => (
-              <Input
-                key={i.id}
-                name={`item-${i.id}`}
-                type="number"
-                min={0}
-                step="0.0001"
-                placeholder={`Preço unit. ${i.descricao}`}
-                className="w-44"
-              />
-            ))}
-            {perguntas.map((r) => (
-              <Input
-                key={r.id}
-                name={`req-${r.id}`}
-                placeholder={r.texto}
-                className="w-full"
-              />
-            ))}
             <Button type="submit" size="sm" disabled={ocupado}>
               Registrar
             </Button>
@@ -654,7 +699,29 @@ export function SourcingWorkspace() {
           <div className="text-[11px] text-muted">
             {dinheiro(p.valor_total)} · {p.prazo_entrega_dias ?? "—"} dias ·{" "}
             {p.condicoes_pagamento ?? "pagamento não informado"}
+            {p.canal === "PORTAL" && " · enviada pelo fornecedor"}
           </div>
+          {ws.anexos
+            .filter((a) => a.proposta_id === p.id)
+            .map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                className="mr-2 text-[11px] text-cyan"
+                onClick={() =>
+                  executar(async () => {
+                    const blob = await getBlob(`/sourcing/anexos/${a.id}`);
+                    const ancora = document.createElement("a");
+                    ancora.href = URL.createObjectURL(blob);
+                    ancora.download = a.nome_arquivo;
+                    ancora.click();
+                    URL.revokeObjectURL(ancora.href);
+                  })
+                }
+              >
+                📎 {a.nome_arquivo}
+              </button>
+            ))}
           <div className="mt-2 flex flex-col gap-1 text-[11px]">
             {p.avaliacoes
               .filter((a) => a.resposta)

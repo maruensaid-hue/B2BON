@@ -26,6 +26,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -245,7 +246,10 @@ class ParticipanteSourcing(Base):
     """Fornecedor convidado/descoberto para um processo (quem responde)."""
 
     __tablename__ = "participante_sourcing"
-    __table_args__ = (CheckConstraint(_CHECK_LADO, name="ck_participante_sourcing_lado"),)
+    __table_args__ = (
+        CheckConstraint(_CHECK_LADO, name="ck_participante_sourcing_lado"),
+        Index("uq_participante_sourcing_token_hash", "token_hash", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, index=True)
@@ -258,6 +262,10 @@ class ParticipanteSourcing(Base):
     origem_descoberta: Mapped[str] = mapped_column(String)  # INTERNAL | NETWORK | MANUAL
     status: Mapped[str] = mapped_column(String)
     motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Phase F: acesso do fornecedor sem assento (Supplier Guest). Só o hash do link secreto é guardado.
+    token_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    token_gerado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
@@ -300,6 +308,7 @@ class PropostaSourcing(Base):
     impostos_inclusos: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     validade: Mapped[date | None] = mapped_column(Date, nullable=True)
     observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    canal: Mapped[str] = mapped_column(String, default="COMPRADOR")  # COMPRADOR (registrada) | PORTAL (enviada pelo fornecedor)
     criado_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
     recebida_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -341,7 +350,44 @@ class AvaliacaoSourcing(Base):
     revisado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
-TABELAS_NATIVAS = (ParticipanteSourcing, ItemSourcing, PropostaSourcing, PropostaItemSourcing, AvaliacaoSourcing)
+class EsclarecimentoSourcing(Base):
+    """Pergunta de um participante e resposta do comprador; publicada a todos sem dizer quem perguntou (Phase F)."""
+
+    __tablename__ = "esclarecimento_sourcing"
+    __table_args__ = (CheckConstraint(_CHECK_LADO, name="ck_esclarecimento_sourcing_lado"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, index=True)
+    lado: Mapped[str] = mapped_column(String)
+    processo_id: Mapped[int] = mapped_column(ForeignKey("processo_sourcing.id"), index=True)
+    participante_id: Mapped[int] = mapped_column(ForeignKey("participante_sourcing.id"), index=True)
+    pergunta: Mapped[str] = mapped_column(Text)
+    resposta: Mapped[str | None] = mapped_column(Text, nullable=True)
+    revisado_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    respondido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class AnexoSourcing(Base):
+    """Evidência enviada com a proposta (Phase F). O arquivo só é lido no download."""
+
+    __tablename__ = "anexo_sourcing"
+    __table_args__ = (CheckConstraint(_CHECK_LADO, name="ck_anexo_sourcing_lado"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, index=True)
+    lado: Mapped[str] = mapped_column(String)
+    proposta_id: Mapped[int] = mapped_column(ForeignKey("proposta_sourcing.id"), index=True)
+    nome_arquivo: Mapped[str] = mapped_column(String)
+    tipo_mime: Mapped[str] = mapped_column(String)
+    tamanho_bytes: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String)
+    conteudo: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+TABELAS_NATIVAS = (ParticipanteSourcing, ItemSourcing, PropostaSourcing, PropostaItemSourcing, AvaliacaoSourcing,
+                   EsclarecimentoSourcing, AnexoSourcing)
 TABELAS_SOURCING = (ProcessoSourcing, ContratoSourcing, DocumentoSourcing, RequisitoSourcing, EventoSourcing, EventoContratoSourcing,
                     *TABELAS_NATIVAS)
 
