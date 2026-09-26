@@ -8,9 +8,6 @@ para `*_sourcing` com lado BUY. Só este contexto conhece estes modelos
 
 from datetime import datetime, time
 
-from sqlalchemy import event
-from sqlalchemy.orm import Session
-
 from app.contexts.procurement import fluxo
 from app.contexts.sourcing.contract import espelho, tipos
 from app.models.contrato_compra import ContratoCompra
@@ -24,10 +21,12 @@ ORIGEM_ACHADOS = "documento_compras.achados"
 
 
 def processo(p: ProcessoContratacao) -> dict:
+    segmento, tipo_processo = fluxo.classificar(p.modalidade)
+    fluxo_processo, regras = fluxo.configuracao(p.modalidade)
     return {
         "tenant_id": p.tenant_id,
-        "segmento": tipos.Segmento.PUBLICO.value,
-        "tipo_processo": p.modalidade if p.modalidade in tipos.TIPOS_PROCESSO else "PUBLIC_TENDER",
+        "segmento": segmento.value,
+        "tipo_processo": tipo_processo,
         "titulo": (f"{p.numero} — " if p.numero else "") + (p.objeto or "")[:200],
         "descricao": p.objeto,
         "emissor_nome": None,  # o emissor é o próprio órgão do tenant (orgao_id em metadados)
@@ -37,8 +36,8 @@ def processo(p: ProcessoContratacao) -> dict:
         "status": p.status,
         "visibilidade": "PRIVADO",
         "classificacao": "CONFIDENTIAL",
-        "ruleset": fluxo.LEI_14133.codigo,
-        "workflow": fluxo.PROCESSO.codigo,
+        "ruleset": regras.codigo if regras else None,
+        "workflow": fluxo_processo.codigo,
         "publicado_em": p.publicado_em,
         "prazo": datetime.combine(p.prazo_previsto, time.min) if p.prazo_previsto else None,
         "valor_estimado": p.valor_estimado,
@@ -113,55 +112,10 @@ MAPA = {
 }
 
 
-def _gravar_linha(conexao, alvo) -> None:
-    tabela, origem, mapear = MAPA[type(alvo)]
-    espelho.gravar(conexao, tabela, LADO, origem, alvo.id, mapear(alvo))
+def _achados(conexao, alvo) -> None:
     if isinstance(alvo, DocumentoCompras):
         espelho.substituir_requisitos(conexao, LADO, ORIGEM_ACHADOS, alvo.id, requisitos_do_documento(alvo))
 
 
-def _gravar(conexao, alvo) -> None:
-    _, origem, _ = MAPA[type(alvo)]
-    espelho.protegido(conexao, f"{origem}:{alvo.id}", lambda: _gravar_linha(conexao, alvo))
-
-
-def _apagar(conexao, alvo) -> None:
-    tabela, origem, _ = MAPA[type(alvo)]
-    espelho.protegido(conexao, f"{origem}:{alvo.id}", lambda: espelho.apagar(conexao, tabela, LADO, origem, alvo.id))
-
-
-for _modelo in MAPA:
-    event.listen(_modelo, "after_insert", lambda mapper, conexao, alvo: _gravar(conexao, alvo))
-    event.listen(_modelo, "after_update", lambda mapper, conexao, alvo: _gravar(conexao, alvo))
-    event.listen(_modelo, "after_delete", lambda mapper, conexao, alvo: _apagar(conexao, alvo))
-
-
-def sincronizar(db: Session, tenant_id: str | None = None, lote: int = 500) -> dict:
-    """Backfill idempotente do lado comprador (pais antes de filhas), em lotes."""
-    relatorio = {}
-    conexao = db.connection()
-    for modelo, (tabela, origem, _) in MAPA.items():
-        consulta = db.query(modelo)
-        if tenant_id:
-            consulta = consulta.filter(modelo.tenant_id == tenant_id)
-        ids, ultimo = set(), 0
-        while True:
-            linhas = consulta.filter(modelo.id > ultimo).order_by(modelo.id).limit(lote).all()
-            if not linhas:
-                break
-            for linha in linhas:
-                _gravar_linha(conexao, linha)
-                ids.add(linha.id)
-            ultimo = linhas[-1].id
-            db.commit()
-            conexao = db.connection()
-        orfaos = 0 if tenant_id else espelho.apagar_orfaos(conexao, tabela, LADO, origem, ids)
-        if modelo is DocumentoCompras and not tenant_id:
-            orfaos += espelho.apagar_orfaos(conexao, "requisito", LADO, ORIGEM_ACHADOS, ids)
-        db.commit()
-        conexao = db.connection()
-        relatorio[origem] = {"espelhados": len(ids), "orfaos_removidos": orfaos}
-    return relatorio
-
-
-espelho.registrar_sincronizador(LADO, sincronizar)
+sincronizar = espelho.instalar(LADO, MAPA, complemento=_achados,
+                               orfaos_extras={DocumentoCompras: ("requisito", ORIGEM_ACHADOS)})

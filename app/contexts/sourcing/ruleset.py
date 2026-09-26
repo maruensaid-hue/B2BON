@@ -1,25 +1,35 @@
 """Rulesets declarativos (S4, D-055) — motor neutro.
 
 Um ruleset reúne as regras de um regime (`PUBLIC_PROCUREMENT_BR_14133@1`):
-documentos esperados por etapa e parâmetros com valor padrão. Parâmetro
+versão, vigência e fonte (plano unificado §22), documentos esperados por etapa
+e parâmetros com valor padrão (a configuração). Parâmetro
 configurado pelo cliente (ex.: `orgao.parametros`) prevalece sobre o padrão;
 parâmetro sem padrão (`None`) e não configurado fica sem avaliação — nunca é
 inventado.
 """
 
 from dataclasses import dataclass, field
+from datetime import date
 
 
 @dataclass(frozen=True)
 class Ruleset:
     codigo: str
     descricao: str
+    fonte: str  # de onde vêm as regras (norma, política do comprador)
+    vigente_desde: date | None = None  # None: sem norma com vigência (ex.: regra privada)
     documentos_esperados: dict[str, tuple[str, ...]] = field(default_factory=dict)
     parametros: dict[str, float | int | None] = field(default_factory=dict)
 
     def __post_init__(self):
         if "@" not in self.codigo:
             raise ValueError(f"{self.codigo}: o código leva a versão (`NOME@n`)")
+        if not self.fonte.strip():
+            raise ValueError(f"{self.codigo}: informe a fonte das regras")
+
+    @property
+    def versao(self) -> int:
+        return int(self.codigo.rsplit("@", 1)[1])
 
     def __hash__(self):
         return hash(self.codigo)

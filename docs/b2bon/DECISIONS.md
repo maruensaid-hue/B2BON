@@ -560,3 +560,25 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   sourcing); limiares analíticos de risco sem base regulatória (`DIAS_PLANEJAMENTO`, `ACRESCIMO_ALERTA`,
   `ADITIVOS_ALERTA`, `CONCENTRACAO_ALERTA`) continuam em `riscos.py` (TD-089).
 - **Status**: ACEITA.
+
+## D-061 · 2026-09-26 · Plano unificado A–I · Phase A fecha a fundação sem tabela nova
+- **Contexto**: PO autorizou S5 e OI-021 e enviou o plano "UNIFIED BUSINESS & SOURCING IMPLEMENTATION" (fases A–I,
+  uma por vez). Perguntado sobre a ordem, o PO escolheu a Phase A.
+- **Decisão**:
+  - O plano A–I passa a ser a ordem de execução; S0–S4 contam para ele (mapa em `18_STRATEGIC_SOURCING.md` §10).
+    S5 vira parte da Phase C (`ProcessWorkspace`) e OI-021 é a Phase I, ambas autorizadas e executadas na vez delas.
+  - **Resolução central** (§21): `sourcing.workflow.vincular/resolver` decide workflow e ruleset por (lado,
+    segmento[, tipo de processo]); o mais específico vence; sem vínculo, erro (falha fechado). A regra "RFP privado é
+    Enterprise" existe só em `bids/fluxo.classificar`, usada pelo espelho e pela validação.
+  - **Ruleset** (§22): versão (do código), vigência (`vigente_desde`), fonte (obrigatória) e configuração
+    (parâmetros). Lei 14.133: vigente desde 2021-04-01 (art. 194); os parâmetros são padrões analíticos do produto,
+    não limites legais, e isso está escrito na descrição.
+  - **Entidades compartilhadas** (§6): nenhuma tabela nova. Cada entidade foi mapeada para onde já vive; Proposal,
+    Evaluation, Lot, Item e Deliverable nascem com o primeiro fluxo que grava nelas (Phase C/E), como em D-058.
+  - **Duplicação** (§35): eventos do ORM e backfill do espelho iguais nos dois lados foram para
+    `sourcing.espelho.instalar`; cada lado declara só o mapeamento.
+  - **Orçamento de desempenho** (§36): `tests/desempenho` (sob demanda) mede e compara com
+    `docs/b2bon/perf/baseline.json`; `scripts/qualidade/duplicacao.py` é a análise de duplicação do projeto.
+- **Alternativas**: criar as 17 entidades do §6 como tabelas agora (vazias, sem fluxo que grave: contraria §29/§49);
+  resolução por `if` em cada contexto (o que §21 pede para evitar).
+- **Status**: ACEITA.

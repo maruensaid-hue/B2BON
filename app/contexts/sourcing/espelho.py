@@ -18,7 +18,7 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, delete, insert, inspect, select, update
+from sqlalchemy import and_, delete, event, insert, inspect, select, update
 from sqlalchemy.engine import Connection
 
 from app.contexts.sourcing.tipos import Lado
@@ -170,3 +170,57 @@ def registrar_sincronizador(lado: Lado, funcao: Callable) -> None:
 def sincronizar_todos(db, tenant_id: str | None = None) -> dict:
     """Backfill idempotente dos dois lados (cada um com o seu lado fixo)."""
     return {lado.value: funcao(db, tenant_id) for lado, funcao in sorted(_SINCRONIZADORES.items())}
+
+
+# --- Instalação por lado: eventos do ORM + backfill (Phase A, §35) ----------------------
+# Cada lado declara só o mapeamento: {modelo: (tabela unificada, origem_tabela, mapear)}.
+# `complemento` grava o que uma linha de origem gera além dela (ex.: achados em JSON →
+# requisitos); `orfaos_extras` diz que origem derivada limpar junto: {modelo: (tabela, origem)}.
+def instalar(lado: Lado, mapa: dict, complemento: Callable | None = None, orfaos_extras: dict | None = None) -> Callable:
+    def gravar_linha(conexao: Connection, alvo) -> None:
+        tabela, origem, mapear = mapa[type(alvo)]
+        gravar(conexao, tabela, lado, origem, alvo.id, mapear(alvo))
+        if complemento is not None:
+            complemento(conexao, alvo)
+
+    def depois_de_gravar(_mapper, conexao, alvo) -> None:
+        protegido(conexao, f"{mapa[type(alvo)][1]}:{alvo.id}", lambda: gravar_linha(conexao, alvo))
+
+    def depois_de_apagar(_mapper, conexao, alvo) -> None:
+        tabela, origem, _ = mapa[type(alvo)]
+        protegido(conexao, f"{origem}:{alvo.id}", lambda: apagar(conexao, tabela, lado, origem, alvo.id))
+
+    for modelo in mapa:
+        event.listen(modelo, "after_insert", depois_de_gravar)
+        event.listen(modelo, "after_update", depois_de_gravar)
+        event.listen(modelo, "after_delete", depois_de_apagar)
+
+    def sincronizar(db, tenant_id: str | None = None, lote: int = 500) -> dict:
+        """Backfill idempotente do lado (pais antes de filhas, na ordem do mapa), em lotes com
+        commit por lote; sem filtro de tenant, remove o que perdeu a origem."""
+        relatorio = {}
+        for modelo, (tabela, origem, _) in mapa.items():
+            consulta = db.query(modelo)
+            if tenant_id:
+                consulta = consulta.filter(modelo.tenant_id == tenant_id)
+            ids, ultimo = set(), 0
+            while linhas := consulta.filter(modelo.id > ultimo).order_by(modelo.id).limit(lote).all():
+                conexao = db.connection()
+                for linha in linhas:
+                    gravar_linha(conexao, linha)
+                    ids.add(linha.id)
+                ultimo = linhas[-1].id
+                db.commit()
+            orfaos = 0
+            if not tenant_id:
+                conexao = db.connection()
+                orfaos = apagar_orfaos(conexao, tabela, lado, origem, ids)
+                if modelo in (orfaos_extras or {}):
+                    tabela_extra, origem_extra = orfaos_extras[modelo]
+                    orfaos += apagar_orfaos(conexao, tabela_extra, lado, origem_extra, ids)
+                db.commit()
+            relatorio[origem] = {"espelhados": len(ids), "orfaos_removidos": orfaos}
+        return relatorio
+
+    registrar_sincronizador(lado, sincronizar)
+    return sincronizar

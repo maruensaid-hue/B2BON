@@ -11,6 +11,8 @@ Parâmetros: o padrão vale para todos; `dias_alerta_contrato` e
 avaliação (UNKNOWN), nunca com um limite inventado.
 """
 
+from datetime import date
+
 from app.contexts.sourcing.contract import ruleset, tipos, workflow
 
 ESTADOS = (
@@ -25,7 +27,9 @@ PROCESSO = workflow.registrar(workflow.Workflow(
 
 LEI_14133 = ruleset.registrar(ruleset.Ruleset(
     codigo="PUBLIC_PROCUREMENT_BR_14133@1",
-    descricao="Contratação pública brasileira (Lei 14.133/2021).",
+    descricao="Contratação pública brasileira (Lei 14.133/2021). Os parâmetros são padrões analíticos do B2B ON, não limites legais.",
+    fonte="Lei nº 14.133, de 1º de abril de 2021 (Lei de Licitações e Contratos Administrativos)",
+    vigente_desde=date(2021, 4, 1),  # art. 194: vigor na data da publicação
     # documento que o processo deveria ter a partir de cada etapa (Missing Documentation)
     documentos_esperados={
         "TERMO_REFERENCIA": ("ETP",),
@@ -40,3 +44,18 @@ LEI_14133 = ruleset.registrar(ruleset.Ruleset(
         "limite_fragmentacao": None,   # depende do regime do órgão: sem padrão
     },
 ))
+LADO = tipos.Lado.COMPRA
+workflow.vincular(LADO, tipos.Segmento.PUBLICO, PROCESSO, LEI_14133)
+
+
+def classificar(modalidade: str | None) -> tuple[tipos.Segmento, str]:
+    """Modalidade do processo → (segmento, tipo de processo). O comprador de hoje é só o público."""
+    return tipos.Segmento.PUBLICO, modalidade if modalidade in tipos.TIPOS_PROCESSO else "PUBLIC_TENDER"
+
+
+def configuracao(modalidade: str | None) -> tuple[workflow.Workflow, ruleset.Ruleset | None]:
+    return workflow.resolver(LADO, *classificar(modalidade))
+
+
+def de(modalidade: str | None) -> workflow.Workflow:
+    return configuracao(modalidade)[0]

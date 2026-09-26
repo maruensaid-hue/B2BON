@@ -1,5 +1,13 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Phase A — Foundation do plano unificado (2026-09-26, autorizada pelo PO)
+
+- Workflow e ruleset resolvidos num ponto só por (lado, segmento, tipo de processo), com falha fechada sem vínculo.
+- Ruleset com versão, vigência e fonte; Lei 14.133 vigente desde 2021-04-01.
+- Espelho: eventos do ORM e backfill num instalador único do núcleo; cada lado declara só o mapeamento.
+- Orçamento de desempenho (`tests/desempenho`, baseline em `docs/b2bon/perf/`) e análise de duplicação (`scripts/qualidade/duplicacao.py`).
+- Sem mudança de schema, de API ou de tela; nenhuma regressão de consultas ou latência.
+
 ## Sourcing S4 — workflow e rulesets declarativos (2026-09-26, autorizada pelo PO)
 
 - Motor neutro `sourcing/workflow.py` e `sourcing/ruleset.py`, com registro por código versionado.

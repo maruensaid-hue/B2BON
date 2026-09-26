@@ -116,7 +116,7 @@ def atualizar(db: Session, tenant_id: str, usuario_id: int | None, entidade: str
     if entidade in ("demanda_compra", "plano_contratacao") and dados.get("status") in ("APROVADA", "APROVADO"):
         raise RegraNegocioViolada("Aprovação é feita pela ação de aprovar (administrador).")
     if entidade == "processo_contratacao" and dados.get("status") is not None:
-        fluxo.PROCESSO.validar(dados["status"], "status", de=registro.status)
+        fluxo.de(registro.modalidade).validar(dados["status"], "status", de=registro.status)
     for campo, valor in dados.items():
         setattr(registro, campo, valor)
     auditoria_service.registrar(db, tenant_id, f"{entidade}_atualizado", entidade, registro.id,

@@ -6,9 +6,6 @@ tabelas antigas é copiada na mesma transação) e pelo backfill idempotente.
 A leitura dupla (`repositorio.py`) compara com estes mesmos mapeamentos.
 """
 
-from sqlalchemy import event
-from sqlalchemy.orm import Session
-
 from app.contexts.bids import fluxo
 from app.contexts.sourcing.contract import espelho, tipos
 from app.models.contrato_venda_publica import ContratoVendaPublica
@@ -24,12 +21,12 @@ def _iso(valor):
 
 
 def processo(lic: Licitacao) -> dict:
-    empresa = fluxo.empresa(lic.modalidade)
-    regras = fluxo.regras_de(lic.modalidade)
+    segmento, tipo_processo = fluxo.classificar(lic.modalidade)
+    fluxo_licitacao, regras = fluxo.configuracao(lic.modalidade)
     return {
         "tenant_id": lic.tenant_id,
-        "segmento": tipos.Segmento.EMPRESA.value if empresa else tipos.Segmento.PUBLICO.value,
-        "tipo_processo": "RFP" if empresa else (lic.modalidade if lic.modalidade in tipos.TIPOS_PROCESSO else "PUBLIC_TENDER"),
+        "segmento": segmento.value,
+        "tipo_processo": tipo_processo,
         "titulo": lic.titulo,
         "descricao": lic.objeto,
         "emissor_nome": lic.orgao_nome,
@@ -40,7 +37,7 @@ def processo(lic: Licitacao) -> dict:
         "visibilidade": "PRIVADO",
         "classificacao": "INTERNAL",
         "ruleset": regras.codigo if regras else None,
-        "workflow": fluxo.de(lic.modalidade).codigo,
+        "workflow": fluxo_licitacao.codigo,
         "publicado_em": lic.data_publicacao,
         "prazo": lic.prazo_proposta,
         "valor_estimado": lic.valor_estimado,
@@ -101,48 +98,4 @@ MAPA = {
 }
 
 
-def _gravar(conexao, alvo) -> None:
-    tabela, origem, mapear = MAPA[type(alvo)]
-    espelho.protegido(conexao, f"{origem}:{alvo.id}",
-                      lambda: espelho.gravar(conexao, tabela, LADO, origem, alvo.id, mapear(alvo)))
-
-
-def _apagar(conexao, alvo) -> None:
-    tabela, origem, _ = MAPA[type(alvo)]
-    espelho.protegido(conexao, f"{origem}:{alvo.id}", lambda: espelho.apagar(conexao, tabela, LADO, origem, alvo.id))
-
-
-for _modelo in MAPA:
-    event.listen(_modelo, "after_insert", lambda mapper, conexao, alvo: _gravar(conexao, alvo))
-    event.listen(_modelo, "after_update", lambda mapper, conexao, alvo: _gravar(conexao, alvo))
-    event.listen(_modelo, "after_delete", lambda mapper, conexao, alvo: _apagar(conexao, alvo))
-
-
-def sincronizar(db: Session, tenant_id: str | None = None, lote: int = 500) -> dict:
-    """Backfill idempotente: regrava tudo do lado vendedor, pais antes de filhas,
-    e remove o que perdeu a origem. Em lotes, com commit por lote."""
-    relatorio = {}
-    conexao = db.connection()
-    for modelo, (tabela, origem, mapear) in MAPA.items():
-        consulta = db.query(modelo)
-        if tenant_id:
-            consulta = consulta.filter(modelo.tenant_id == tenant_id)
-        ids, ultimo = set(), 0
-        while True:
-            linhas = consulta.filter(modelo.id > ultimo).order_by(modelo.id).limit(lote).all()
-            if not linhas:
-                break
-            for linha in linhas:
-                espelho.gravar(conexao, tabela, LADO, origem, linha.id, mapear(linha))
-                ids.add(linha.id)
-            ultimo = linhas[-1].id
-            db.commit()
-            conexao = db.connection()
-        orfaos = 0 if tenant_id else espelho.apagar_orfaos(conexao, tabela, LADO, origem, ids)
-        db.commit()
-        conexao = db.connection()
-        relatorio[origem] = {"espelhados": len(ids), "orfaos_removidos": orfaos}
-    return relatorio
-
-
-espelho.registrar_sincronizador(LADO, sincronizar)
+sincronizar = espelho.instalar(LADO, MAPA)

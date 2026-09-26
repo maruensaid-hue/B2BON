@@ -419,3 +419,33 @@ internas, decisões e planos futuros.
 | AI retrieval / orquestrador | ferramentas declaram lado; ambiguidade compra × venda → esclarecer (D-040) | ferramentas de `sourcing` com lado BUY |
 | Analytics | métricas divididas pela barreira (D-046) | métricas de sourcing só no painel do comprador |
 | Logs | sem corpo, query nem headers; espelho loga só origem e id | igual |
+
+## 10. Plano unificado A–I (prompt "UNIFIED BUSINESS & SOURCING IMPLEMENTATION", D-061)
+
+O plano A–I substitui a sequência S5–S8 como ordem de execução. O que S0–S4 já entregaram conta para as fases novas; nada é refeito.
+
+| Fase nova | Escopo | Relação com S0–S8 | Estado |
+|---|---|---|---|
+| **A · Foundation** | processo canônico, entidades compartilhadas, tipos, lado, segmento, rulesets, fundação de workflow | S1–S4 + fechamento das lacunas (§22 ruleset, §21 resolução central) | ✅ 2026-09-26 (`PHASE_A_COMPLETION.md`) |
+| B · Document & Requirement Engine | documentos, extração, requisitos, evidência, proveniência, conformidade | engines da S1 + troca de leitura da S6 (TD-087/088) | aguardando o PO |
+| C · Sell side | Public Bid + Enterprise Bid (qualificação, conformidade, Go/No-Go, workspace, proposta) | S7 + parte da S5 (`ProcessWorkspace`, §28) | aguardando o PO |
+| D · Public buy side | demanda, PCA, processo, fornecedor, avaliação, contrato, risco | Procurement atual sobre os engines; TD-089/090 | aguardando o PO |
+| E · Enterprise buy side | Strategic Sourcing, descoberta, RFI/RFP/RFQ, qualificação, comparação, shortlist, negociação | S8; tabelas de proposta, avaliação, lote e item nascem aqui | aguardando o PO |
+| F · Business Network | publicação/convite, matching, visibilidade, acesso do fornecedor | novo | aguardando o PO |
+| G · Intelligence | IA de requisitos, avaliação, bids, procurement, fornecedor, risco | capabilities pelo AI Gateway | aguardando o PO |
+| H · Optimization | duplicação, bundle, latência, consultas, memória, custo de IA | usa `scripts/qualidade/duplicacao.py` e `tests/desempenho` | aguardando o PO |
+| I · Commercialization | planos, módulos, entitlements, AI Credits, página de vendas, assinatura | OI-021 (autorizada; executa na vez dela) | aguardando a vez |
+
+**Entidades compartilhadas (§6) — onde cada uma vive hoje, sem tabela nova na Phase A:**
+
+| Entidade | Hoje | Tabela própria quando |
+|---|---|---|
+| Organization, Person, Supplier | contas/decisores (CRM), órgãos e fornecedores do comprador, rede | — |
+| SourcingProcess, Document, Requirement, Contract | `processo_sourcing`, `documento_sourcing`, `requisito_sourcing`, `contrato_sourcing` (S3) | — |
+| Evidence | proveniência do requisito (documento, página, cláusula, trecho) + cofre de documentos | Phase B, se a evidência precisar ser compartilhada entre requisitos |
+| Approval, Task, Deadline | `evento_sourcing` (APROVACAO, TAREFA, MARCO) + `aprovado_por/aprovado_em` + prazos da licitação | — |
+| RiskSignal | calculado sob demanda (`riscos.sinais`), não persistido | quando houver histórico de sinais (Phase D) |
+| Lot, Item | categorias LOTE/ITEM do requisito; itens do PCA | Phase E (RFQ precisa de itens com quantidade e preço) |
+| Proposal, Evaluation, Deliverable | — | Phase E / C (primeiro fluxo que grava) |
+
+Regra (D-058, §29, §49): tabela nasce com o primeiro fluxo que grava nela; nada de tabela vazia "para o futuro".

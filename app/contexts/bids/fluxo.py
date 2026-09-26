@@ -10,6 +10,10 @@ Fonte única dos estados de uma licitação. Reproduz o comportamento anterior
 próprio para que o fluxo enterprise (S7) nasça como nova versão sem
 reescrever o histórico. `PRIVATE_RFP@1` não tem regra regulatória: é
 contratação privada.
+
+Classificação única da modalidade em (segmento, tipo de processo), usada
+pelo espelho e pela resolução do workflow: a regra "RFP privado é
+Enterprise" vive só aqui.
 """
 
 from app.contexts.sourcing.contract import ruleset, tipos, workflow
@@ -37,17 +41,24 @@ def _fluxo(codigo: str) -> workflow.Workflow:
 LICITACAO_PUBLICA = _fluxo("PUBLIC_TENDER_SELL@1")
 RFP_PRIVADO = _fluxo("ENTERPRISE_RFP_SELL@1")
 REGRAS_RFP_PRIVADO = ruleset.registrar(ruleset.Ruleset(
-    codigo="PRIVATE_RFP@1", descricao="RFP privado: sem regime legal de contratação pública; regras do próprio comprador.",
+    codigo="PRIVATE_RFP@1", descricao="RFP privado: sem regime legal de contratação pública.",
+    fonte="Regras do próprio comprador privado (edital/RFP do emissor)",
 ))
+LADO = tipos.Lado.VENDA
+workflow.vincular(LADO, tipos.Segmento.PUBLICO, LICITACAO_PUBLICA)
+workflow.vincular(LADO, tipos.Segmento.EMPRESA, RFP_PRIVADO, REGRAS_RFP_PRIVADO)
 
 
-def empresa(modalidade: str | None) -> bool:
-    return modalidade == "PRIVATE_RFP"
+def classificar(modalidade: str | None) -> tuple[tipos.Segmento, str]:
+    """Modalidade da licitação → (segmento, tipo de processo)."""
+    if modalidade == "PRIVATE_RFP":
+        return tipos.Segmento.EMPRESA, "RFP"
+    return tipos.Segmento.PUBLICO, modalidade if modalidade in tipos.TIPOS_PROCESSO else "PUBLIC_TENDER"
+
+
+def configuracao(modalidade: str | None) -> tuple[workflow.Workflow, ruleset.Ruleset | None]:
+    return workflow.resolver(LADO, *classificar(modalidade))
 
 
 def de(modalidade: str | None) -> workflow.Workflow:
-    return RFP_PRIVADO if empresa(modalidade) else LICITACAO_PUBLICA
-
-
-def regras_de(modalidade: str | None) -> ruleset.Ruleset | None:
-    return REGRAS_RFP_PRIVADO if empresa(modalidade) else None
+    return configuracao(modalidade)[0]

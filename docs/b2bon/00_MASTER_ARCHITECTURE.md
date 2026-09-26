@@ -76,3 +76,9 @@ Intelligence · 9 Bid Intelligence · 10 Public Procurement · 11 Rooms ·
 12 Agent Orchestration · 13 External CRM Connectors · 14 Catalog/Plans/
 Sales Page · 15 Public Procurement Pricing (**só com instrução do PO**) ·
 16 Analytics · 17 Hardening.
+
+**Plano unificado de sourcing (2026-09-26, D-061):** depois das fases 0–17 e de S0–S4, a ordem passa a ser A · Foundation ✅ ·
+B · Document & Requirement Engine · C · Sell side · D · Public buy side · E · Enterprise buy side · F · Business Network ·
+G · Intelligence · H · Optimization · I · Commercialization — uma por vez, cada uma com autorização do PO
+(`18_STRATEGIC_SOURCING.md` §10). Toda fase mede desempenho contra `docs/b2bon/perf/baseline.json` e roda a análise de
+duplicação (`scripts/qualidade/duplicacao.py`).

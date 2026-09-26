@@ -144,7 +144,7 @@ def test_definicao_invalida_ou_versao_reescrita_e_recusada():
         sourcing.workflow.registrar(W("PUBLIC_TENDER_SELL@1", atual.lado, atual.estados, atual.inicial, atual.finais, ()))
     assert sourcing.workflow.registrar(atual) is atual  # mesma definição: idempotente
     with pytest.raises(ValueError, match="nova versão"):
-        sourcing.ruleset.registrar(sourcing.ruleset.Ruleset("PRIVATE_RFP@1", "outra", parametros={"x": 1}))
+        sourcing.ruleset.registrar(sourcing.ruleset.Ruleset("PRIVATE_RFP@1", "outra", "fonte", parametros={"x": 1}))
 
 
 def test_restricao_de_origem_e_suportada_pelo_motor():

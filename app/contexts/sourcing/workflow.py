@@ -8,11 +8,17 @@ Uma transição diz **por qual ação** um estado é alcançado e, opcionalmente
 de quais estados. A ação separa o que é mudança livre de status (`status`)
 do que exige registro próprio (decisão Go/No-Go, resultado), com a mensagem
 que o usuário vê quando tenta pelo caminho errado.
+
+Qual workflow e qual ruleset valem para um processo é decidido num lugar só
+(plano unificado §21): cada lado vincula (lado, segmento[, tipo de processo])
+a um workflow e a um ruleset, e todos perguntam a `resolver`. Sem vínculo, é
+erro (falha fechado), nunca um fluxo por omissão.
 """
 
 from dataclasses import dataclass, field
 
-from app.contexts.sourcing.tipos import Lado
+from app.contexts.sourcing import ruleset as rulesets
+from app.contexts.sourcing.tipos import TIPOS_PROCESSO, Lado, Segmento
 from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 
 QUALQUER = None  # transição aceita partindo de qualquer estado
@@ -43,6 +49,10 @@ class Workflow:
             raise ValueError(f"{self.codigo}: estados não declarados {sorted(desconhecidos)}")
         if "@" not in self.codigo:
             raise ValueError(f"{self.codigo}: o código leva a versão (`NOME@n`)")
+
+    @property
+    def versao(self) -> int:
+        return int(self.codigo.rsplit("@", 1)[1])
 
     def acoes_para(self, para: str) -> set[str]:
         return {t.acao for t in self.transicoes if t.para == para}
@@ -81,3 +91,34 @@ def obter(codigo: str) -> Workflow:
 
 def codigos() -> set[str]:
     return set(_REGISTRO)
+
+
+# --- Resolução: (lado, segmento, tipo de processo) → workflow + ruleset ---------------
+_VINCULOS: dict[tuple[Lado, Segmento, str | None], tuple[str, str | None]] = {}
+
+
+def vincular(lado: Lado, segmento: Segmento, workflow: Workflow, ruleset: rulesets.Ruleset | None = None,
+             tipos_processo: tuple[str, ...] | None = None) -> None:
+    """Sem `tipos_processo`, vale para todo tipo do segmento; com, só para eles (mais específico vence)."""
+    if workflow.lado != lado:
+        raise ValueError(f"{workflow.codigo} é do lado {workflow.lado.value}, não {lado.value}")
+    for tipo in tipos_processo or (None,):
+        if tipo is not None and tipo not in TIPOS_PROCESSO:
+            raise ValueError(f"Tipo de processo desconhecido: {tipo}")
+        chave = (lado, segmento, tipo)
+        valor = (registrar(workflow).codigo, rulesets.registrar(ruleset).codigo if ruleset else None)
+        if _VINCULOS.get(chave, valor) != valor:
+            raise ValueError(f"{chave} já vinculado a {_VINCULOS[chave]}")
+        _VINCULOS[chave] = valor
+
+
+def resolver(lado: Lado, segmento: Segmento, tipo_processo: str) -> tuple[Workflow, rulesets.Ruleset | None]:
+    vinculo = _VINCULOS.get((lado, segmento, tipo_processo)) or _VINCULOS.get((lado, segmento, None))
+    if vinculo is None:
+        raise LookupError(f"Nenhum workflow para {lado.value}/{segmento.value}/{tipo_processo}")
+    codigo_workflow, codigo_ruleset = vinculo
+    return obter(codigo_workflow), rulesets.obter(codigo_ruleset) if codigo_ruleset else None
+
+
+def vinculos() -> dict[tuple[Lado, Segmento, str | None], tuple[str, str | None]]:
+    return dict(_VINCULOS)
