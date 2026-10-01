@@ -95,3 +95,16 @@ Consultas por rota **iguais** em todas as 13 rotas medidas; latências dentro da
   IRPJ 5.760 + CSLL 3.456 = 17.076 de impostos (CBS/IBS-teste 1.200 fora da carga) → margem 96.924 → comissão 19.384,80.
 - **OI-018 aberto**: câmbio por tabela com fonte e vigência; sem cotação, `AWAITING_FX_RATE`.
 - Migração `a6c8e0f2b4d7`. Suíte **2.143 passed**, Postgres 9/9, E2E 17/17, ruff 40, lint 25, duplicação 42.
+
+## Adendo D-076 — custo de infraestrutura conservador e parâmetros pendentes
+
+- **OI-026**: Infrastructure Cost Pool (fornecedores/planos cadastrados, nenhum valor no código), custo real × provisionado
+  (plano máximo), alocação ponderada por tier (1/2/4, configurável), atribuição direta com prioridade, sem dupla contagem com
+  IA/APIs, capacidade 70/80/90/100% com alertas que exigem decisão humana, Provider Economics e projeção determinística.
+  Tax Profiles 2026 revisados (licença 1.05/2800, implantação 1.07/2919, SaaS para simulação, adicional de IRPJ, acréscimo
+  de presunção, CBS/IBS com situação). Pendente: valores dos planos dos fornecedores.
+- **OI-018**: política PTAX de fechamento do Banco Central (rotina horária e Admin). **OI-024**: franquia de contas
+  1.000/3.000/10.000 e Public Procurement BASIC/FULL por capability.
+- Exemplo com pool **de teste** (R$ 1.000/mês, órgão Professional único com tier): subscrição de 36.000 carrega 12 meses de
+  infraestrutura provisionada (12.000) → margem 18.600 → comissão 3.720; licença de 120.000 não carrega meses → 20.400.
+- Migração `b7d9f1a3c5e8`. Suíte **2.163 passed**, Postgres 9/9, E2E 17/17, ruff 40, lint 25, duplicação 41 (era 42).

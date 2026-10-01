@@ -107,27 +107,30 @@ def _semear_planos_d059() -> None:
     j3 = _migracao("c5e7a9b1d3f4_phase_j3_usuarios_bid_intelligence.py")
     governo = _migracao("d9e1f3a5b7c9_b2bon_government.py")
     d075 = _migracao("a6c8e0f2b4d7_parametros_financeiros_entitlements_gov.py")
+    d076 = _migracao("b7d9f1a3c5e8_pool_infraestrutura_tributos_2026.py")
     db = SessionLocal()
     try:
         for nome, preco, usuarios, modulos, self_service, tipo in migracao.PLANOS:
             if nome == j3.PLANO and usuarios is None:
                 usuarios = j3.USUARIOS_INCLUIDOS
             if db.query(Plano).filter_by(nome=nome).one_or_none() is None:
-                db.add(Plano(nome=nome, franquia_contas_mes=0, max_usuarios=usuarios, preco_mensal=preco,
+                db.add(Plano(nome=nome, franquia_contas_mes=0, tier_infraestrutura=d076.tier_por_nome(nome), max_usuarios=usuarios,
+                             preco_mensal=preco,
                              visivel_self_service=self_service, modulos_contratados=modulos, categoria="modulo", tipo_preco=tipo))
         for nome, licenca, implantacao, assinatura, creditos, recomendado in governo.PLANOS:
             if db.query(Plano).filter_by(nome=nome).one_or_none() is None:
                 usuarios, api, extras = d075.ENTITLEMENTS[nome]
-                db.add(Plano(nome=nome, franquia_contas_mes=0, max_usuarios=usuarios, preco_mensal=0.0, visivel_self_service=False,
-                             modulos_contratados=list(d075.MODULOS), categoria="governo", tipo_preco="CONTRACT", segmento="GOVERNMENT",
+                db.add(Plano(nome=nome, franquia_contas_mes=d076.FRANQUIA_GOVERNO[nome], tier_infraestrutura=d076.tier_por_nome(nome),
+                             max_usuarios=usuarios, preco_mensal=0.0, visivel_self_service=False, modulos_contratados=list(d075.MODULOS), categoria="governo", tipo_preco="CONTRACT", segmento="GOVERNMENT",
                              modelo_cobranca=governo.MODELO, preco_licenca=licenca, preco_implantacao=implantacao,
                              preco_assinatura_anual=assinatura, creditos_ia_anuais=creditos, recomendado=recomendado,
                              permite_api_parceiros=api, entitlements=dict(extras)))
         if db.query(PerfilTributario).count() == 0:
-            for tipo, codigo, presuncao, iss, observacao in d075.PERFIS:
-                db.add(PerfilTributario(regime="LUCRO_PRESUMIDO", vigente_de=d075.VIGENCIA[0], vigente_ate=d075.VIGENCIA[1], tipo_receita=tipo,
-                                        municipio=d075.MUNICIPIO, codigo_servico=codigo, componentes=d075._componentes(presuncao, iss),
-                                        metodo_calculo="POR_TRIBUTO", fonte=d075.FONTE, observacoes=observacao, criado_por="seed"))
+            for tipo, item, codigo, presuncao, iss, observacao in d076.PERFIS:
+                db.add(PerfilTributario(regime="LUCRO_PRESUMIDO", vigente_de=d076.VIGENCIA[0], vigente_ate=d076.VIGENCIA[1], tipo_receita=tipo,
+                                        municipio=d076.MUNICIPIO, item_lista_servico=item, codigo_servico=codigo,
+                                        versao_legal=d076.VERSAO_LEGAL, componentes=d076.componentes(presuncao, iss),
+                                        metodo_calculo="POR_TRIBUTO", fonte=d076.FONTE, observacoes=observacao, criado_por="seed"))
         db.commit()
     finally:
         db.close()

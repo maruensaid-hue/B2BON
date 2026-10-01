@@ -86,3 +86,7 @@ class NucleoPlanLimitsProvider(PlanLimitsProvider):
     def permite_modulo(self, tenant_id: str, modulo: str) -> bool:
         plano = self._plano_ativo(tenant_id)
         return modulo in plano.modulos_contratados if plano is not None else False
+
+    def obter_nivel_public_procurement(self, tenant_id: str) -> str | None:
+        plano = self._plano_ativo(tenant_id)
+        return (plano.entitlements or {}).get("public_procurement") if plano is not None else None

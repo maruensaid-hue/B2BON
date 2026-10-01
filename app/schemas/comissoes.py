@@ -9,7 +9,9 @@ class PerfilTributarioSchema(BaseModel):
     vigente_ate: date | None = None
     tipo_receita: str = "*"
     municipio: str | None = None
-    codigo_servico: str | None = None
+    item_lista_servico: str | None = None  # LC 116 (ex.: 1.05)
+    codigo_servico: str | None = None  # código de serviço municipal (ex.: 2800)
+    versao_legal: str | None = None
     # Um por tributo (D-075): {"tributo": "IRPJ", "base": "PRESUNCAO", "aliquota": 0.15, "presuncao": 0.32}, validados no Tax Engine
     componentes: list[dict]
     metodo_calculo: str | None = None
@@ -17,13 +19,59 @@ class PerfilTributarioSchema(BaseModel):
     observacoes: str | None = None
 
 
-class ModeloCustoInfraSchema(BaseModel):
-    nome: str = Field(min_length=1)
+class ComponenteInfraSchema(BaseModel):
+    """Fornecedor/plano do Infrastructure Cost Pool (D-076). Custos no ciclo de cobrança e na moeda informados."""
+
+    fornecedor: str = Field(min_length=1)
+    servico: str = Field(min_length=1)
+    categoria: str
+    plano: str | None = None
+    plano_referencia: str | None = None
+    ciclo_cobranca: str = "MONTHLY"
+    moeda: str = "BRL"
+    custo_contratado: float | None = None
+    custo_referencia: float | None = None
+    custo_real: float | None = None
+    capacidade_contratada: float | None = None
+    uso_atual: float | None = None
+    unidade_uso: str | None = None
+    politica_custo: str = "MAX_CONTRACTED_PLAN"
+    metodo_alocacao: str = "WEIGHTED"
+    contabilizacao: str = "INFRASTRUCTURE"
     vigente_de: date
     vigente_ate: date | None = None
-    componentes: list[dict]  # {"categoria": "cloud_cost", "metodo": "PERCENTAGE", "percentual": 0.04}
-    fonte: str | None = None
     observacoes: str | None = None
+
+
+class AtualizarComponenteInfraSchema(BaseModel):
+    dados: dict
+    motivo: str = Field(min_length=1)
+
+
+class UsoCapacidadeSchema(BaseModel):
+    uso: float = Field(ge=0)
+    fonte: str | None = None
+    medido_em: datetime | None = None
+
+
+class CustoDiretoSchema(BaseModel):
+    componente_id: int
+    tenant_id: str
+    competencia: str  # AAAA-MM
+    custo: float = Field(ge=0)
+    quantidade: float | None = None
+    fonte: str | None = None
+
+
+class DecisaoAlertaSchema(BaseModel):
+    decisao: str = Field(min_length=1)
+
+
+class PoliticaInfraSchema(BaseModel):
+    pesos: dict[str, float]
+    limiares: dict[str, float]
+    custo_comissao: str = "PROVISIONED"
+    motivo: str = Field(min_length=1)
 
 
 class RecalculoSchema(BaseModel):

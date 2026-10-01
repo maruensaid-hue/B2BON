@@ -1,5 +1,15 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Custo de infraestrutura conservador, tributos 2026 e PTAX (2026-10-01, D-076)
+
+- Admin → Parâmetros financeiros → Infraestrutura: cadastro de fornecedores e planos (plano atual e plano máximo de referência, custo, capacidade, uso, moeda), sem nenhum valor pronto. A comissão usa o custo do plano máximo (conservador); o custo real fica ao lado.
+- Divisão do custo entre clientes por peso (Department/entrada 1, Professional 2, Enterprise 4, ajustáveis), com prioridade para o custo medido diretamente por cliente (ex.: créditos de enriquecimento). Custos já contados como IA/dados não entram de novo.
+- Monitoramento de capacidade por fornecedor (70/80/90/100%), com recomendação e alertas que só fecham com a decisão registrada; nada é contratado sozinho. Visão por fornecedor com custo por cliente, por unidade e sobre a receita, concentração e data estimada de esgotamento.
+- MAP: custo de infraestrutura real e provisionado lado a lado, custo de IA, margem de contribuição real e conservadora e a reserva de infraestrutura.
+- Tributos 2026: licença de software (IRPJ/CSLL com presunção de 32%, ISS São Paulo 1.05/2800 2,90%), implantação (1.07/2919, 2,90%), SaaS em categoria de serviço para simulação, adicional de IRPJ, acréscimo de presunção de 2026 e situação de CBS/IBS registrada pela contabilidade.
+- Câmbio: PTAX de fechamento do Banco Central, buscada a cada hora ou cadastrada.
+- Planos Government: franquia mensal de contas 1.000 / 3.000 / 10.000 e Public Procurement Básico/Completo (o Básico não acessa os recursos de inteligência).
+
 ## Parâmetros do PO: entitlements Government, Tax Engine e câmbio (2026-10-01, D-075)
 
 - Os planos Government passam a mostrar o que cada tier inclui (usuários, unidades administrativas, armazenamento, retenção, módulos, Public Procurement, API, SSO, suporte e onboarding), na página pública e em Admin → Planos, a partir do catálogo central. Usuários, módulos e API valem de verdade na plataforma.

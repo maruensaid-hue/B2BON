@@ -316,9 +316,11 @@ def creditos_ia(db: Session = Depends(get_db)) -> dict:
     franquia do mês, libera reservas órfãs, registra alertas de uso
     (80/95/100%), anomalias de consumo e alertas de margem. D-072: concede o
     pool anual dos períodos Government que começaram, encerra os que
-    terminaram e marca os avisos de renovação."""
+    terminaram e marca os avisos de renovação. D-076: grava a PTAX de
+    fechamento do Banco Central dos últimos dias úteis."""
     governo_resultado = governo.contratos.rotina(db)
-    return {**finops.creditos_ia_rotina(db), "governo": governo_resultado}
+    ptax = finops.cambio.sincronizar_ptax(db)  # D-076: PTAX de fechamento do Banco Central (OI-018)
+    return {**finops.creditos_ia_rotina(db), "governo": governo_resultado, "ptax": ptax}
 
 
 @router.post("/sourcing-sincronizar", dependencies=[Depends(_exigir_segredo_cron)])

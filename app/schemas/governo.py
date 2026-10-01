@@ -41,6 +41,7 @@ class ComponenteAdicionalSchema(BaseModel):
     valor: float
     descricao: str | None = None
     creditos: int | None = None
+    tipo_receita: str | None = None  # D-076: classificação fiscal do serviço adicional
 
 
 class MotivoSchema(BaseModel):

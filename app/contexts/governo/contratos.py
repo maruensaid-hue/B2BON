@@ -14,6 +14,7 @@ from decimal import Decimal
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.contexts.comissoes import contract as comissoes
 from app.contexts.finops import contract as finops
 from app.contexts.governo import ofertas, politicas
 from app.contexts.governo.tipos import ADICIONAIS, RECORRENTES, Componente, ModeloCobranca
@@ -223,8 +224,10 @@ def renovar(db: Session, contrato_id: int, *, valor_assinatura=None, motivo_reaj
 
 
 def adicionar_componente(db: Session, contrato_id: int, *, tipo: str, valor, descricao: str | None = None, creditos: int | None = None,
-                         ator_id: str | None = None) -> ComponenteContratoGoverno:
-    """Serviços adicionais ou AI Credits adicionais contratados (os créditos entram como pacote na mesma carteira)."""
+                         tipo_receita: str | None = None, ator_id: str | None = None) -> ComponenteContratoGoverno:
+    """Serviços adicionais ou AI Credits adicionais contratados (os créditos entram como pacote na mesma carteira).
+    D-076: serviço adicional leva a classificação fiscal (IMPLEMENTATION, CONSULTING, SUPPORT...); sem ela, a comissão
+    aguarda o Tax Profile."""
     contrato = obter(db, contrato_id)
     tipo_enum = Componente(tipo)
     if tipo_enum not in ADICIONAIS:
@@ -233,7 +236,10 @@ def adicionar_componente(db: Session, contrato_id: int, *, tipo: str, valor, des
     if valor <= 0:
         raise ValidacaoFalhou("Valor do componente precisa ser positivo.")
     atual = periodo_vigente(db, contrato)
+    if tipo_receita is not None and tipo_receita not in comissoes.tipos.TIPOS_RECEITA:
+        raise ValidacaoFalhou(f"Classificação fiscal: {', '.join(comissoes.tipos.TIPOS_RECEITA)}.")
     componente = _componente(db, contrato, tipo_enum, valor, hoje(), atual, descricao)
+    componente.tipo_receita = tipo_receita
     if tipo_enum == Componente.CREDITOS:
         if not creditos or creditos <= 0:
             raise ValidacaoFalhou("Informe a quantidade de AI Credits adicionais.")
@@ -245,7 +251,7 @@ def adicionar_componente(db: Session, contrato_id: int, *, tipo: str, valor, des
             descricao=descricao or "AI Credits adicionais (contrato governamental)",
         )
     _auditar(db, contrato, "componente_governo_adicionado", "componente_contrato_governo", componente.id, ator_id,
-             {"tipo": tipo_enum.value, "valor": float(valor), "creditos": creditos})
+             {"tipo": tipo_enum.value, "valor": float(valor), "creditos": creditos, "tipo_receita": tipo_receita})
     db.commit()
     return componente
 

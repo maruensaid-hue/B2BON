@@ -120,7 +120,7 @@ def renovar(contrato_id: int, dados: RenovarContratoGovernoSchema, ator_id: str 
 def adicionar_componente(contrato_id: int, dados: ComponenteAdicionalSchema, ator_id: str | None = Depends(get_ator_id),
                          db: Session = Depends(get_db)) -> dict:
     governo.contratos.adicionar_componente(db, contrato_id, tipo=dados.tipo, valor=dados.valor, descricao=dados.descricao,
-                                           creditos=dados.creditos, ator_id=ator_id)
+                                           creditos=dados.creditos, tipo_receita=dados.tipo_receita, ator_id=ator_id)
     return governo.contratos.resumo(db, governo.contratos.obter(db, contrato_id), com_comissoes=True)
 
 

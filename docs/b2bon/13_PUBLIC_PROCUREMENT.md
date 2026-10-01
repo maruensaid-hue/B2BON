@@ -86,3 +86,12 @@ Enterprise) liberam inicialmente este módulo (`procurement`) e estão em `15_PR
   períodos mandam); a barreira Buy/Sell e o isolamento por tenant não mudam.
 - Limites por tier (usuários, unidades administrativas, SLA, armazenamento, volume documental...) ficam "conforme contrato"
   até o PO definir (OI-024).
+
+## 7. BASIC × FULL (D-076)
+
+Um motor só. O nível do plano (`entitlements.public_procurement`: BASIC | FULL) decide as capabilities
+(`app/contexts/shared/entitlements.py`, `Entitlements.has_capability`, dependência `exigir_capacidade`). BASIC: demandas,
+workspace de processos, PCA, cadastro de fornecedores, pesquisa de preços básica, documentos, tarefas, prazos, workflow
+básico, contratos, painel e auditoria. FULL acrescenta Supplier 360, Document Intelligence, Risk Engine, Next Best Action,
+inteligência de contrato e as demais capabilities de inteligência; as rotas correspondentes respondem 403 no BASIC. Plano
+sem nível (privado) continua com tudo.

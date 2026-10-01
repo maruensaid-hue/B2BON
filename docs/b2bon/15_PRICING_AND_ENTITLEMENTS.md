@@ -187,6 +187,8 @@ carteira de AI Credits, comissões, auditoria). O modelo privado mensal não mud
 |---|---|---|---|
 | internal_users | 20 | 50 | 100 |
 | administrative_units | 1 | 5 | 20 |
+| monthly_accounts (franquia de contas MAP/PREDATOR, `franquia_contas_mes`, D-076) | 1.000 | 3.000 | 10.000 |
+| ai_credits_annual (separado da franquia de contas) | 300.000 | 600.000 | 1.200.000 |
 | storage_gb | 100 | 500 | 2.048 |
 | operational_retention_months | 12 | 24 | 60 |
 | crm · map · predator · bid_intelligence | sim | sim | sim |
@@ -197,9 +199,16 @@ carteira de AI Credits, comissões, auditoria). O modelo privado mensal não mud
 | support_sla | BUSINESS_HOURS_8X5 | PRIORITY_BUSINESS_HOURS_8X5 | CRITICAL_BUSINESS_HOURS_8X5 |
 | onboarding | STANDARD | ADVANCED | DEDICATED |
 
-Aplicados pela plataforma: usuários (assentos), módulos (acesso) e API. Os demais são contratuais/declarativos: a
-plataforma ainda não mede unidades administrativas, armazenamento, retenção, SSO nem o que separa Public Procurement BASIC
-de FULL. A franquia mensal de contas do MAP/PREDATOR nos planos Government é 0 (não definida pelo PO).
+Aplicados pela plataforma: usuários (assentos), módulos (acesso), API, franquia mensal de contas e o nível do Public
+Procurement (D-076). Contratuais/declarativos: unidades administrativas, armazenamento, retenção, SSO, suporte e onboarding.
+
+**Public Procurement BASIC × FULL (D-076)** — capabilities do mesmo motor (`Entitlements.has_capability`), sem dois motores:
+BASIC = gestão de demandas, workspace de processos, PCA, cadastro de fornecedores, pesquisa de preços básica, documentos,
+tarefas, prazos, workflow básico, acompanhamento de contratos, painel e trilha de auditoria; FULL = BASIC + Supplier 360,
+grafo, Document Intelligence/RAG, ETP/TR/Edital Intelligence, matriz de conformidade, avaliação, agente, Next Best Action,
+Risk Engine, comparação de propostas, inteligência de contrato, SLA, aditivos, renovação, analytics avançado e APIs. As
+rotas de inteligência (`/procurement/riscos`, `/proximas-acoes`, `/fornecedores/ranking`, `/fornecedores/{id}/360`,
+`/contratos/{id}/inteligencia`, `/documentos/{id}/estimativa` e `/analisar`) exigem FULL. Plano sem nível (privado) = FULL.
 
 - **Fonte única**: `GET /catalogo` (seção `governo`), `GET /planos` e `GET /governo/planos` leem a tabela `plano`; o frontend não
   tem preço Government no código (teste `test_pagina_publica_e_admin_iguais_ao_catalogo`). Mudar preço = Admin → Planos (auditado);
@@ -212,12 +221,15 @@ de FULL. A franquia mensal de contas do MAP/PREDATOR nos planos Government é 0 
 - **Comissão**: política versionada `politica_comissao` (licença 20%, subscrição inicial 20%, renovações 10%, serviços e
   AI Credits adicionais 10% — D-073 —, implantação não comissionável; gatilho PAYMENT_RECEIVED), sobre
   `comissao_representante` e o repasse mensal existente.
-- **Base de cálculo (D-074, todas as vendas)**: **Margem Comissionável Líquida** = receita recebida − impostos atribuíveis (Tax
-  Profile) − infraestrutura atribuível (Infrastructure Cost Model, inclusive IA quando alocada); comissão = margem × taxa.
-  Nunca sobre a receita bruta. Sem parâmetros: AWAITING_COST_PARAMETERS (OI-026). Engine único: `app/contexts/comissoes`.
-- **Tax Engine (D-075)**: Lucro Presumido, um componente por tributo — PIS 0,65% e COFINS 3% sobre a receita; IRPJ 15% e
-  CSLL 9% sobre a base presumida (presunção por tipo de receita: serviços 32%; licença e SaaS a informar); ISS por município e
-  código de serviço (São Paulo/SP item 1.05: 2,90%); CBS 0,9%/IBS 0,1% de 2026 só como teste (entra apenas o caixa efetivo);
-  adicional de IRPJ suportado. Custo de IA só entra na margem se a Commission Policy da margem mandar (v1: não). Câmbio por
-  tabela `cotacao_cambio` (OI-018).
-- Pendências do PO: custo real de infraestrutura e parâmetros tributários faltantes (OI-026); fonte do câmbio (OI-018).
+- **Base de cálculo (D-074/D-076, todas as vendas)**: **Margem Comissionável Líquida** = receita recebida − impostos
+  atribuíveis (Tax Engine) − infraestrutura **provisionada** atribuível (Infrastructure Cost Pool, plano máximo, alocação
+  ponderada 1/2/4 por tier + custos diretos); comissão = margem × taxa (20% inicial, 10% renovação Government). Nunca sobre a
+  receita bruta. Sem valores no pool: AWAITING_INFRASTRUCTURE_COST (OI-026). Engine único: `app/contexts/comissoes`.
+- **Tax Engine (D-075/D-076)**: Lucro Presumido, um componente por tributo — PIS 0,65% e COFINS 3%; IRPJ 15% e CSLL 9% sobre a
+  base presumida de 32% (licença de software, SaaS para simulação, implantação), com o acréscimo de 2026 (presunção × 1,10 acima
+  de R$ 5 milhões/ano) e o adicional de IRPJ (10% acima de R$ 20.000 × meses do período); ISS São Paulo/SP 2,90% para 1.05/2800
+  (licença) e 1.07/2919 (implantação de suporte/instalação/configuração/manutenção); CBS 0,9%/IBS 0,1% de 2026 com situação
+  registrada (só PAYABLE entra). Custo de IA só entra na margem se a política da margem mandar (v1: não). Câmbio: PTAX de
+  fechamento do Banco Central (OI-018 resolvido quanto à política).
+- Pendências do PO (OI-026): valores dos planos de referência dos fornecedores, capacidades e moedas; ISS da subscrição SaaS;
+  perfis de consultoria e suporte; situação CBS/IBS 2026; tier de Bid Intelligence e Strategic Sourcing.

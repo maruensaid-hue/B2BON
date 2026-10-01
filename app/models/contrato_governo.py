@@ -133,6 +133,9 @@ class ComponenteContratoGoverno(Base):
     recorrente: Mapped[bool] = mapped_column(Boolean, default=False)  # entra no ARR
     comissionavel: Mapped[bool] = mapped_column(Boolean, default=False)
     taxa_comissao: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # D-076: classificação fiscal do componente (SOFTWARE_LICENSE, SAAS_SUBSCRIPTION, IMPLEMENTATION, CONSULTING,
+    # SUPPORT). Vazio = padrão do tipo; serviço adicional sem classificação aguarda o Tax Profile.
+    tipo_receita: Mapped[str | None] = mapped_column(String, nullable=True)
     booking_em: Mapped[date] = mapped_column(Date)
     cancelado: Mapped[bool] = mapped_column(Boolean, default=False)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

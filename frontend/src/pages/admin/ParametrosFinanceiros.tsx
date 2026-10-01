@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
+import { PainelInfraestrutura } from "@/components/PainelInfraestrutura";
 import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { brl } from "@/lib/aiCredits";
 import { api, mensagemErro } from "@/lib/api";
@@ -100,9 +101,9 @@ export function ParametrosFinanceiros() {
         </div>
         <div className="mt-0.5 text-[11px] text-muted">
           Comissão = Margem Comissionável Líquida (receita recebida − impostos
-          atribuíveis − infraestrutura atribuível) × taxa. Sem Tax Profile ou
-          modelo de infraestrutura vigente, a comissão fica aguardando e não é
-          paga.
+          atribuíveis − infraestrutura provisionada atribuível) × taxa. Sem Tax
+          Profile ou sem valores no Infrastructure Cost Pool, a comissão fica
+          aguardando e não é paga.
         </div>
       </div>
       {mensagem && <div className="text-[12px] text-muted">{mensagem}</div>}
@@ -143,7 +144,11 @@ export function ParametrosFinanceiros() {
                   <span className="font-semibold">{p.tipo_receita}</span> ·{" "}
                   {p.regime}
                   {p.municipio ? ` · ${p.municipio}` : ""}
-                  {p.codigo_servico ? ` · serviço ${p.codigo_servico}` : ""}
+                  {p.item_lista_servico
+                    ? ` · item ${p.item_lista_servico}`
+                    : ""}
+                  {p.codigo_servico ? ` · código ${p.codigo_servico}` : ""}
+                  {p.versao_legal ? ` · ${p.versao_legal}` : ""}
                 </span>
                 <span className="flex items-center gap-2">
                   de {p.vigente_de}{" "}
@@ -186,6 +191,9 @@ export function ParametrosFinanceiros() {
               tipo_receita: String(f.get("tipo_receita")),
               municipio: String(f.get("municipio") ?? "") || null,
               codigo_servico: String(f.get("codigo_servico") ?? "") || null,
+              item_lista_servico:
+                String(f.get("item_lista_servico") ?? "") || null,
+              versao_legal: String(f.get("versao_legal") ?? "") || null,
               componentes: lerJson(tributosJson),
               fonte: String(f.get("fonte") ?? "") || null,
             }))
@@ -202,7 +210,18 @@ export function ParametrosFinanceiros() {
             ))}
           </Select>
           <Input name="municipio" placeholder="Município (ex.: São Paulo/SP)" />
-          <Input name="codigo_servico" placeholder="Código de serviço (ISS)" />
+          <Input
+            name="item_lista_servico"
+            placeholder="Item LC 116 (ex.: 1.05)"
+          />
+          <Input
+            name="codigo_servico"
+            placeholder="Código municipal (ex.: 2800)"
+          />
+          <Input
+            name="versao_legal"
+            placeholder="Versão legal (ex.: 2026-v1)"
+          />
           <Input
             name="fonte"
             placeholder="Fonte (contador, parecer...)"
@@ -222,99 +241,7 @@ export function ParametrosFinanceiros() {
         </form>
       </Card>
 
-      <Card>
-        <SectionLabel>
-          Infrastructure Cost Model (custo atribuível à receita)
-        </SectionLabel>
-        <div className="flex flex-col gap-1 text-[12px]">
-          {(dados?.modelos_custo_infra ?? []).map((m) => (
-            <div
-              key={m.id}
-              className="flex flex-wrap justify-between gap-2 rounded-md border border-border p-2"
-            >
-              <span>
-                <span className="font-semibold">{m.nome}</span> · {m.metodo} ·{" "}
-                {JSON.stringify(m.componentes)}
-              </span>
-              <span>
-                de {m.vigente_de}{" "}
-                {m.vigente_ate ? `até ${m.vigente_ate}` : "(vigente)"}
-              </span>
-            </div>
-          ))}
-          {dados?.modelos_custo_infra.length === 0 && (
-            <Badge tone="amber">Nenhum modelo — comissões aguardando</Badge>
-          )}
-        </div>
-        <form
-          className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-4"
-          onSubmit={(e) =>
-            enviar(e, "/comissoes/modelos-custo-infra", (f) => {
-              const componentes: Record<string, unknown>[] = [];
-              const valor = String(f.get("valor") ?? "").trim();
-              const metodo = String(f.get("metodo"));
-              if (valor || metodo === "USAGE_BASED") {
-                const numero = Number(valor.replace(",", "."));
-                const campo: Record<string, Record<string, unknown>> = {
-                  PERCENTAGE: { percentual: numero / 100 },
-                  FIXED: { valor: numero },
-                  PER_TENANT: { padrao: numero },
-                  PER_USER: { valor_por_usuario: numero },
-                  USAGE_BASED: { janela_dias: numero || 30 },
-                };
-                componentes.push({
-                  categoria: String(f.get("categoria")),
-                  metodo,
-                  ...campo[metodo],
-                });
-              }
-              const extra = String(f.get("extra") ?? "").trim();
-              if (extra) componentes.push(...lerJson(extra));
-              return {
-                nome: String(f.get("nome")),
-                vigente_de: String(f.get("vigente_de")),
-                componentes,
-                fonte: String(f.get("fonte") ?? "") || null,
-              };
-            })
-          }
-        >
-          <Input name="nome" required placeholder="Nome do modelo" />
-          <Input name="vigente_de" type="date" required />
-          <Select name="categoria">
-            {(dados?.categorias_infra ?? []).map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-          <Select name="metodo">
-            {Object.entries(dados?.metodos_infra ?? {}).map(([m, ajuda]) => (
-              <option key={m} value={m} title={ajuda}>
-                {m}
-              </option>
-            ))}
-          </Select>
-          <Input
-            name="valor"
-            placeholder="Valor (% p/ PERCENTAGE, R$ p/ FIXED/PER_TENANT/PER_USER, dias p/ USAGE_BASED)"
-            className="sm:col-span-2"
-          />
-          <Input
-            name="extra"
-            placeholder='Outros componentes (HYBRID): [{"categoria":"storage_cost","metodo":"FIXED","valor":40}]'
-            className="sm:col-span-2"
-          />
-          <Input
-            name="fonte"
-            placeholder="Fonte (cloud, banco...)"
-            className="sm:col-span-2"
-          />
-          <Button type="submit" size="sm" className="sm:col-span-2">
-            Salvar modelo
-          </Button>
-        </form>
-      </Card>
+      <PainelInfraestrutura onAlterado={setMensagem} />
 
       <Card>
         <SectionLabel>Commission Policy</SectionLabel>
@@ -453,10 +380,15 @@ export function ParametrosFinanceiros() {
                   "",
                   "Receita bruta",
                   "Impostos",
-                  "Infraestrutura",
+                  "Infra provisionada",
+                  "Infra real",
+                  "Custo de IA",
                   "Margem comissionável",
                   "Comissão",
                   "Margem CyberFort",
+                  "Contribuição real",
+                  "Contribuição conservadora",
+                  "Reserva de infra",
                   "Aguardando",
                 ].map((t) => (
                   <th key={t} className="p-2 text-left">
@@ -487,6 +419,12 @@ export function ParametrosFinanceiros() {
                       {pct(l.percentuais.infraestrutura)}
                     </span>
                   </td>
+                  <td className="p-2" data-testid="infra-real">
+                    {l.infraestrutura_real_incompleta
+                      ? "—"
+                      : brl(l.infraestrutura_real)}
+                  </td>
+                  <td className="p-2">{brl(l.custo_ia)}</td>
                   <td className="p-2">
                     {brl(l.margem_comissionavel_liquida)}{" "}
                     <span className="text-muted">
@@ -504,6 +442,19 @@ export function ParametrosFinanceiros() {
                     <span className="text-muted">
                       {pct(l.percentuais.margem_cyberfort_apos_comissao)}
                     </span>
+                  </td>
+                  <td className="p-2">
+                    {l.margem_contribuicao_real === null
+                      ? "—"
+                      : brl(l.margem_contribuicao_real)}
+                  </td>
+                  <td className="p-2">
+                    {brl(l.margem_contribuicao_conservadora)}
+                  </td>
+                  <td className="p-2">
+                    {l.reserva_infraestrutura === null
+                      ? "—"
+                      : brl(l.reserva_infraestrutura)}
                   </td>
                   <td className="p-2 text-muted">
                     {l.aguardando_parametros

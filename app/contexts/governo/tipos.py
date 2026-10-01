@@ -52,9 +52,12 @@ ESTAGIOS_FECHADOS = frozenset({"CONTRACT", "BOOKING", "PAYMENT", "COMMISSION_EVE
 # - crm, map, predator, bid_intelligence → `modulos_contratados` (o acesso real aos módulos);
 # - public_procurement → nível no JSON, liberado só com "procurement" em `modulos_contratados`;
 # - api_access → `permite_api_parceiros`;
+# - monthly_accounts → `franquia_contas_mes` (franquia de contas do MAP/PREDATOR, D-076) e ai_credits_annual →
+#   `creditos_ia_anuais` — dois entitlements separados, um não é o outro;
 # - demais → JSON `entitlements` (CHAVES_ENTITLEMENT). Valor None = "conforme contrato".
 ORDEM_ENTITLEMENTS = (
-    "internal_users", "administrative_units", "storage_gb", "operational_retention_months", "crm", "map", "predator",
+    "internal_users", "administrative_units", "monthly_accounts", "ai_credits_annual", "storage_gb", "operational_retention_months",
+    "crm", "map", "predator",
     "bid_intelligence", "public_procurement", "business_network", "corporate_brain", "api_access", "sso", "support_sla", "onboarding",
 )
 MODULO_POR_ENTITLEMENT = {"crm": "crm", "map": "map", "predator": "predator", "bid_intelligence": "bids"}

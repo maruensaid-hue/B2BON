@@ -189,6 +189,7 @@ def _calcular_comissao_representante(db: Session, pagamento: PagamentoLicenca) -
         recebido_em=(pagamento.confirmado_em or datetime.now(UTC)).date(), receita_bruta=pagamento.valor,
         beneficiarios=[(representante.id, 1)] if representante else [],
         taxa=representante.percentual_comissao if representante else None, pagamento_licenca_id=pagamento.id,
+        meses_infra=1.0,  # D-076: a mensalidade remunera um mês de operação (custo de infraestrutura do tenant-mês)
     )
 
 

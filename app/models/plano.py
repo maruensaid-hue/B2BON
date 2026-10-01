@@ -80,3 +80,6 @@ class Plano(Base):
     recomendado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Entitlements configuráveis por oferta (usuários, unidades, SLA, armazenamento...): valor None = "conforme contrato".
     entitlements: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # D-076: tier de infraestrutura (ENTRY | DEPARTMENT | PROFESSIONAL | ENTERPRISE) — o peso de cada tier fica na
+    # política de infraestrutura (configurável); plano sem tier não entra na alocação ponderada.
+    tier_infraestrutura: Mapped[str | None] = mapped_column(String, nullable=True)

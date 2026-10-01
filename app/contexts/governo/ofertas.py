@@ -19,6 +19,7 @@ from app.contexts.governo.tipos import (
     VALORES_SSO,
     ModeloCobranca,
 )
+from app.contexts.shared.entitlements import CAPACIDADES_PUBLIC_PROCUREMENT
 from app.models.plano import Plano
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
@@ -53,6 +54,8 @@ def entitlements(plano: Plano) -> dict:
     valores = {chave: extras.get(chave) for chave in CHAVES_ENTITLEMENT}
     valores.update({chave: modulo in modulos for chave, modulo in MODULO_POR_ENTITLEMENT.items()})
     valores["internal_users"] = plano.max_usuarios
+    valores["monthly_accounts"] = plano.franquia_contas_mes
+    valores["ai_credits_annual"] = plano.creditos_ia_anuais
     valores["api_access"] = bool(plano.permite_api_parceiros)
     if "procurement" not in modulos:
         valores["public_procurement"] = False
@@ -86,6 +89,7 @@ def oferta(plano: Plano) -> dict:
         "licenca": float(licenca), "implantacao": float(implantacao), "assinatura_anual": float(assinatura),
         "contratacao_inicial": float(contratacao_inicial(licenca, implantacao, assinatura)),
         "creditos_ia_anuais": plano.creditos_ia_anuais, "entitlements": entitlements(plano),
+        "capacidades_public_procurement": list(CAPACIDADES_PUBLIC_PROCUREMENT.get(entitlements(plano)["public_procurement"], ())),
     }
 
 

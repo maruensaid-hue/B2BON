@@ -942,3 +942,71 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Fórmula mantida**: NET_COMMISSIONABLE_MARGIN = receita comissionável recebida − impostos atribuíveis − infraestrutura
   atribuível; 20% inicial, 10% renovação Government, implantação não comissionável por padrão; nunca Gross Revenue × taxa.
 - **Status**: ACEITA. Migração `a6c8e0f2b4d7` (reversível).
+
+## D-076 · 2026-10-01 · Infrastructure Cost Policy (conservadora) e parâmetros pendentes de OI-018/OI-024/OI-026
+- **Contexto**: prompts do PO "RESOLUÇÃO OI-026 — INFRASTRUCTURE COST POLICY" e "RESOLUÇÃO DOS PARÂMETROS PENDENTES —
+  OI-018 / OI-024 / OI-026". Substitui o Infrastructure Cost Model da D-075 (sem dados em produção) pelo pool de fornecedores;
+  fórmula da comissão mantida.
+- **Decisão (texto do PO)**: "CyberFort adopts a conservative provisioned infrastructure cost policy for commission
+  calculations, initially based on the selected maximum provider plan/capacity, while maintaining actual infrastructure costs
+  separately for FinOps and profitability analysis."
+- **Infrastructure Cost Pool** (`componente_infra`, um motor só em `app/contexts/comissoes/infraestrutura.py`): fornecedor,
+  serviço, categoria, plano atual e plano de referência (máximo), ciclo, moeda, custo contratado, custo de referência, custo
+  real, capacidade, uso, unidade, vigência, método de alocação e notas — nenhum fornecedor ou valor no código.
+  - **ACTUAL** (custo real) e **PROVISIONED** coexistem e nunca se misturam. Com `MAX_CONTRACTED_PLAN`, o provisionado é o
+    custo integral do plano de referência, mesmo com uso baixo.
+  - **Weighted Allocation**: unidades ponderadas = Σ tenants ativos × peso do tier do plano; custo por unidade = pool
+    provisionado do mês ÷ unidades; custo do tenant = custo por unidade × peso. Pesos iniciais ENTRY/DEPARTMENT 1,
+    PROFESSIONAL 2, ENTERPRISE 4, configuráveis (política `INFRASTRUCTURE_COST_POLICY`, versionada e auditada). Tier do plano
+    no catálogo (`plano.tier_infraestrutura`): ofertas Government pelo tier; privados pelo nome (Starter = ENTRY, Professional,
+    Enterprise); plano sem tier não entra na alocação e a comissão dele aguarda.
+  - **Direct Attribution** tem prioridade: componente DIRECT recebe o consumo medido por tenant (`custo_direto_infra`); o
+    restante do plano provisionado volta ao pool ponderado. Marca d'água por competência: um custo direto vai a um
+    recebimento só.
+  - **Sem dupla contagem**: componente contabilizado como `AI_COST` (IA, APIs e dados já medidos pelo FinOps) nunca entra no
+    custo de infraestrutura; o custo de IA continua separado e só entra na margem pela política da margem (D-075).
+  - **Atribuição temporal (metodologia)**: o custo do tenant-mês vai uma vez para a receita que remunera a operação daquele
+    mês — mensalidade privada = 1 mês; subscrição anual Government = meses do período × fração recebida; licença, implantação
+    e adicionais não carregam meses de operação. Sem pool com valores, toda comissão fica `AWAITING_INFRASTRUCTURE_COST`.
+- **Comissão**: NET_COMMISSIONABLE_MARGIN = receita comissionável recebida − impostos atribuíveis − infraestrutura
+  PROVISIONADA (política `custo_comissao`); 20% inicial, 10% renovação Government; nunca sobre Gross Revenue.
+- **Capacidade**: status NORMAL < 70%, ATTENTION ≥ 70%, REVIEW ≥ 80%, CRITICAL ≥ 90%, CAPACITY_REACHED ≥ 100% (limiares
+  configuráveis). REVIEW gera a recomendação "Revisar capacidade e condições comerciais do fornecedor."; CRITICAL, o alerta
+  "Capacidade próxima do limite. Avaliar upgrade, contrato Enterprise, desconto por volume ou parceria estratégica."; 100%,
+  "Contracted capacity reached.". Nenhum upgrade ou contratação automática: o alerta fecha com a decisão registrada.
+- **Provider Economics e forecast**: por fornecedor — plano atual × referência, custos, capacidade, uso, utilização, custo por
+  tenant, por unidade ponderada e ÷ receita, participação no pool (concentração, dependência), utilização projetada
+  (30/90/180 dias) e data estimada de esgotamento por regressão linear do uso medido; projeção de custo e de custo ÷ receita
+  pela tendência de tenants. Determinístico, sem LLM.
+- **MAP**: receita, impostos, infraestrutura real, infraestrutura provisionada, custo de IA, Margem Comissionável Líquida,
+  comissão, margem CyberFort após comissão, Actual Contribution Margin, Conservative Contribution Margin e reserva de
+  infraestrutura (provisionado − real).
+- **Tax Engine (OI-026)**:
+  - tipos de receita separados: SOFTWARE_LICENSE, SAAS_SUBSCRIPTION, IMPLEMENTATION, CONSULTING, SUPPORT; serviço adicional
+    leva a classificação no componente (sem ela, aguarda);
+  - SOFTWARE_LICENSE: IRPJ 15% e CSLL 9% sobre base presumida de 32% (32% é base, não imposto); ISS São Paulo/SP item 1.05,
+    código municipal 2800, 2,90%;
+  - SAAS_SUBSCRIPTION: na categoria de serviço (presunção 32%) para simulação, classificação versionada para validação
+    contábil; ISS/código de serviço a informar;
+  - IMPLEMENTATION (suporte técnico, instalação, configuração, manutenção de software/banco de dados): item 1.07, código 2919,
+    2,90%; consultoria ou outra atividade usa o perfil correspondente (CONSULTING/SUPPORT sem perfil ainda);
+  - adicional de IRPJ: 10% sobre a parcela da base do IRPJ acima de R$ 20.000 × meses do período (trimestre: R$ 60.000);
+  - regra de 2026: acréscimo de 10% nos percentuais de presunção sobre a parcela da receita acima de R$ 5.000.000/ano,
+    proporcional ao período de apuração (35,2% em vez de 32%, nunca +10 pontos), versionada no perfil;
+  - CBS 0,90% / IBS 0,10% (2026) com situação COMPENSATED, WAIVED_BY_COMPLIANCE, PAYABLE ou PENDING_COMPLIANCE_CONFIRMATION
+    (só PAYABLE entra na carga; inicial: PENDING);
+  - perfis por vigência com `effective_from/until`, `legal_version`, regime, tipo de receita, município, item LC 116 e código
+    municipal; 2027+ exige perfil novo (nada estendido nem alíquota CBS definitiva inventada). Perfis da D-075 encerrados na
+    própria vigência (histórico preservado).
+  - Os cálculos de limite (adicional, acréscimo) consideram as receitas do B2B ON apuradas pelo motor.
+- **Câmbio (OI-018)**: fonte BANCO_CENTRAL_DO_BRASIL, PTAX de fechamento (cotação de venda), par USD/BRL, do dia útil da
+  contabilização; sem PTAX no dia, a última anterior. Obtida da API pública do Banco Central (rotina horária e botão no Admin)
+  ou cadastrada; snapshot fx_rate, fx_date, source, retrieved_at; custo já fechado não é recalculado.
+- **Government (OI-024)**: franquia mensal de contas do MAP/PREDATOR 1.000 / 3.000 / 10.000 (separada dos AI Credits
+  300.000 / 600.000 / 1.200.000 por ano). Public Procurement BASIC (gestão de demandas, workspace de processos, PCA, cadastro
+  de fornecedores, pesquisa de preços básica, documentos, tarefas, prazos, workflow básico, acompanhamento de contratos,
+  painel, trilha de auditoria) e FULL (BASIC + Supplier 360, grafo, Document Intelligence/RAG, ETP/TR/Edital Intelligence,
+  matriz de conformidade, avaliação, agente, Next Best Action, Risk Engine, comparação de propostas, inteligência de
+  contrato, SLA, aditivos, renovação, analytics avançado, APIs) como capabilities do mesmo motor (`has_capability`); plano sem
+  nível (privado) mantém todas.
+- **Status**: ACEITA. Migração `b7d9f1a3c5e8` (reversível).

@@ -51,6 +51,7 @@
 | Usuários do Bid Intelligence por entitlement; Supplier Guest não conta; pool de créditos do tenant | `tests/integration/test_usuarios_bid_intelligence_j3.py` | Phase J |
 | Government: componentes, ARR/TCV/Cash-In, renovação, pool anual, catálogo único, comissão por componente | `tests/integration/test_governo.py` (+ `_pg`), `e2e/governo.spec.ts` | D-072 |
 | Comissão sobre a Margem Comissionável Líquida: impostos, infraestrutura e IA antes da taxa, AWAITING_COST_PARAMETERS, recálculo, snapshot, PAID imutável, waterfall | `tests/integration/test_comissao_margem.py` | D-074 |
+| Infrastructure Cost Pool: real × provisionado, plano máximo, pesos 1/2/4 configuráveis, atribuição direta, sem dupla contagem IA/API, limiares 70/80/90/100, alertas sem upgrade automático, projeção, Provider Economics, PTAX, isolamento | `tests/integration/test_infraestrutura_pool.py` | D-076 |
 | Entitlements Government do PO no catálogo único; Tax Engine (presunção, ISS SP 1.05, CBS/IBS-teste fora da carga, adicional de IRPJ, pendências); infraestrutura por categoria/método; câmbio por vigência e AWAITING_FX_RATE; IA só pela política | `tests/integration/test_parametros_financeiros.py` | D-075 |
 
 ## Regras
@@ -100,3 +101,4 @@
 | Government (2026-10-01) | 2.117 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |
 | D-074 margem comissionável (2026-10-01) | 2.128 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |
 | D-075 parâmetros do PO (2026-10-01) | 2.143 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |
+| D-076 infraestrutura conservadora (2026-10-01) | 2.163 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |

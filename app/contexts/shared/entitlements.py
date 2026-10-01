@@ -36,6 +36,22 @@ _FEATURES: dict[str, Callable[[PlanLimitsProvider, str], bool]] = {
 }
 FEATURES = tuple(_FEATURES)
 
+# D-076: capabilities do Public Procurement. Um motor só (módulo `procurement`); o nível do plano (BASIC | FULL) define
+# o que fica disponível. Plano sem nível (privado) tem todas, como antes.
+CAPACIDADES_PUBLIC_PROCUREMENT_BASIC = (
+    "demand_management", "process_workspace", "pca_support", "supplier_registry", "basic_price_research",
+    "document_management", "tasks", "deadlines", "basic_workflow", "contract_tracking", "procurement_dashboard", "audit_trail",
+)
+CAPACIDADES_PUBLIC_PROCUREMENT = {
+    "BASIC": CAPACIDADES_PUBLIC_PROCUREMENT_BASIC,
+    "FULL": CAPACIDADES_PUBLIC_PROCUREMENT_BASIC + (
+        "supplier_360", "procurement_graph", "document_intelligence", "etp_intelligence", "tr_intelligence", "tender_intelligence",
+        "compliance_matrix", "evaluation_engine", "procurement_agent", "next_best_action", "risk_engine", "proposal_comparison",
+        "contract_intelligence", "sla_monitoring", "amendment_intelligence", "renewal_intelligence", "advanced_analytics",
+        "apis_integrations",
+    ),
+}
+
 # Phase J3 (OI-023): papéis de quem é de fora da empresa (ex.: fornecedor convidado a responder um processo)
 # nunca ocupam assento interno. Hoje o Supplier Guest entra por link, sem usuário; se um papel externo passar a
 # existir como usuário, ele é declarado aqui e continua fora da contagem.
@@ -64,3 +80,13 @@ class Entitlements:
         if verificar is None:
             raise ValueError(f"Feature desconhecida: {feature}")
         return verificar(self._plan_limits, self._tenant_id)
+
+    def nivel_public_procurement(self) -> str:
+        return self._plan_limits.obter_nivel_public_procurement(self._tenant_id) or "FULL"
+
+    def has_capability(self, capacidade: str) -> bool:
+        """Capability do Public Procurement (D-076): exige o módulo e o nível do plano que a inclui."""
+        if capacidade not in CAPACIDADES_PUBLIC_PROCUREMENT["FULL"]:
+            raise ValueError(f"Capability desconhecida: {capacidade}")
+        nivel = self.nivel_public_procurement()
+        return self.has_module("procurement") and capacidade in CAPACIDADES_PUBLIC_PROCUREMENT.get(nivel, ())

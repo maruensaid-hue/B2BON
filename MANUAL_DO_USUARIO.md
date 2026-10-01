@@ -732,16 +732,26 @@ usa nomenclatura própria (ex.: "Master"/"Vendedor"/"Cliente").
   impostos atribuíveis (Tax Profile: regime, vigência, tipo de receita,
   município e código de serviço, com cada tributo — PIS, COFINS, IRPJ e
   CSLL pela presunção, ISS, CBS/IBS-teste — calculado separadamente) e
-  custo de infraestrutura atribuível (categorias de custo alocadas por
-  valor fixo, percentual, por tenant, por usuário ou por uso; o custo de
-  IA só entra se a política da margem mandar). A cotação do dólar para o
-  custo de IA também é cadastrada aqui, com fonte e vigência. No topo, a
+  custo de infraestrutura provisionado. Em **Infraestrutura** você
+  cadastra cada fornecedor e plano (Render, Neon, Lusha... com plano
+  atual, plano máximo de referência, custo, capacidade e uso): a
+  comissão usa o custo do plano máximo (conservador), dividido entre os
+  clientes por peso (Department/entrada 1, Professional 2, Enterprise 4,
+  ajustáveis) mais o que for medido diretamente por cliente; o custo
+  real fica ao lado para comparação. Ao chegar a 80%, 90% e 100% da
+  capacidade de um fornecedor aparecem recomendações e alertas — nada é
+  contratado sozinho, você registra a decisão. O custo de IA só entra
+  na comissão se a política da margem mandar. A cotação do dólar (PTAX
+  de fechamento do Banco Central) é buscada sozinha ou cadastrada aqui.
+  No topo, a
   tela lista exatamente o que ainda falta informar. Sem esses
   parâmetros a comissão fica "aguardando parâmetros de custo" e não é
   paga; ao informá-los, ela é calculada sozinha. Comissão já paga nunca
   muda; as não pagas só mudam por recálculo com motivo. A tela mostra a
-  waterfall: receita bruta → impostos → infraestrutura → margem
-  comissionável → comissão → margem da CyberFort, por tenant,
+  waterfall: receita bruta → impostos → infraestrutura provisionada (e a
+  real ao lado) → custo de IA → margem comissionável → comissão → margem
+  da CyberFort, margem de contribuição real e conservadora e a reserva
+  de infraestrutura, por tenant,
   representante, produto, venda ou período.
 
 ---
@@ -854,6 +864,7 @@ definidas na contratação.
 | Armazenamento | 100 GB | 500 GB | 2 TB |
 | Retenção operacional | 12 meses | 24 meses | 60 meses |
 | CRM, MAP, PREDATOR, Bid Intelligence, Business Network, Corporate Brain | sim | sim | sim |
+| Franquia mensal de contas (MAP/PREDATOR) | 1.000 | 3.000 | 10.000 |
 | Public Procurement | Básico | Completo | Completo |
 | API | não | sim | sim |
 | SSO | não | opcional | sim |

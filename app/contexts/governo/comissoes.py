@@ -36,15 +36,28 @@ def _numero_renovacao(db: Session, componente: ComponenteContratoGoverno) -> int
     return db.get(PeriodoAssinaturaGoverno, componente.periodo_id).numero - 1
 
 
+def _meses_operacao(db: Session, componente: ComponenteContratoGoverno, recebimento: RecebimentoGoverno) -> float:
+    """D-076: meses de operação que o recebimento remunera — subscrição: meses do período × fração recebida do componente;
+    licença, implantação e adicionais: 0 (o custo de infraestrutura do tenant-mês vai para a subscrição, uma vez)."""
+    if componente.tipo not in comissoes.tipos.COMPONENTES_OPERACIONAIS or componente.periodo_id is None or not componente.valor:
+        return 0.0
+    periodo = db.get(PeriodoAssinaturaGoverno, componente.periodo_id)
+    meses = (periodo.fim.year - periodo.inicio.year) * 12 + periodo.fim.month - periodo.inicio.month \
+        + (periodo.fim.day - periodo.inicio.day) / 30
+    return round(max(meses, 0) * float(recebimento.valor) / float(componente.valor), 4)
+
+
 def reconhecer_recebimento(db: Session, contrato: ContratoGoverno, componente: ComponenteContratoGoverno,
                            recebimento: RecebimentoGoverno) -> list[ComissaoRepresentante]:
     """Todo recebimento é apurado (waterfall do MAP); só componente comissionável gera comissão."""
     comissionavel = componente.comissionavel and componente.taxa_comissao and not componente.cancelado
     plano = db.get(Plano, contrato.plano_id)
+    tipo_receita = componente.tipo_receita or comissoes.tipos.TIPO_RECEITA_POR_COMPONENTE.get(componente.tipo) \
+        or comissoes.tipos.RECEITA_NAO_CLASSIFICADA
     _, geradas = comissoes.motor.registrar_recebimento(
         db, origem=comissoes.tipos.Origem.RECEBIMENTO_GOVERNO, tenant_id=contrato.tenant_id, segmento="GOVERNMENT",
         produto=plano.nome if plano else "B2B ON Government", recebido_em=recebimento.recebido_em, receita_bruta=recebimento.valor,
-        tipo_receita=comissoes.tipos.TIPO_RECEITA_POR_COMPONENTE.get(componente.tipo, comissoes.tipos.RECEITA_SAAS),
+        tipo_receita=tipo_receita, meses_infra=_meses_operacao(db, componente, recebimento),
         beneficiarios=_beneficiarios(contrato) if comissionavel else [], taxa=componente.taxa_comissao if comissionavel else None,
         recebimento_governo_id=recebimento.id, componente_tipo=componente.tipo,
         meta={"componente_governo_id": componente.id, "contrato_governo_id": contrato.id,

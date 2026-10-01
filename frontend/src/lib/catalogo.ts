@@ -147,6 +147,8 @@ export function formatarLimite(valor: number | null | undefined): string {
 const ROTULOS_ENTITLEMENT: Record<string, string> = {
   internal_users: "Usuários internos",
   administrative_units: "Unidades administrativas",
+  monthly_accounts: "Franquia mensal de contas (MAP/PREDATOR)",
+  ai_credits_annual: "AI Credits/ano",
   storage_gb: "Armazenamento",
   operational_retention_months: "Retenção operacional",
   crm: "CRM",
@@ -186,6 +188,7 @@ export function linhasEntitlements(
       texto =
         Number(valor) >= 1024 ? `${Number(valor) / 1024} TB` : `${valor} GB`;
     else if (chave === "operational_retention_months") texto = `${valor} meses`;
+    else if (typeof valor === "number") texto = valor.toLocaleString("pt-BR");
     else texto = VALORES_ENTITLEMENT[String(valor)] ?? String(valor);
     return [ROTULOS_ENTITLEMENT[chave] ?? chave, texto];
   });

@@ -91,9 +91,11 @@ com valor anterior, novo e motivo. Execuções guardam a versão usada.
 
 - Custo: `preco_modelo_ia` (USD/MTok versionado) × tokens das quatro
   categorias. Modelo sem preço → custo desconhecido, nunca zero.
-- Custo em BRL = USD × cotação USD/BRL vigente (tabela `cotacao_cambio`,
-  D-075, Admin → Parâmetros financeiros). Sem cotação, lucro e margem são
-  `null` com motivo `AWAITING_FX_RATE` (UNKNOWN em vez de invenção).
+- Custo em BRL = USD × PTAX de fechamento (venda) do Banco Central do dia
+  útil da contabilização; sem PTAX no dia, a última anterior (D-076, OI-018).
+  A PTAX é gravada pela rotina horária (`/cron/creditos-ia`) ou cadastrada no
+  Admin → Parâmetros financeiros, com snapshot (taxa, data, fonte, obtenção).
+  Sem cotação, lucro e margem são `null` com motivo `AWAITING_FX_RATE`.
 - Cache de resposta (FAQ e orquestrador): hit registra `cache_hit`,
   custo 0 e `economia_cache_usd`; o crédito é cobrado (política comercial).
 - Cost guard: se o custo estimado passar do teto do workload
@@ -139,3 +141,13 @@ receita/lucro/margem agora vêm de `economia.kpis`. A política
   parametrizado por todas as features: evento de uso com workload e versão
   do catálogo, execução LIQUIDADA, CREDIT_CONSUMED no extrato e
   reconciliação consistente.
+
+## 10. Custo de infraestrutura × custo de IA (D-076)
+
+- O custo de IA (LLM e dados medidos pelo AI Gateway) fica no FinOps, separado. O custo de infraestrutura vem do
+  **Infrastructure Cost Pool** (Admin → Parâmetros financeiros → Infraestrutura): fornecedores e planos cadastrados, com
+  custo **real** (o que a CyberFort paga) e custo **provisionado** (plano máximo/de referência, conservador).
+- Componente marcado `AI_COST` (IA, APIs e dados já medidos aqui) nunca entra de novo como infraestrutura.
+- O custo real alimenta a Actual Contribution Margin; o provisionado, a comissão e a Conservative Contribution Margin;
+  a diferença aparece como reserva de infraestrutura. Capacidade, alertas (80/90/100%) e projeção de esgotamento ficam em
+  Provider Economics; nada é contratado automaticamente.

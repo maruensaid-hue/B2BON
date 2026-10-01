@@ -101,6 +101,15 @@ def _modo_creditos_medicao(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _ptax_sem_rede(monkeypatch):
+    """D-076: a suíte nunca chama a API do Banco Central; sem cotação, a PTAX fica ausente (testes de câmbio injetam a
+    busca ou cadastram a cotação)."""
+    from app.contexts.finops import cambio
+
+    monkeypatch.setattr(cambio, "_buscar_ptax_bcb", lambda dia: None)
+
+
+@pytest.fixture(autouse=True)
 def _sourcing_leitura_dupla_estrita(monkeypatch):
     """Sourcing S3: toda leitura de licitação/processo/documento/requisito na
     suíte confere as tabelas unificadas e falha em qualquer divergência — é

@@ -35,16 +35,18 @@ def _migracao(arquivo: str = "d9e1f3a5b7c9_b2bon_government.py"):
 MIG = _migracao()
 MIG_D073 = _migracao("e1f3a5b7c9d2_comissao_base_liquida.py")
 MIG_D075 = _migracao("a6c8e0f2b4d7_parametros_financeiros_entitlements_gov.py")
+MIG_D076 = _migracao("b7d9f1a3c5e8_pool_infraestrutura_tributos_2026.py")
 
 
 @pytest.fixture()
 def planos_gov(db_session):
-    """Os três planos com os valores das migrações (a fonte que cria os planos em produção): preços da D-072 e
-    entitlements da D-075."""
+    """Os três planos com os valores das migrações (a fonte que cria os planos em produção): preços da D-072,
+    entitlements da D-075, franquia de contas e tier de infraestrutura da D-076."""
     criados = {}
     for nome, licenca, implantacao, assinatura, creditos, recomendado in MIG.PLANOS:
         usuarios, api, extras = MIG_D075.ENTITLEMENTS[nome]
-        plano = Plano(nome=nome, franquia_contas_mes=0, max_usuarios=usuarios, preco_mensal=0.0, visivel_self_service=False,
+        plano = Plano(nome=nome, franquia_contas_mes=MIG_D076.FRANQUIA_GOVERNO[nome], tier_infraestrutura=MIG_D076.tier_por_nome(nome),
+                      max_usuarios=usuarios, preco_mensal=0.0, visivel_self_service=False,
                       modulos_contratados=list(MIG_D075.MODULOS), categoria="governo", tipo_preco="CONTRACT", segmento="GOVERNMENT",
                       modelo_cobranca=MIG.MODELO, preco_licenca=licenca, preco_implantacao=implantacao, preco_assinatura_anual=assinatura,
                       creditos_ia_anuais=creditos, recomendado=recomendado, permite_api_parceiros=api, entitlements=dict(extras))

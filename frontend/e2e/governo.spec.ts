@@ -47,6 +47,9 @@ for (const tamanho of TAMANHOS) {
     const entProfessional = professional.getByTestId("entitlements-governo");
     await expect(entProfessional.getByText("Usuários internos")).toBeVisible();
     await expect(
+      entProfessional.getByText("3.000", { exact: true }),
+    ).toBeVisible();
+    await expect(
       entProfessional.getByText("50", { exact: true }),
     ).toBeVisible();
     await expect(
@@ -94,9 +97,16 @@ test.describe("Admin", () => {
       page
         .getByTestId("parametros-pendentes")
         .getByText(
-          "Infrastructure Cost Model (custos reais de infraestrutura)",
+          "Infrastructure Cost Pool: fornecedores e planos de referência com valores",
         ),
     ).toBeVisible();
+    // D-076: pool de infraestrutura vazio (valores do PO) e formulário de fornecedor/plano
+    await expect(
+      page
+        .getByTestId("painel-infraestrutura")
+        .getByText(/AWAITING_INFRASTRUCTURE_COST/),
+    ).toBeVisible();
+    await expect(page.getByTestId("form-componente-infra")).toBeVisible();
     await expect(
       page.getByTestId("cambio").getByText(/AWAITING_FX_RATE/),
     ).toBeVisible();

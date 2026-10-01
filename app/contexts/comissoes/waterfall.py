@@ -1,6 +1,11 @@
-"""Waterfall financeira das comissões (D-074), para o MAP:
+"""Waterfall financeira das comissões (D-074, D-076), para o MAP:
 
-    Receita bruta → impostos → infraestrutura → Margem Comissionável Líquida → comissão → margem CyberFort após comissão
+    Receita bruta → impostos → infraestrutura provisionada → Margem Comissionável Líquida → comissão
+    → margem CyberFort após comissão
+
+Ao lado, sem esconder a diferença (D-076): custo real de infraestrutura, custo de IA, Actual Contribution Margin (receita −
+impostos − infraestrutura real − IA), Conservative Contribution Margin (receita − impostos − infraestrutura provisionada −
+IA) e a reserva de infraestrutura (provisionado − real).
 
 Por venda, representante, produto, tenant ou período. Recebimentos ainda sem parâmetros de custo não entram nos totais
 (seriam números inventados): aparecem separados em `aguardando`, com a contagem por parâmetro faltante. O total traz os
@@ -19,7 +24,7 @@ from app.models.apuracao_comissao import ApuracaoComissao
 from app.models.comissao_representante import ComissaoRepresentante
 
 AGRUPAMENTOS = ("venda", "representante", "produto", "tenant", "periodo")
-CAMPOS = ("receita_bruta", "impostos", "infraestrutura", "margem_comissionavel_liquida", "comissao")
+CAMPOS = ("receita_bruta", "impostos", "infraestrutura", "infraestrutura_real", "custo_ia", "margem_comissionavel_liquida", "comissao")
 
 
 def _chave(agrupar: str, apuracao: ApuracaoComissao, representante_id: int | None):
@@ -27,15 +32,25 @@ def _chave(agrupar: str, apuracao: ApuracaoComissao, representante_id: int | Non
             "periodo": apuracao.recebido_em.strftime("%Y-%m")}[agrupar]
 
 
-def _linha(chave, valores: dict, aguardando: Decimal) -> dict:
+def _linha(chave, valores: dict, aguardando: Decimal, real_incompleto: bool = False) -> dict:
     bruta = valores["receita_bruta"]
     apos = valores["margem_comissionavel_liquida"] - valores["comissao"]
-    pct = lambda v: float((v / bruta * 100).quantize(Decimal("0.01"))) if bruta else None  # noqa: E731
+    base = bruta - valores["impostos"] - valores["custo_ia"]
+    real = None if real_incompleto else base - valores["infraestrutura_real"]
+    conservadora = base - valores["infraestrutura"]
+    reserva = None if real_incompleto else valores["infraestrutura"] - valores["infraestrutura_real"]
+    pct = lambda v: float((v / bruta * 100).quantize(Decimal("0.01"))) if bruta and v is not None else None  # noqa: E731
     return {
         "chave": chave, **{c: float(valores[c]) for c in CAMPOS}, "margem_cyberfort_apos_comissao": float(apos),
+        "margem_contribuicao_real": float(real) if real is not None else None,
+        "margem_contribuicao_conservadora": float(conservadora), "reserva_infraestrutura": float(reserva) if reserva is not None else None,
+        "infraestrutura_real_incompleta": real_incompleto,
         "percentuais": {"impostos": pct(valores["impostos"]), "infraestrutura": pct(valores["infraestrutura"]),
+                        "infraestrutura_real": pct(None if real_incompleto else valores["infraestrutura_real"]),
+                        "custo_ia": pct(valores["custo_ia"]),
                         "margem_comissionavel_liquida": pct(valores["margem_comissionavel_liquida"]), "comissao": pct(valores["comissao"]),
-                        "margem_cyberfort_apos_comissao": pct(apos)},
+                        "margem_cyberfort_apos_comissao": pct(apos), "margem_contribuicao_real": pct(real),
+                        "margem_contribuicao_conservadora": pct(conservadora)},
         "aguardando_parametros": float(aguardando),
     }
 
@@ -55,6 +70,7 @@ def calcular(db: Session, agrupar: str = "tenant", inicio: date | None = None, f
     aguardando = defaultdict(Decimal)
     totais, total_aguardando = dict.fromkeys(CAMPOS, Decimal(0)), Decimal(0)
     por_tributo, por_parametro = defaultdict(Decimal), defaultdict(int)
+    real_incompleto, total_real_incompleto = set(), False
     for apuracao in consulta.all():
         if apuracao.status == Status.CALCULADA.value:
             for linha in ((apuracao.detalhe or {}).get("tributos") or {}).get("tributos") or []:
@@ -75,15 +91,21 @@ def calcular(db: Session, agrupar: str = "tenant", inicio: date | None = None, f
             valores = {
                 "receita_bruta": Decimal(str(apuracao.receita_bruta)) * fracao, "impostos": Decimal(str(apuracao.impostos)) * fracao,
                 "infraestrutura": Decimal(str(apuracao.custo_infra)) * fracao,
+                "infraestrutura_real": Decimal(str(apuracao.custo_infra_real or 0)) * fracao,
+                "custo_ia": Decimal(str(apuracao.custo_ia or 0)) * fracao,
                 "margem_comissionavel_liquida": Decimal(str(apuracao.margem_comissionavel_liquida)) * fracao,
                 "comissao": sum((Decimal(str(c.valor_comissao)) for c in comissoes
                                  if comissao and c.representante_id == comissao.representante_id), Decimal(0)),
             }
+            if apuracao.custo_infra_real is None:
+                real_incompleto.add(chave)
+                total_real_incompleto = True
             for campo, valor in valores.items():
                 grupos[chave][campo] += valor
                 totais[campo] += valor
     return {"agrupar": agrupar, "periodo": {"inicio": inicio.isoformat() if inicio else None, "fim": fim.isoformat() if fim else None},
-            "linhas": [_linha(chave, valores, aguardando[chave]) for chave, valores in sorted(grupos.items(), key=lambda i: str(i[0]))],
-            "total": {**_linha("total", totais, total_aguardando),
+            "linhas": [_linha(chave, valores, aguardando[chave], chave in real_incompleto)
+                       for chave, valores in sorted(grupos.items(), key=lambda i: str(i[0]))],
+            "total": {**_linha("total", totais, total_aguardando, total_real_incompleto),
                       "impostos_por_tributo": {t: float(v) for t, v in sorted(por_tributo.items())},
                       "aguardando_por_parametro": dict(sorted(por_parametro.items()))}}

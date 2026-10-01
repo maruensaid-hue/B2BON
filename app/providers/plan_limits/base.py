@@ -87,3 +87,8 @@ class PlanLimitsProvider(ABC):
         `obter_limite_enriquecimento_*`: ausência de plano bloqueia, não
         libera)."""
         raise NotImplementedError
+
+    def obter_nivel_public_procurement(self, tenant_id: str) -> str | None:
+        """D-076: nível do Public Procurement do plano (BASIC | FULL). `None` = plano sem nível (privado): todas as
+        capabilities do módulo, como antes. Não é abstrato para não obrigar quem não vende Government."""
+        return None

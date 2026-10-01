@@ -1,5 +1,5 @@
-"""Commission Engine (D-074, D-075): parâmetros financeiros (Tax Profile, Infrastructure Cost Model, câmbio, Commission
-Policy da margem) e memória de cálculo. Só super_admin."""
+"""Commission Engine (D-074–D-076): parâmetros financeiros (Tax Profile, Infrastructure Cost Pool, capacidade, câmbio PTAX,
+Commission Policies) e memória de cálculo. Só super_admin."""
 
 from datetime import date
 
@@ -10,14 +10,20 @@ from app.api.deps import exigir_papel, get_ator_id, get_db
 from app.contexts.comissoes import contract as comissoes
 from app.contexts.finops import contract as finops
 from app.contexts.governo import contract as governo
-from app.models.apuracao_comissao import ApuracaoComissao, ModeloCustoInfra, PerfilTributario
+from app.models.apuracao_comissao import ApuracaoComissao, PerfilTributario
 from app.models.cotacao_cambio import CotacaoCambio
+from app.models.custo_infraestrutura import ComponenteInfra
 from app.schemas.comissoes import (
+    AtualizarComponenteInfraSchema,
+    ComponenteInfraSchema,
     CotacaoCambioSchema,
-    ModeloCustoInfraSchema,
+    CustoDiretoSchema,
+    DecisaoAlertaSchema,
     PerfilTributarioSchema,
+    PoliticaInfraSchema,
     PoliticaMargemSchema,
     RecalculoSchema,
+    UsoCapacidadeSchema,
 )
 
 router = APIRouter(prefix="/comissoes", tags=["comissoes"], dependencies=[Depends(exigir_papel("super_admin"))])
@@ -27,40 +33,50 @@ router = APIRouter(prefix="/comissoes", tags=["comissoes"], dependencies=[Depend
 def parametros(db: Session = Depends(get_db)) -> dict:
     hoje = date.today()
     perfis = db.query(PerfilTributario).order_by(PerfilTributario.vigente_de.desc(), PerfilTributario.id.desc()).all()
-    modelos = db.query(ModeloCustoInfra).order_by(ModeloCustoInfra.vigente_de.desc(), ModeloCustoInfra.id.desc()).all()
     cotacoes = db.query(CotacaoCambio).order_by(CotacaoCambio.vigente_em.desc(), CotacaoCambio.id.desc()).limit(50).all()
     vigente = governo.politicas.politica_vigente(db)
-    margem = comissoes.politica.vigente(db)
-    modelo_vigente = comissoes.infraestrutura.aplicavel(db, hoje)
+    margem, infra = comissoes.politica.vigente(db), comissoes.politica.vigente_infra(db)
     cambio = finops.cambio.aplicavel(db)
-    db.commit()
-    return {
+    resposta = {
         "perfis_tributarios": [comissoes.tributos.como_dict(p) for p in perfis],
-        "modelos_custo_infra": [comissoes.infraestrutura.como_dict(m) for m in modelos],
-        "modelo_vigente_id": modelo_vigente.id if modelo_vigente else None,
         "cotacoes_cambio": [finops.cambio.como_dict(c) for c in cotacoes],
-        "cotacao_vigente": finops.cambio.como_dict(cambio) if cambio else None,
+        "cotacao_vigente": finops.cambio.como_dict(cambio) if cambio else None, "politica_cambio": finops.cambio.POLITICA,
         "tributos": [t.value for t in comissoes.tipos.Tributo], "bases_tributo": [b.value for b in comissoes.tipos.BaseTributo],
-        "categorias_infra": list(comissoes.tipos.CATEGORIAS_INFRA), "metodos_infra": comissoes.tipos.METODOS_INFRA,
-        "tipos_receita": sorted(set(comissoes.tipos.TIPO_RECEITA_POR_COMPONENTE.values()) | {comissoes.tipos.QUALQUER}),
+        "situacoes_reforma": [s.value for s in comissoes.tipos.SituacaoReforma],
+        "tipos_receita": [*comissoes.tipos.TIPOS_RECEITA, comissoes.tipos.QUALQUER],
         "politica_governo": {"versao": vigente.versao, "regras": vigente.regras},
         "politica_margem": {"versao": margem.versao, "regras": margem.regras},
+        "politica_infraestrutura": {"versao": infra.versao, "regras": infra.regras},
         "politica_privada": "% de comissão de cada representante (Admin → Representantes), sobre a Margem Comissionável Líquida",
-        "pendentes": _pendentes(db, hoje, modelo_vigente, cambio, margem.regras),
+        "pendentes": _pendentes(db, hoje, cambio, margem.regras),
     }
+    db.commit()
+    return resposta
 
 
-def _pendentes(db: Session, hoje: date, modelo_vigente, cambio, regras_margem: dict) -> list[str]:
-    """O que ainda falta para as comissões de hoje saírem de AWAITING (mostrado na tela e no relatório)."""
+def _pendentes(db: Session, hoje: date, cambio, regras_margem: dict) -> list[str]:
+    """O que ainda impede as comissões de saírem de AWAITING (mostrado na tela e no relatório ao PO)."""
     faltam = []
-    for tipo in sorted(set(comissoes.tipos.TIPO_RECEITA_POR_COMPONENTE.values())):
+    for tipo in comissoes.tipos.TIPOS_RECEITA:
         perfil = comissoes.tributos.aplicavel(db, tipo, hoje)
         if perfil is None:
             faltam.append(f"Tax Profile vigente para {tipo}")
         else:
             faltam += [f"Tax Profile {tipo}: {item}" for item in comissoes.tributos.pendencias(perfil)]
-    if modelo_vigente is None:
-        faltam.append("Infrastructure Cost Model (custos reais de infraestrutura)")
+    componentes = comissoes.infraestrutura.vigentes(db, hoje)
+    if not componentes:
+        faltam.append("Infrastructure Cost Pool: fornecedores e planos de referência com valores")
+    for componente in componentes:
+        custos = comissoes.infraestrutura.custos_mensais(db, componente, hoje)
+        nome = f"{componente.fornecedor} · {componente.servico}"
+        if custos["faltante"] == comissoes.tipos.Faltante.CUSTO_INFRA.value:
+            faltam.append(f"Valor do plano de referência: {nome}")
+        elif custos["faltante"] == comissoes.tipos.Faltante.CAMBIO.value:
+            faltam.append(f"Cotação PTAX {componente.moeda}/BRL: {nome}")
+        if componente.capacidade_contratada is None:
+            faltam.append(f"Capacidade contratada: {nome}")
+    _, _, sem_peso = comissoes.infraestrutura.unidades_ponderadas(db, comissoes.politica.vigente_infra(db).regras["pesos"])
+    faltam += [f"Tier de infraestrutura do plano {plano}" for plano in sem_peso]
     if cambio is None and regras_margem.get("deduzir_custo_ia"):
         faltam.append("Cotação USD/BRL (a política deduz custo de IA)")
     return faltam
@@ -74,12 +90,78 @@ def criar_perfil(dados: PerfilTributarioSchema, ator_id: str | None = Depends(ge
     return {"perfil": comissoes.tributos.como_dict(perfil), "aguardando_calculadas": calculadas}
 
 
-@router.post("/modelos-custo-infra", status_code=201)
-def criar_modelo(dados: ModeloCustoInfraSchema, ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
-    modelo = comissoes.infraestrutura.criar(db, dados.model_dump(), ator_id)
+@router.get("/infraestrutura")
+def infraestrutura(db: Session = Depends(get_db)) -> dict:
+    """Infrastructure Cost Pool, Provider Economics, capacidade, alertas e projeção."""
+    componentes = db.query(ComponenteInfra).order_by(ComponenteInfra.fornecedor, ComponenteInfra.id).all()
+    resposta = {"componentes": [comissoes.infraestrutura.como_dict(c) for c in componentes],
+                "economia": comissoes.capacidade.economia_fornecedores(db), "categorias": list(comissoes.tipos.CATEGORIAS_INFRA),
+                "ciclos": list(comissoes.tipos.CICLOS_COBRANCA), "politica": comissoes.politica.vigente_infra(db).regras}
+    db.commit()
+    return resposta
+
+
+def _recalcular(db: Session) -> int:
     calculadas = comissoes.motor.recalcular_aguardando(db)
     db.commit()
-    return {"modelo": comissoes.infraestrutura.como_dict(modelo), "aguardando_calculadas": calculadas}
+    return calculadas
+
+
+@router.post("/infraestrutura/componentes", status_code=201)
+def criar_componente(dados: ComponenteInfraSchema, ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
+    componente = comissoes.infraestrutura.criar(db, dados.model_dump(), ator_id)
+    return {"componente": comissoes.infraestrutura.como_dict(componente), "aguardando_calculadas": _recalcular(db)}
+
+
+@router.patch("/infraestrutura/componentes/{componente_id}")
+def atualizar_componente(componente_id: int, dados: AtualizarComponenteInfraSchema, ator_id: str | None = Depends(get_ator_id),
+                         db: Session = Depends(get_db)) -> dict:
+    """Plano, custo, capacidade ou alocação. Comissões calculadas guardam o snapshot; só o recálculo explícito muda as não pagas."""
+    valores = dict(dados.dados)
+    for campo in ("vigente_de", "vigente_ate"):
+        if isinstance(valores.get(campo), str):
+            valores[campo] = date.fromisoformat(valores[campo])
+    componente = comissoes.infraestrutura.atualizar(db, componente_id, valores, dados.motivo, ator_id)
+    return {"componente": comissoes.infraestrutura.como_dict(componente), "aguardando_calculadas": _recalcular(db)}
+
+
+@router.post("/infraestrutura/componentes/{componente_id}/uso")
+def registrar_uso(componente_id: int, dados: UsoCapacidadeSchema, ator_id: str | None = Depends(get_ator_id),
+                  db: Session = Depends(get_db)) -> dict:
+    """Uso medido → status e alerta de capacidade. Nenhum upgrade ou contratação acontece sozinho."""
+    resultado = comissoes.capacidade.registrar_uso(db, componente_id, dados.uso, ator_id, dados.fonte, dados.medido_em)
+    db.commit()
+    return resultado
+
+
+@router.post("/infraestrutura/custos-diretos", status_code=201)
+def registrar_custo_direto(dados: CustoDiretoSchema, ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
+    linha = comissoes.infraestrutura.registrar_custo_direto(db, dados.model_dump(), ator_id)
+    return {"id": linha.id, "aguardando_calculadas": _recalcular(db)}
+
+
+@router.post("/infraestrutura/alertas/{alerta_id}/decisao")
+def decidir_alerta(alerta_id: int, dados: DecisaoAlertaSchema, ator_id: str | None = Depends(get_ator_id),
+                   db: Session = Depends(get_db)) -> dict:
+    alerta = comissoes.capacidade.decidir_alerta(db, alerta_id, dados.decisao, ator_id)
+    db.commit()
+    return comissoes.capacidade.alerta_dict(alerta)
+
+
+@router.post("/politica-infraestrutura", status_code=201)
+def alterar_politica_infra(dados: PoliticaInfraSchema, ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
+    """Pesos por tier, limiares de capacidade e base de custo da comissão: nova versão auditada."""
+    politica = comissoes.politica.nova_infra(db, {"pesos": dados.pesos, "limiares": dados.limiares,
+                                                  "custo_comissao": dados.custo_comissao}, dados.motivo, ator_id)
+    db.commit()
+    return {"versao": politica.versao, "regras": politica.regras}
+
+
+@router.post("/cotacoes-cambio/sincronizar")
+def sincronizar_ptax(db: Session = Depends(get_db)) -> dict:
+    """PTAX de fechamento do Banco Central dos últimos dias úteis (a mesma rotina do cron horário)."""
+    resultado = finops.cambio.sincronizar_ptax(db)
+    return {**resultado, "aguardando_calculadas": _recalcular(db)}
 
 
 @router.post("/recalculo")

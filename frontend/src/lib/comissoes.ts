@@ -11,9 +11,13 @@ export interface ComponenteTributo {
   periodo?: string | null;
   aliquota_teste?: number | null;
   aliquota_caixa_efetiva?: number | null;
-  compensado?: boolean;
-  dispensado?: boolean;
-  status_conformidade?: string | null;
+  limite_mensal?: number | null;
+  situacao?: string | null;
+  acrescimo_presuncao?: {
+    percentual: number;
+    limite_anual: number;
+    periodo?: string;
+  } | null;
 }
 
 export interface PerfilTributario {
@@ -23,7 +27,9 @@ export interface PerfilTributario {
   vigente_ate: string | null;
   tipo_receita: string;
   municipio: string | null;
+  item_lista_servico: string | null;
   codigo_servico: string | null;
+  versao_legal: string | null;
   componentes: ComponenteTributo[];
   fonte: string | null;
   observacoes: string | null;
@@ -39,27 +45,120 @@ export interface CotacaoCambio {
   vigente_em: string;
 }
 
-export interface ModeloCustoInfra {
+/** Componente do Infrastructure Cost Pool (D-076): fornecedor/plano, custos no ciclo e na moeda informados. */
+export interface ComponenteInfra {
   id: number;
-  nome: string;
+  fornecedor: string;
+  servico: string;
+  categoria: string;
+  plano: string | null;
+  plano_referencia: string | null;
+  ciclo_cobranca: string;
+  moeda: string;
+  custo_contratado: number | null;
+  custo_referencia: number | null;
+  custo_real: number | null;
+  capacidade_contratada: number | null;
+  uso_atual: number | null;
+  unidade_uso: string | null;
+  politica_custo: string;
+  metodo_alocacao: string;
+  contabilizacao: string;
   vigente_de: string;
   vigente_ate: string | null;
-  metodo: string;
-  componentes: Record<string, unknown>[];
-  fonte: string | null;
+  observacoes: string | null;
+}
+
+export interface LinhaFornecedor {
+  id: number;
+  fornecedor: string;
+  servico: string;
+  categoria: string;
+  plano_atual: string | null;
+  plano_referencia: string | null;
+  moeda: string;
+  custo_contratado: number | null;
+  custo_real: number | null;
+  custo_provisionado_mensal_brl: number | null;
+  custo_real_mensal_brl: number | null;
+  contabilizacao: string;
+  capacidade: number | null;
+  uso: number | null;
+  unidade_uso: string | null;
+  utilizacao: number | null;
+  status: string | null;
+  custo_por_tenant: number | null;
+  custo_por_unidade_ponderada: number | null;
+  custo_sobre_receita: number | null;
+  participacao_pool: number | null;
+  projecao: {
+    utilizacao_projetada: Record<string, number>;
+    esgotamento_estimado: string | null;
+  };
+}
+
+export interface AlertaCapacidade {
+  id: number;
+  componente_id: number;
+  nivel: string;
+  utilizacao: number;
+  mensagem: string;
+  status: string;
+}
+
+export interface PoliticaInfra {
+  pesos: Record<string, number>;
+  limiares: Record<string, number>;
+  custo_comissao: string;
+}
+
+export interface Infraestrutura {
+  componentes: ComponenteInfra[];
+  categorias: string[];
+  ciclos: string[];
+  politica: PoliticaInfra;
+  economia: {
+    competencia: string;
+    componentes: LinhaFornecedor[];
+    alertas_abertos: AlertaCapacidade[];
+    resumo: {
+      pool_provisionado_mensal: number;
+      pool_real_mensal: number | null;
+      reserva_mensal: number | null;
+      unidades_ponderadas: number;
+      tenants_alocados: number;
+      planos_sem_peso: string[];
+      receita_recorrente_mensal: number;
+      custo_sobre_receita: number | null;
+      dependencia_maior_fornecedor: {
+        fornecedor: string;
+        participacao: number;
+      } | null;
+    };
+    projecao: {
+      horizonte_dias: number;
+      custo_infra_projetado_mensal: number;
+      receita_recorrente_projetada_mensal: number;
+      custo_sobre_receita_projetado: number | null;
+      esgotamentos_ate_180_dias: {
+        fornecedor: string;
+        servico: string;
+        data: string;
+      }[];
+    };
+  };
 }
 
 export interface Parametros {
   perfis_tributarios: PerfilTributario[];
-  modelos_custo_infra: ModeloCustoInfra[];
-  modelo_vigente_id: number | null;
   cotacoes_cambio: CotacaoCambio[];
   cotacao_vigente: CotacaoCambio | null;
   tributos: string[];
   bases_tributo: string[];
-  categorias_infra: string[];
-  metodos_infra: Record<string, string>;
+  situacoes_reforma: string[];
   tipos_receita: string[];
+  politica_infraestrutura: { versao: number; regras: PoliticaInfra };
+  politica_cambio: Record<string, string>;
   politica_margem: { versao: number; regras: { deduzir_custo_ia: boolean } };
   pendentes: string[];
   politica_governo: {
@@ -80,9 +179,15 @@ export interface LinhaWaterfall {
   receita_bruta: number;
   impostos: number;
   infraestrutura: number;
+  infraestrutura_real: number;
+  custo_ia: number;
   margem_comissionavel_liquida: number;
   comissao: number;
   margem_cyberfort_apos_comissao: number;
+  margem_contribuicao_real: number | null;
+  margem_contribuicao_conservadora: number;
+  reserva_infraestrutura: number | null;
+  infraestrutura_real_incompleta: boolean;
   percentuais: Record<string, number | null>;
   aguardando_parametros: number;
 }
@@ -103,18 +208,21 @@ export function descreverTributo(c: ComponenteTributo): string {
       ? "a informar"
       : pct(Math.round(v * 1e6) / 1e4);
   if (c.base === "TESTE_REFORMA")
-    return `${c.tributo} teste ${p(c.aliquota_teste)} (${
-      c.compensado || c.dispensado
-        ? "compensado/dispensado"
-        : c.aliquota_caixa_efetiva !== null &&
-            c.aliquota_caixa_efetiva !== undefined
-          ? `caixa ${p(c.aliquota_caixa_efetiva)}`
-          : "fora da carga"
-    }${c.status_conformidade ? `, ${c.status_conformidade}` : ""})`;
+    return `${c.tributo} teste ${p(c.aliquota_teste)} (${c.situacao ?? "PENDING_COMPLIANCE_CONFIRMATION"}${
+      c.situacao === "PAYABLE" ? "" : ", fora da carga"
+    })`;
   if (c.base === "PRESUNCAO")
-    return `${c.tributo} ${p(c.aliquota)} × presunção ${p(c.presuncao)}`;
+    return `${c.tributo} ${p(c.aliquota)} × presunção ${p(c.presuncao)}${
+      c.acrescimo_presuncao
+        ? ` (+${p(c.acrescimo_presuncao.percentual)} na presunção acima de ${brlCurto(c.acrescimo_presuncao.limite_anual)}/ano)`
+        : ""
+    }`;
   if (c.base === "PRESUNCAO_EXCEDENTE")
-    return `${c.tributo} ${p(c.aliquota)} sobre base presumida acima de ${c.limite_periodo ?? "a informar"}/${c.periodo ?? "período"}`;
+    return `${c.tributo} ${p(c.aliquota)} sobre a base do IRPJ acima de ${
+      c.limite_mensal !== null && c.limite_mensal !== undefined
+        ? `${brlCurto(c.limite_mensal)} × meses`
+        : (c.limite_periodo ?? "a informar")
+    } (${c.periodo ?? "período"})`;
   return `${c.rotulo ?? c.tributo} ${p(c.aliquota)}`;
 }
 
@@ -122,3 +230,5 @@ export const pct = (valor: number | null | undefined) =>
   valor === null || valor === undefined
     ? "—"
     : `${valor.toLocaleString("pt-BR")}%`;
+
+const brlCurto = (valor: number) => `R$ ${valor.toLocaleString("pt-BR")}`;

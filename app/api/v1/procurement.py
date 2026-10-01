@@ -1,7 +1,9 @@
 """Public Procurement — Buy Side (Fase 10, master prompt §37-§51).
 
 Gate: módulo "procurement" (preço PENDING_DEFINITION, §71; nenhum plano o
-inclui). Tudo do tenant comprador, CONFIDENTIAL. Aprovações são de admin.
+inclui). D-076: inteligência (riscos, próximas ações, Supplier 360, contrato e
+documento) exige a capability do nível FULL; BASIC usa o mesmo motor sem elas.
+Tudo do tenant comprador, CONFIDENTIAL. Aprovações são de admin.
 Riscos são sinais analíticos para revisão, nunca conclusão jurídica.
 """
 
@@ -12,7 +14,15 @@ from fastapi.responses import Response
 from sqlalchemy import Boolean, Date, DateTime, Float, Integer
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
+from app.api.deps import (
+    exigir_capacidade,
+    exigir_papel,
+    get_ator_id,
+    get_db,
+    get_llm_provider,
+    get_tenant_id,
+    limitar_ia_por_tenant,
+)
 from app.api.respostas import arquivo_com_hash
 from app.contexts.intelligence import contract as intel
 from app.contexts.procurement import contract as compras
@@ -82,7 +92,7 @@ def _coagir(entidade: str, dados: dict) -> dict:
 # --- Inteligência (rotas fixas antes das genéricas) ------------------------------------
 
 
-@router.get("/riscos")
+@router.get("/riscos", dependencies=[Depends(exigir_capacidade("risk_engine"))])
 def riscos(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
     return compras.riscos.sinais(db, tenant_id)
 
@@ -94,22 +104,22 @@ def metricas(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_
     return compras.metricas.metricas(db, tenant_id)
 
 
-@router.get("/proximas-acoes")
+@router.get("/proximas-acoes", dependencies=[Depends(exigir_capacidade("next_best_action"))])
 def proximas_acoes(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
     return compras.nba.acoes(db, tenant_id, compras.riscos.sinais(db, tenant_id))
 
 
-@router.get("/fornecedores/ranking")
+@router.get("/fornecedores/ranking", dependencies=[Depends(exigir_capacidade("supplier_360"))])
 def ranking_fornecedores(categoria: str, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
     return compras.fornecedores.ranking_por_categoria(db, tenant_id, categoria)
 
 
-@router.get("/fornecedores/{fornecedor_id}/360")
+@router.get("/fornecedores/{fornecedor_id}/360", dependencies=[Depends(exigir_capacidade("supplier_360"))])
 def fornecedor_360(fornecedor_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
     return compras.fornecedores.visao_360(db, tenant_id, compras.cadastros.obter(db, tenant_id, "fornecedor_compras", fornecedor_id))
 
 
-@router.get("/contratos/{contrato_id}/inteligencia")
+@router.get("/contratos/{contrato_id}/inteligencia", dependencies=[Depends(exigir_capacidade("contract_intelligence"))])
 def contrato_inteligencia(contrato_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
     return compras.contratos.inteligencia(db, tenant_id, compras.cadastros.obter(db, tenant_id, "contrato_compra", contrato_id))
 
@@ -181,14 +191,15 @@ def baixar_documento(documento_id: int, tenant_id: str = Depends(get_tenant_id),
     return arquivo_com_hash(documento.conteudo, documento.tipo_mime, f"documento-{documento.id}", documento.sha256)
 
 
-@router.get("/documentos/{documento_id}/estimativa")
+@router.get("/documentos/{documento_id}/estimativa", dependencies=[Depends(exigir_capacidade("document_intelligence"))])
 def estimar_analise(documento_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
     """AI Credits estimados antes de analisar (Fase 15)."""
     documento = _documento(db, tenant_id, documento_id)
     return intel.estimar(db, compras.documentos.FEATURE, {"paginas": len(documento.paginas_texto or [])})
 
 
-@router.post("/documentos/{documento_id}/analisar", dependencies=[Depends(limitar_ia_por_tenant())])
+@router.post("/documentos/{documento_id}/analisar",
+             dependencies=[Depends(exigir_capacidade("document_intelligence")), Depends(limitar_ia_por_tenant())])
 def analisar_documento(documento_id: int, confirmar: bool = False, tenant_id: str = Depends(get_tenant_id),
                        ator_id: str | None = Depends(get_ator_id), llm: LLMProvider = Depends(get_llm_provider),
                        db: Session = Depends(get_db)) -> dict:

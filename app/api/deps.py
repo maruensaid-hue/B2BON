@@ -424,6 +424,19 @@ def exigir_modulo(modulo: str):
     return _dependencia
 
 
+def exigir_capacidade(capacidade: str):
+    """D-076: capability do Public Procurement pelo nível do plano (BASIC | FULL) — mesmo motor, sem rota duplicada."""
+
+    def _dependencia(
+        tenant_id: str = Depends(get_tenant_id),
+        plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+    ) -> None:
+        if not Entitlements(plan_limits, tenant_id).has_capability(capacidade):
+            raise NaoAutorizado("Recurso do Public Procurement FULL — o plano contratado inclui o nível BASIC.")
+
+    return _dependencia
+
+
 def exigir_algum_modulo(*modulos: str):
     """Rotas legitimamente compartilhadas entre módulos (Fase 1, D-007):
     Organization/Person (Conta/Decisor) são Shared Kernel, então um

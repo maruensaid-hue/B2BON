@@ -216,18 +216,26 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
                 ("B2B ON Government Enterprise", 180000, 30000, 54000, 1200000, 0, 0, "CONTRACT", "GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION")]
             assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE segmento = 'PRIVATE' AND preco_licenca IS NOT NULL")).scalar() == 0
             ativas = conexao.execute(sa.text("SELECT codigo, versao FROM politica_comissao WHERE ativa ORDER BY codigo")).fetchall()
-            # D-073 (adicionais 10%); BASE_LIQUIDA saiu na D-074; D-075: política da margem sem custo de IA
-            assert [tuple(linha) for linha in ativas] == [("GOVERNMENT", 2), ("NET_COMMISSIONABLE_MARGIN", 1)]
-            perfis = conexao.execute(sa.text("SELECT tipo_receita, municipio, codigo_servico, vigente_de, vigente_ate FROM perfil_tributario "
-                                             "ORDER BY tipo_receita")).fetchall()
-            assert [tuple(p) for p in perfis] == [("LICENCA_SOFTWARE", "São Paulo/SP", "1.05", "2026-01-01", "2027-01-01"),
-                                                  ("SAAS", "São Paulo/SP", None, "2026-01-01", "2027-01-01"),
-                                                  ("SERVICO", "São Paulo/SP", None, "2026-01-01", "2027-01-01")]
-            assert conexao.execute(sa.text("SELECT count(*) FROM modelo_custo_infra")).scalar() == 0  # custo de infra: não informado
-            assert conexao.execute(sa.text("SELECT count(*) FROM cotacao_cambio")).scalar() == 0  # câmbio: não informado
-            usuarios = conexao.execute(sa.text("SELECT max_usuarios, permite_api_parceiros FROM plano WHERE segmento = 'GOVERNMENT' "
-                                               "ORDER BY preco_licenca")).fetchall()
-            assert [tuple(u) for u in usuarios] == [(20, 0), (50, 1), (100, 1)]
+            # D-073 (adicionais 10%); BASE_LIQUIDA saiu na D-074; D-075: política da margem; D-076: política de infraestrutura
+            assert [tuple(linha) for linha in ativas] == [("GOVERNMENT", 2), ("INFRASTRUCTURE_COST_POLICY", 1), ("NET_COMMISSIONABLE_MARGIN", 1)]
+            perfis = conexao.execute(sa.text("SELECT tipo_receita, item_lista_servico, codigo_servico, vigente_de, vigente_ate FROM perfil_tributario "
+                                             "WHERE vigente_ate > vigente_de ORDER BY tipo_receita")).fetchall()
+            assert [tuple(p) for p in perfis] == [("IMPLEMENTATION", "1.07", "2919", "2026-01-01", "2027-01-01"),
+                                                  ("SAAS_SUBSCRIPTION", None, None, "2026-01-01", "2027-01-01"),
+                                                  ("SOFTWARE_LICENSE", "1.05", "2800", "2026-01-01", "2027-01-01")]
+            # os perfis da D-075 ficam no histórico, encerrados na própria vigência (nunca vigentes junto com os novos)
+            assert conexao.execute(sa.text("SELECT count(*) FROM perfil_tributario WHERE vigente_ate = vigente_de")).scalar() == 3
+            assert conexao.execute(sa.text("SELECT count(*) FROM componente_infra")).scalar() == 0  # valores dos fornecedores: do PO
+            assert conexao.execute(sa.text("SELECT count(*) FROM cotacao_cambio")).scalar() == 0  # PTAX: obtida/cadastrada, nunca semeada
+            planos = conexao.execute(sa.text("SELECT max_usuarios, permite_api_parceiros, franquia_contas_mes, tier_infraestrutura FROM plano "
+                                             "WHERE segmento = 'GOVERNMENT' ORDER BY preco_licenca")).fetchall()
+            assert [tuple(p) for p in planos] == [(20, 0, 1000, "DEPARTMENT"), (50, 1, 3000, "PROFESSIONAL"), (100, 1, 10000, "ENTERPRISE")]
+            tiers = dict(conexao.execute(sa.text("SELECT nome, tier_infraestrutura FROM plano WHERE segmento = 'PRIVATE'")).fetchall())
+            assert (tiers.get("MAP Starter"), tiers.get("CRM Professional"), tiers.get("Bid Intelligence")) == ("ENTRY", "PROFESSIONAL", None)
+        command.downgrade(config, "a6c8e0f2b4d7")  # D-076 volta: pool, perfis novos, franquias e política de infraestrutura saem
+        with engine.connect() as conexao:
+            assert conexao.execute(sa.text("SELECT count(*) FROM perfil_tributario WHERE vigente_ate > vigente_de")).scalar() == 3
+            assert conexao.execute(sa.text("SELECT franquia_contas_mes FROM plano WHERE nome = 'B2B ON Government Department'")).scalar() == 0
         command.downgrade(config, "f4a6b8c0d2e3")  # D-075 volta: perfis semeados, câmbio e política da margem saem
         with engine.connect() as conexao:
             assert conexao.execute(sa.text("SELECT count(*) FROM perfil_tributario")).scalar() == 0

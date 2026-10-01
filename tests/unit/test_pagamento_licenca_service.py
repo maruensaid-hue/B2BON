@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 from datetime import UTC, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 
 from app.models.comissao_representante import ComissaoRepresentante
 from app.models.licenca import Licenca
@@ -12,7 +13,7 @@ from app.models.usuario import Usuario
 from app.providers.channels.email.stub import StubEmailProvider
 from app.providers.payment.stub import StubPaymentProvider
 from app.services import pagamento_licenca_service
-from tests.parametros_comissao import definir_parametros
+from tests.parametros_comissao import componente, definir_parametros
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 TENANT_ID = "tenant-teste"
@@ -300,15 +301,19 @@ def test_webhook_aprovado_com_representante_calcula_comissao(db_session):
     assert comissao.representante_id == representante.id
     # D-074: sem Tax Profile e Infrastructure Cost Model a comissão aguarda (taxa conhecida, valor não)
     assert (comissao.status, comissao.valor_comissao, comissao.taxa) == ("AWAITING_COST_PARAMETERS", 0.0, 0.1)
-    definir_parametros(db_session, impostos=0.15, infra=[{"categoria": "cloud_cost", "metodo": "PERCENTAGE", "percentual": 0.05}])
+    # D-076: pool provisionado de teste R$ 10/mês; o tenant é o único com tier → a mensalidade carrega R$ 10
+    definir_parametros(db_session, impostos=0.15, pool=[componente(10.0)])
     db_session.refresh(comissao)
-    margem = round(plano.preco_mensal * 0.80, 2)  # recebido − 15% − 5%
-    assert (comissao.status, comissao.base_calculo, comissao.valor_comissao) == ("PAYABLE", margem, round(margem * 0.1, 2))
+    margem = round(plano.preco_mensal * 0.85 - 10, 2)  # recebido − 15% − infraestrutura provisionada do mês
+    valor = float((Decimal(str(margem)) * Decimal("0.1")).quantize(Decimal("0.01"), ROUND_HALF_UP))
+    assert (comissao.status, comissao.base_calculo, comissao.valor_comissao) == ("PAYABLE", margem, valor)
 
 
 def test_comissao_privada_com_parametros_ja_definidos_nasce_pagavel(db_session):
-    definir_parametros(db_session, impostos=0.10, infra=[{"categoria": "cloud_cost", "metodo": "PERCENTAGE", "percentual": 0.10}])
+    definir_parametros(db_session, impostos=0.10, pool=[componente(20.0)])
     plano = _tenant_e_plano(db_session)
+    plano.tier_infraestrutura = "ENTRY"
+    db_session.commit()
     representante = Representante(nome="Ciclano", email="ciclano@vendedor.com.br", chave_pix="ciclano@pix", percentual_comissao=0.2)
     db_session.add(representante)
     db_session.flush()
@@ -320,7 +325,7 @@ def test_comissao_privada_com_parametros_ja_definidos_nasce_pagavel(db_session):
     pagamento_licenca_service.confirmar_via_webhook(db_session, provider, provider.aprovar(pagamento.preferencia_id_externo),
                                                     StubEmailProvider())
     comissao = db_session.query(ComissaoRepresentante).filter_by(pagamento_licenca_id=pagamento.id).one()
-    assert (comissao.status, comissao.valor_comissao) == ("PAYABLE", round(plano.preco_mensal * 0.8 * 0.2, 2))
+    assert (comissao.status, comissao.valor_comissao) == ("PAYABLE", round((plano.preco_mensal * 0.9 - 20) * 0.2, 2))
     assert comissao.valor_comissao != round(plano.preco_mensal * 0.2, 2)  # nunca sobre a receita bruta
 
 

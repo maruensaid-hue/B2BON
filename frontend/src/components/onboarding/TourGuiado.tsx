@@ -218,7 +218,7 @@ const PASSOS_TOUR: PassoGuia[] = [
     id: "nav:/admin/parametros-financeiros",
     titulo: "Admin — Parâmetros financeiros",
     descricao:
-      "Tax Profile por tributo (PIS, COFINS, IRPJ e CSLL pela presunção, ISS por município, CBS/IBS-teste), custo de infraestrutura, câmbio e política de comissão: toda comissão é calculada sobre a Margem Comissionável Líquida (receita recebida − impostos − infraestrutura). No topo, o que ainda falta informar; embaixo, a waterfall por tenant, representante, produto e período.",
+      "Tax Profile por tributo (PIS, COFINS, IRPJ e CSLL pela presunção, ISS por município, CBS/IBS-teste), Infrastructure Cost Pool (fornecedores, plano máximo, custo real × provisionado, capacidade e alertas), câmbio PTAX e política de comissão: toda comissão é calculada sobre a Margem Comissionável Líquida (receita recebida − impostos − infraestrutura). No topo, o que ainda falta informar; embaixo, a waterfall por tenant, representante, produto e período.",
   },
   {
     id: "nav:/assinatura",

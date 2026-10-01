@@ -2,8 +2,7 @@
 
 - `PerfilTributario` (Tax Profile): tributos por regime, vigência, tipo de receita, município e código de serviço, um
   componente por tributo (IRPJ, adicional de IRPJ, CSLL, PIS, COFINS, ISS, CBS, IBS, outros) — nenhuma alíquota no código.
-- `ModeloCustoInfra` (Infrastructure Cost Model): alocação do custo de infraestrutura atribuível à receita (fixa,
-  percentual, por uso de IA, por tenant, por produto ou híbrida), com vigência.
+- Custo de infraestrutura: Infrastructure Cost Pool (`custo_infraestrutura.py`, D-076).
 - `ApuracaoComissao`: uma por recebimento (pagamento de plano privado ou recebimento Government). Guarda o snapshot do
   cálculo — receita bruta, perfil e valor de impostos, modelo e valor de infraestrutura, Margem Comissionável Líquida —
   para que mudança futura de parâmetro não altere a memória de uma comissão já calculada ou paga.
@@ -27,27 +26,14 @@ class PerfilTributario(Base):
     vigente_ate: Mapped[date | None] = mapped_column(Date, nullable=True)  # exclusivo
     tipo_receita: Mapped[str] = mapped_column(String, default="*")  # SAAS | LICENCA_SOFTWARE | SERVICO | * (qualquer)
     municipio: Mapped[str | None] = mapped_column(String, nullable=True)
-    codigo_servico: Mapped[str | None] = mapped_column(String, nullable=True)  # item da lista de serviços (ISS), ex.: 1.05
+    item_lista_servico: Mapped[str | None] = mapped_column(String, nullable=True)  # LC 116, ex.: 1.05
+    codigo_servico: Mapped[str | None] = mapped_column(String, nullable=True)  # código de serviço municipal, ex.: 2800
+    versao_legal: Mapped[str | None] = mapped_column(String, nullable=True)  # base legal da versão (ex.: LC 224/2025)
     # D-075: um componente por tributo — {"tributo": "IRPJ", "aliquota": 0.15, "base": "PRESUNCAO", "presuncao": 0.32}.
     # O imposto é calculado pelo Tax Engine componente a componente; nenhuma alíquota efetiva única vira regra.
     componentes: Mapped[list] = mapped_column(JSON)
     aliquota_efetiva: Mapped[float | None] = mapped_column(Float, nullable=True)  # legado D-074 (não usado no cálculo)
     metodo_calculo: Mapped[str] = mapped_column(String, default="SOBRE_RECEITA_RECEBIDA")
-    fonte: Mapped[str | None] = mapped_column(String, nullable=True)
-    observacoes: Mapped[str | None] = mapped_column(String, nullable=True)
-    criado_por: Mapped[str | None] = mapped_column(String, nullable=True)
-    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
-
-class ModeloCustoInfra(Base):
-    __tablename__ = "modelo_custo_infra"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    nome: Mapped[str] = mapped_column(String)
-    vigente_de: Mapped[date] = mapped_column(Date)
-    vigente_ate: Mapped[date | None] = mapped_column(Date, nullable=True)  # exclusivo
-    metodo: Mapped[str] = mapped_column(String)  # FIXED | PERCENTAGE | USAGE | TENANT | PRODUCT | HYBRID
-    componentes: Mapped[list] = mapped_column(JSON)
     fonte: Mapped[str | None] = mapped_column(String, nullable=True)
     observacoes: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_por: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -72,8 +58,11 @@ class ApuracaoComissao(Base):
     perfil_tributario_id: Mapped[int | None] = mapped_column(ForeignKey("perfil_tributario.id"), nullable=True, index=True)
     aliquota_tributaria: Mapped[float | None] = mapped_column(Float, nullable=True)
     impostos: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
-    modelo_custo_infra_id: Mapped[int | None] = mapped_column(ForeignKey("modelo_custo_infra.id"), nullable=True, index=True)
-    custo_infra: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)  # inclui o custo de IA, quando o modelo o aloca
+    # D-076: custo provisionado (conservador, usado na comissão) e custo real ficam separados
+    custo_infra: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)  # provisionado (comissão)
+    custo_infra_real: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    meses_infra: Mapped[float | None] = mapped_column(Float, nullable=True)  # meses de operação que o recebimento remunera
+    custo_direto_ate: Mapped[str | None] = mapped_column(String(7), nullable=True)  # competência até onde o custo direto foi atribuído
     custo_ia: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     custo_ia_ate: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # até onde o custo de IA do tenant já foi atribuído
     margem_comissionavel_liquida: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)

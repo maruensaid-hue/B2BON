@@ -4,10 +4,10 @@ Nenhuma cotação fica no código ou em variável de ambiente. Cada linha é uma
 partir do qual vale; a cotação aplicável a um custo é a mais recente com `vigente_em` até o instante do custo.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Index, Integer, Numeric, String, func
+from sqlalchemy import Date, DateTime, Index, Integer, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -21,7 +21,10 @@ class CotacaoCambio(Base):
     moeda_base: Mapped[str] = mapped_column(String(3))  # base_currency (ex.: USD)
     moeda_cotacao: Mapped[str] = mapped_column(String(3))  # quote_currency (ex.: BRL)
     taxa: Mapped[Decimal] = mapped_column(Numeric(14, 6))  # 1 moeda_base = taxa moeda_cotacao
-    fonte: Mapped[str] = mapped_column(String)  # ex.: PTAX venda BCB
+    fonte: Mapped[str] = mapped_column(String)  # ex.: BANCO_CENTRAL_DO_BRASIL
     vigente_em: Mapped[datetime] = mapped_column(DateTime)  # effective_at
+    tipo: Mapped[str] = mapped_column(String, default="MANUAL", server_default="MANUAL")  # PTAX_CLOSE | MANUAL
+    data_cotacao: Mapped[date | None] = mapped_column(Date, nullable=True)  # fx_date (dia útil da PTAX)
+    obtida_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # retrieved_at
     criado_por: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
