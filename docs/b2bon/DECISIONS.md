@@ -848,3 +848,19 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - **MAP**: margem de contribuição por tenant (receita recebida − impostos − comissões − custo de IA − infraestrutura);
     o que a plataforma não sabe (impostos sem alíquota configurada, infraestrutura) sai como desconhecido e a margem, parcial.
 - **Status**: ACEITA. Migração `d9e1f3a5b7c9` (reversível; não converte nenhum cliente privado).
+
+## D-073 · 2026-10-01 · Comissão sobre o lucro líquido (todas as vendas) e adicionais Government a 10%
+- **Contexto**: respostas do PO às pendências de D-072 (OI-024 e OI-025).
+- **Decisão**:
+  - **Base de toda comissão de representante** (planos privados e Government): o **lucro líquido** da CyberFort com o
+    B2B ON naquele recebimento = valor recebido − impostos − custo de infraestrutura. Comissão = base líquida × taxa do
+    representante (privado) ou do componente (Government) × fração da divisão.
+  - Impostos e infraestrutura são **alíquotas sobre o valor recebido**, numa política versionada e auditada (`BASE_LIQUIDA`,
+    Admin → Representantes / Government). O PO ainda não informou os valores: a versão 1 nasce **vazia** e, enquanto isso,
+    a comissão é registrada como `pendente_parametros` (valor 0, nunca repassada). Ao definir as alíquotas, as pendentes
+    são recalculadas; comissões já calculadas não mudam. Cada comissão guarda base bruta, alíquotas e versão aplicadas.
+  - **Serviços adicionais e AI Credits adicionais** (Government): comissionáveis a **10%** (política Government versão 2).
+  - A **margem de contribuição** do MAP usa as mesmas alíquotas (antes: variável de ambiente sem valor).
+  - **Composição dos tiers** Government: confirmado pelo PO que a composição (módulos, usuários, unidades, SLA etc.) é o
+    que diferencia Department, Professional e Enterprise; os valores por tier continuam a definir (OI-024).
+- **Status**: ACEITA. Migração `e1f3a5b7c9d2` (reversível). Resolve OI-025; abre OI-026 (valores das alíquotas).

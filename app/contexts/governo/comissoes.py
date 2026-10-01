@@ -2,6 +2,7 @@
 (`comissao_representante` + repasse mensal por Pix já usado nos planos privados).
 
 - Taxa e "comissionável" vêm do componente (cópia da política do contrato); nunca de um total.
+- D-073: a base é o lucro líquido do recebimento (bruto − impostos − infraestrutura, `comissao_service`).
 - Gatilho PAYMENT_RECEIVED: cada recebimento gera a comissão daquele valor (parcelas = proporcional).
   CONTRACT_SIGNED: o componente inteiro na contratação.
 - Estorno de recebimento: comissão ainda não repassada é anulada; já repassada vira um CLAWBACK
@@ -10,7 +11,7 @@
   o futuro; comissões já geradas ficam com quem as gerou.
 """
 
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
@@ -18,10 +19,9 @@ from app.contexts.governo.tipos import Componente, Gatilho
 from app.models.comissao_representante import ComissaoRepresentante
 from app.models.contrato_governo import ComponenteContratoGoverno, ContratoGoverno, PeriodoAssinaturaGoverno, RecebimentoGoverno
 from app.models.representante import Representante
-from app.services import auditoria_service
+from app.services import auditoria_service, comissao_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
-CENTAVO = Decimal("0.01")
 
 
 def _beneficiarios(contrato: ContratoGoverno) -> list[tuple[int, Decimal]]:
@@ -51,9 +51,9 @@ def _gerar(db: Session, contrato: ContratoGoverno, componente: ComponenteContrat
         comissao = ComissaoRepresentante(
             representante_id=representante_id, tenant_id=contrato.tenant_id, recebimento_governo_id=recebimento.id if recebimento else None,
             componente_governo_id=componente.id, contrato_governo_id=contrato.id, componente_tipo=componente.tipo,
-            base_calculo=float(base), taxa=float(taxa), fracao_divisao=float(fracao), numero_renovacao=_numero_renovacao(db, componente),
-            evento="ACCRUAL", valor_comissao=float((base * taxa * fracao).quantize(CENTAVO, ROUND_HALF_UP)), status="calculada",
+            numero_renovacao=_numero_renovacao(db, componente), evento="ACCRUAL",
         )
+        comissao_service.calcular(db, comissao, base, taxa, fracao)  # D-073: sobre o lucro líquido
         db.add(comissao)
         geradas.append(comissao)
     db.flush()
@@ -74,14 +74,15 @@ def reconhecer_recebimento(db: Session, contrato: ContratoGoverno, componente: C
 def estornar_recebimento(db: Session, recebimento: RecebimentoGoverno) -> dict:
     anuladas = compensar = 0
     for comissao in db.query(ComissaoRepresentante).filter_by(recebimento_governo_id=recebimento.id, evento="ACCRUAL").all():
-        if comissao.status == "calculada":
+        if comissao.status in ("calculada", comissao_service.PENDENTE):
             comissao.status = "estornada"
             anuladas += 1
         elif comissao.status == "paga":
             db.add(ComissaoRepresentante(
                 representante_id=comissao.representante_id, tenant_id=comissao.tenant_id, recebimento_governo_id=recebimento.id,
                 componente_governo_id=comissao.componente_governo_id, contrato_governo_id=comissao.contrato_governo_id,
-                componente_tipo=comissao.componente_tipo, base_calculo=-(comissao.base_calculo or 0), taxa=comissao.taxa,
+                componente_tipo=comissao.componente_tipo, base_calculo=-(comissao.base_calculo or 0),
+                base_bruta=-(comissao.base_bruta or 0), deducoes=comissao.deducoes, taxa=comissao.taxa,
                 fracao_divisao=comissao.fracao_divisao, numero_renovacao=comissao.numero_renovacao, evento="CLAWBACK",
                 valor_comissao=-comissao.valor_comissao, status="a_compensar",
             ))
@@ -145,7 +146,8 @@ def listar(db: Session, contrato_id: int | None = None, representante_id: int | 
         consulta = consulta.filter_by(representante_id=representante_id)
     return [{"id": c.id, "representante_id": c.representante_id, "tenant_id": c.tenant_id, "contrato_id": c.contrato_governo_id,
              "componente_id": c.componente_governo_id, "componente_tipo": c.componente_tipo, "recebimento_id": c.recebimento_governo_id,
-             "numero_renovacao": c.numero_renovacao, "base_calculo": c.base_calculo, "taxa": c.taxa, "fracao": c.fracao_divisao,
+             "numero_renovacao": c.numero_renovacao, "base_bruta": c.base_bruta, "deducoes": c.deducoes,
+             "base_calculo": c.base_calculo, "taxa": c.taxa, "fracao": c.fracao_divisao,
              "evento": c.evento, "valor": c.valor_comissao, "status": c.status,
              "criado_em": c.criado_em.isoformat() if c.criado_em else None, "pago_em": c.pago_em.isoformat() if c.pago_em else None}
             for c in consulta.order_by(ComissaoRepresentante.id).all()]

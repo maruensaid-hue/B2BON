@@ -189,6 +189,9 @@ carteira de AI Credits, comissões, auditoria). O modelo privado mensal não mud
 - **Métricas** (`GET /governo/metricas`): bookings por tipo, ARR (só subscrição vigente), New/Renewal ARR, TCV inicial, Cash-In,
   receita comissionável × não comissionável, comissões (inicial, renovação, paga, pendente, a compensar; por representante,
   contrato, cliente) e pipeline ponderado.
-- **Comissão**: política versionada `politica_comissao` (licença 20%, subscrição inicial 20%, renovações 10%, implantação não
-  comissionável; gatilho PAYMENT_RECEIVED), sobre `comissao_representante` e o repasse mensal existente.
-- Pendências do PO: composição de cada tier (OI-024); comissão de adicionais, impostos e infraestrutura (OI-025).
+- **Comissão**: política versionada `politica_comissao` (licença 20%, subscrição inicial 20%, renovações 10%, serviços e
+  AI Credits adicionais 10% — D-073 —, implantação não comissionável; gatilho PAYMENT_RECEIVED), sobre
+  `comissao_representante` e o repasse mensal existente.
+- **Base líquida (D-073, todas as vendas)**: comissão = (recebido − impostos − infraestrutura) × taxa. Alíquotas na política
+  `BASE_LIQUIDA`; sem elas, a comissão aguarda (OI-026).
+- Pendências do PO: valores de cada tier (OI-024); valores das alíquotas (OI-026).

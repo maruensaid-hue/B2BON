@@ -17,10 +17,10 @@ from app.contexts.finops import contract as finops
 from app.contexts.governo import contratos as contratos_mod
 from app.contexts.governo import pipeline
 from app.contexts.governo.tipos import Componente
-from app.core.config import settings
 from app.models.comissao_representante import ComissaoRepresentante
 from app.models.contrato_governo import ComponenteContratoGoverno, ContratoGoverno, PeriodoAssinaturaGoverno, RecebimentoGoverno
 from app.models.plano import Plano
+from app.services import comissao_service
 
 ZERO = Decimal(0)
 GRUPO_BOOKING = {
@@ -49,6 +49,9 @@ def _comissoes(lista: list[ComissaoRepresentante]) -> dict:
         "renovacao": _f(soma(c for c in validas if c.componente_tipo == Componente.RENOVACAO.value)),
         "reconhecida": _f(soma(validas)), "paga": _f(soma(c for c in validas if c.status == "paga")),
         "pendente": _f(soma(c for c in validas if c.status in ("calculada", "falhou"))),
+        # D-073: aguardam as alíquotas de impostos e infraestrutura (valor ainda não calculado)
+        "aguardando_parametros": len([c for c in validas if c.status == comissao_service.PENDENTE]),
+        "base_bruta_aguardando": _f(sum((Decimal(str(c.base_bruta or 0)) for c in validas if c.status == comissao_service.PENDENTE), ZERO)),
         "a_compensar": _f(soma(c for c in validas if c.status == "a_compensar")),
         **{f"por_{chave}": [{"id": k, "valor": _f(v)} for k, v in sorted(valores.items(), key=lambda i: str(i[0]))]
            for chave, valores in por.items()},
@@ -106,11 +109,14 @@ def margem_contribuicao(db: Session, tenant_id: str, inicio: date, fim: date) ->
     como None e a margem sai `parcial`, nunca com número inventado."""
     dados = metricas(db, inicio, fim, tenant_id)
     bruta = Decimal(str(dados["cash_in"]))
-    aliquota = settings.governo_aliquota_impostos
-    impostos = (bruta * Decimal(str(aliquota))).quantize(Decimal("0.01")) if aliquota is not None else None
+    aliquotas = comissao_service.aliquotas(db)  # D-073: as mesmas alíquotas da base líquida das comissões
+
+    def _deducao(nome: str) -> Decimal | None:
+        return (bruta * Decimal(str(aliquotas[nome]))).quantize(Decimal("0.01")) if aliquotas[nome] is not None else None
+
+    impostos, infraestrutura = _deducao("impostos"), _deducao("infraestrutura")
     kpis = finops.economia.kpis(db, datetime.combine(inicio, time.min), datetime.combine(fim, time.min), tenant_id)
     custo_ia = kpis["ai_variable_cost_brl"]
-    infraestrutura = None  # sem rateio de infraestrutura por tenant na plataforma
     partes = {"impostos": impostos, "comissoes_iniciais": Decimal(str(dados["comissoes"]["inicial"])),
               "comissoes_renovacao": Decimal(str(dados["comissoes"]["renovacao"])),
               "custo_ia": Decimal(str(custo_ia)) if custo_ia is not None else None, "infraestrutura": infraestrutura}

@@ -11,7 +11,7 @@ from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.channels.email.stub import StubEmailProvider
 from app.providers.payment.stub import StubPaymentProvider
-from app.services import pagamento_licenca_service
+from app.services import comissao_service, pagamento_licenca_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 TENANT_ID = "tenant-teste"
@@ -297,8 +297,30 @@ def test_webhook_aprovado_com_representante_calcula_comissao(db_session):
 
     comissao = db_session.query(ComissaoRepresentante).filter_by(pagamento_licenca_id=pagamento.id).one()
     assert comissao.representante_id == representante.id
+    # D-073: sem as alíquotas de impostos e infraestrutura a comissão aguarda (nunca presumida)
+    assert (comissao.status, comissao.valor_comissao, comissao.base_bruta) == ("pendente_parametros", 0.0, plano.preco_mensal)
+    comissao_service.definir(db_session, 0.15, 0.05, "Alíquotas da CyberFort", "teste")
+    db_session.refresh(comissao)
     assert comissao.status == "calculada"
-    assert comissao.valor_comissao == plano.preco_mensal * 0.1
+    assert comissao.base_calculo == round(plano.preco_mensal * 0.8, 2)
+    assert comissao.valor_comissao == round(plano.preco_mensal * 0.8 * 0.1, 2)
+
+
+def test_comissao_privada_com_aliquotas_ja_definidas_nasce_calculada(db_session):
+    comissao_service.definir(db_session, 0.10, 0.10, "Alíquotas", "teste")
+    plano = _tenant_e_plano(db_session)
+    representante = Representante(nome="Ciclano", email="ciclano@vendedor.com.br", chave_pix="ciclano@pix", percentual_comissao=0.2)
+    db_session.add(representante)
+    db_session.flush()
+    db_session.query(Tenant).filter_by(id=TENANT_ID).one().representante_id = representante.id
+    provider = StubPaymentProvider()
+    pagamento, _ = pagamento_licenca_service.iniciar(db_session, TENANT_ID, plano.id, "admin@teste.com.br", provider)
+    db_session.add(Licenca(tenant_id=TENANT_ID, plano_id=plano.id, status="pendente_pagamento"))
+    db_session.commit()
+    pagamento_licenca_service.confirmar_via_webhook(db_session, provider, provider.aprovar(pagamento.preferencia_id_externo),
+                                                    StubEmailProvider())
+    comissao = db_session.query(ComissaoRepresentante).filter_by(pagamento_licenca_id=pagamento.id).one()
+    assert (comissao.status, comissao.valor_comissao) == ("calculada", round(plano.preco_mensal * 0.8 * 0.2, 2))
 
 
 def test_webhook_aprovado_sem_representante_nao_gera_comissao(db_session):

@@ -54,10 +54,9 @@ class Settings(BaseSettings):
     ai_creditos_max_reservas_abertas: int = 20
     # Validade padrão de créditos comprados (meses).
     ai_creditos_validade_topup_meses: int = 12
-    # B2B ON Government (D-072): janela de aviso de renovação (dias antes do fim do período) e alíquota
-    # de impostos para a margem de contribuição (None = desconhecida; a margem sai parcial, sem número inventado).
+    # B2B ON Government (D-072): janela de aviso de renovação (dias antes do fim do período). Impostos e infraestrutura
+    # ficam na política versionada BASE_LIQUIDA (D-073), não em variável de ambiente.
     governo_aviso_renovacao_dias: int = 90
-    governo_aliquota_impostos: float | None = None
     # Receita de referência por crédito de franquia de assinatura (R$ por 1.000 créditos)
     # para medir margem; default = preço efetivo do maior pacote (conservador).
     ai_creditos_receita_ref_assinatura_1k_brl: float = 6.99

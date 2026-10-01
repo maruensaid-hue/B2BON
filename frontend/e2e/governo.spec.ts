@@ -75,6 +75,12 @@ test.describe("Admin", () => {
     await expect(professional.getByText("R$ 176.000,00")).toBeVisible();
     await expect(professional.getByText("600.000/ano")).toBeVisible();
     await page.goto("/admin/governo");
+    // D-073: alíquotas da base líquida ainda não definidas — comissões aguardam
+    await expect(
+      page
+        .getByTestId("base-liquida-comissao")
+        .getByText(/Impostos: não definido/),
+    ).toBeVisible();
     await expect(
       page.getByTestId("metricas-governo").getByText("ARR Government"),
     ).toBeVisible();

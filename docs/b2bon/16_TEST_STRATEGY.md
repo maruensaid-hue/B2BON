@@ -96,3 +96,4 @@
 | J | 2.094 passed (+ Postgres 8/8) | lint OK (25 warnings), build OK | 12/12 |
 | Docs/onboarding (2026-10-01) | 2.094 passed | lint OK (25 warnings), build OK | 13/13 (+ tutoriais dos módulos) |
 | Government (2026-10-01) | 2.117 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |
+| D-073 base líquida (2026-10-01) | 2.121 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |

@@ -15,6 +15,7 @@ from app.models.comissao_representante import ComissaoRepresentante
 from app.models.plano import Plano
 from app.models.representante import Representante
 from app.models.tenant import Tenant
+from app.services import comissao_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 RAIZ = Path(__file__).resolve().parents[2]
@@ -23,15 +24,16 @@ TENANT = "orgao-gov"
 HOJE = date.today()
 
 
-def _migracao():
-    caminho = RAIZ / "alembic/versions/d9e1f3a5b7c9_b2bon_government.py"
-    spec = importlib.util.spec_from_file_location("mig_governo", caminho)
+def _migracao(arquivo: str = "d9e1f3a5b7c9_b2bon_government.py"):
+    caminho = RAIZ / "alembic/versions" / arquivo
+    spec = importlib.util.spec_from_file_location(arquivo, caminho)
     modulo = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(modulo)
     return modulo
 
 
 MIG = _migracao()
+MIG_D073 = _migracao("e1f3a5b7c9d2_comissao_base_liquida.py")
 
 
 @pytest.fixture()
@@ -53,6 +55,10 @@ def planos_gov(db_session):
 
 @pytest.fixture()
 def rep(db_session):
+    """Representante. Alíquotas zero (D-073): base líquida = valor recebido, para conferir as taxas de cada componente;
+    a base líquida com impostos e infraestrutura tem testes próprios abaixo."""
+    comissao_service.definir(db_session, 0, 0, "testes de taxa", "teste")
+
     def _criar(nome: str) -> Representante:
         r = Representante(nome=nome, email=f"{nome}@rep.com", chave_pix=f"{nome}-pix", percentual_comissao=0.1)
         db_session.add(r)
@@ -315,14 +321,54 @@ def test_transferencia_preserva_historico_e_override_exige_aprovacao(client, db_
     assert eventos == {"comissao_governo_transferida", "comissao_governo_override"}
 
 
-def test_comissoes_no_map_e_margem_parcial_sem_numero_inventado(client, db_session, planos_gov, rep):
+def test_comissoes_no_map_e_margem_com_impostos_e_infraestrutura(client, db_session, planos_gov, rep):
     contrato = _contrato(db_session, planos_gov["Department"], rep("nina"))
+    comissao_service.definir(db_session, 0.15, 0.05, "Alíquotas da CyberFort", "teste")
     governo.recebimentos.registrar(db_session, contrato.id, componente_id=_componente(db_session, contrato, "LICENSE").id, valor=72_000,
                                    recebido_em=HOJE)
     margem = client.get(f"/api/v1/motor/tenants/{TENANT}/margem-contribuicao",
                         params={"inicio": (HOJE - timedelta(days=1)).isoformat(), "fim": (HOJE + timedelta(days=1)).isoformat()}).json()
-    assert margem["receita_bruta"] == 72_000 and margem["comissoes_iniciais"] == 14_400 and margem["parcial"] is True
-    assert "impostos" in margem["desconhecidos"] and "infraestrutura" in margem["desconhecidos"]
+    assert (margem["receita_bruta"], margem["impostos"], margem["infraestrutura"]) == (72_000, 10_800, 3_600)
+    assert margem["comissoes_iniciais"] == 11_520  # (72.000 − 15% − 5%) × 20%
+    assert "impostos" not in margem["desconhecidos"] and "infraestrutura" not in margem["desconhecidos"]
+
+
+# D-073 — comissão sobre o lucro líquido -----------------------------------------------------------------------------------
+def test_sem_aliquotas_a_comissao_aguarda_e_e_recalculada(client, db_session, planos_gov):
+    vendedor = Representante(nome="olga", email="olga@rep.com", chave_pix="olga-pix", percentual_comissao=0.1)
+    db_session.add(vendedor)
+    db_session.commit()
+    contrato = _contrato(db_session, planos_gov["Professional"], vendedor)
+    governo.recebimentos.registrar(db_session, contrato.id, componente_id=_componente(db_session, contrato, "LICENSE").id,
+                                   valor=120_000, recebido_em=HOJE)
+    pendente = _comissoes(db_session, contrato_governo_id=contrato.id)[0]
+    assert (pendente.status, pendente.valor_comissao, pendente.base_bruta, pendente.base_calculo) == ("pendente_parametros", 0.0, 120_000, None)
+    assert governo.analytics.metricas(db_session)["comissoes"]["aguardando_parametros"] == 1
+    assert client.get("/api/v1/representantes/base-liquida-comissao").json() == {"impostos": None, "infraestrutura": None, "versao": 1}
+    resposta = client.put("/api/v1/representantes/base-liquida-comissao",
+                          json={"impostos": 0.15, "infraestrutura": 0.05, "motivo": "Alíquotas da CyberFort"})
+    assert resposta.status_code == 200 and resposta.json()["comissoes_recalculadas"] == 1
+    db_session.refresh(pendente)
+    assert (pendente.status, pendente.base_calculo, pendente.valor_comissao) == ("calculada", 96_000, 19_200)  # (120k − 20%) × 20%
+    assert pendente.deducoes == {"impostos": 0.15, "infraestrutura": 0.05, "versao": 2}
+    log = db_session.query(AuditLog).filter_by(evento_tipo="base_liquida_comissao_alterada").one()
+    assert log.detalhes["antes"] == {"impostos": None, "infraestrutura": None} and log.detalhes["motivo"] == "Alíquotas da CyberFort"
+
+
+def test_adicionais_comissionam_10_sobre_o_liquido(db_session, planos_gov, rep):
+    contrato = _contrato(db_session, planos_gov["Professional"], rep("paulo"))
+    comissao_service.definir(db_session, 0.15, 0.05, "Alíquotas", "teste")
+    servico = governo.contratos.adicionar_componente(db_session, contrato.id, tipo="ADDITIONAL_SERVICES", valor=10_000, descricao="Treinamento")
+    creditos = governo.contratos.adicionar_componente(db_session, contrato.id, tipo="ADDITIONAL_AI_CREDITS", valor=6_990, creditos=1_000_000)
+    for componente in (servico, creditos):
+        governo.recebimentos.registrar(db_session, contrato.id, componente_id=componente.id, valor=componente.valor, recebido_em=HOJE)
+    valores = {c.componente_tipo: (c.taxa, c.valor_comissao) for c in _comissoes(db_session, contrato_governo_id=contrato.id)}
+    assert valores == {"ADDITIONAL_SERVICES": (0.1, 800.0), "ADDITIONAL_AI_CREDITS": (0.1, 559.2)}
+
+
+def test_aliquotas_invalidas_sao_recusadas(client, db_session):
+    for corpo in ({"impostos": 1.2, "infraestrutura": 0, "motivo": "x"}, {"impostos": 0.6, "infraestrutura": 0.5, "motivo": "x"}):
+        assert client.put("/api/v1/representantes/base-liquida-comissao", json=corpo).status_code == 422
 
 
 def test_desconto_exige_motivo_e_fica_auditado(db_session, planos_gov):
@@ -347,5 +393,7 @@ def test_pipeline_ponderado_e_proposta_por_template(client, db_session, planos_g
 
 def test_politica_e_template_iniciais_iguais_a_migracao():
     assert governo.tipos.POLITICA_INICIAL == MIG.POLITICA_V1
+    assert governo.tipos.POLITICA_ATUAL == MIG_D073.POLITICA_V2
+    assert MIG_D073.DEDUCOES_V1 == {"impostos": None, "infraestrutura": None}  # nenhuma alíquota presumida
     assert governo.tipos.TEMPLATE_PROPOSTA_INICIAL == MIG.TEMPLATE_V1
     assert tuple(governo.tipos.CHAVES_ENTITLEMENT) == tuple(MIG.ENTITLEMENTS)

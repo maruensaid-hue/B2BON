@@ -10,7 +10,7 @@ from app.contexts.governo.tipos import (
     CODIGO_POLITICA,
     CODIGO_TEMPLATE_PROPOSTA,
     MARCADORES_TEMPLATE,
-    POLITICA_INICIAL,
+    POLITICA_ATUAL,
     TEMPLATE_PROPOSTA_INICIAL,
     Componente,
     Gatilho,
@@ -23,8 +23,8 @@ from app.services.errors import ValidacaoFalhou
 def semear(db: Session) -> None:
     """Garante a versão 1 da política e do template (bancos criados sem a migração: testes, E2E)."""
     if db.query(PoliticaComissao).filter_by(codigo=CODIGO_POLITICA).first() is None:
-        db.add(PoliticaComissao(codigo=CODIGO_POLITICA, versao=1, regras=POLITICA_INICIAL, ativa=True,
-                                motivo="Política comercial inicial do PO (D-072)", criado_por="semente"))
+        db.add(PoliticaComissao(codigo=CODIGO_POLITICA, versao=1, regras=POLITICA_ATUAL, ativa=True,
+                                motivo="Política comercial do PO (D-072, D-073)", criado_por="semente"))
     if db.query(TemplateDocumentoComercial).filter_by(codigo=CODIGO_TEMPLATE_PROPOSTA).first() is None:
         db.add(TemplateDocumentoComercial(codigo=CODIGO_TEMPLATE_PROPOSTA, versao=1, corpo=TEMPLATE_PROPOSTA_INICIAL, ativo=True,
                                           criado_por="semente"))

@@ -72,3 +72,11 @@ Consultas por rota **iguais** em todas as 13 rotas medidas; latências dentro da
 - Comissão sobre serviços e créditos adicionais, alíquota de impostos, rateio de infraestrutura e gatilho por nota fiscal
   (não existe integração fiscal): OI-025.
 - Preço do Public Procurement para clientes privados continua PENDING_DEFINITION (OI-017).
+
+## Adendo D-073 (mesmo dia) — comissão sobre o lucro líquido
+
+- Base de **toda** comissão (privada e Government) = recebido − impostos − infraestrutura (`app/services/comissao_service.py`,
+  política `BASE_LIQUIDA`). Sem alíquotas: `pendente_parametros`, recalculada ao definir (OI-026).
+- Serviços e AI Credits adicionais: 10% (política Government v2). Margem de contribuição do MAP usa as mesmas alíquotas.
+- Migração `e1f3a5b7c9d2` (SQLite e Postgres 16, subida/descida). Suíte **2.121 passed**, Postgres 9/9, E2E 17/17,
+  ruff 40, lint 25, duplicação 42.

@@ -15,7 +15,7 @@ from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
 from app.providers.payment.base import PaymentProvider
-from app.services import auditoria_service, webhook_parceiro_service
+from app.services import auditoria_service, comissao_service, webhook_parceiro_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 logger = logging.getLogger(__name__)
@@ -182,14 +182,11 @@ def _calcular_comissao_representante(db: Session, pagamento: PagamentoLicenca) -
     representante = db.query(Representante).filter_by(id=tenant.representante_id).one_or_none()
     if representante is None:
         return
-    db.add(
-        ComissaoRepresentante(
-            representante_id=representante.id,
-            tenant_id=tenant.id,
-            pagamento_licenca_id=pagamento.id,
-            valor_comissao=pagamento.valor * representante.percentual_comissao,
-        )
-    )
+    # D-073: sobre o lucro líquido (valor pago − impostos − infraestrutura); sem alíquotas definidas, fica pendente
+    comissao = ComissaoRepresentante(representante_id=representante.id, tenant_id=tenant.id, pagamento_licenca_id=pagamento.id,
+                                     evento="ACCRUAL")
+    comissao_service.calcular(db, comissao, pagamento.valor, representante.percentual_comissao)
+    db.add(comissao)
 
 
 def _destinatarios_admin(db: Session, tenant_id: str) -> list[Usuario]:

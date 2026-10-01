@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Comissão sobre o lucro líquido (2026-10-01, decisão do PO, D-073)
+
+- Toda comissão de representante, de plano privado ou Government, passa a ser calculada sobre o lucro líquido do recebimento: valor recebido menos impostos e custo de infraestrutura.
+- As alíquotas são definidas em Admin → Representantes (ou Government), com motivo e auditoria; enquanto não forem informadas, as comissões novas ficam "aguardando parâmetros" e não são repassadas, e são recalculadas quando forem definidas.
+- Serviços e AI Credits adicionais do Government passam a pagar 10% de comissão.
+
 ## B2B ON Government (2026-10-01, pedido do PO, D-072)
 
 - Três ofertas para órgãos públicos — Department, Professional (recomendada) e Enterprise — com licença institucional, implantação e subscrição anual separadas e AI Credits anuais (300 mil, 600 mil e 1,2 milhão).

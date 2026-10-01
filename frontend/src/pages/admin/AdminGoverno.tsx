@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
+import { BaseLiquidaComissao } from "@/components/BaseLiquidaComissao";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
@@ -59,7 +60,8 @@ interface Comissao {
   representante_id: number;
   componente_tipo: string;
   numero_renovacao: number | null;
-  base_calculo: number;
+  base_bruta: number | null;
+  base_calculo: number | null;
   taxa: number;
   evento: string;
   valor: number;
@@ -235,7 +237,10 @@ function DetalheContrato({
                 Rep. {c.representante_id} ·{" "}
                 {ROTULO_COMPONENTE[c.componente_tipo] ?? c.componente_tipo}
                 {c.numero_renovacao ? ` #${c.numero_renovacao}` : ""} ·{" "}
-                {brl(c.base_calculo)} × {Math.round(c.taxa * 100)}%
+                {c.base_calculo === null
+                  ? `${brl(c.base_bruta ?? 0)} recebido · aguardando alíquotas`
+                  : `${brl(c.base_bruta ?? c.base_calculo)} recebido → ${brl(c.base_calculo)} líquido`}{" "}
+                × {Math.round(c.taxa * 100)}%
               </span>
               <span>
                 {brl(c.valor)}{" "}
@@ -358,6 +363,7 @@ export function AdminGoverno() {
         </div>
       </div>
       {erro && <div className="text-[12px] text-red">{erro}</div>}
+      <BaseLiquidaComissao />
 
       {metricas && (
         <div

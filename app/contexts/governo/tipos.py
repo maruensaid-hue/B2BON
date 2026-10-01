@@ -66,6 +66,16 @@ POLITICA_INICIAL = {
     },
 }
 
+# D-073: serviços e AI Credits adicionais comissionáveis a 10% (migração e1f3a5b7c9d2, versão seguinte da política)
+POLITICA_ATUAL = {
+    "gatilho": POLITICA_INICIAL["gatilho"],
+    "componentes": {
+        **POLITICA_INICIAL["componentes"],
+        Componente.SERVICOS.value: {"comissionavel": True, "taxa": 0.10},
+        Componente.CREDITOS.value: {"comissionavel": True, "taxa": 0.10},
+    },
+}
+
 TEMPLATE_PROPOSTA_INICIAL = (
     "Proposta comercial — {plano}\n"
     "Órgão: {entidade}\n"

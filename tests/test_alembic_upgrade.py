@@ -215,7 +215,12 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
                 ("B2B ON Government Professional", 120000, 20000, 36000, 600000, 1, 0, "CONTRACT", "GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION"),
                 ("B2B ON Government Enterprise", 180000, 30000, 54000, 1200000, 0, 0, "CONTRACT", "GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION")]
             assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE segmento = 'PRIVATE' AND preco_licenca IS NOT NULL")).scalar() == 0
-            assert conexao.execute(sa.text("SELECT versao FROM politica_comissao WHERE codigo = 'GOVERNMENT'")).scalar() == 1
+            ativas = conexao.execute(sa.text("SELECT codigo, versao FROM politica_comissao WHERE ativa ORDER BY codigo")).fetchall()
+            assert [tuple(linha) for linha in ativas] == [("BASE_LIQUIDA", 1), ("GOVERNMENT", 2)]  # D-073
+        command.downgrade(config, "d9e1f3a5b7c9")
+        with engine.connect() as conexao:
+            ativas = conexao.execute(sa.text("SELECT codigo, versao FROM politica_comissao WHERE ativa")).fetchall()
+            assert [tuple(linha) for linha in ativas] == [("GOVERNMENT", 1)]
         command.downgrade(config, "c5e7a9b1d3f4")
         with engine.connect() as conexao:
             assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE nome LIKE 'B2B ON Government%'")).scalar() == 0

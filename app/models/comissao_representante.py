@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -31,8 +31,12 @@ class ComissaoRepresentante(Base):
     fracao_divisao: Mapped[float | None] = mapped_column(Float, nullable=True)
     numero_renovacao: Mapped[int | None] = mapped_column(Integer, nullable=True)
     evento: Mapped[str | None] = mapped_column(String, nullable=True)  # ACCRUAL | CLAWBACK
+    # D-073: comissão sobre o lucro líquido. `base_bruta` = valor recebido; `base_calculo` = bruto − impostos −
+    # infraestrutura; `deducoes` = alíquotas e versão aplicadas. Sem alíquota definida: status "pendente_parametros".
+    base_bruta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    deducoes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     valor_comissao: Mapped[float] = mapped_column(Float)
-    status: Mapped[str] = mapped_column(String, default="calculada")  # calculada | paga | falhou | estornada | a_compensar
+    status: Mapped[str] = mapped_column(String, default="calculada")  # calculada | pendente_parametros | paga | falhou | estornada | a_compensar
     motivo_falha: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     pago_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
