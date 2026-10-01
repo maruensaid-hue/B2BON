@@ -2,8 +2,8 @@
 
 Link público para os representantes mostrarem o B2B ON a clientes, sem login nem senha reais.
 
-- **Link**: `https://b2bon.onrender.com/demo` (ou `https://<seu-domínio>/demo`, se o site tiver domínio próprio).
-- Na tela de login aparece também **"Ver demonstração (sem login)"** quando a demonstração está ligada.
+- **Link**: `https://b2bon.onrender.com/demo` — também no botão **DEMO** do rodapé da tela de login.
+- O botão fica sempre visível; com a demonstração desligada no servidor, o link mostra "A demonstração não está habilitada".
 
 ## Como funciona
 
