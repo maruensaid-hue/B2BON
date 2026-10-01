@@ -108,19 +108,23 @@ def _semear_planos_d059() -> None:
     governo = _migracao("d9e1f3a5b7c9_b2bon_government.py")
     d075 = _migracao("a6c8e0f2b4d7_parametros_financeiros_entitlements_gov.py")
     d076 = _migracao("b7d9f1a3c5e8_pool_infraestrutura_tributos_2026.py")
+    d077 = _migracao("c8e0a2b4d6f9_precos_publicos_fornecedores.py")
+
+    def tier(nome: str) -> str | None:  # D-076 pelo nome; D-077: ENTRY → STARTER e tiers próprios de Bid/Sourcing
+        return d077.TIERS.get(nome) or {"ENTRY": "STARTER"}.get(d076.tier_por_nome(nome), d076.tier_por_nome(nome))
     db = SessionLocal()
     try:
         for nome, preco, usuarios, modulos, self_service, tipo in migracao.PLANOS:
             if nome == j3.PLANO and usuarios is None:
                 usuarios = j3.USUARIOS_INCLUIDOS
             if db.query(Plano).filter_by(nome=nome).one_or_none() is None:
-                db.add(Plano(nome=nome, franquia_contas_mes=0, tier_infraestrutura=d076.tier_por_nome(nome), max_usuarios=usuarios,
+                db.add(Plano(nome=nome, franquia_contas_mes=0, tier_infraestrutura=tier(nome), max_usuarios=usuarios,
                              preco_mensal=preco,
                              visivel_self_service=self_service, modulos_contratados=modulos, categoria="modulo", tipo_preco=tipo))
         for nome, licenca, implantacao, assinatura, creditos, recomendado in governo.PLANOS:
             if db.query(Plano).filter_by(nome=nome).one_or_none() is None:
                 usuarios, api, extras = d075.ENTITLEMENTS[nome]
-                db.add(Plano(nome=nome, franquia_contas_mes=d076.FRANQUIA_GOVERNO[nome], tier_infraestrutura=d076.tier_por_nome(nome),
+                db.add(Plano(nome=nome, franquia_contas_mes=d076.FRANQUIA_GOVERNO[nome], tier_infraestrutura=tier(nome),
                              max_usuarios=usuarios, preco_mensal=0.0, visivel_self_service=False, modulos_contratados=list(d075.MODULOS), categoria="governo", tipo_preco="CONTRACT", segmento="GOVERNMENT",
                              modelo_cobranca=governo.MODELO, preco_licenca=licenca, preco_implantacao=implantacao,
                              preco_assinatura_anual=assinatura, creditos_ia_anuais=creditos, recomendado=recomendado,

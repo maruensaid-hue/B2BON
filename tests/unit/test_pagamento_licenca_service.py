@@ -312,7 +312,7 @@ def test_webhook_aprovado_com_representante_calcula_comissao(db_session):
 def test_comissao_privada_com_parametros_ja_definidos_nasce_pagavel(db_session):
     definir_parametros(db_session, impostos=0.10, pool=[componente(20.0)])
     plano = _tenant_e_plano(db_session)
-    plano.tier_infraestrutura = "ENTRY"
+    plano.tier_infraestrutura = "STARTER"
     db_session.commit()
     representante = Representante(nome="Ciclano", email="ciclano@vendedor.com.br", chave_pix="ciclano@pix", percentual_comissao=0.2)
     db_session.add(representante)

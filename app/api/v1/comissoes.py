@@ -17,6 +17,7 @@ from app.schemas.comissoes import (
     AtualizarComponenteInfraSchema,
     ComponenteInfraSchema,
     CotacaoCambioSchema,
+    EnvelopeCapacidadeSchema,
     CustoDiretoSchema,
     DecisaoAlertaSchema,
     PerfilTributarioSchema,
@@ -63,19 +64,25 @@ def _pendentes(db: Session, hoje: date, cambio, regras_margem: dict) -> list[str
             faltam.append(f"Tax Profile vigente para {tipo}")
         else:
             faltam += [f"Tax Profile {tipo}: {item}" for item in comissoes.tributos.pendencias(perfil)]
-    componentes = comissoes.infraestrutura.vigentes(db, hoje)
+    regras_infra = comissoes.politica.vigente_infra(db).regras
+    pools = regras_infra.get("pools_comissao") or ["INFRASTRUCTURE", "DATA_PROVIDER"]
+    componentes = comissoes.infraestrutura.aplicaveis(db, hoje, pools)
     if not componentes:
         faltam.append("Infrastructure Cost Pool: fornecedores e planos de referência com valores")
     for componente in componentes:
         custos = comissoes.infraestrutura.custos_mensais(db, componente, hoje)
         nome = f"{componente.fornecedor} · {componente.servico}"
+        if componente.status_arquitetura == comissoes.tipos.StatusArquitetura.APLICAVEL_A_CONFIRMAR.value:
+            faltam.append(f"Confirmar uso na arquitetura: {nome}")
         if custos["faltante"] == comissoes.tipos.Faltante.CUSTO_INFRA.value:
-            faltam.append(f"Valor do plano de referência: {nome}")
+            faltam.append(f"Capacity envelope: {nome}" if componente.modelo_preco == comissoes.tipos.ModeloPreco.USO.value
+                          else f"Valor do plano de referência: {nome}")
         elif custos["faltante"] == comissoes.tipos.Faltante.CAMBIO.value:
             faltam.append(f"Cotação PTAX {componente.moeda}/BRL: {nome}")
-        if componente.capacidade_contratada is None:
-            faltam.append(f"Capacidade contratada: {nome}")
-    _, _, sem_peso = comissoes.infraestrutura.unidades_ponderadas(db, comissoes.politica.vigente_infra(db).regras["pesos"])
+    for componente in comissoes.infraestrutura.vigentes(db, hoje):
+        if componente.proxima_revisao_em and componente.proxima_revisao_em <= hoje:
+            faltam.append(f"Revisar preço: {componente.fornecedor} · {componente.servico} (desde {componente.proxima_revisao_em})")
+    _, _, sem_peso = comissoes.infraestrutura.unidades_ponderadas(db, regras_infra["pesos"])
     faltam += [f"Tier de infraestrutura do plano {plano}" for plano in sem_peso]
     if cambio is None and regras_margem.get("deduzir_custo_ia"):
         faltam.append("Cotação USD/BRL (a política deduz custo de IA)")
@@ -95,6 +102,9 @@ def infraestrutura(db: Session = Depends(get_db)) -> dict:
     """Infrastructure Cost Pool, Provider Economics, capacidade, alertas e projeção."""
     componentes = db.query(ComponenteInfra).order_by(ComponenteInfra.fornecedor, ComponenteInfra.id).all()
     resposta = {"componentes": [comissoes.infraestrutura.como_dict(c) for c in componentes],
+                "modelos_preco": [m.value for m in comissoes.tipos.ModeloPreco],
+                "status_arquitetura": [s.value for s in comissoes.tipos.StatusArquitetura],
+                "tipos_fonte": [t.value for t in comissoes.tipos.TipoFonte],
                 "economia": comissoes.capacidade.economia_fornecedores(db), "categorias": list(comissoes.tipos.CATEGORIAS_INFRA),
                 "ciclos": list(comissoes.tipos.CICLOS_COBRANCA), "politica": comissoes.politica.vigente_infra(db).regras}
     db.commit()
@@ -118,11 +128,20 @@ def atualizar_componente(componente_id: int, dados: AtualizarComponenteInfraSche
                          db: Session = Depends(get_db)) -> dict:
     """Plano, custo, capacidade ou alocação. Comissões calculadas guardam o snapshot; só o recálculo explícito muda as não pagas."""
     valores = dict(dados.dados)
-    for campo in ("vigente_de", "vigente_ate"):
+    for campo in ("vigente_de", "vigente_ate", "verificado_em", "proxima_revisao_em"):
         if isinstance(valores.get(campo), str):
             valores[campo] = date.fromisoformat(valores[campo])
     componente = comissoes.infraestrutura.atualizar(db, componente_id, valores, dados.motivo, ator_id)
     return {"componente": comissoes.infraestrutura.como_dict(componente), "aguardando_calculadas": _recalcular(db)}
+
+
+@router.post("/infraestrutura/componentes/{componente_id}/envelopes", status_code=201)
+def criar_envelope(componente_id: int, dados: EnvelopeCapacidadeSchema, ator_id: str | None = Depends(get_ator_id),
+                   db: Session = Depends(get_db)) -> dict:
+    """Capacity Envelope de fornecedor por uso (ex.: Neon). Benchmark do fornecedor fica só como referência."""
+    valores = {k: v for k, v in dados.model_dump().items() if v is not None or k == "benchmark_only"}
+    envelope = comissoes.infraestrutura.criar_envelope(db, componente_id, valores, ator_id)
+    return {"envelope": comissoes.infraestrutura.envelope_dict(envelope), "aguardando_calculadas": _recalcular(db)}
 
 
 @router.post("/infraestrutura/componentes/{componente_id}/uso")

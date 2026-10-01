@@ -1,6 +1,12 @@
 from app.models.alerta_detrator import AlertaDetrator
 from app.models.apuracao_comissao import ApuracaoComissao, PerfilTributario
-from app.models.custo_infraestrutura import AlertaCapacidadeInfra, ComponenteInfra, CustoDiretoInfra, UsoCapacidadeInfra
+from app.models.custo_infraestrutura import (
+    AlertaCapacidadeInfra,
+    ComponenteInfra,
+    CustoDiretoInfra,
+    EnvelopeCapacidade,
+    UsoCapacidadeInfra,
+)
 from app.models.cotacao_cambio import CotacaoCambio
 from app.models.aprovacao import Aprovacao
 from app.models.atividade import Atividade
@@ -201,6 +207,7 @@ __all__ = [
     "AlertaCapacidadeInfra",
     "ComponenteInfra",
     "CustoDiretoInfra",
+    "EnvelopeCapacidade",
     "UsoCapacidadeInfra",
     "CotacaoCambio",
     "PerfilTributario",

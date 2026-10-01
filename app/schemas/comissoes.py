@@ -41,6 +41,36 @@ class ComponenteInfraSchema(BaseModel):
     vigente_de: date
     vigente_ate: date | None = None
     observacoes: str | None = None
+    # D-077: modelo de preço, aplicabilidade e fonte do preço
+    modelo_preco: str = "FIXED_PLAN"
+    status_arquitetura: str = "APPLICABLE"
+    provisionado_para_comissao: bool = True
+    funcao_arquitetural: str | None = None
+    coexistencia_justificada: str | None = None
+    url_fonte: str | None = None
+    tipo_fonte: str = "MANUAL_APPROVED"
+    verificado_em: date | None = None
+    proxima_revisao_em: date | None = None
+    override_manual: bool = False
+    motivo_override: str | None = None
+    atributos: dict | None = None
+
+
+class EnvelopeCapacidadeSchema(BaseModel):
+    """Capacity Envelope (D-077): quantidades provisionadas decididas pela CyberFort."""
+
+    max_unidades_computo: float | None = None
+    horas_computo_provisionadas: float | None = None
+    armazenamento_gb_provisionado: float | None = None
+    preco_unidade_computo: float | None = None
+    preco_armazenamento_gb: float | None = None
+    outros_custos: list[dict] | None = None
+    custo_mensal_estimado: float | None = None  # só para benchmark
+    benchmark_only: bool = False
+    vigente_de: date | None = None
+    fonte: str | None = None
+    verificado_em: date | None = None
+    observacoes: str | None = None
 
 
 class AtualizarComponenteInfraSchema(BaseModel):

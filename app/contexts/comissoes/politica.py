@@ -24,7 +24,7 @@ from app.services.errors import ValidacaoFalhou
 
 INICIAIS = {
     CODIGO_POLITICA_MARGEM: (POLITICA_MARGEM_INICIAL, "Política inicial (D-075): custo de IA fora da margem"),
-    CODIGO_POLITICA_INFRA: (POLITICA_INFRA_INICIAL, "Política inicial do PO (D-076): plano máximo, pesos 1/1/2/4"),
+    CODIGO_POLITICA_INFRA: (POLITICA_INFRA_INICIAL, "Política do PO (D-076/D-077): plano máximo aplicável, pesos 1/1/2/4/2/4"),
 }
 
 
@@ -58,8 +58,14 @@ def _validar_infra(regras: dict) -> None:
         raise ValidacaoFalhou("Limiares crescentes e positivos (ex.: 0,70 < 0,80 < 0,90 < 1,00).")
     if regras.get("custo_comissao") not in ("PROVISIONED", "ACTUAL"):
         raise ValidacaoFalhou("custo_comissao: PROVISIONED ou ACTUAL.")
-    if set(regras) - {"pesos", "limiares", "custo_comissao"}:
-        raise ValidacaoFalhou("A política de infraestrutura só define pesos, limiares e custo_comissao.")
+    pools = regras.get("pools_comissao", POLITICA_INFRA_INICIAL["pools_comissao"])
+    if not pools or set(pools) - {"INFRASTRUCTURE", "DATA_PROVIDER"}:
+        raise ValidacaoFalhou("pools_comissao: INFRASTRUCTURE e/ou DATA_PROVIDER (custo de IA nunca entra por aqui).")
+    capacidade = regras.get("capacidade_unidades")
+    if capacidade is not None and (not isinstance(capacidade, int | float) or capacidade <= 0):
+        raise ValidacaoFalhou("capacidade_unidades: positiva ou vazia.")
+    if set(regras) - set(POLITICA_INFRA_INICIAL):
+        raise ValidacaoFalhou(f"A política de infraestrutura só define {', '.join(POLITICA_INFRA_INICIAL)}.")
 
 
 def _validar_margem(regras: dict) -> None:

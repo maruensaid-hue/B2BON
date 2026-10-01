@@ -151,3 +151,7 @@ receita/lucro/margem agora vêm de `economia.kpis`. A política
 - O custo real alimenta a Actual Contribution Margin; o provisionado, a comissão e a Conservative Contribution Margin;
   a diferença aparece como reserva de infraestrutura. Capacidade, alertas (80/90/100%) e projeção de esgotamento ficam em
   Provider Economics; nada é contratado automaticamente.
+- D-077: o pool usa o maior plano público **aplicável** à arquitetura real (Render Scale + Web Service 12c-96g; Neon por
+  Capacity Envelope; Lusha Premium no pool de provedores de dados). Componentes disponíveis mas não usados (Render Postgres,
+  Key Value, disco) ficam fora. Preço CUSTOM nunca recebe valor inventado. Custos em USD pela PTAX; cada custo guarda fonte,
+  data de verificação e próxima revisão. A parte do pool não absorvida pelos tenants aparece como capacidade não alocada.

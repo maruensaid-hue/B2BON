@@ -180,14 +180,19 @@ def test_snapshot_preserva_calculo_e_paga_nunca_muda(db_session, professional, c
                             json={"dados": {"custo_referencia": 2000}, "motivo": "Plano de referência novo"})
     assert resposta.status_code == 200
     resposta = client.post("/api/v1/comissoes/recalculo", json={"motivo": "Novos parâmetros"})
-    assert resposta.status_code == 200 and resposta.json()["alteradas"] == 1  # só a não paga
+    assert resposta.status_code == 200 and resposta.json()["alteradas"] == 0  # D-077: PAYABLE e PAID nunca são recalculadas
     db_session.refresh(paga)
     apuracao = _apuracao(db_session, recebimento)
     assert (paga.status, paga.valor_comissao) == ("PAID", 20_400.0)
     assert (apuracao.aliquota_tributaria, apuracao.impostos, apuracao.custo_infra, apuracao.margem_comissionavel_liquida) == (
         0.15, Decimal("18000.00"), Decimal("0.00"), Decimal("102000.00"))
     nao_paga = _comissoes(db_session)[-1]
-    assert nao_paga.valor_comissao == 960.0  # (36.000 − 7.200 − 24.000) × 20% com os parâmetros novos, por recálculo explícito
+    assert (nao_paga.status, nao_paga.valor_comissao) == ("PAYABLE", 3_720.0)  # valor final: preço novo não a altera
+    # um recebimento novo usa os parâmetros novos: (36.000 − 7.200 − 24.000) × 20% = 960
+    renovacao = governo.contratos.renovar(db_session, professional.id)
+    componente_ = next(c for c in governo.contratos.componentes(db_session, professional) if c.periodo_id == renovacao.id)
+    governo.recebimentos.registrar(db_session, professional.id, componente_id=componente_.id, valor=componente_.valor, recebido_em=HOJE)
+    assert _comissoes(db_session)[-1].base_calculo == 4_800.0
 
 
 def test_waterfall_do_map_separa_custo_real_e_provisionado(db_session, professional, client):

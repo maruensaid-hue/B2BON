@@ -217,7 +217,7 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
             assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE segmento = 'PRIVATE' AND preco_licenca IS NOT NULL")).scalar() == 0
             ativas = conexao.execute(sa.text("SELECT codigo, versao FROM politica_comissao WHERE ativa ORDER BY codigo")).fetchall()
             # D-073 (adicionais 10%); BASE_LIQUIDA saiu na D-074; D-075: política da margem; D-076: política de infraestrutura
-            assert [tuple(linha) for linha in ativas] == [("GOVERNMENT", 2), ("INFRASTRUCTURE_COST_POLICY", 1), ("NET_COMMISSIONABLE_MARGIN", 1)]
+            assert [tuple(linha) for linha in ativas] == [("GOVERNMENT", 2), ("INFRASTRUCTURE_COST_POLICY", 2), ("NET_COMMISSIONABLE_MARGIN", 1)]
             perfis = conexao.execute(sa.text("SELECT tipo_receita, item_lista_servico, codigo_servico, vigente_de, vigente_ate FROM perfil_tributario "
                                              "WHERE vigente_ate > vigente_de ORDER BY tipo_receita")).fetchall()
             assert [tuple(p) for p in perfis] == [("IMPLEMENTATION", "1.07", "2919", "2026-01-01", "2027-01-01"),
@@ -225,13 +225,25 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
                                                   ("SOFTWARE_LICENSE", "1.05", "2800", "2026-01-01", "2027-01-01")]
             # os perfis da D-075 ficam no histórico, encerrados na própria vigência (nunca vigentes junto com os novos)
             assert conexao.execute(sa.text("SELECT count(*) FROM perfil_tributario WHERE vigente_ate = vigente_de")).scalar() == 3
-            assert conexao.execute(sa.text("SELECT count(*) FROM componente_infra")).scalar() == 0  # valores dos fornecedores: do PO
+            # D-077: preços públicos verificados; só Render (workspace + web service), Neon e Lusha Premium entram no pool
+            no_pool = conexao.execute(sa.text("SELECT fornecedor, servico, custo_referencia FROM componente_infra WHERE provisionado_para_comissao "
+                                              "AND status_arquitetura <> 'AVAILABLE_NOT_ALLOCATED' ORDER BY fornecedor, servico")).fetchall()
+            assert [tuple(c) for c in no_pool] == [("LUSHA", "SALES_INTELLIGENCE", 399.9), ("NEON", "POSTGRES", None),
+                                                   ("RENDER", "WEB_SERVICE_COMPUTE", 1500), ("RENDER", "WORKSPACE", 499)]
+            assert conexao.execute(sa.text("SELECT count(*) FROM componente_infra")).scalar() == 9
+            assert conexao.execute(sa.text("SELECT benchmark_only, custo_mensal_estimado FROM envelope_capacidade")).fetchall() == [(1, 1404)]
             assert conexao.execute(sa.text("SELECT count(*) FROM cotacao_cambio")).scalar() == 0  # PTAX: obtida/cadastrada, nunca semeada
             planos = conexao.execute(sa.text("SELECT max_usuarios, permite_api_parceiros, franquia_contas_mes, tier_infraestrutura FROM plano "
                                              "WHERE segmento = 'GOVERNMENT' ORDER BY preco_licenca")).fetchall()
             assert [tuple(p) for p in planos] == [(20, 0, 1000, "DEPARTMENT"), (50, 1, 3000, "PROFESSIONAL"), (100, 1, 10000, "ENTERPRISE")]
             tiers = dict(conexao.execute(sa.text("SELECT nome, tier_infraestrutura FROM plano WHERE segmento = 'PRIVATE'")).fetchall())
-            assert (tiers.get("MAP Starter"), tiers.get("CRM Professional"), tiers.get("Bid Intelligence")) == ("ENTRY", "PROFESSIONAL", None)
+            assert (tiers.get("MAP Starter"), tiers.get("CRM Professional"), tiers.get("Bid Intelligence"), tiers.get("Strategic Sourcing")) == (
+                "STARTER", "PROFESSIONAL", "BID_INTELLIGENCE", "STRATEGIC_SOURCING")
+        command.downgrade(config, "b7d9f1a3c5e8")  # D-077 volta: preços dos fornecedores, envelopes e pesos novos saem
+        with engine.connect() as conexao:
+            assert conexao.execute(sa.text("SELECT count(*) FROM componente_infra")).scalar() == 0
+            assert conexao.execute(sa.text("SELECT tier_infraestrutura FROM plano WHERE nome = 'MAP Starter'")).scalar() == "ENTRY"
+            assert conexao.execute(sa.text("SELECT versao FROM politica_comissao WHERE codigo = 'INFRASTRUCTURE_COST_POLICY' AND ativa")).scalar() == 1
         command.downgrade(config, "a6c8e0f2b4d7")  # D-076 volta: pool, perfis novos, franquias e política de infraestrutura saem
         with engine.connect() as conexao:
             assert conexao.execute(sa.text("SELECT count(*) FROM perfil_tributario WHERE vigente_ate > vigente_de")).scalar() == 3

@@ -67,6 +67,24 @@ export interface ComponenteInfra {
   vigente_de: string;
   vigente_ate: string | null;
   observacoes: string | null;
+  modelo_preco: string;
+  status_arquitetura: string;
+  provisionado_para_comissao: boolean;
+  funcao_arquitetural: string | null;
+  url_fonte: string | null;
+  tipo_fonte: string;
+  verificado_em: string | null;
+  proxima_revisao_em: string | null;
+  atributos: Record<string, unknown> | null;
+}
+
+export interface EnvelopeCapacidade {
+  id: number;
+  horas_computo_provisionadas: number | null;
+  armazenamento_gb_provisionado: number | null;
+  custo_mensal_estimado: number | null;
+  moeda: string;
+  benchmark_only: boolean;
 }
 
 export interface LinhaFornecedor {
@@ -91,6 +109,15 @@ export interface LinhaFornecedor {
   custo_por_unidade_ponderada: number | null;
   custo_sobre_receita: number | null;
   participacao_pool: number | null;
+  no_pool_comissao: boolean;
+  status_arquitetura: string;
+  modelo_preco: string;
+  tipo_fonte: string;
+  url_fonte: string | null;
+  verificado_em: string | null;
+  proxima_revisao_em: string | null;
+  revisao_vencida: boolean;
+  envelope: EnvelopeCapacidade | null;
   projecao: {
     utilizacao_projetada: Record<string, number>;
     esgotamento_estimado: string | null;
@@ -116,6 +143,9 @@ export interface Infraestrutura {
   componentes: ComponenteInfra[];
   categorias: string[];
   ciclos: string[];
+  modelos_preco: string[];
+  status_arquitetura: string[];
+  tipos_fonte: string[];
   politica: PoliticaInfra;
   economia: {
     competencia: string;
@@ -124,6 +154,9 @@ export interface Infraestrutura {
     resumo: {
       pool_provisionado_mensal: number;
       pool_real_mensal: number | null;
+      por_pool: Record<string, number>;
+      alocado_tenants_mensal: number;
+      capacidade_nao_alocada_mensal: number;
       reserva_mensal: number | null;
       unidades_ponderadas: number;
       tenants_alocados: number;

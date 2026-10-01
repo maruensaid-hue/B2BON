@@ -14,7 +14,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.contexts.comissoes import infraestrutura, politica
-from app.contexts.comissoes.tipos import MENSAGENS_CAPACIDADE, Contabilizacao, StatusCapacidade
+from app.contexts.comissoes.tipos import MENSAGENS_CAPACIDADE, StatusCapacidade
 from app.models.custo_infraestrutura import AlertaCapacidadeInfra, ComponenteInfra, UsoCapacidadeInfra
 from app.models.licenca import Licenca
 from app.models.plano import Plano
@@ -151,12 +151,14 @@ def economia_fornecedores(db: Session, dia: date | None = None) -> dict:
     mrr = receita_recorrente_mensal(db)
     tenants = len(dados["pesos"])
     linhas, total_prov = [], Decimal(0)
+    no_pool = {c.id for c in infraestrutura.aplicaveis(db, dia, regras.get("pools_comissao") or ["INFRASTRUCTURE", "DATA_PROVIDER"])}
     for componente in infraestrutura.vigentes(db, dia):
         custos = infraestrutura.custos_mensais(db, componente, dia)
         prov = custos["provisionado"]
-        if prov is not None and componente.contabilizacao == Contabilizacao.INFRAESTRUTURA.value:
+        if prov is not None and componente.id in no_pool:
             total_prov += prov
         uso_relativo = utilizacao(componente)
+        envelope = infraestrutura.envelope_vigente(db, componente, dia)
         linhas.append({
             "id": componente.id, "fornecedor": componente.fornecedor, "servico": componente.servico, "categoria": componente.categoria,
             "plano_atual": componente.plano, "plano_referencia": componente.plano_referencia, "moeda": componente.moeda,
@@ -165,16 +167,22 @@ def economia_fornecedores(db: Session, dia: date | None = None) -> dict:
             "custo_real_mensal_brl": infraestrutura._f(custos["real"]), "contabilizacao": componente.contabilizacao,
             "capacidade": infraestrutura._f(componente.capacidade_contratada), "uso": infraestrutura._f(componente.uso_atual),
             "unidade_uso": componente.unidade_uso, "utilizacao": round(uso_relativo, 4) if uso_relativo is not None else None,
+            "no_pool_comissao": componente.id in no_pool, "status_arquitetura": componente.status_arquitetura,
+            "modelo_preco": componente.modelo_preco, "tipo_fonte": componente.tipo_fonte, "url_fonte": componente.url_fonte,
+            "verificado_em": componente.verificado_em.isoformat() if componente.verificado_em else None,
+            "proxima_revisao_em": componente.proxima_revisao_em.isoformat() if componente.proxima_revisao_em else None,
+            "revisao_vencida": bool(componente.proxima_revisao_em and componente.proxima_revisao_em <= dia),
+            "envelope": infraestrutura.envelope_dict(envelope) if envelope else None, "atributos": componente.atributos,
             "status": status(uso_relativo, regras["limiares"]),
             "custo_por_tenant": float(prov / tenants) if prov is not None and tenants else None,
-            "custo_por_unidade_ponderada": float(prov / dados["unidades"]) if prov is not None and dados["unidades"] else None,
+            "custo_por_unidade_ponderada": float(prov / dados["divisor"]) if prov is not None and dados["divisor"] else None,
             "custo_sobre_receita": round(float(prov / mrr), 4) if prov is not None and mrr else None,
             "projecao": projecao(db, componente),
         })
     for linha in linhas:
         valor = linha["custo_provisionado_mensal_brl"]
         linha["participacao_pool"] = round(valor / float(total_prov), 4) if valor is not None and total_prov and \
-            linha["contabilizacao"] == Contabilizacao.INFRAESTRUTURA.value else None
+            linha["no_pool_comissao"] else None
     por_fornecedor: dict[str, float] = {}
     for linha in linhas:
         if linha["participacao_pool"]:
@@ -190,6 +198,9 @@ def economia_fornecedores(db: Session, dia: date | None = None) -> dict:
         "competencia": dados["competencia"], "componentes": linhas, "alertas_abertos": [alerta_dict(a) for a in alertas],
         "resumo": {
             "pool_provisionado_mensal": float(total_prov), "pool_real_mensal": infraestrutura._f(dados["real"]),
+            "por_pool": dados["por_pool"], "alocado_tenants_mensal": float(dados["alocado_tenants"]),
+            # capacidade contratada ainda não absorvida pela base (custo de capacidade ociosa da plataforma)
+            "capacidade_nao_alocada_mensal": float(dados["capacidade_nao_alocada"]), "faltantes": dados["faltantes"],
             "reserva_mensal": float(total_prov - dados["real"]) if dados["real"] is not None else None,
             "unidades_ponderadas": float(dados["unidades"]), "tenants_alocados": tenants, "planos_sem_peso": dados["planos_sem_peso"],
             "receita_recorrente_mensal": float(mrr), "custo_sobre_receita": round(float(total_prov / mrr), 4) if mrr else None,

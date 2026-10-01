@@ -100,6 +100,14 @@ export function PainelInfraestrutura({
           </span>
           <span>Real/mês: {valor(resumo.pool_real_mensal)}</span>
           <span>Reserva/mês: {valor(resumo.reserva_mensal)}</span>
+          <span>
+            Infra: {valor(resumo.por_pool.INFRASTRUCTURE)} · Provedores de
+            dados: {valor(resumo.por_pool.DATA_PROVIDER)}
+          </span>
+          <span data-testid="capacidade-nao-alocada">
+            Capacidade não alocada/mês:{" "}
+            {valor(resumo.capacidade_nao_alocada_mensal)}
+          </span>
           <span>Unidades ponderadas: {resumo.unidades_ponderadas}</span>
           <span>Custo ÷ MRR: {pct(resumo.custo_sobre_receita)}</span>
           {resumo.dependencia_maior_fornecedor && (
@@ -183,9 +191,27 @@ export function PainelInfraestrutura({
                 <td className="p-2 font-semibold">
                   {l.fornecedor}
                   <div className="font-normal text-muted">
-                    {l.servico} · {l.categoria}
-                    {l.contabilizacao === "AI_COST" ? " · no custo de IA" : ""}
+                    {l.servico} · {l.categoria} · {l.contabilizacao}
                   </div>
+                  <div className="font-normal">
+                    <Badge tone={l.no_pool_comissao ? "green" : "muted"}>
+                      {l.status_arquitetura}
+                    </Badge>{" "}
+                    <span className="text-muted">
+                      {l.modelo_preco} · {l.tipo_fonte}
+                      {l.verificado_em
+                        ? ` · verificado ${l.verificado_em}`
+                        : ""}
+                      {l.revisao_vencida ? " · revisão vencida" : ""}
+                    </span>
+                  </div>
+                  {l.modelo_preco === "USAGE_BASED" && (
+                    <div className="font-normal text-muted">
+                      {l.envelope
+                        ? `Envelope: ${l.envelope.custo_mensal_estimado ?? "—"} ${l.envelope.moeda}/mês`
+                        : "Sem capacity envelope"}
+                    </div>
+                  )}
                 </td>
                 <td className="p-2">
                   {l.plano_atual ?? "—"} → {l.plano_referencia ?? "—"}
@@ -286,6 +312,15 @@ export function PainelInfraestrutura({
             politica_custo: String(f.get("politica_custo")),
             metodo_alocacao: String(f.get("metodo_alocacao")),
             contabilizacao: String(f.get("contabilizacao")),
+            modelo_preco: String(f.get("modelo_preco")),
+            status_arquitetura: String(f.get("status_arquitetura")),
+            provisionado_para_comissao:
+              String(f.get("status_arquitetura")) !== "AVAILABLE_NOT_ALLOCATED",
+            tipo_fonte: String(f.get("tipo_fonte")),
+            url_fonte: String(f.get("url_fonte") ?? "") || null,
+            verificado_em: String(f.get("verificado_em") ?? "") || null,
+            funcao_arquitetural:
+              String(f.get("funcao_arquitetural") ?? "") || null,
             vigente_de: String(f.get("vigente_de")),
           }))
         }
@@ -338,8 +373,36 @@ export function PainelInfraestrutura({
         </Select>
         <Select name="contabilizacao">
           <option value="INFRASTRUCTURE">Infraestrutura</option>
-          <option value="AI_COST">Já no custo de IA/dados (FinOps)</option>
+          <option value="DATA_PROVIDER">Provedor de dados</option>
+          <option value="AI_COST">Já no custo de IA (FinOps)</option>
         </Select>
+        <Select name="modelo_preco">
+          {(dados?.modelos_preco ?? ["FIXED_PLAN"]).map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </Select>
+        <Select name="status_arquitetura">
+          {(dados?.status_arquitetura ?? ["APPLICABLE"]).map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </Select>
+        <Select name="tipo_fonte">
+          {(dados?.tipos_fonte ?? ["MANUAL_APPROVED"]).map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </Select>
+        <Input name="url_fonte" placeholder="URL da fonte do preço" />
+        <Input name="verificado_em" type="date" title="Verificado em" />
+        <Input
+          name="funcao_arquitetural"
+          placeholder="Função (ex.: PRIMARY_DATABASE)"
+        />
         <Button type="submit" size="sm" className="sm:col-span-3">
           Cadastrar fornecedor/plano
         </Button>
@@ -373,6 +436,47 @@ export function PainelInfraestrutura({
         <Input name="quantidade" placeholder="Quantidade" />
         <Button type="submit" size="sm" variant="ghost">
           Custo direto
+        </Button>
+      </form>
+
+      <form
+        className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-5"
+        data-testid="form-envelope"
+        onSubmit={(e) => {
+          const f = new FormData(e.currentTarget);
+          enviar(
+            e,
+            `/comissoes/infraestrutura/componentes/${String(f.get("componente_id"))}/envelopes`,
+            (form) => ({
+              horas_computo_provisionadas: numero(form, "horas"),
+              armazenamento_gb_provisionado: numero(form, "gb"),
+              fonte: String(form.get("fonte") ?? "") || null,
+            }),
+          );
+        }}
+      >
+        <Select name="componente_id">
+          {(dados?.componentes ?? [])
+            .filter((c) => c.modelo_preco === "USAGE_BASED")
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.fornecedor} · {c.servico}
+              </option>
+            ))}
+        </Select>
+        <Input
+          name="horas"
+          required
+          placeholder="Horas de computação/mês (CU-h)"
+        />
+        <Input
+          name="gb"
+          required
+          placeholder="Armazenamento provisionado (GB)"
+        />
+        <Input name="fonte" placeholder="Decisão/fonte" />
+        <Button type="submit" size="sm" variant="ghost">
+          Definir capacity envelope
         </Button>
       </form>
 

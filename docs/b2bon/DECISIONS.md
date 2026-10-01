@@ -1010,3 +1010,40 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   contrato, SLA, aditivos, renovação, analytics avançado, APIs) como capabilities do mesmo motor (`has_capability`); plano sem
   nível (privado) mantém todas.
 - **Status**: ACEITA. Migração `b7d9f1a3c5e8` (reversível).
+
+## D-077 · 2026-10-01 · Preços públicos verificados dos fornecedores no Infrastructure Cost Pool (OI-026)
+- **Contexto**: prompt do PO "RESOLUÇÃO OI-026 — INFRASTRUCTURE COST POOL COM VALORES PÚBLICOS VERIFICADOS DOS FORNECEDORES".
+- **Decisão (texto do PO)**: "Provider pricing researched and verified on 2026-10-01. Use the highest publicly priced
+  plan/capacity applicable to the actual B2B ON architecture. Custom-priced plans must never receive invented prices."
+- **Pool da comissão** = componentes vigentes **E** aplicáveis à arquitetura (APPLICABLE ou APPLICABLE_PENDING_CONFIRMATION)
+  **E** `provisionado_para_comissao`, dos pools que a política inclui (INFRASTRUCTURE e DATA_PROVIDER). AI_COST nunca entra.
+  Mesmo fornecedor/serviço: vale a fonte de maior prioridade (fatura/contrato > proposta comercial > preço público > manual).
+- **Preços verificados (páginas oficiais, 2026-10-01; revisão prevista 2026-12-30)**:
+  - Render Workspace **Scale USD 499/mês** e Web Service **12 CPU/96 GB USD 1.500/mês** — envelope base USD 1.999/mês; em uso
+    pelo que o repositório mostra (`render.yaml`: API `b2bon-api`), **a confirmar**; Enterprise **CUSTOM** (sem preço).
+  - Render Postgres (até USD 11.000/mês) e Key Value (até USD 1.100/mês): **AVAILABLE_NOT_ALLOCATED** — o banco principal é o
+    Neon (DEPLOY.md) e não há Key Value na arquitetura; entram só se passarem a ser usados.
+  - Render Persistent Disk USD 0,25/GB-mês: por uso, **não alocado** (sem disco na arquitetura; depende de storage envelope).
+  - Neon **Scale por uso** (USD 0,222/CU-hora, USD 0,35/GB-mês), banco principal: sem preço mensal fixo — o provisionado vem do
+    **Capacity Envelope** (horas de CU e GB decididos pela CyberFort). O exemplo oficial (4–10 CU, 100 GB ≈ USD 1.404/mês) é só
+    `benchmark_only`.
+  - Lusha **Premium USD 399,90/mês** (3.400 créditos, 5 assentos) no pool **DATA_PROVIDER**, alocação direta com prioridade;
+    Lusha Scale **CUSTOM** (contrato anual) sem preço — se contratado, entra o valor do contrato com nova vigência.
+- **Capacity Envelope** (`envelope_capacidade`): fornecedor, serviço, máximo de CU, horas de CU e GB provisionados, preços
+  unitários, outros custos, custo mensal estimado, moeda, vigência, fonte, verificação e `benchmark_only`.
+- **Dupla contagem**: cada despesa pertence a um pool só; o mesmo fornecedor/serviço/plano/fonte não entra duas vezes;
+  dois componentes aplicáveis na mesma função arquitetural (ex.: Neon e Render Postgres como PRIMARY_DATABASE) só coexistem
+  com a coexistência justificada (uso real dos dois).
+- **Fonte e auditoria** de cada custo: fornecedor, serviço, plano, modelo de preço (FIXED_PLAN, USAGE_BASED, CUSTOM), preço
+  publicado, moeda, ciclo, URL e tipo da fonte (OFFICIAL_PUBLIC_PRICING, CONTRACT, COMMERCIAL_PROPOSAL, INVOICE,
+  MANUAL_APPROVED), verificado em, próxima revisão, vigência, override manual com motivo. Revisão vencida aparece nas
+  pendências. Mudança de preço **não recalcula** comissão PAYABLE ou PAID (snapshot da apuração).
+- **Pesos**: STARTER/DEPARTMENT 1, PROFESSIONAL 2, ENTERPRISE 4, BID_INTELLIGENCE 2, STRATEGIC_SOURCING 4 (configuráveis; o
+  tier ENTRY passa a STARTER; Strategic Sourcing e Strategic Sourcing Enterprise = STRATEGIC_SOURCING).
+- **Capacidade não alocada**: sem tenants, nada é dividido (sem divisão por zero) e o pool inteiro aparece como
+  UNALLOCATED_INFRASTRUCTURE_CAPACITY. Com `capacidade_unidades` na política (capacidade compartilhada para a qual o pool foi
+  dimensionado), cada unidade custa pool ÷ capacidade e a parte não absorvida pela base fica separada como custo de
+  capacidade ociosa da plataforma — uma venda não carrega 100% do envelope.
+- **Comissão**: NET_COMMISSIONABLE_MARGIN = receita comissionável recebida − impostos atribuíveis − infraestrutura
+  provisionada atribuível; 20% inicial; 10% renovação Government. Custos em USD pela PTAX de fechamento do Banco Central.
+- **Status**: ACEITA. Migração `c8e0a2b4d6f9` (reversível).

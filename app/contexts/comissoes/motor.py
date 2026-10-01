@@ -27,6 +27,8 @@ from app.services.errors import ValidacaoFalhou
 
 CENTAVO = Decimal("0.01")
 NAO_RECALCULAVEIS = (Status.PAGA, Status.ESTORNADA, Status.COMPENSAR)
+# D-077: mudança de preço/parâmetro nunca recalcula comissão já fixada (PAYABLE ou PAID); só o que ainda não tem valor final.
+FIXADAS = (Status.PAGAVEL, *NAO_RECALCULAVEIS)
 
 
 def _agora() -> datetime:
@@ -156,14 +158,14 @@ def _reconstruir_legado(db: Session, comissao: ComissaoRepresentante) -> int:
 
 
 def recalcular_nao_pagas(db: Session, motivo: str, ator_id: str | None) -> dict:
-    """Recálculo explícito e auditado das apurações ainda não pagas com os parâmetros vigentes na data de cada recebimento.
-    Comissões PAID, estornadas ou a compensar nunca mudam."""
+    """Recálculo explícito e auditado das apurações sem comissão fixada, com os parâmetros vigentes na data de cada
+    recebimento. Comissões PAYABLE (valor final), PAID, estornadas ou a compensar nunca mudam (D-077)."""
     if not (motivo or "").strip():
         raise ValidacaoFalhou("Recálculo exige motivo.")
     alteradas = []
     for apuracao in db.query(ApuracaoComissao).filter(ApuracaoComissao.status != Status.ESTORNADA.value).all():
         comissoes = db.query(ComissaoRepresentante).filter_by(apuracao_id=apuracao.id, evento="ACCRUAL").all()
-        if any(c.status in NAO_RECALCULAVEIS for c in comissoes):
+        if any(c.status in FIXADAS for c in comissoes):
             continue
         antes = {"margem": str(apuracao.margem_comissionavel_liquida), "valores": [c.valor_comissao for c in comissoes]}
         apurar(db, apuracao)

@@ -58,8 +58,8 @@ def _receber(db, planos, tenant_id, valor=1000.0, rep=None):
 
 
 def test_pesos_iniciais_e_alocacao_ponderada(db_session, tenants):
-    assert comissoes.politica.vigente_infra(db_session).regras["pesos"] == {"ENTRY": 1.0, "DEPARTMENT": 1.0, "PROFESSIONAL": 2.0,
-                                                                           "ENTERPRISE": 4.0}
+    assert comissoes.politica.vigente_infra(db_session).regras["pesos"] == {
+        "STARTER": 1.0, "DEPARTMENT": 1.0, "PROFESSIONAL": 2.0, "ENTERPRISE": 4.0, "BID_INTELLIGENCE": 2.0, "STRATEGIC_SOURCING": 4.0}
     _criar(db_session, 7000.0)
     dados = comissoes.infraestrutura.pool(db_session, HOJE)
     assert dados["unidades"] == 7  # 1 + 2 + 4: não é custo ÷ número de clientes
@@ -91,7 +91,7 @@ def test_comissao_usa_a_politica_configurada(db_session, tenants):
 
 def test_pesos_configuraveis_versionados_e_auditados(client, db_session, tenants):
     _criar(db_session, 1000.0)
-    regras = {"pesos": {"ENTRY": 1, "DEPARTMENT": 1, "PROFESSIONAL": 3, "ENTERPRISE": 6},
+    regras = {"pesos": {"STARTER": 1, "DEPARTMENT": 1, "PROFESSIONAL": 3, "ENTERPRISE": 6, "BID_INTELLIGENCE": 2, "STRATEGIC_SOURCING": 4},
               "limiares": {"ATTENTION": 0.7, "REVIEW": 0.8, "CRITICAL": 0.9, "CAPACITY_REACHED": 1.0}, "custo_comissao": "PROVISIONED"}
     resposta = client.post("/api/v1/comissoes/politica-infraestrutura", json={**regras, "motivo": "Revisão de pesos"})
     assert resposta.status_code == 201 and resposta.json()["versao"] == 2
@@ -118,7 +118,7 @@ def test_atribuicao_direta_tem_prioridade_e_nao_vaza_entre_tenants(db_session, t
     pro2, _ = _receber(db_session, tenants, "t-pro", 1002.0)
     assert pro2.custo_infra == Decimal("200.00")  # custo direto já atribuído não se repete
     with pytest.raises(ValidacaoFalhou, match="DIRECT"):
-        comissoes.infraestrutura.registrar_custo_direto(db_session, {"componente_id": _criar(db_session, 1.0).id, "tenant_id": "t-pro",
+        comissoes.infraestrutura.registrar_custo_direto(db_session, {"componente_id": _criar(db_session, 1.0, servico="Outro").id, "tenant_id": "t-pro",
                                                                      "competencia": "2026-10", "custo": 1}, "teste")
 
 
@@ -146,7 +146,8 @@ def test_alertas_80_90_100_exigem_decisao_humana_e_nada_muda_sozinho(client, db_
     mensagens = [comissoes.capacidade.registrar_uso(db_session, item.id, uso, "teste")["alerta"] for uso in (50, 82, 85, 91, 100)]
     db_session.commit()
     assert [m["mensagem"] if m else None for m in mensagens] == [
-        None, "Revisar capacidade e condições comerciais do fornecedor.", None,
+        None, "Revisar capacidade e condições comerciais do fornecedor: avaliar plano superior, contrato Enterprise, desconto por "
+              "volume, parceria comercial, arquitetura ou novo fornecedor.", None,
         "Capacidade próxima do limite. Avaliar upgrade, contrato Enterprise, desconto por volume ou parceria estratégica.",
         "Contracted capacity reached."]
     db_session.refresh(item)

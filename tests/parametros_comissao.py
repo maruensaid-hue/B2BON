@@ -16,7 +16,7 @@ def componente(custo_referencia: float = 0.0, **extra) -> dict:
 
 
 def definir_parametros(db, impostos: float = 0.0, pool: list[dict] | None = None, vigente_de: date = INICIO,
-                       tipo_receita: str = "*", tier_padrao: str | None = "ENTRY") -> None:
+                       tipo_receita: str = "*", tier_padrao: str | None = "STARTER") -> None:
     """Tax Profile com uma carga única de teste (OTHER_TAX sobre a receita) e Infrastructure Cost Pool (padrão: um componente
     de custo 0) vigentes desde `vigente_de`. Planos sem tier recebem `tier_padrao`, para entrarem na alocação ponderada."""
     comissoes.tributos.criar(db, {"regime": "LUCRO_PRESUMIDO", "vigente_de": vigente_de, "tipo_receita": tipo_receita,

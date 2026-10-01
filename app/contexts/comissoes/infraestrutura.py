@@ -13,6 +13,12 @@ Alocação mensal do pool:
 Componente DIRECT: o consumo medido por tenant vai direto para ele; o restante do plano (provisionado − medido) volta ao
 pool ponderado. Componente contabilizado como AI_COST nunca entra aqui (já está no custo de IA do FinOps).
 
+D-077: só entram no pool os componentes vigentes, APLICÁVEIS à arquitetura real e provisionados para comissão, dos pools
+que a política inclui (INFRASTRUCTURE e DATA_PROVIDER). Para o mesmo fornecedor/serviço vale a fonte de maior prioridade
+(fatura/contrato > proposta > preço público). Preço por uso (ex.: Neon) só tem custo provisionado com Capacity Envelope;
+preço CUSTOM nunca recebe valor inventado. Com capacidade compartilhada configurada, a parte do pool não absorvida pela
+base fica como UNALLOCATED_INFRASTRUCTURE_CAPACITY (custo de capacidade ociosa da plataforma), separada da alocação.
+
 Um recebimento carrega o custo dos meses de operação que remunera (`meses_infra`: mensalidade = 1, subscrição anual =
 meses do período × fração recebida; licença, implantação e adicionais = 0), uma vez por tenant-mês. Sem pool com valores,
 nenhuma comissão sai de AWAITING_INFRASTRUCTURE_COST.
@@ -28,15 +34,20 @@ from app.contexts.comissoes import politica
 from app.contexts.comissoes.tipos import (
     CATEGORIAS_INFRA,
     CICLOS_COBRANCA,
+    PRIORIDADE_FONTE,
+    STATUS_NO_POOL,
     Contabilizacao,
     Faltante,
     MetodoAlocacao,
+    ModeloPreco,
     PoliticaCustoInfra,
+    StatusArquitetura,
+    TipoFonte,
 )
 from app.contexts.finops import contract as finops
 from app.models.apuracao_comissao import ApuracaoComissao
 from app.models.creditos_ia import ExecucaoIa
-from app.models.custo_infraestrutura import ComponenteInfra, CustoDiretoInfra
+from app.models.custo_infraestrutura import ComponenteInfra, CustoDiretoInfra, EnvelopeCapacidade
 from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
@@ -47,8 +58,12 @@ CENTAVO = Decimal("0.01")
 CAMPOS_COMPONENTE = (
     "fornecedor", "servico", "categoria", "plano", "plano_referencia", "ciclo_cobranca", "moeda", "custo_contratado",
     "custo_referencia", "custo_real", "capacidade_contratada", "uso_atual", "unidade_uso", "politica_custo", "metodo_alocacao",
-    "contabilizacao", "vigente_de", "vigente_ate", "observacoes",
+    "contabilizacao", "vigente_de", "vigente_ate", "observacoes", "modelo_preco", "status_arquitetura", "provisionado_para_comissao",
+    "funcao_arquitetural", "coexistencia_justificada", "url_fonte", "tipo_fonte", "verificado_em", "proxima_revisao_em",
+    "override_manual", "motivo_override", "atributos",
 )
+PADROES = {"modelo_preco": ModeloPreco.PLANO_FIXO.value, "status_arquitetura": StatusArquitetura.APLICAVEL.value,
+           "provisionado_para_comissao": True, "tipo_fonte": TipoFonte.MANUAL.value, "override_manual": False}
 
 
 def _q(valor: Decimal) -> Decimal:
@@ -69,6 +84,30 @@ def vigentes(db: Session, dia: date) -> list[ComponenteInfra]:
             .order_by(ComponenteInfra.id).all())
 
 
+def aplicaveis(db: Session, dia: date, pools: list[str]) -> list[ComponenteInfra]:
+    """Componentes do pool da comissão: vigentes, aplicáveis à arquitetura, provisionados e dos pools da política. Para o
+    mesmo fornecedor/serviço fica a fonte de maior prioridade (a outra é substituída, nunca somada)."""
+    escolhidos: dict[tuple, ComponenteInfra] = {}
+    for componente in vigentes(db, dia):
+        if componente.status_arquitetura not in STATUS_NO_POOL or not componente.provisionado_para_comissao \
+                or componente.contabilizacao not in pools:
+            continue
+        chave = (componente.fornecedor.strip().lower(), componente.servico.strip().lower())
+        atual = escolhidos.get(chave)
+        if atual is None or (PRIORIDADE_FONTE.get(componente.tipo_fonte, 0), componente.vigente_de, componente.id) > \
+                (PRIORIDADE_FONTE.get(atual.tipo_fonte, 0), atual.vigente_de, atual.id):
+            escolhidos[chave] = componente
+    return sorted(escolhidos.values(), key=lambda c: c.id)
+
+
+def envelope_vigente(db: Session, componente: ComponenteInfra, dia: date) -> EnvelopeCapacidade | None:
+    """Capacity Envelope em vigor (nunca um benchmark do fornecedor)."""
+    return (db.query(EnvelopeCapacidade).filter(
+        EnvelopeCapacidade.componente_id == componente.id, EnvelopeCapacidade.benchmark_only.is_(False),
+        EnvelopeCapacidade.vigente_de <= dia, or_(EnvelopeCapacidade.vigente_ate.is_(None), EnvelopeCapacidade.vigente_ate > dia))
+        .order_by(EnvelopeCapacidade.vigente_de.desc(), EnvelopeCapacidade.id.desc()).first())
+
+
 def _em_brl(db: Session, valor: Decimal | None, moeda: str, dia: date) -> tuple[Decimal | None, dict | None, str | None]:
     """(valor em reais, snapshot da cotação, faltante). Moeda estrangeira usa a cotação PTAX aplicável ao dia."""
     if valor is None:
@@ -84,14 +123,20 @@ def _em_brl(db: Session, valor: Decimal | None, moeda: str, dia: date) -> tuple[
 def custos_mensais(db: Session, componente: ComponenteInfra, dia: date) -> dict:
     """Custo provisionado e real do componente por mês, em reais. `None` = valor não informado (nunca estimado)."""
     meses = CICLOS_COBRANCA[componente.ciclo_cobranca]
-    base_provisionada = (componente.custo_referencia if componente.custo_referencia is not None else componente.custo_contratado) \
-        if componente.politica_custo == PoliticaCustoInfra.PLANO_MAXIMO.value else componente.custo_real
+    envelope = None
+    if componente.politica_custo == PoliticaCustoInfra.CUSTO_REAL.value:
+        base_provisionada = componente.custo_real
+    elif componente.modelo_preco == ModeloPreco.USO.value:
+        envelope = envelope_vigente(db, componente, dia)  # preço por uso: provisionado = envelope decidido pela CyberFort
+        base_provisionada, meses = (envelope.custo_mensal_estimado, 1) if envelope else (None, meses)
+    else:  # plano fixo (referência ou atual); CUSTOM só com valor de contrato/proposta, nunca inventado
+        base_provisionada = componente.custo_referencia if componente.custo_referencia is not None else componente.custo_contratado
     provisionado, fx, falta_fx = _em_brl(db, base_provisionada, componente.moeda, dia)
     real, fx_real, falta_fx_real = _em_brl(db, componente.custo_real, componente.moeda, dia)
     return {"provisionado": _q(provisionado / meses) if provisionado is not None else None,
             "real": _q(real / meses) if real is not None else None, "fx": fx or fx_real,
             "faltante": falta_fx or (None if base_provisionada is not None else Faltante.CUSTO_INFRA.value),
-            "faltante_real": falta_fx_real}
+            "faltante_real": falta_fx_real, "envelope_id": envelope.id if envelope else None}
 
 
 def _diretos(db: Session, componente: ComponenteInfra, mes: str, dia: date) -> tuple[dict[str, Decimal] | None, str | None]:
@@ -125,13 +170,15 @@ def pool(db: Session, dia: date) -> dict:
     mes = competencia(dia)
     faltantes, componentes, diretos = [], [], {}
     pool_prov, pool_real, real_conhecido = Decimal(0), Decimal(0), True
-    for componente in vigentes(db, dia):
-        if componente.contabilizacao == Contabilizacao.CUSTO_IA.value:
-            continue  # já está no custo de IA do FinOps
+    por_pool: dict[str, Decimal] = {}
+    for componente in aplicaveis(db, dia, regras.get("pools_comissao") or ["INFRASTRUCTURE", "DATA_PROVIDER"]):
         custos = custos_mensais(db, componente, dia)
         linha = {"id": componente.id, "fornecedor": componente.fornecedor, "servico": componente.servico, "plano": componente.plano,
                  "plano_referencia": componente.plano_referencia, "metodo": componente.metodo_alocacao,
-                 "provisionado": _f(custos["provisionado"]), "real": _f(custos["real"]), "fx": custos["fx"]}
+                 "pool": componente.contabilizacao, "modelo_preco": componente.modelo_preco, "tipo_fonte": componente.tipo_fonte,
+                 "verificado_em": componente.verificado_em.isoformat() if componente.verificado_em else None,
+                 "envelope_id": custos["envelope_id"], "provisionado": _f(custos["provisionado"]), "real": _f(custos["real"]),
+                 "fx": custos["fx"]}
         if custos["faltante"]:
             faltantes.append(custos["faltante"])
         prov, real = custos["provisionado"] or Decimal(0), custos["real"]
@@ -146,6 +193,7 @@ def pool(db: Session, dia: date) -> dict:
             prov, real = max(prov - medido, Decimal(0)), (max(real - medido, Decimal(0)) if real is not None else None)
             linha["direto_medido"] = float(medido)
         pool_prov += prov
+        por_pool[componente.contabilizacao] = por_pool.get(componente.contabilizacao, Decimal(0)) + prov
         if real is None:
             real_conhecido = False
         else:
@@ -154,18 +202,23 @@ def pool(db: Session, dia: date) -> dict:
     if not componentes:
         faltantes.append(Faltante.CUSTO_INFRA.value)
     unidades, pesos_tenant, sem_peso = unidades_ponderadas(db, regras["pesos"])
+    capacidade = Decimal(str(regras["capacidade_unidades"])) if regras.get("capacidade_unidades") else Decimal(0)
+    divisor = max(unidades, capacidade)  # sem tenants: nada é dividido (nunca divisão por zero)
+    alocado = _q(pool_prov / divisor * unidades) if divisor else Decimal(0)
     return {"competencia": mes, "provisionado": _q(pool_prov), "real": _q(pool_real) if real_conhecido and componentes else None,
-            "unidades": unidades, "pesos": pesos_tenant, "planos_sem_peso": sem_peso, "diretos": diretos, "componentes": componentes,
-            "faltantes": sorted(set(faltantes)), "politica": regras}
+            "por_pool": {k: float(_q(v)) for k, v in sorted(por_pool.items())}, "unidades": unidades, "divisor": divisor,
+            "alocado_tenants": alocado, "capacidade_nao_alocada": _q(pool_prov - alocado), "pesos": pesos_tenant,
+            "planos_sem_peso": sem_peso, "diretos": diretos, "componentes": componentes, "faltantes": sorted(set(faltantes)),
+            "politica": regras}
 
 
 def custo_tenant_mensal(dados: dict, tenant_id: str) -> tuple[Decimal | None, Decimal | None]:
     """(provisionado, real) por mês do tenant pela alocação ponderada, sem os custos diretos."""
     peso = dados["pesos"].get(tenant_id)
-    if peso is None or not dados["unidades"]:
+    if peso is None or not dados["divisor"]:
         return None, None
-    prov = _q(dados["provisionado"] / dados["unidades"] * peso)
-    real = _q(dados["real"] / dados["unidades"] * peso) if dados["real"] is not None else None
+    prov = _q(dados["provisionado"] / dados["divisor"] * peso)
+    real = _q(dados["real"] / dados["divisor"] * peso) if dados["real"] is not None else None
     return prov, real
 
 
@@ -177,11 +230,12 @@ def _diretos_nao_atribuidos(db: Session, apuracao: ApuracaoComissao) -> tuple[De
     consulta = db.query(CustoDiretoInfra).filter(CustoDiretoInfra.tenant_id == apuracao.tenant_id, CustoDiretoInfra.competencia <= mes)
     if ultimo:
         consulta = consulta.filter(CustoDiretoInfra.competencia > ultimo)
+    pools = politica.vigente_infra(db).regras.get("pools_comissao") or ["INFRASTRUCTURE", "DATA_PROVIDER"]
     total = Decimal(0)
     for linha in consulta.all():
         componente = db.get(ComponenteInfra, linha.componente_id)
-        if componente.contabilizacao == Contabilizacao.CUSTO_IA.value:
-            continue
+        if componente.contabilizacao not in pools or componente.status_arquitetura not in STATUS_NO_POOL:
+            continue  # custo de IA/dados do FinOps ou componente fora da arquitetura: nunca de novo aqui
         valor, _, falta = _em_brl(db, linha.custo, componente.moeda, apuracao.recebido_em)
         if falta:
             return Decimal(0), None, falta
@@ -195,8 +249,9 @@ def alocar(db: Session, apuracao: ApuracaoComissao) -> tuple[Decimal | None, Dec
     dados = pool(db, apuracao.recebido_em)
     meses = Decimal(str(apuracao.meses_infra or 0))
     detalhe = {"competencia": dados["competencia"], "politica": dados["politica"], "pool_provisionado": float(dados["provisionado"]),
-               "pool_real": _f(dados["real"]), "unidades_ponderadas": float(dados["unidades"]), "componentes": dados["componentes"],
-               "meses": float(meses)}
+               "pool_real": _f(dados["real"]), "por_pool": dados["por_pool"], "unidades_ponderadas": float(dados["unidades"]),
+               "divisor": float(dados["divisor"]), "capacidade_nao_alocada": float(dados["capacidade_nao_alocada"]),
+               "componentes": dados["componentes"], "meses": float(meses)}
     if dados["faltantes"]:
         return None, None, {**detalhe, "faltante": dados["faltantes"][0], "faltantes": dados["faltantes"]}
     peso = dados["pesos"].get(apuracao.tenant_id)
@@ -210,7 +265,7 @@ def alocar(db: Session, apuracao: ApuracaoComissao) -> tuple[Decimal | None, Dec
     prov = _q(prov_mes * meses + direto)
     real = _q(real_mes * meses + direto) if real_mes is not None else None
     return prov, real, {**detalhe, "peso_tenant": _f(peso), "custo_mensal_provisionado": _f(prov_mes), "custo_mensal_real": _f(real_mes),
-                        "custo_unidade": _f(_q(dados["provisionado"] / dados["unidades"])) if dados["unidades"] else None,
+                        "custo_unidade": _f(_q(dados["provisionado"] / dados["divisor"])) if dados["divisor"] else None,
                         "direto": float(direto)}
 
 
@@ -268,6 +323,17 @@ def _validar(dados: dict) -> None:
         raise ValidacaoFalhou("Contabilização: INFRASTRUCTURE ou AI_COST.")
     if dados["categoria"] == "AI" and dados["contabilizacao"] != Contabilizacao.CUSTO_IA.value:
         raise ValidacaoFalhou("Custo de IA é contabilizado como AI_COST (FinOps), nunca de novo como infraestrutura.")
+    if dados.get("modelo_preco") not in {m.value for m in ModeloPreco}:
+        raise ValidacaoFalhou("Modelo de preço: FIXED_PLAN, USAGE_BASED ou CUSTOM.")
+    if dados.get("status_arquitetura") not in {s.value for s in StatusArquitetura}:
+        raise ValidacaoFalhou("Status: APPLICABLE, APPLICABLE_PENDING_CONFIRMATION ou AVAILABLE_NOT_ALLOCATED.")
+    if dados.get("tipo_fonte") not in {t.value for t in TipoFonte}:
+        raise ValidacaoFalhou(f"Fonte do preço: {', '.join(t.value for t in TipoFonte)}.")
+    if dados["modelo_preco"] == ModeloPreco.CUSTOM.value and dados.get("tipo_fonte") == TipoFonte.PUBLICO.value \
+            and (dados.get("custo_referencia") is not None or dados.get("custo_contratado") is not None):
+        raise ValidacaoFalhou("Plano CUSTOM não tem preço público: valor só com contrato, proposta ou fatura.")
+    if dados.get("override_manual") and not (dados.get("motivo_override") or "").strip():
+        raise ValidacaoFalhou("Override manual exige motivo.")
     for campo in ("custo_contratado", "custo_referencia", "custo_real", "capacidade_contratada", "uso_atual"):
         if dados.get(campo) is not None and Decimal(str(dados[campo])) < 0:
             raise ValidacaoFalhou(f"{campo} não pode ser negativo.")
@@ -279,9 +345,34 @@ def _foto(componente: ComponenteInfra) -> dict:
     return {c: (str(v) if isinstance(v, Decimal | date) else v) for c in CAMPOS_COMPONENTE for v in [getattr(componente, c)]}
 
 
+def _sem_dupla_contagem(db: Session, dados: dict, componente_id: int | None = None) -> None:
+    """Uma despesa não entra duas vezes: (1) o mesmo fornecedor/serviço/plano/fonte com vigência sobreposta; (2) dois
+    componentes aplicáveis na mesma função arquitetural (ex.: Neon e Render Postgres como banco principal) sem a
+    coexistência justificada. Pools diferentes para a mesma despesa são impossíveis: cada componente tem um pool só."""
+    if dados.get("status_arquitetura") not in STATUS_NO_POOL or not dados.get("provisionado_para_comissao"):
+        return
+    inicio, fim = dados["vigente_de"], dados.get("vigente_ate") or date.max
+    for outro in db.query(ComponenteInfra).filter(ComponenteInfra.id != (componente_id or 0)).all():
+        if outro.status_arquitetura not in STATUS_NO_POOL or not outro.provisionado_para_comissao:
+            continue
+        if not (outro.vigente_de < fim and inicio < (outro.vigente_ate or date.max)):
+            continue
+        mesmo = (outro.fornecedor.strip().lower(), outro.servico.strip().lower(), (outro.plano or "").lower(), outro.tipo_fonte) == (
+            dados["fornecedor"].strip().lower(), dados["servico"].strip().lower(), (dados.get("plano") or "").lower(), dados["tipo_fonte"])
+        if mesmo:
+            raise ValidacaoFalhou(f"{outro.fornecedor} · {outro.servico} já está no pool nessa vigência (dupla contagem).")
+        funcao = dados.get("funcao_arquitetural")
+        if funcao and outro.funcao_arquitetural == funcao and not (dados.get("coexistencia_justificada") or "").strip() \
+                and (outro.fornecedor.strip().lower(), outro.servico.strip().lower()) != (dados["fornecedor"].strip().lower(),
+                                                                                         dados["servico"].strip().lower()):
+            raise ValidacaoFalhou(f"{outro.fornecedor} · {outro.servico} já ocupa a função {funcao}; os dois só entram juntos com a "
+                                  "coexistência justificada (uso real dos dois).")
+
+
 def criar(db: Session, dados: dict, ator_id: str | None) -> ComponenteInfra:
-    dados = {**dados, "moeda": (dados.get("moeda") or "").upper()}
+    dados = {**PADROES, **{k: v for k, v in dados.items() if v is not None or k not in PADROES}, "moeda": (dados.get("moeda") or "").upper()}
     _validar(dados)
+    _sem_dupla_contagem(db, dados)
     componente = ComponenteInfra(**{c: dados.get(c) for c in CAMPOS_COMPONENTE}, criado_por=ator_id)
     db.add(componente)
     db.flush()
@@ -301,6 +392,7 @@ def atualizar(db: Session, componente_id: int, dados: dict, motivo: str, ator_id
     novos = {**{c: getattr(componente, c) for c in CAMPOS_COMPONENTE}, **{c: v for c, v in dados.items() if c in CAMPOS_COMPONENTE}}
     novos["moeda"] = (novos.get("moeda") or "").upper()
     _validar(novos)
+    _sem_dupla_contagem(db, novos, componente.id)
     numericos = ("custo_contratado", "custo_referencia", "custo_real", "capacidade_contratada", "uso_atual")
     for campo, valor in novos.items():
         setattr(componente, campo, Decimal(str(valor)) if campo in numericos and valor is not None else valor)
@@ -332,6 +424,54 @@ def registrar_custo_direto(db: Session, dados: dict, ator_id: str | None) -> Cus
                                 ator_id, {"componente_id": componente.id, "tenant_id": linha.tenant_id, "competencia": competencia_,
                                           "custo": str(linha.custo), "moeda": componente.moeda, "origem": "admin"})
     return linha
+
+
+def criar_envelope(db: Session, componente_id: int, dados: dict, ator_id: str | None) -> EnvelopeCapacidade:
+    """Capacity Envelope de um componente por uso: as quantidades são decisão da CyberFort (nunca inventadas). Preços
+    unitários vêm do envelope ou dos atributos do componente (preço público verificado)."""
+    componente = db.get(ComponenteInfra, componente_id)
+    if componente is None:
+        raise NaoEncontrado("Componente não encontrado")
+    if componente.modelo_preco != ModeloPreco.USO.value:
+        raise ValidacaoFalhou("Capacity Envelope só para componente com preço por uso (USAGE_BASED).")
+    unitarios = (componente.atributos or {}).get("precos_unitarios") or {}
+    preco_cu = dados.get("preco_unidade_computo", unitarios.get("CU_HOUR"))
+    preco_gb = dados.get("preco_armazenamento_gb", unitarios.get("GB_MONTH"))
+    horas, gb = dados.get("horas_computo_provisionadas"), dados.get("armazenamento_gb_provisionado")
+    outros = dados.get("outros_custos") or []
+    if any(v is not None and Decimal(str(v)) < 0 for v in (horas, gb, preco_cu, preco_gb, dados.get("max_unidades_computo"))):
+        raise ValidacaoFalhou("Quantidades e preços não negativos.")
+    benchmark = bool(dados.get("benchmark_only"))
+    if benchmark:
+        estimado = dados.get("custo_mensal_estimado")
+    else:
+        if horas is None or gb is None:
+            raise ValidacaoFalhou("Informe as horas de computação e o armazenamento provisionados (decisão da CyberFort).")
+        if (Decimal(str(horas)) and preco_cu is None) or (Decimal(str(gb)) and preco_gb is None):
+            raise ValidacaoFalhou("Preço unitário de computação/armazenamento não informado.")
+        estimado = Decimal(str(horas)) * Decimal(str(preco_cu or 0)) + Decimal(str(gb)) * Decimal(str(preco_gb or 0)) \
+            + sum((Decimal(str(o["valor"])) for o in outros), Decimal(0))
+    envelope = EnvelopeCapacidade(
+        componente_id=componente.id, max_unidades_computo=dados.get("max_unidades_computo"), horas_computo_provisionadas=horas,
+        armazenamento_gb_provisionado=gb, preco_unidade_computo=preco_cu, preco_armazenamento_gb=preco_gb, outros_custos=outros or None,
+        custo_mensal_estimado=_q(Decimal(str(estimado))) if estimado is not None else None, moeda=componente.moeda,
+        vigente_de=dados.get("vigente_de") or date.today(), vigente_ate=dados.get("vigente_ate"), fonte=dados.get("fonte"),
+        verificado_em=dados.get("verificado_em"), benchmark_only=benchmark, observacoes=dados.get("observacoes"), criado_por=ator_id)
+    db.add(envelope)
+    db.flush()
+    auditoria_service.registrar(db, auditoria_service.TENANT_PLATAFORMA, "envelope_capacidade_criado", "envelope_capacidade", envelope.id,
+                                ator_id, {"componente_id": componente.id, "custo_mensal_estimado": str(envelope.custo_mensal_estimado),
+                                          "benchmark_only": benchmark, "origem": "admin"})
+    return envelope
+
+
+def envelope_dict(envelope: EnvelopeCapacidade) -> dict:
+    return {"id": envelope.id, "componente_id": envelope.componente_id, "max_unidades_computo": _f(envelope.max_unidades_computo),
+            "horas_computo_provisionadas": _f(envelope.horas_computo_provisionadas),
+            "armazenamento_gb_provisionado": _f(envelope.armazenamento_gb_provisionado),
+            "preco_unidade_computo": _f(envelope.preco_unidade_computo), "preco_armazenamento_gb": _f(envelope.preco_armazenamento_gb),
+            "custo_mensal_estimado": _f(envelope.custo_mensal_estimado), "moeda": envelope.moeda, "benchmark_only": envelope.benchmark_only,
+            "vigente_de": envelope.vigente_de.isoformat(), "fonte": envelope.fonte, "observacoes": envelope.observacoes}
 
 
 def como_dict(componente: ComponenteInfra) -> dict:

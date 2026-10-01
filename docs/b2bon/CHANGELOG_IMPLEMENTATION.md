@@ -1,5 +1,14 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Preços públicos dos fornecedores no custo de infraestrutura (2026-10-01, D-077)
+
+- O custo de infraestrutura da comissão passa a usar os preços públicos verificados em 2026-10-01: Render Scale (US$ 499/mês) e o maior Web Service (US$ 1.500/mês), Neon por uso (US$ 0,222/CU-hora e US$ 0,35/GB-mês) e Lusha Premium (US$ 399,90/mês, como provedor de dados), convertidos pela PTAX.
+- Só entram os componentes que o B2B ON usa: Render Postgres, Key Value e disco aparecem como disponíveis, fora da conta. Planos sob consulta (Render Enterprise, Lusha Scale) nunca recebem preço inventado.
+- Para o Neon, a CyberFort define o envelope de capacidade (horas de computação e armazenamento); o exemplo oficial do fornecedor fica só como referência.
+- Cada custo mostra a fonte, a data de verificação e a próxima revisão; mudar um preço não altera comissões já pagáveis ou pagas.
+- A parte do custo ainda não absorvida pelos clientes aparece como capacidade não alocada, separada do custo de cada cliente.
+- Pesos: Bid Intelligence 2 e Strategic Sourcing 4 (além de Starter/Department 1, Professional 2, Enterprise 4).
+
 ## Custo de infraestrutura conservador, tributos 2026 e PTAX (2026-10-01, D-076)
 
 - Admin → Parâmetros financeiros → Infraestrutura: cadastro de fornecedores e planos (plano atual e plano máximo de referência, custo, capacidade, uso, moeda), sem nenhum valor pronto. A comissão usa o custo do plano máximo (conservador); o custo real fica ao lado.
