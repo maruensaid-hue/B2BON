@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 
+import {
+  BotaoReverTutorial,
+  TutorialModulo,
+} from "@/components/onboarding/TutorialModulo";
+import { useTutorialModulo } from "@/components/onboarding/useTutorialModulo";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { api, ApiError } from "@/lib/api";
+import { PASSOS_TUTORIAL_COMPRAS } from "@/pages/compras/tutorial";
 
 interface Registro {
   id: number;
@@ -92,6 +98,8 @@ export function ComprasPublicas() {
     Indicador
   > | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [carregado, setCarregado] = useState(false);
+  const tutorial = useTutorialModulo("compras", carregado);
 
   const carregar = useCallback(async () => {
     try {
@@ -116,6 +124,7 @@ export function ComprasPublicas() {
       setAcoes(a);
       setIndicadores(ind);
       setPlanoId((atual) => atual ?? (p[0]?.id as number | undefined) ?? null);
+      setCarregado(true);
     } catch (error) {
       setErro(
         error instanceof ApiError
@@ -215,7 +224,10 @@ export function ComprasPublicas() {
   return (
     <div className="flex flex-col gap-4" data-testid="compras-publicas">
       <div>
-        <div className="font-head text-xl font-bold">Compras públicas</div>
+        <div className="flex items-center gap-2">
+          <div className="font-head text-xl font-bold">Compras públicas</div>
+          <BotaoReverTutorial tutorial={tutorial} />
+        </div>
         <div className="text-[11px] text-muted">
           Planejamento, demandas, processos, contratos e fornecedores do órgão.
           Dados sigilosos do comprador: nunca aparecem para fornecedores nem na
@@ -228,6 +240,7 @@ export function ComprasPublicas() {
         <div
           className="grid grid-cols-2 gap-3 lg:grid-cols-4"
           data-testid="indicadores-compras"
+          data-tutorial-id="compras:indicadores"
         >
           {Object.keys(ROTULO_INDICADOR).map((chave) => (
             <Card key={chave}>
@@ -247,7 +260,7 @@ export function ComprasPublicas() {
       )}
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2" data-tutorial-id="compras:plano">
           <div className="flex items-center justify-between">
             <SectionLabel>Plano de contratações</SectionLabel>
             <Select
@@ -336,7 +349,7 @@ export function ComprasPublicas() {
           </form>
         </Card>
 
-        <Card>
+        <Card data-tutorial-id="compras:acoes">
           <SectionLabel>Próximas ações sugeridas</SectionLabel>
           {acoes.length === 0 ? (
             <div className="text-[11px] text-muted">Nada pendente.</div>
@@ -360,7 +373,7 @@ export function ComprasPublicas() {
           )}
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2" data-tutorial-id="compras:processos">
           <SectionLabel>Processos</SectionLabel>
           <div className="flex flex-col gap-1.5 text-[11px]">
             {processos.map((p) => (
@@ -418,7 +431,7 @@ export function ComprasPublicas() {
           </div>
         </Card>
 
-        <Card>
+        <Card data-tutorial-id="compras:sinais">
           <SectionLabel>Sinais para revisão</SectionLabel>
           {sinais && (
             <div className="mb-1.5 text-[10px] text-muted">{sinais.aviso}</div>
@@ -443,6 +456,7 @@ export function ComprasPublicas() {
           </div>
         </Card>
       </div>
+      <TutorialModulo passos={PASSOS_TUTORIAL_COMPRAS} tutorial={tutorial} />
     </div>
   );
 }

@@ -37,8 +37,34 @@ MÓDULOS DA PLATAFORMA (menu lateral):
 - CRM: quadro Kanban de negócios/oportunidades, arrastar entre estágios do funil, criar proposta comercial \
 a partir de um negócio, importar/exportar negócios via CSV. Botão "Editar Funil" (Admin/Super Admin) cria \
 filas customizadas além das 5 padrão, renomeia, exclui (se a fila estiver vazia) e reordena as filas.
+  - Revenue Intelligence (dentro do CRM): receita, conversão por estágio, ciclo de venda e atribuição no \
+período escolhido — pipeline é retrato de agora; atribuição mostra o toque registrado, não causalidade.
 - MAP: mapa/visão de saúde das contas por vendedor e gestor, com visão hierárquica pra quem gerencia \
 sub-tenants.
+- Licitações (B2B ON Bid Intelligence — lado vendedor): editais públicos e RFPs de empresas que a sua \
+empresa acompanha. Cadastrar a oportunidade, enviar o edital/TR (a IA extrai requisitos com página e \
+trecho; cada requisito precisa de revisão humana — confirmar ou descartar), matriz de conformidade, \
+cofre de documentos (certidões, atestados, balanços com validade), prazos, histórico contra concorrentes \
+e recomendação de Go/No-Go (só apoio — quem decide é a empresa) e aba de proposta.
+- Compras públicas (lado comprador público, Lei 14.133): órgão, plano anual de contratações (PCA), \
+demandas, processos com documentos (ETP, TR, edital), pesquisa de preços, timeline com auditoria, \
+próximas ações sugeridas pelo fluxo e sinais de risco para revisão humana (aditivos, acréscimos, \
+concentração em fornecedor, prazo de planejamento) — os limites seguem a configuração do órgão.
+- Strategic Sourcing (compras privadas da empresa): RFP, RFQ (cotação), RFI, manifestação de interesse, \
+concorrência privada, qualificação de fornecedores e evento de sourcing. No workspace: requisitos e \
+critérios com peso, itens, descoberta de fornecedores (cadastro próprio e rede), convites, \
+esclarecimentos, comparação de propostas (nunca há vencedor automático), shortlist, rodadas de \
+negociação, aprovação por administrador, adjudicação e contrato. Aba de inteligência: a IA sugere \
+requisitos a partir da especificação e ajuda a avaliar propostas citando o texto do fornecedor — \
+consome AI Credits com estimativa antes de confirmar, documento RESTRICTED nunca vai para a IA e nada \
+vale sem confirmação humana. Os dados do comprador nunca vão para a rede nem para o lado vendedor.
+- Convites de compra: processos de compra em que a sua empresa foi convidada por um comprador da rede — \
+ler requisitos, perguntar (o esclarecimento é publicado sem dizer quem perguntou), enviar proposta com \
+anexos ou declinar. O fornecedor vê só o próprio convite (sem pesos, valor estimado ou outros \
+participantes). Fornecedor sem conta responde por um link secreto (Supplier Guest), sem login.
+- Cérebro Corporativo: o que a IA sabe sobre a sua empresa; itens internos nunca saem daqui, só itens \
+marcados "rede" podem ser usados para responder outras empresas.
+- Valores: AI Credits incluídos em cada plano, pacotes adicionais e quanto cada operação de IA consome.
 - Predator (motor de prospecção B2B — agrupa os módulos pagos abaixo, exige licença ativa):
   - Prospecção: criar um ICP (perfil de cliente ideal — segmento, porte, região, CNAEs, UFs), gerar lista \
 de contas que batem com o ICP (busca na base da Receita Federal), enriquecer cada conta (pesquisa de site \
@@ -93,7 +119,10 @@ raiz ou super_admin).
 admin de um tenant distribuidor/revendedor gerenciando sua subárvore), Convites (convidar um colega pro \
 SEU PRÓPRIO tenant, com o papel Usuário/Admin — qualquer Admin ou Super Admin já pode gerar; só um \
 Super Admin concede o papel Super Admin), Planos e Verificações (operação global da rede, exclusiva de \
-Super Admin), Integrações (chave de API de parceiro/webhooks, admin de tenant distribuidor).
+Super Admin), Integrações (chave de API de parceiro/webhooks, admin de tenant distribuidor), API & \
+Webhooks (Admin), AI Credits (Admin: saldo, uso do mês, créditos que vencem, compra de pacotes, recarga \
+automática, limites e avisos em 80%/95%/100%), Assinatura (Admin: plano, módulos e uso do período, \
+inclusive usuários) e FinOps IA (Super Admin).
 
 REGRAS IMPORTANTES QUE OS USUÁRIOS COSTUMAM PERGUNTAR:
 - "Convidar empresa" (Shoal) traz uma empresa NOVA pra rede, com tenant/licença próprios. "Convites" \
@@ -108,6 +137,13 @@ lista nem cadastro manual). Planos gratuitos/cortesia também têm um limite sem
 de enriquecimento (site e contatos, contadores independentes).
 - O Shoal é gratuito e funciona mesmo sem licença ativa do Predator — só os módulos pagos (Prospecção, \
 Cadências, Campanhas, etc.) exigem licença.
+- AI Credits são um saldo único da empresa, não por usuário; operações determinísticas (sem IA) não \
+consomem créditos. A IA nunca é usada sem medição.
+- O plano B2B ON Bid Intelligence inclui 10 usuários por empresa; usuários adicionais podem ser \
+contratados, mas o preço deles ainda está em definição — não informe valor. Fornecedor convidado \
+(Supplier Guest) ou usuário externo não conta como usuário.
+- Preços que a plataforma ainda não definiu (ex.: Public Procurement, B2B ON Suite, usuário adicional) \
+devem ser respondidos como "em definição" — nunca invente um valor.
 """
 
 

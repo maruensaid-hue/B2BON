@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import {
+  BotaoReverTutorial,
+  TutorialModulo,
+} from "@/components/onboarding/TutorialModulo";
+import { useTutorialModulo } from "@/components/onboarding/useTutorialModulo";
 import { Badge } from "@/components/ui/Badge";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { api, mensagemErro } from "@/lib/api";
 import { PortalFornecedor } from "@/pages/portal/PortalFornecedor";
+import { PASSOS_TUTORIAL_CONVITES } from "@/pages/portal/tutorial";
 
 interface Convite {
   participante_id: number;
@@ -21,6 +27,10 @@ export function ConvitesRecebidos() {
   const { id } = useParams<{ id: string }>();
   const [convites, setConvites] = useState<Convite[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const tutorial = useTutorialModulo(
+    "convites_compra",
+    !id && convites !== null,
+  );
 
   useEffect(() => {
     if (id) return;
@@ -46,13 +56,16 @@ export function ConvitesRecebidos() {
 
   return (
     <div className="flex flex-col gap-3.5" data-testid="convites-recebidos">
-      <div className="font-head text-xl font-bold">Convites de compra</div>
+      <div className="flex items-center gap-2">
+        <div className="font-head text-xl font-bold">Convites de compra</div>
+        <BotaoReverTutorial tutorial={tutorial} />
+      </div>
       <div className="text-[11px] text-muted">
         Processos de compra em que a sua empresa foi convidada a responder. Você
         vê só o que o comprador compartilhou.
       </div>
       {erro && <div className="text-[12px] text-red">{erro}</div>}
-      <Card>
+      <Card data-tutorial-id="convites:recebidos">
         <SectionLabel>Recebidos</SectionLabel>
         {(convites ?? []).map((c) => (
           <Link
@@ -74,6 +87,7 @@ export function ConvitesRecebidos() {
           <div className="text-[11px] text-muted">Nenhum convite.</div>
         )}
       </Card>
+      <TutorialModulo passos={PASSOS_TUTORIAL_CONVITES} tutorial={tutorial} />
     </div>
   );
 }

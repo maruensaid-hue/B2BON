@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 
+import {
+  BotaoReverTutorial,
+  TutorialModulo,
+} from "@/components/onboarding/TutorialModulo";
+import { useTutorialModulo } from "@/components/onboarding/useTutorialModulo";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { api, ApiError, postFile } from "@/lib/api";
 import { MODALIDADES, type Licitacao } from "@/pages/bids/tipos";
+import { PASSOS_TUTORIAL_BIDS } from "@/pages/bids/tutorial";
 
 interface Prazo {
   tipo: string;
@@ -78,6 +84,8 @@ export function Licitacoes() {
   const [cofre, setCofre] = useState<DocumentoCofre[]>([]);
   const [concorrentes, setConcorrentes] = useState<Concorrente[]>([]);
   const [erro, setErro] = useState<string | null>(null);
+  const [carregado, setCarregado] = useState(false);
+  const tutorial = useTutorialModulo("bids", carregado);
 
   const carregar = useCallback(async () => {
     try {
@@ -94,6 +102,7 @@ export function Licitacoes() {
       );
       setCofre(c);
       setConcorrentes(k);
+      setCarregado(true);
     } catch (error) {
       setErro(
         error instanceof ApiError
@@ -179,7 +188,10 @@ export function Licitacoes() {
   return (
     <div className="flex flex-col gap-4" data-testid="bids-licitacoes">
       <div>
-        <div className="font-head text-xl font-bold">Licitações</div>
+        <div className="flex items-center gap-2">
+          <div className="font-head text-xl font-bold">Licitações</div>
+          <BotaoReverTutorial tutorial={tutorial} />
+        </div>
         <div className="text-[11px] text-muted">
           Bid Intelligence — editais e RFPs que a sua empresa acompanha. A
           plataforma recomenda; quem decide o Go/No-Go é você.
@@ -188,7 +200,7 @@ export function Licitacoes() {
       {erro && <div className="text-[12px] text-red">{erro}</div>}
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2" data-tutorial-id="bids:lista">
           <SectionLabel>Em acompanhamento</SectionLabel>
           {licitacoes.length === 0 ? (
             <div className="text-[11px] text-muted">
@@ -237,6 +249,7 @@ export function Licitacoes() {
             </div>
           )}
           <form
+            data-tutorial-id="bids:cadastro"
             onSubmit={criar}
             className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-5"
           >
@@ -269,7 +282,7 @@ export function Licitacoes() {
           </form>
         </Card>
 
-        <Card>
+        <Card data-tutorial-id="bids:prazos">
           <SectionLabel>Prazos que pedem atenção</SectionLabel>
           {prazos.length === 0 ? (
             <div className="text-[11px] text-muted">Nada vencendo.</div>
@@ -290,7 +303,7 @@ export function Licitacoes() {
           )}
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2" data-tutorial-id="bids:cofre">
           <SectionLabel>Cofre de documentos</SectionLabel>
           <div className="flex flex-col gap-1 text-[11px]">
             {cofre.map((d) => (
@@ -344,7 +357,7 @@ export function Licitacoes() {
           </form>
         </Card>
 
-        <Card>
+        <Card data-tutorial-id="bids:concorrentes">
           <SectionLabel>Concorrentes (seu histórico)</SectionLabel>
           {concorrentes.length === 0 ? (
             <div className="text-[11px] text-muted">
@@ -367,6 +380,7 @@ export function Licitacoes() {
           )}
         </Card>
       </div>
+      <TutorialModulo passos={PASSOS_TUTORIAL_BIDS} tutorial={tutorial} />
     </div>
   );
 }

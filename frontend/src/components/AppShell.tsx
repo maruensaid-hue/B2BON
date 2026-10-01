@@ -742,6 +742,7 @@ export function AppShell() {
                 icon={CRM_ITEM.icon}
                 path={CRM_ITEM.path}
                 itens={CRM_SUBITENS}
+                tourToggleId="crm"
                 collapsed={collapsed}
                 descricao={CRM_ITEM.descricao}
               />

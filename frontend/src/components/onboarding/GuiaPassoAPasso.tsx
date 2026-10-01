@@ -106,8 +106,10 @@ export function GuiaPassoAPasso({ open, onClose, passos, atributoSeletor, atribu
   const topoBalao = Math.min(retangulo.bottom + 12, window.innerHeight - 220);
   const esquerdaBalao = Math.min(retangulo.right + 12, window.innerWidth - 300);
 
+  // z-[100]: acima do botão flutuante do assistente (z-90), que cobria o
+  // balão nos passos do canto inferior direito.
   return (
-    <div className="fixed inset-0 z-[60]">
+    <div className="fixed inset-0 z-[100]">
       <div className="absolute inset-0 bg-slate-950/70" onClick={onClose} />
       <div
         className="pointer-events-none absolute rounded-lg ring-2 ring-cyan transition-all duration-200"

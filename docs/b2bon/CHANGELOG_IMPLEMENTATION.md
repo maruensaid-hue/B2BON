@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Documentação e onboarding (2026-10-01, pedido do PO)
+
+- Tour guiado com passos para Licitações, Compras públicas, Strategic Sourcing, Convites de compra, Revenue Intelligence, Cérebro Corporativo, Valores, AI Credits e Assinatura.
+- Tutoriais de primeiro acesso, com "Rever tutorial", em Licitações, Compras públicas, Strategic Sourcing e Convites de compra.
+- FAQ com IA conhece os módulos novos, os AI Credits, o limite de usuários do Bid Intelligence e responde "em definição" para preço ainda não definido.
+- Manual do Usuário com seções novas (Licitações, Compras públicas, Strategic Sourcing, Convites de compra, AI Credits/Valores/Assinatura, ajuda) e tabela de planos atualizada; README e estratégia de testes atualizados.
+
 ## Phase J — pós-plano (2026-09-26, autorizada pelo PO)
 
 - B2B ON Bid Intelligence com 10 usuários incluídos por empresa; usuários adicionais suportados (preço em definição); fornecedor convidado não conta como usuário.

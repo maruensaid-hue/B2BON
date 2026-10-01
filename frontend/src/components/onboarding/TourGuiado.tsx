@@ -2,7 +2,8 @@ import { GuiaPassoAPasso, type PassoGuia } from "@/components/onboarding/GuiaPas
 
 // Um passo por módulo do menu lateral (raio-X 2026-09-01), com uma
 // "visita detalhada" a mais passos dentro de PREDATOR e SHOAL (pedido
-// 2026-09-20) — ainda sem clique-a-clique em cada ação de cada tela
+// 2026-09-20), e um passo por módulo de Licitações/Compras/Sourcing e
+// pelos itens de conta (AI Credits, Assinatura, Valores) desde a Phase J — ainda sem clique-a-clique em cada ação de cada tela
 // (dúvidas mais específicas continuam na FAQ com IA), só um passo por
 // SUB-MÓDULO real em vez de um parágrafo único cobrindo os nove de
 // uma vez. Cada `id` casa com um `data-tour-id` marcado em
@@ -27,6 +28,13 @@ const PASSOS_TOUR: PassoGuia[] = [
     titulo: "CRM",
     descricao:
       "Seu quadro Kanban de negócios — arraste oportunidades entre os estágios do funil, gere propostas comerciais a partir de um negócio, e use \"Editar Funil\" (Admin/Super Admin) pra criar ou renomear filas próprias.",
+  },
+  {
+    id: "nav:/crm/receita",
+    titulo: "CRM — Revenue Intelligence",
+    descricao:
+      "Receita, conversão por estágio, ciclo de venda e atribuição dos negócios no período escolhido — atribuição mostra o toque registrado, não causalidade.",
+    grupoToggle: "crm",
   },
   {
     id: "map",
@@ -107,6 +115,24 @@ const PASSOS_TOUR: PassoGuia[] = [
     grupoToggle: "predator",
   },
   {
+    id: "nav:/bids",
+    titulo: "Licitações — Bid Intelligence",
+    descricao:
+      "Para quem vende: editais públicos e RFPs de empresas num só lugar. Requisitos extraídos do edital com página e trecho, matriz de conformidade, cofre de documentos e recomendação de Go/No-Go — a decisão é sua.",
+  },
+  {
+    id: "nav:/compras",
+    titulo: "Compras públicas",
+    descricao:
+      "Para o órgão comprador: plano de contratações, demandas, processos da Lei 14.133 com documentos, pesquisa de preços, timeline e sinais de risco para revisão humana.",
+  },
+  {
+    id: "nav:/sourcing",
+    titulo: "Strategic Sourcing",
+    descricao:
+      "Compras privadas da sua empresa: RFP, RFQ, RFI e qualificação. Convide fornecedores da rede ou por link, compare propostas, negocie e aprove — sem vencedor automático.",
+  },
+  {
     id: "nav:/rede-social",
     titulo: "Shoal — a rede social B2B",
     descricao:
@@ -149,6 +175,23 @@ const PASSOS_TOUR: PassoGuia[] = [
       "Gere um link pra uma empresa nova entrar no Shoal — qualquer pessoa da sua empresa pode gerar (o convite gratuito/cortesia é restrito a Admin/Super Admin).",
   },
   {
+    id: "nav:/convites-compra",
+    titulo: "Convites de compra",
+    descricao:
+      "Quando um comprador da rede convida a sua empresa para um processo, ele aparece aqui: leia os requisitos, tire dúvidas, envie a proposta ou decline.",
+  },
+  {
+    id: "nav:/inteligencia/cerebro",
+    titulo: "Cérebro Corporativo",
+    descricao:
+      "O que a IA sabe sobre a sua empresa. Itens internos nunca saem daqui; só os marcados \"rede\" podem ser usados para responder outras empresas.",
+  },
+  {
+    id: "nav:/valores",
+    titulo: "Valores",
+    descricao: "AI Credits incluídos em cada plano, pacotes adicionais e quanto cada operação de IA consome.",
+  },
+  {
     id: "leads",
     titulo: "Leads",
     descricao: "Empresas e Contatos cadastrados diretamente, fora do fluxo de ICP.",
@@ -158,6 +201,18 @@ const PASSOS_TOUR: PassoGuia[] = [
     titulo: "Admin",
     descricao:
       "Gestão de tenants/licenças/relatórios (hierarquia), Convites (traz um colega pro seu próprio tenant — qualquer Admin já pode gerar) e Planos/Verificações (Super Admin) — visível conforme o seu papel.",
+  },
+  {
+    id: "nav:/ai-credits",
+    titulo: "Admin — AI Credits",
+    descricao:
+      "Saldo de AI Credits da empresa (um pool só, não por usuário), uso do mês, créditos que vencem, compra de pacotes, recarga automática, limites de uso e avisos em 80%, 95% e 100%.",
+  },
+  {
+    id: "nav:/assinatura",
+    titulo: "Admin — Assinatura",
+    descricao:
+      "Plano, módulos contratados e uso do período, incluindo usuários: o limite vem do plano (ex.: 10 no Bid Intelligence) mais os adicionais contratados; fornecedor convidado não conta.",
   },
 ];
 

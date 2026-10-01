@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import {
+  BotaoReverTutorial,
+  TutorialModulo,
+} from "@/components/onboarding/TutorialModulo";
+import { useTutorialModulo } from "@/components/onboarding/useTutorialModulo";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { api, mensagemErro } from "@/lib/api";
+import { PASSOS_TUTORIAL_SOURCING } from "@/pages/sourcing/tutorial";
 import {
   ROTULO_STATUS_SOURCING,
   TIPOS_SOURCING,
@@ -16,11 +22,14 @@ import {
 export function SourcingProcessos() {
   const [processos, setProcessos] = useState<ProcessoSourcing[]>([]);
   const [erro, setErro] = useState<string | null>(null);
+  const [carregado, setCarregado] = useState(false);
+  const tutorial = useTutorialModulo("sourcing", carregado);
   const navegar = useNavigate();
 
   const carregar = useCallback(async () => {
     try {
       setProcessos(await api.get<ProcessoSourcing[]>("/sourcing/processos"));
+      setCarregado(true);
     } catch (error) {
       setErro(mensagemErro(error, "Não foi possível carregar os processos."));
     }
@@ -50,14 +59,18 @@ export function SourcingProcessos() {
   return (
     <div className="flex flex-col gap-3.5" data-testid="sourcing-processos">
       <div>
-        <div className="font-head text-xl font-bold">Strategic Sourcing</div>
+        <div className="flex items-center gap-2">
+          <div className="font-head text-xl font-bold">Strategic Sourcing</div>
+          <BotaoReverTutorial tutorial={tutorial} />
+        </div>
         <div className="text-[11px] text-muted">
           RFI, RFP, RFQ e qualificação de fornecedores. Dados do comprador:
-          nunca vão para a rede, para o lado vendedor ou para a IA.
+          nunca vão para a rede nem para o lado vendedor; a IA só é usada quando
+          você pede, e documento restrito nunca vai para ela.
         </div>
       </div>
       {erro && <div className="text-[12px] text-red">{erro}</div>}
-      <Card>
+      <Card data-tutorial-id="sourcing:novo">
         <SectionLabel>Novo processo</SectionLabel>
         <form
           onSubmit={criar}
@@ -92,7 +105,7 @@ export function SourcingProcessos() {
           />
         </form>
       </Card>
-      <Card>
+      <Card data-tutorial-id="sourcing:processos">
         <SectionLabel>Processos</SectionLabel>
         <div className="flex flex-col gap-1.5">
           {processos.map((p) => (
@@ -116,6 +129,7 @@ export function SourcingProcessos() {
           )}
         </div>
       </Card>
+      <TutorialModulo passos={PASSOS_TUTORIAL_SOURCING} tutorial={tutorial} />
     </div>
   );
 }

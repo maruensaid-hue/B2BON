@@ -7,7 +7,9 @@
 | Unit | `tests/unit/` | sim (`staging` e `master`, D-009) |
 | Integração (TestClient + SQLite em memória por teste) | `tests/integration/` | sim |
 | Migrações (cabeça única do Alembic) | `tests/test_alembic_upgrade.py` | sim |
-| E2E Playwright (login, criar negócio, gerar proposta) | `frontend/e2e/` | sim |
+| Postgres 16 (concorrência, índices parciais, ordem de NULLs) | `tests/**/*_pg.py`, com `B2BON_TESTE_PG_URL` | não (sob demanda; pulados sem a variável) |
+| Orçamento de desempenho contra o baseline | `tests/desempenho/`, com `B2BON_MEDIR` e `B2BON_BASELINE` | não (sob demanda) |
+| E2E Playwright (login, negócio, proposta, planos, MAP, workspace de licitação, Strategic Sourcing, portal do fornecedor, tutoriais dos módulos) | `frontend/e2e/` | sim |
 | Lint + typecheck + build do frontend | `npm run lint`, `npm run build` | sim |
 
 ## Testes arquiteturais e críticos (Master Prompt §78–§82)
@@ -38,6 +40,15 @@
 | Toda rota com IA tem teto de uso (fitness) | `tests/unit/test_limite_ia_nas_rotas.py` | Fase 17 |
 | Toda FK tem índice, exceto autoria (fitness) | `tests/unit/test_indices_fk.py` | Fase 17 |
 | Orçamento de consultas (sem N+1 na carteira) | `tests/integration/test_desempenho_consultas.py` | Fase 17 |
+| Barreira Buy/Sell no núcleo de sourcing (repositório por lado + fitness) | `tests/unit/test_barreira_sourcing.py`, `tests/integration/test_sourcing_repositorio.py` | S2 |
+| Espelho, backfill e leitura dupla das tabelas unificadas | `tests/integration/test_sourcing_s3.py` (+ `_pg`) | S3 |
+| Workflow e ruleset versionados | `tests/unit/test_sourcing_s4.py`, `test_sourcing_fase_a.py` | S4 / Phase A |
+| Comprador privado: fluxos RFP/RFQ/RFI, lado imutável, concorrência | `tests/integration/test_sourcing_fase_e.py` (+ `_pg`) | Phase E |
+| Portal do fornecedor: link secreto, visão restrita, esclarecimento anônimo | `tests/integration/test_sourcing_fase_f.py` | Phase F |
+| IA do comprador ancorada no texto do fornecedor, créditos, RESTRICTED fora da IA | `tests/integration/test_sourcing_fase_g.py` (+ `_pg`) | Phase G |
+| Planos D-059 e preços congelados | `tests/integration/test_comercializacao_fase_i.py`, `tests/unit/test_precos_preservados.py` | Phase I |
+| Leitura unificada responde igual à antiga | `tests/integration/test_leitura_unificada_j1.py` (+ `_pg`) | Phase J |
+| Usuários do Bid Intelligence por entitlement; Supplier Guest não conta; pool de créditos do tenant | `tests/integration/test_usuarios_bid_intelligence_j3.py` | Phase J |
 
 ## Regras
 
@@ -71,4 +82,15 @@
 | 14 | 1.926 passed | lint OK (25 warnings), build OK | 5/5 (+ página pública de planos) |
 | 16 | 1.933 passed | lint OK (25 warnings), build OK | 5/5 |
 | 17 | 1.953 passed (+ carga e restore em Postgres 16) | lint OK (25 warnings), build OK, 0 vulnerabilidades | 5/5 |
-| 12 | 1.857 passed | lint OK (25 warnings), build OK | 4/4 |
+| 15 | 1.996 passed | lint OK (25 warnings), build OK | 6/6 |
+| A | 2.047 passed | lint OK (25 warnings), build OK | 6/6 |
+| B | 2.051 passed | lint OK (25 warnings), build OK | 6/6 |
+| C | 2.056 passed | lint OK (25 warnings), build OK | 8/8 |
+| D | 2.060 passed | lint OK (25 warnings), build OK | 8/8 |
+| E | 2.067 passed (+ Postgres) | lint OK (25 warnings), build OK | 9/9 |
+| F | 2.071 passed | lint OK (25 warnings), build OK | 10/10 |
+| G | 2.078 passed (+ Postgres) | lint OK (25 warnings), build OK | 10/10 |
+| H | 2.080 passed | lint OK (25 warnings), build OK | 11/11 |
+| I | 2.086 passed (+ Postgres 7/7) | lint OK (25 warnings), build OK | 12/12 |
+| J | 2.094 passed (+ Postgres 8/8) | lint OK (25 warnings), build OK | 12/12 |
+| Docs/onboarding (2026-10-01) | 2.094 passed | lint OK (25 warnings), build OK | 13/13 (+ tutoriais dos módulos) |

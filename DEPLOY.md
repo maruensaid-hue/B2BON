@@ -132,7 +132,8 @@ um **GitHub Actions agendado** (`.github/workflows/cron-envios.yml`, já
 no repo), com dois grupos de disparo em sequência:
 
 - **A cada 15 minutos**: `processar-envios`, `processar-campanhas`
-  (e-mail/WhatsApp em massa), `processar-retorno` (lembretes de
+  (e-mail/WhatsApp em massa), `processar-eventos` (outbox de eventos e
+  webhooks de saída), `processar-retorno` (lembretes de
   reunião D-1/H-2 + NPS), `disparar-webhooks-parceiros` (Fase 2 da
   hierarquia) e `processar-fila-enriquecimento` (lote de importação de
   planilha).
@@ -141,8 +142,14 @@ no repo), com dois grupos de disparo em sequência:
   dias — ver `MANUAL_DO_USUARIO.md` seção 8), `enviar-lembretes-cobranca`
   (e-mail pré/pós-vencimento), `disparar-relatorios-periodicos`
   (Fase 3 da hierarquia — dashboard + webhook opcional pro
-  distribuidor) e `podar-recorte-cnpj` (libera espaço de CNAE/UF que
-  nenhum ICP ativo usa mais — ver seção 7.1).
+  distribuidor), `podar-recorte-cnpj` (libera espaço de CNAE/UF que
+  nenhum ICP ativo usa mais — ver seção 7.1) e `sourcing-sincronizar`
+  (backfill das tabelas unificadas de licitações/compras; idempotente).
+- **Ainda não agendado**: `creditos-ia`, que deveria rodar **de hora em
+  hora** (expira lotes de AI Credits, concede a franquia do mês, libera
+  reservas órfãs e registra os avisos de 80/95/100% — ver
+  `docs/b2bon/AI_CREDITS_OPERACAO.md`). Até entrar no workflow, precisa
+  ser chamado por outro agendador.
 
 Cada rota é `POST /cron/<nome>`, protegida pelo mesmo `X-Cron-Secret`
 (seção abaixo) — nenhuma delas aceita chamada sem esse segredo. O

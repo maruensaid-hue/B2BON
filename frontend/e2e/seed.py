@@ -63,11 +63,11 @@ def main() -> None:
                     senha_hash=hash_senha(SENHA),
                     papel="super_admin",
                     ativo=True,
-                    # Sem isso, o tour de primeiro acesso do CRM abre
-                    # sozinho na primeira visita e intercepta o clique em
-                    # "+ Novo negócio" — os testes E2E testam o fluxo real
-                    # de negócio, não o onboarding.
-                    tutoriais_modulo_vistos=["crm"],
+                    # Sem isso, os tutoriais de primeiro acesso (CRM, Licitações,
+                    # Compras, Sourcing, Convites de compra) abrem sozinhos na
+                    # primeira visita e interceptam os cliques — os testes E2E
+                    # testam o fluxo real de negócio, não o onboarding.
+                    tutoriais_modulo_vistos=["crm", "bids", "compras", "sourcing", "convites_compra"],
                 )
             )
         else:

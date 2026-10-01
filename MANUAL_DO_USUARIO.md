@@ -16,6 +16,12 @@ já em funcionamento.
 6. [Leads (clientes avulsos, sem ICP)](#6-leads-clientes-avulsos-sem-icp)
 7. [Administração](#7-administração)
 8. [Modelos de licença](#8-modelos-de-licença)
+9. [Licitações — B2B ON Bid Intelligence](#9-licitações--b2b-on-bid-intelligence)
+10. [Compras públicas](#10-compras-públicas)
+11. [Strategic Sourcing](#11-strategic-sourcing)
+12. [Convites de compra e portal do fornecedor](#12-convites-de-compra-e-portal-do-fornecedor)
+13. [AI Credits, Valores e Assinatura](#13-ai-credits-valores-e-assinatura)
+14. [Ajuda dentro da plataforma: tour, tutoriais e FAQ com IA](#14-ajuda-dentro-da-plataforma-tour-tutoriais-e-faq-com-ia)
 
 ---
 
@@ -87,6 +93,13 @@ módulo liberado por padrão. Todo o resto (CRM, Prospecção, Cadências,
 Aprovações, Reuniões, MAP, Configuração) exige licença ativa; a API
 recusa o acesso com uma mensagem clara se isso não for atendido.
 
+Além da licença ativa, cada item do menu depende dos **módulos do
+plano**: **Licitações** aparece com o módulo Bid Intelligence,
+**Compras públicas** com Public Procurement e **Strategic Sourcing** com
+o módulo de mesmo nome. **Convites de compra** (seção
+[12](#12-convites-de-compra-e-portal-do-fornecedor)) e **Valores**
+aparecem para todos.
+
 ---
 
 ## 2. CRM
@@ -109,6 +122,10 @@ Prospecção (PREDATOR) gerou ou que entraram por outro canal.
     barras) e taxa de conversão do período.
   - **Economia**: LTV médio, CAC, taxa de churn, novos clientes e
     cancelamentos no mês.
+- **Revenue Intelligence** (menu CRM → Revenue Intelligence): receita,
+  conversão por estágio, ciclo de venda e atribuição no período
+  escolhido. O pipeline é o retrato de agora; receita e conversões são
+  do período; a atribuição mostra o toque registrado, não causalidade.
 - **Ligação automática com o PREDATOR**: quando uma reunião de
   prospecção é confirmada, o CRM ganha automaticamente uma oportunidade
   vinculada à conta — não é preciso lançar isso manualmente.
@@ -696,6 +713,12 @@ usa nomenclatura própria (ex.: "Master"/"Vendedor"/"Cliente").
   [3.1](#31-perfil-e-verificação)) — aprova ou recusa, com os sinais
   automáticos (domínio do e-mail confere com o site, CNPJ encontrado na
   Receita Federal) visíveis pra ajudar na decisão.
+- **API & Webhooks** (`admin`/`super_admin`): chaves da API de produto e
+  webhooks de saída do próprio tenant.
+- **AI Credits** e **Assinatura** (`admin`/`super_admin`): ver seção
+  [13](#13-ai-credits-valores-e-assinatura).
+- **FinOps IA** (exclusivo de `super_admin`): custo e margem da IA da
+  plataforma inteira.
 
 ---
 
@@ -760,13 +783,33 @@ O consumo/restante em tempo real aparece na tela de **Prospecção**.
 
 ### Planos padrão
 
+Suíte (CRM + MAP + PREDATOR), valores de cadastro inicial:
+
 | Plano | Franquia (contas/mês) | Máx. usuários | Preço mensal |
 |---|---|---|---|
 | POC | 50 | 3 | R$ 0 (gratuito) |
-| Teste | 200 | 10 | R$ 0 (cortesia, só por convite) |
-| Starter | 200 | 10 | R$ 490 |
-| Professional | 800 | 25 | R$ 990 |
-| Enterprise | 5.000 | 999 (na prática, ilimitado) | R$ 2.490 |
+| Teste | 200 | sem limite | R$ 0 (cortesia, só por convite) |
+| Starter | 200 | 5 | R$ 924,50 |
+| Professional | 800 | 10 | R$ 1.664,10 |
+| Enterprise | 5.000 | 20 | R$ 2.958,40 |
+
+MAP, PREDATOR e CRM também são vendidos separados (planos Starter /
+Professional / Enterprise de cada módulo, com 5 / 10 / 20 usuários).
+
+Linhas de licitações e compras (decisão D-059):
+
+| Plano | Usuários | AI Credits/mês | Preço mensal | Contratação |
+|---|---|---|---|---|
+| B2B ON Bid Intelligence (Public Sector Bids + Enterprise Bids) | 10 incluídos por empresa; adicionais suportados, preço em definição | 25.000 | R$ 1.490 | autoatendimento |
+| Strategic Sourcing | 5 | 50.000 | R$ 2.990 | autoatendimento |
+| Strategic Sourcing Enterprise | por contrato | 100.000 | a partir de R$ 5.990 | venda assistida |
+| Public Procurement | — | — | em definição | — |
+| B2B ON Suite | — | — | em definição | — |
+
+Os AI Credits do plano são um saldo único da empresa — não são
+multiplicados pelo número de usuários. No Bid Intelligence, um
+fornecedor convidado (Supplier Guest) ou outro usuário externo não
+conta como usuário da empresa.
 
 Esses valores são registros no banco (tabela `plano`), não constantes
 fixas no código — podem ser ajustados comercialmente sem alteração de
@@ -776,7 +819,8 @@ novos planos podem ser criados do mesmo jeito.
 **"Máx. usuários"** é o número de contas de usuário (`Usuario`) que o
 plano comporta dentro do tenant — é o limite pensado para dimensionar o
 plano correto para o tamanho do time do cliente (ex.: POC serve para um
-piloto de até 3 pessoas; Enterprise cobre praticamente qualquer time).
+piloto de até 3 pessoas). O limite vem do plano somado aos usuários
+adicionais contratados na licença, e só conta usuários internos ativos.
 
 **Plano "Teste"** espelha o Starter em franquia/usuários, mas é
 gratuito e nasce **sem** cobrança nem data de expiração — só é
@@ -824,3 +868,119 @@ módulos por dentro (o texto de boas-vindas do convite já menciona CRM,
 MAP e PREDATOR), e o upgrade para um plano pago é uma decisão comercial
 feita depois, sem precisar recriar a conta: basta o `super_admin`
 atribuir uma licença ao tenant já existente.
+
+---
+
+## 9. Licitações — B2B ON Bid Intelligence
+
+Para quem **vende** a órgãos públicos ou responde RFPs de empresas
+(Public Sector Bids + Enterprise Bids). Menu **Licitações**.
+
+- **Em acompanhamento**: as oportunidades da empresa, com o prazo de
+  proposta mais próximo primeiro. Cadastre com título/número do edital,
+  órgão ou comprador, modalidade (pregão, concorrência, RFP privada...),
+  prazo e valor estimado.
+- **Workspace da licitação** (clique numa linha), em abas:
+  - **Visão geral**: andamento pelo fluxo da modalidade e a
+    recomendação de **Go/No-Go** com os motivos. É só apoio: quem
+    decide é a empresa.
+  - **Documentos**: envie o edital, TR ou anexos. A IA extrai os
+    requisitos com **página e trecho** de onde saíram (consome AI
+    Credits).
+  - **Requisitos**: cada requisito sugerido precisa ser revisado —
+    confirmar ou descartar. Nada vale sem essa revisão.
+  - **Conformidade**: matriz requisito × evidência da empresa, incluindo
+    documentos do cofre vencidos ou vencendo.
+  - **Proposta**: esboço da proposta a partir dos requisitos confirmados.
+- **Prazos que pedem atenção**, **Cofre de documentos** (certidões,
+  atestados, balanços com validade) e **Concorrentes** (em quantas
+  disputas você encontrou cada concorrente e a sua taxa de vitória
+  contra ele — só o que a empresa registrou).
+
+## 10. Compras públicas
+
+Para o **órgão comprador** (Lei 14.133). Menu **Compras públicas**. Os
+dados do comprador nunca aparecem para fornecedores nem na rede.
+
+- **Indicadores** do plano de contratações, dos processos e dos
+  contratos.
+- **Plano de contratações**: órgão, plano anual (PCA), execução e
+  demandas em risco.
+- **Próximas ações sugeridas**: o que o fluxo pede em seguida para cada
+  processo, com o motivo.
+- **Processos**: abrem um workspace com andamento, documentos (ETP, TR,
+  edital...), **pesquisa de preços** e **timeline** com auditoria.
+- **Sinais para revisão**: aditivos, acréscimos, concentração em
+  fornecedor, prazo de planejamento — sempre com a evidência. São sinais
+  para revisão humana, não acusações; os limites seguem a configuração
+  do órgão.
+
+## 11. Strategic Sourcing
+
+Compras **privadas** da sua empresa. Menu **Strategic Sourcing**.
+
+- **Novo processo**: RFP, RFQ (cotação), RFI, manifestação de interesse,
+  concorrência privada, qualificação de fornecedores ou evento de
+  sourcing.
+- **Workspace do processo**, em abas:
+  - **Visão geral**: andamento pelo fluxo do tipo escolhido e o painel
+    de próxima ação e alertas (sem IA).
+  - **Requisitos** (ou **Itens e requisitos**, na cotação): requisitos e
+    critérios com **peso** e obrigatoriedade. Ao enviar a especificação,
+    a IA sugere requisitos com trecho e página — só valem depois de
+    confirmados.
+  - **Fornecedores**: descoberta no seu cadastro e nos perfis da rede
+    que você pode ver, convite (pela rede ou por link), acompanhamento e
+    o histórico de cada fornecedor com você (respondeu, venceu, declinou).
+  - **Propostas** (ou **Respostas**, no RFI): o que cada fornecedor
+    enviou, em cada rodada, e a **avaliação assistida** — a IA
+    sugere a nota citando o que o fornecedor escreveu, e o avaliador
+    decide.
+  - **Comparação** (não existe em RFI e manifestação de interesse):
+    propostas lado a lado com avaliação ponderada, shortlist e rodadas de
+    negociação. **Nenhum
+    vencedor é escolhido automaticamente**: aprovação por administrador,
+    adjudicação e contrato são passos humanos.
+- Toda sugestão de IA mostra a estimativa de AI Credits antes de
+  confirmar, e documento **RESTRICTED** nunca vai para a IA.
+- Os dados do comprador nunca vão para a rede nem para o lado vendedor.
+
+## 12. Convites de compra e portal do fornecedor
+
+- **Empresa da rede**: o menu **Convites de compra** lista os processos
+  em que a sua empresa foi convidada. Abra um convite para ler os
+  requisitos, perguntar (o esclarecimento é respondido para todos, sem
+  dizer quem perguntou), enviar proposta com anexos ou declinar.
+- **Fornecedor sem conta (Supplier Guest)**: recebe do comprador um
+  **link secreto**, sem login e sem ocupar usuário. Gerar o link de novo
+  revoga o anterior.
+- Em qualquer caso o fornecedor vê só o próprio convite — nunca pesos,
+  valor estimado, avaliações ou outros participantes.
+
+## 13. AI Credits, Valores e Assinatura
+
+- **AI Credits** (Admin): toda funcionalidade com IA consome créditos
+  de um **saldo único da empresa**. A tela mostra o uso do mês, os
+  créditos que vencem, compra de pacotes, recarga automática, limites de
+  uso e avisos em 80%, 95% e 100%. Operações sem IA não consomem nada,
+  e a IA nunca roda sem medição.
+- **Valores** (todos): créditos incluídos por plano, pacotes adicionais
+  e quanto cada operação consome.
+- **Assinatura** (Admin): plano, módulos contratados e uso do período,
+  inclusive usuários (limite do plano + adicionais contratados).
+
+## 14. Ajuda dentro da plataforma: tour, tutoriais e FAQ com IA
+
+- **Tour guiado**: no primeiro acesso, destaca cada item do menu que o
+  seu plano e o seu papel liberam — CRM (com Revenue Intelligence), MAP,
+  Predator, Licitações, Compras públicas, Strategic Sourcing, Shoal,
+  Convites de compra, Cérebro Corporativo, Valores, Leads e Admin (com
+  AI Credits e Assinatura). Itens que você não vê são pulados. Pode ser
+  refeito pelo painel de ajuda.
+- **Tutoriais por módulo**: abrem sozinhos na primeira visita a CRM,
+  MAP, telas do Predator, Shoal, Leads, **Licitações**, **Compras
+  públicas**, **Strategic Sourcing** e **Convites de compra**, e voltam
+  pelo botão **🔄 Rever tutorial** ao lado do título.
+- **FAQ com IA** (painel lateral): responde dúvidas sobre o uso de
+  qualquer módulo. Preço que ainda não foi definido é respondido como
+  "em definição".
