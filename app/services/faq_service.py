@@ -41,6 +41,13 @@ filas customizadas além das 5 padrão, renomeia, exclui (se a fila estiver vazi
 período escolhido — pipeline é retrato de agora; atribuição mostra o toque registrado, não causalidade.
 - MAP: mapa/visão de saúde das contas por vendedor e gestor, com visão hierárquica pra quem gerencia \
 sub-tenants.
+  - Performance comercial (dentro do MAP, aba): quotas de New MRR por representante e da equipe (o número de \
+representantes não é fixo), pipeline e cobertura, funil, atividade (contas trabalhadas, reuniões, propostas), \
+mix e ticket, velocidade de vendas, comissão recorrente (sobre a mensalidade efetivamente paga; cliente \
+inadimplente fica com a comissão retida), Summer Sales Challenge, Government Pipeline separado da quota, MAP \
+Intelligence (alertas com ação recomendada) e Daily Comercial (só exceções). O gestor (Super Admin) vê a \
+equipe e configura quotas, políticas e a Prontidão (vincular cada representante ao usuário do CRM, produto \
+de cada oferta e o que conta como contato efetivo); o representante vinculado vê "Meu desempenho".
 - Licitações (B2B ON Bid Intelligence — lado vendedor): editais públicos e RFPs de empresas que a sua \
 empresa acompanha. Cadastrar a oportunidade, enviar o edital/TR (a IA extrai requisitos com página e \
 trecho; cada requisito precisa de revisão humana — confirmar ou descartar), matriz de conformidade, \
@@ -120,7 +127,8 @@ admin de um tenant distribuidor/revendedor gerenciando sua subárvore), Convites
 SEU PRÓPRIO tenant, com o papel Usuário/Admin — qualquer Admin ou Super Admin já pode gerar; só um \
 Super Admin concede o papel Super Admin), Planos e Verificações (operação global da rede, exclusiva de \
 Super Admin), Integrações (chave de API de parceiro/webhooks, admin de tenant distribuidor), API & \
-Webhooks (Admin), AI Credits (Admin: saldo, uso do mês, créditos que vencem, compra de pacotes, recarga \
+Webhooks (Admin), Representantes (Super Admin: cadastro dos representantes comerciais, percentual e \
+chave PIX), AI Credits (Admin: saldo, uso do mês, créditos que vencem, compra de pacotes, recarga \
 automática, limites e avisos em 80%/95%/100%), Assinatura (Admin: plano, módulos e uso do período, \
 inclusive usuários) e FinOps IA (Super Admin).
 
@@ -147,6 +155,17 @@ com licença institucional + implantação + subscrição anual e um pool anual 
 inicial = licença + implantação + subscrição anual; a renovação é só a subscrição anual (+ serviços, créditos adicionais \
 e reajuste contratual), sem cobrar a licença de novo. Há também o modelo somente subscrição anual, conforme a contratação. \
 Não cite valores de memória: os preços vigentes estão na página Planos e preços (catálogo central).
+- Tenant desligado: "Desativar" é reversível (usuários perdem o acesso, dados ficam); "Excluir \
+definitivamente" apaga os dados do tenant — só depois de remover os tenants abaixo dele, nunca o próprio \
+tenant. Contas/negócios de OUTRA empresa que estavam com um vendedor do tenant excluído ficam sem \
+responsável (não somem); o histórico de pagamento é mantido por obrigação fiscal.
+- Demonstração: o link https://b2bon.onrender.com/demo (botão DEMO no rodapé do login) abre, sem login, um \
+ambiente próprio com dados fictícios que expira em 8 horas — vários representantes podem demonstrar ao \
+mesmo tempo sem interferência. Nada sai da plataforma (e-mail, WhatsApp, agenda e integrações são \
+simulados) e a área administrativa não abre na demonstração.
+- Central de Negócios (página que aparece ao sair): índices de bolsa, câmbio/cripto/ouro e notícias de \
+negócios reais dos portais (UOL, G1, InfoMoney), atualizadas sozinhas com a página aberta; quando uma fonte \
+falha, mostra a última cotação real conhecida — nunca um número inventado.
 - Preços que a plataforma ainda não definiu (ex.: Public Procurement, B2B ON Suite, usuário adicional) \
 devem ser respondidos como "em definição" — nunca invente um valor.
 """

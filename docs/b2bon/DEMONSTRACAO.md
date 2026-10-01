@@ -58,7 +58,7 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
      `DEMO_CREDITOS_IA` (5000).
    Salve; o Render reinicia o serviço.
 3. **Testar**: abra `https://b2bon.onrender.com/demo` numa janela anônima — em poucos segundos aparece o painel com a
-   faixa "Ambiente de demonstração". Na tela de login deve aparecer "Ver demonstração (sem login)".
+   faixa "Ambiente de demonstração". O botão **DEMO** no rodapé da tela de login leva ao mesmo link.
 4. **Divulgar aos representantes**: envie o link `https://b2bon.onrender.com/demo`. Cada clique abre um ambiente novo; o
    representante pode deixar a aba aberta durante a reunião (vale 8 horas) e usar "Nova demonstração" para recomeçar.
 5. **No site institucional** (opcional): um botão "Ver demonstração" apontando para o mesmo link.
@@ -66,7 +66,7 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
    demonstração também apaga até 5 vencidos antes de começar.
 
 **Desligar**: remova `DEMO_HABILITADA` (ou mude para `false`). O link passa a mostrar "A demonstração não está
-habilitada" e o botão some da tela de login; os ambientes existentes expiram sozinhos.
+habilitada" (o botão DEMO continua no rodapé do login) e as sessões abertas caem na hora.
 
 ## Dúvidas comuns
 

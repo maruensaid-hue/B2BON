@@ -1208,3 +1208,26 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   provedores simulados com credenciais reais configuradas, marca de demonstração propagada até a rota e limite por IP
   real; varredura das 27 telas da demonstração no navegador (146 chamadas, nenhuma bloqueada indevidamente).
 - **Status**: ACEITA. Sem migração.
+
+## D-084 · 2026-10-01 · Exclusão definitiva com referências de outros tenants; câmbio com fonte de reserva
+- **Contexto** (produção): excluir o revendedor desligado "Dayanne Mendes" falhava com HTTP 500 para o gestor e para o
+  Super Admin — `ForeignKeyViolation` em `fk_conta_vendedor_usuario_id`: o distribuidor (tenant pai) tinha uma conta
+  atribuída à vendedora do revendedor, e a varredura só apaga linhas do próprio tenant. Além disso, a FK
+  `pagamento_licenca.tenant_id` impedia apagar qualquer tenant que já tivesse pago, embora a tabela já ficasse fora da
+  varredura justamente para sobreviver (retenção fiscal). Na Central de Negócios, o câmbio seguia "não disponível": a
+  AwesomeAPI devolve 429 de forma sustentada ao IP de saída do Render (os índices, do Yahoo, funcionavam).
+- **Decisão**:
+  - Antes de varrer, `apagar_dados` solta as referências aos usuários do tenant: coluna anulável → NULL (a conta ou
+    negócio da outra empresa fica sem responsável, não some); coluna obrigatória em tabela sem tenant (ex.: token de
+    redefinição de senha) → apagada com o usuário; coluna obrigatória em linha de OUTRO tenant → recusa com mensagem
+    clara antes de apagar qualquer coisa. Qualquer erro de integridade restante vira mensagem (nunca 500).
+  - `pagamento_licenca.tenant_id` deixa de ter FK (coluna e índice mantidos): o histórico de pagamento sobrevive ao
+    tenant, como já estava decidido.
+  - Câmbio: AwesomeAPI primeiro; o que faltar (moedas e cripto) vem do Yahoo Finance em BRL. Ouro fica fora do reserva
+    (o Yahoo cota em USD por onça — outra unidade; ausente é melhor que um número diferente). Notícias: cache de 10 min,
+    a página consulta a cada 5 min, mais recentes primeiro, portal fora do ar mantém as últimas matérias dele, e a tela
+    mostra "atualizado às" e há quanto tempo cada matéria saiu.
+- **Acesso**: o usuário Admin do PO no tenant CyberFort passou a Super Admin (operação registrada em `audit_log`,
+  reversível) — gerir tenants de todas as redes e representantes é atribuição do Super Admin, que continua não podendo
+  ser concedido pela interface.
+- **Status**: ACEITA. Migração `c0e2a4b6d8f1` (reversível; o downgrade descarta pagamentos de tenants já apagados).

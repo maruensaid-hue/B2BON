@@ -245,3 +245,56 @@ def test_excluir_definitivamente_retoma_de_uma_varredura_parcial(db_session):
 
     with pytest.raises(NaoEncontrado):
         tenant_service.excluir_definitivamente(db_session, TENANT_ALVO, ator)
+
+
+def test_excluir_definitivamente_solta_vendedor_do_filho_em_conta_do_pai(db_session):
+    """Caso de produção (revendedor desligado): o distribuidor atribuiu uma conta SUA ao vendedor do revendedor. A
+    exclusão do revendedor estourava a FK `conta.vendedor_usuario_id` (HTTP 500); agora a conta do pai fica sem
+    responsável e continua existindo."""
+    ator = _ator(db_session)
+    _tenant_alvo(db_session, "pai-distribuidor")
+    _tenant_alvo(db_session, "filho-revendedor", tenant_pai_id="pai-distribuidor")
+    vendedor = Usuario(tenant_id="filho-revendedor", nome="Vendedora", email="v@filho.com", papel="user", ativo=False)
+    db_session.add(vendedor)
+    db_session.flush()
+    conta_do_pai = Conta(tenant_id="pai-distribuidor", nome="Conta do pai", status="prospectada", vendedor_usuario_id=vendedor.id)
+    db_session.add(conta_do_pai)
+    db_session.commit()
+
+    tenant_service.excluir_definitivamente(db_session, "filho-revendedor", ator)
+
+    db_session.refresh(conta_do_pai)
+    assert conta_do_pai.vendedor_usuario_id is None
+    assert db_session.query(Tenant).filter_by(id="filho-revendedor").one_or_none() is None
+    assert db_session.query(Usuario).filter_by(tenant_id="filho-revendedor").count() == 0
+
+
+def test_excluir_definitivamente_recusa_antes_de_apagar_se_outro_tenant_depende_do_usuario(db_session):
+    """Referência obrigatória em linha de outro tenant não pode virar NULL: recusa com mensagem clara e nada é apagado."""
+    from app.models.solicitacao_desconto import SolicitacaoDesconto
+
+    ator = _ator(db_session)
+    _tenant_alvo(db_session, "outro-tenant")
+    _tenant_alvo(db_session)
+    usuario = Usuario(tenant_id=TENANT_ALVO, nome="Fulano", email="f@alvo-ref.com", papel="user")
+    db_session.add(usuario)
+    db_session.flush()
+    colunas = SolicitacaoDesconto.__table__.c
+    obrigatorias = {
+        c.name: _valor_minimo(c) for c in colunas
+        if not c.nullable and c.default is None and c.server_default is None and not c.primary_key
+    }
+    obrigatorias.update(tenant_id="outro-tenant", solicitante_usuario_id=usuario.id)
+    db_session.execute(SolicitacaoDesconto.__table__.insert().values(**obrigatorias))
+    db_session.commit()
+
+    with pytest.raises(RegraNegocioViolada, match="outro-tenant"):
+        tenant_service.excluir_definitivamente(db_session, TENANT_ALVO, ator)
+    assert db_session.query(Usuario).filter_by(tenant_id=TENANT_ALVO).count() == 1
+
+
+def _valor_minimo(coluna):
+    tipo = coluna.type.python_type
+    if tipo is datetime:
+        return datetime.now(UTC)
+    return {int: 1, float: 1.0, str: "x", bool: False}.get(tipo, "x")

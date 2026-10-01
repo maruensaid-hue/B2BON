@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Correções: exclusão de tenant, câmbio e notícias (2026-10-01, D-084)
+
+- Excluir definitivamente um tenant desligado volta a funcionar mesmo quando um vendedor dele era responsável por contas de outra empresa da rede: essas contas ficam sem responsável, em vez de travar a exclusão. Tenants que já pagaram também podem ser excluídos; o histórico de pagamento é mantido.
+- Quando a exclusão não puder seguir, a tela explica o motivo em vez de mostrar um erro genérico.
+- Central de Negócios: o câmbio passa a ter uma fonte de reserva e deixa de aparecer como "não disponível" quando a fonte principal bloqueia. As notícias se atualizam sozinhas com a página aberta, mostram as mais recentes primeiro e há quanto tempo saíram.
+- Tour e ajuda com IA atualizados: Performance comercial do MAP, Representantes, exclusão de tenant, demonstração e Central de Negócios.
+
 ## Demonstração protegida antes de ir ao ar (2026-10-01, D-083)
 
 - A demonstração só alcança as telas de produto do próprio ambiente fictício; todo o resto da plataforma fica fechado para ela, inclusive o que for criado no futuro.

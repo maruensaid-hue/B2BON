@@ -17,6 +17,8 @@ _CHAVE_CACHE_MERCADO = "mercado"
 # usado em `LimitadorEmMemoria` (app/core/rate_limit.py), sem precisar de
 # backend compartilhado enquanto a API roda numa única instância.
 _TTL_SEGUNDOS = 900
+# Notícias envelhecem mais rápido que cotação de fechamento: 10 min no servidor, e a página consulta a cada 5 min.
+_TTL_NOTICIAS_SEGUNDOS = 600
 
 _lock = Lock()
 _mercado_cache: Mercado | None = None
@@ -92,14 +94,18 @@ def obter_noticias(noticias_client: NoticiasClient) -> list[Noticia]:
     global _noticias_cache, _noticias_cache_em
     agora = time.monotonic()
     with _lock:
-        if _noticias_cache is not None and (agora - _noticias_cache_em) < _TTL_SEGUNDOS:
+        if _noticias_cache is not None and (agora - _noticias_cache_em) < _TTL_NOTICIAS_SEGUNDOS:
             return _noticias_cache
         cache_anterior = _noticias_cache
 
     dados = noticias_client()
-    # Mesmo fallback stale-enquanto-revalida de `obter_mercado` acima.
-    if not dados and cache_anterior:
-        dados = cache_anterior
+    # Mesmo fallback stale-enquanto-revalida de `obter_mercado` acima, por portal: um portal fora do ar mantém as
+    # últimas matérias dele sem congelar as dos outros.
+    if cache_anterior:
+        portais_novos = {noticia["portal"] for noticia in dados}
+        dados = dados + [noticia for noticia in cache_anterior if noticia["portal"] not in portais_novos]
+    # Mais recentes primeiro (sem data vão para o fim) — a ordem do RSS nem sempre é cronológica.
+    dados = sorted(dados, key=lambda noticia: noticia["publicado_em"] or "", reverse=True)
 
     with _lock:
         _noticias_cache = dados

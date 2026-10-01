@@ -39,7 +39,8 @@ const PASSOS_TOUR: PassoGuia[] = [
   {
     id: "map",
     titulo: "MAP",
-    descricao: "Mapa de saúde das suas contas — acompanhe o que cada vendedor está trabalhando.",
+    descricao:
+      "Mapa de saúde das suas contas — acompanhe o que cada vendedor está trabalhando. Na aba Performance comercial: quotas, funil, atividade, comissão recorrente, campanha, MAP Intelligence e o Daily Comercial (o representante vinculado vê \"Meu desempenho\").",
   },
   {
     id: "predator",
@@ -200,7 +201,13 @@ const PASSOS_TOUR: PassoGuia[] = [
     id: "admin",
     titulo: "Admin",
     descricao:
-      "Gestão de tenants/licenças/relatórios (hierarquia), Convites (traz um colega pro seu próprio tenant — qualquer Admin já pode gerar) e Planos/Verificações (Super Admin) — visível conforme o seu papel.",
+      "Gestão de tenants/licenças/relatórios (hierarquia — desativar é reversível; excluir definitivamente apaga os dados), Convites (traz um colega pro seu próprio tenant — qualquer Admin já pode gerar) e Planos/Verificações (Super Admin) — visível conforme o seu papel.",
+  },
+  {
+    id: "nav:/admin/representantes",
+    titulo: "Admin — Representantes",
+    descricao:
+      "Cadastro dos representantes comerciais (percentual de comissão e chave PIX). Quem entra aqui aparece no MAP → Performance comercial; lá, em Configuração → Prontidão, cada um é vinculado ao seu usuário do CRM.",
   },
   {
     id: "nav:/ai-credits",

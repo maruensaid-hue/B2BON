@@ -278,10 +278,22 @@ function JanelaCotacoes({ cambio }: { cambio: CotacaoMoeda[] }) {
   );
 }
 
+const INTERVALO_NOTICIAS_MS = 300000;
+
+/** "há 12 min", "há 3 h" ou a data — a matéria mostra o quão nova é. */
+function quandoPublicada(iso: string): string {
+  const minutos = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (Number.isNaN(minutos)) return "";
+  if (minutos < 1) return "agora";
+  if (minutos < 60) return `há ${minutos} min`;
+  if (minutos < 24 * 60) return `há ${Math.round(minutos / 60)} h`;
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
 /** Central de Negócios (raio-X 2026-09-21, dados ao vivo 2026-09-21) —
  * página pública, alcançável pelo botão "Sair" da página de boas-vindas.
  * B3/câmbio vêm de `GET /central-negocios/mercado` (Yahoo Finance +
- * AwesomeAPI, cacheado 15min no backend); notícias vêm de
+ * AwesomeAPI, com Yahoo de reserva para o câmbio; cacheado 15min no backend); notícias vêm de
  * `GET /central-negocios/noticias` (RSS real de cada portal) — nunca
  * cotação/manchete inventada aqui. Dicas de venda continuam conteúdo
  * original estático da B2B ON. */
@@ -312,6 +324,24 @@ export function CentralNegocios() {
         .then(setMercado)
         .catch(() => undefined);
     }, 120000);
+    return () => clearInterval(intervalo);
+  }, []);
+
+  // Notícias também se atualizam com a aba aberta (antes só no carregamento): a cada 5 min, mantendo as atuais se a
+  // consulta falhar. O backend guarda 10 min e completa um portal fora do ar com as últimas matérias dele.
+  const [noticiasEm, setNoticiasEm] = useState<Date | null>(null);
+  useEffect(() => {
+    if (noticias) setNoticiasEm(new Date());
+  }, [noticias]);
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      api
+        .get<Noticia[]>("/central-negocios/noticias")
+        .then((atuais) => {
+          if (atuais.length > 0) setNoticias(atuais);
+        })
+        .catch(() => undefined);
+    }, INTERVALO_NOTICIAS_MS);
     return () => clearInterval(intervalo);
   }, []);
 
@@ -352,7 +382,14 @@ export function CentralNegocios() {
       </Card>
 
       <Card className="mb-4">
-        <div className="mb-3 text-[10px] font-semibold tracking-wider text-muted uppercase">Notícias de negócios</div>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="text-[10px] font-semibold tracking-wider text-muted uppercase">Notícias de negócios</div>
+          {noticiasEm && (
+            <span className="text-[10.5px] text-muted" data-testid="noticias-atualizadas">
+              atualizado às {noticiasEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+        </div>
         {carregando ? (
           <div className="text-[12px] text-muted">Carregando notícias...</div>
         ) : (
@@ -376,6 +413,9 @@ export function CentralNegocios() {
                           >
                             {materia.titulo}
                           </a>
+                          {materia.publicado_em && (
+                            <div className="text-[10px] text-muted">{quandoPublicada(materia.publicado_em)}</div>
+                          )}
                         </li>
                       ))}
                     </ul>

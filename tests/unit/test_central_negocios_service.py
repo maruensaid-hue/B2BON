@@ -117,3 +117,32 @@ def test_obter_noticias_usa_cache_dentro_do_ttl() -> None:
     central_negocios_service.obter_noticias(client)
 
     assert len(chamadas) == 1
+
+
+def test_obter_noticias_ordena_mais_recentes_e_mantem_portal_fora_do_ar() -> None:
+    def materia(portal: str, titulo: str, quando: str | None) -> dict:
+        return {"portal": portal, "titulo": titulo, "link": f"https://exemplo.com/{titulo}", "publicado_em": quando}
+
+    central_negocios_service.obter_noticias(lambda: [materia("G1 Economia", "g1-antiga", "2026-10-01T08:00:00+00:00")])
+    central_negocios_service._noticias_cache_em -= central_negocios_service._TTL_NOTICIAS_SEGUNDOS + 1
+
+    resultado = central_negocios_service.obter_noticias(lambda: [
+        materia("UOL Economia", "uol-sem-data", None),
+        materia("UOL Economia", "uol-nova", "2026-10-01T12:00:00+00:00"),
+    ])
+
+    assert [m["titulo"] for m in resultado] == ["uol-nova", "g1-antiga", "uol-sem-data"]
+
+
+def test_obter_noticias_renova_depois_de_10_minutos() -> None:
+    chamadas = []
+
+    def client():
+        chamadas.append(1)
+        return [{"portal": "UOL Economia", "titulo": f"t{len(chamadas)}", "link": "https://exemplo.com", "publicado_em": None}]
+
+    central_negocios_service.obter_noticias(client)
+    central_negocios_service._noticias_cache_em -= central_negocios_service._TTL_NOTICIAS_SEGUNDOS + 1
+    resultado = central_negocios_service.obter_noticias(client)
+
+    assert len(chamadas) == 2 and resultado[0]["titulo"] == "t2"

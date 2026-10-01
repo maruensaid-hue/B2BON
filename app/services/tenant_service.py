@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import and_, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.contexts.governo import contract as governo
@@ -647,7 +648,15 @@ def excluir_definitivamente(db: Session, tenant_id: str, ator: Usuario) -> None:
     if _tem_filho(db, tenant_id):
         raise RegraNegocioViolada("Existem tenants abaixo deste — remova-os antes de excluir definitivamente.")
 
-    apagar_dados(db, tenant_id)
+    try:
+        apagar_dados(db, tenant_id)
+    except IntegrityError as erro:
+        db.rollback()
+        logger.warning("Exclusão definitiva de %s bloqueada por integridade: %s", tenant_id, erro.orig)
+        raise RegraNegocioViolada(
+            "Ainda há registros de outra empresa ligados a este tenant — a exclusão parou sem apagar o tenant. "
+            "Tente de novo; se persistir, acione o suporte."
+        ) from erro
 
     # Log sob o tenant de quem executou, não o que está sumindo — senão o
     # próprio registro da exclusão desapareceria junto (admin nunca exclui
@@ -666,6 +675,7 @@ def apagar_dados(db: Session, tenant_id: str) -> None:
     expirados (D-082), que não têm um ator humano."""
     metadata = Base.metadata
     condicoes_indiretas = _condicoes_indiretas(metadata)
+    _soltar_referencias_aos_usuarios(db, metadata, tenant_id)
 
     for table in reversed(metadata.sorted_tables):
         if table.name in _TABELAS_EXCLUIDAS_DA_VARREDURA:
@@ -679,6 +689,40 @@ def apagar_dados(db: Session, tenant_id: str) -> None:
             continue
         db.execute(table.delete().where(or_(*(coluna == tenant_id for coluna in colunas_tenant))))
         db.commit()
+
+
+def _soltar_referencias_aos_usuarios(db: Session, metadata, tenant_id: str) -> None:
+    """Usuários do tenant podem estar referenciados em linhas de OUTRO tenant — ex.: o distribuidor que atribuiu uma conta
+    sua ao vendedor do revendedor (`conta.vendedor_usuario_id`). A varredura só apaga as linhas do próprio tenant, então
+    o DELETE dos usuários estourava a FK. Antes de varrer:
+    - referência anulável → vira NULL (a conta/negócio do outro tenant fica sem responsável, não some);
+    - referência obrigatória numa linha de outro tenant → recusa com mensagem clara, antes de apagar qualquer coisa;
+    - referência obrigatória numa tabela sem tenant (ex.: token de redefinição de senha) → é do próprio usuário, apaga."""
+    usuario = metadata.tables["usuario"]
+    ids_usuarios = select(usuario.c.id).where(usuario.c.tenant_id == tenant_id)
+    referencias = [
+        (table, fk.parent)
+        for table in metadata.sorted_tables
+        for fk in table.foreign_keys
+        if fk.column.table is usuario and table.name not in _TABELAS_EXCLUIDAS_DA_VARREDURA
+    ]
+    for table, coluna in referencias:
+        if coluna.nullable or "tenant_id" not in table.c:
+            continue
+        em_uso = db.execute(
+            select(table.c.tenant_id).where(coluna.in_(ids_usuarios), table.c.tenant_id != tenant_id).limit(1)
+        ).scalar_one_or_none()
+        if em_uso is not None:
+            raise RegraNegocioViolada(
+                f"Um usuário deste tenant ainda é responsável por registros do tenant {em_uso} ({table.name}) — "
+                "transfira-os antes de excluir definitivamente."
+            )
+    for table, coluna in referencias:
+        if coluna.nullable:
+            db.execute(table.update().where(coluna.in_(ids_usuarios)).values({coluna.name: None}))
+        elif "tenant_id" not in table.c:
+            db.execute(table.delete().where(coluna.in_(ids_usuarios)))
+    db.commit()
 
 
 def _gerar_tenant_id(db: Session, razao_social: str) -> str:

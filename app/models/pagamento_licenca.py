@@ -16,7 +16,8 @@ class PagamentoLicenca(Base):
     __tablename__ = "pagamento_licenca"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenant.id"), index=True)
+    # Sem FK para tenant: o histórico de pagamento sobrevive à exclusão definitiva do tenant (retenção fiscal).
+    tenant_id: Mapped[str] = mapped_column(String, index=True)
     plano_id: Mapped[int] = mapped_column(ForeignKey("plano.id"))
     preferencia_id_externo: Mapped[str] = mapped_column(String)
     pagamento_id_externo: Mapped[str | None] = mapped_column(String, nullable=True)

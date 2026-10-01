@@ -163,3 +163,39 @@ def test_buscar_noticias_falha_de_um_portal_nao_derruba_os_demais(monkeypatch: p
     assert "UOL Economia" not in portais
     assert "G1 Economia" in portais
     assert "InfoMoney" in portais
+
+
+def test_buscar_cambio_cai_para_o_yahoo_quando_a_awesomeapi_bloqueia(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Produção (2026-10-01): a AwesomeAPI devolve 429 sustentado ao IP do Render. As moedas e cripto vêm do Yahoo;
+    ouro não (unidade diferente no Yahoo) — fica ausente em vez de um número que não é o mesmo."""
+    monkeypatch.setattr(central_negocios_client.time, "sleep", lambda _s: None)
+
+    def get_falso(url: str, **kwargs):
+        if "awesomeapi" in url:
+            raise httpx.HTTPStatusError("429", request=httpx.Request("GET", url), response=httpx.Response(429))
+        precos = {"USDBRL": 5.3, "EURBRL": 6.2, "GBPBRL": 7.1, "JPYBRL": 0.0361, "BTC-BRL": 600000.0, "ETH-BRL": 20000.0}
+        ticker = next(t for t in precos if t in url)
+        return _RespostaFalsa({"chart": {"result": [{"meta": {"regularMarketPrice": precos[ticker], "chartPreviousClose": precos[ticker] / 1.01}}]}})
+
+    monkeypatch.setattr(httpx, "get", get_falso)
+
+    resultado = central_negocios_client._buscar_cambio()
+
+    assert [c["codigo"] for c in resultado] == ["USD", "EUR", "GBP", "JPY", "BTC", "ETH"]
+    assert resultado[0]["valor"] == 5.3 and resultado[0]["variacao_pct"] == 1.0
+    assert resultado[3]["valor"] == 0.0361  # JPY não pode ser arredondado para 0,04
+
+
+def test_buscar_cambio_completa_so_o_que_faltou_na_awesomeapi(monkeypatch: pytest.MonkeyPatch) -> None:
+    def get_falso(url: str, **kwargs):
+        if "awesomeapi" in url:
+            return _RespostaFalsa({"USDBRL": {"bid": "5.1", "pctChange": "0.5"}, "XAUBRL": {"bid": "600", "pctChange": "1"}})
+        if "EURBRL" in url:
+            return _RespostaFalsa({"chart": {"result": [{"meta": {"regularMarketPrice": 6.0, "regularMarketChangePercent": -0.2}}]}})
+        raise httpx.ConnectError("sem rede")
+
+    monkeypatch.setattr(httpx, "get", get_falso)
+
+    resultado = central_negocios_client._buscar_cambio()
+
+    assert [(c["codigo"], c["valor"]) for c in resultado] == [("USD", 5.1), ("EUR", 6.0), ("XAU", 600.0)]

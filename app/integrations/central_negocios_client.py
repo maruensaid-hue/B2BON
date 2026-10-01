@@ -48,6 +48,18 @@ _MOEDAS = (
     ("XAU", "Ouro"),
 )
 
+# Fallback do câmbio (2026-10-01): a AwesomeAPI devolve 429 de forma sustentada ao IP de saída do Render, e o câmbio
+# ficava "indisponível" enquanto os índices (Yahoo) apareciam. O mesmo Yahoo cota moedas e cripto em BRL; ouro fica
+# de fora do fallback (a cotação do Yahoo é em USD por onça, outra unidade — melhor ausente do que um número diferente).
+_TICKERS_CAMBIO_YAHOO = {
+    "USD": "USDBRL=X",
+    "EUR": "EURBRL=X",
+    "GBP": "GBPBRL=X",
+    "JPY": "JPYBRL=X",
+    "BTC": "BTC-BRL",
+    "ETH": "ETH-BRL",
+}
+
 # RSS reais dos próprios portais — nunca manchete/link inventado (mesma
 # cautela de "IA não pode inventar fato" aplicada aqui a dado editorial).
 _LIMITE_POR_PORTAL = 6
@@ -163,7 +175,41 @@ def _buscar_cambio_com_retentativa(pares: str) -> dict:
     raise ultimo_erro
 
 
+def _cotacao_yahoo(codigo: str, nome: str) -> CotacaoMoeda | None:
+    ticker = _TICKERS_CAMBIO_YAHOO.get(codigo)
+    if ticker is None:
+        return None
+    try:
+        resposta = httpx.get(
+            _URL_CHART_YAHOO.format(ticker=quote(ticker, safe="")),
+            params={"interval": "1d", "range": "5d"},
+            headers={"User-Agent": _USER_AGENT},
+            timeout=_TIMEOUT_SEGUNDOS,
+        )
+        resposta.raise_for_status()
+        meta = resposta.json()["chart"]["result"][0]["meta"]
+        valor = float(meta["regularMarketPrice"])
+        variacao = meta.get("regularMarketChangePercent")
+        if variacao is None:
+            anterior = float(meta.get("previousClose") or meta["chartPreviousClose"])
+            variacao = (valor - anterior) / anterior * 100 if anterior else 0.0
+        return {"codigo": codigo, "nome": nome, "valor": round(valor, 4), "variacao_pct": round(float(variacao), 2)}
+    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
 def _buscar_cambio() -> list[CotacaoMoeda]:
+    """AwesomeAPI primeiro (inclui ouro); o que faltar vem do Yahoo."""
+    resultado = _buscar_cambio_awesomeapi()
+    obtidos = {cotacao["codigo"] for cotacao in resultado}
+    for codigo, nome in _MOEDAS:
+        if codigo not in obtidos and (cotacao := _cotacao_yahoo(codigo, nome)):
+            resultado.append(cotacao)
+    ordem = [codigo for codigo, _ in _MOEDAS]
+    return sorted(resultado, key=lambda cotacao: ordem.index(cotacao["codigo"]))
+
+
+def _buscar_cambio_awesomeapi() -> list[CotacaoMoeda]:
     pares = ",".join(f"{codigo}-BRL" for codigo, _ in _MOEDAS)
     try:
         dados = _buscar_cambio_com_retentativa(pares)
@@ -223,7 +269,7 @@ def _parsear_rss(portal: str, url: str) -> list[Noticia]:
         pub_date_bruto = item.findtext("pubDate")
         if pub_date_bruto:
             try:
-                publicado_em = parsedate_to_datetime(pub_date_bruto).isoformat()
+                publicado_em = parsedate_to_datetime(pub_date_bruto).astimezone(UTC).isoformat()  # UTC: ordenável como texto
             except (TypeError, ValueError):
                 publicado_em = None
         itens.append({"portal": portal, "titulo": titulo, "link": link, "publicado_em": publicado_em})
