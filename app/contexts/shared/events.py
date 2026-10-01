@@ -34,6 +34,7 @@ class TipoEvento(StrEnum):
     OPPORTUNITY_CREATED = "OpportunityCreated"
     OPPORTUNITY_STAGE_CHANGED = "OpportunityStageChanged"
     MEETING_COMPLETED = "MeetingCompleted"
+    PROPOSAL_SENT = "ProposalSent"  # MAP Performance (D-080): etapa "proposta" do funil comercial
     MESSAGE_APPROVED = "MessageApproved"
     CUSTOMER_CREATED = "CustomerCreated"
     CUSTOMER_AT_RISK = "CustomerAtRisk"

@@ -38,11 +38,13 @@ Código: `app/contexts/shared/events.py`, tabela `evento_dominio`
 | OpportunityCreated | `crm_service.criar_negocio` | conta_id, valor, estagio_id |
 | OpportunityStageChanged | `crm_service.mover_estagio` | conta_id, estagio_id, tipo_estagio |
 | CustomerCreated | `crm_service.mover_estagio` (1º ganho da conta) | negocio_id |
+| MeetingCompleted | `reuniao_service.marcar_resultado` (status realizada, D-080) | conta_id, vendedor_id |
+| ProposalSent | `proposta_service.anexar` (D-080) | proposta_id, versao, gerada_automaticamente |
 | MessageApproved | `aprovacao_service.aprovar`, `aprovar_lote`, auto-aprovação por regra | canal, decisor_id, cadencia_id |
 
 ## Catálogo (declarado, publicado nas fases que criam o fluxo)
 
-MeetingCompleted, CustomerAtRisk, ChurnPredicted, RemediationCreated,
+CustomerAtRisk, ChurnPredicted, RemediationCreated,
 IntentCreated, BusinessMatchCreated (7–8), BidDiscovered, BidAnalyzed (9),
 ProcurementDemandCreated, ProcurementPlanUpdated,
 ProcurementProcessCreated, ContractExpiring, SupplierRiskDetected (10),

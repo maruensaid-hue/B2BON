@@ -8,6 +8,7 @@ cliente e desempenho por vendedor.
 from sqlalchemy.orm import Session
 
 from app.contexts.map import economics, interacoes, risk, saude
+from app.contexts.map.performance import servico as performance
 from app.contexts.map.data_source import CanonicalMapDataSource, CrmInternoMapDataSource, MapDataSource
 from app.models.usuario import Usuario
 
@@ -20,7 +21,7 @@ calcular_cs_score = economics.calcular_cs_score
 classificar = risk.classificar
 
 
-__all__ = ["CanonicalMapDataSource", "CrmInternoMapDataSource", "MapDataSource"]
+__all__ = ["CanonicalMapDataSource", "CrmInternoMapDataSource", "MapDataSource", "performance"]
 
 
 def _fonte(db: Session, fonte: MapDataSource | None) -> MapDataSource:

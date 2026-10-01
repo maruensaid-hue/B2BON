@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.contexts.shared import events as eventos
 from app.core.config import settings
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.models.conta import Conta
@@ -377,6 +378,9 @@ def marcar_resultado(db: Session, tenant_id: str, ator_id: str | None, reuniao_i
     auditoria_service.registrar(
         db, tenant_id, "reuniao_resultado_marcado", "reuniao", reuniao.id, ator_id, {"status": status}, conta_id=reuniao.conta_id
     )
+    if status == "realizada":  # MeetingCompleted existia no catálogo mas não era publicado (D-080)
+        eventos.publicar(db, eventos.TipoEvento.MEETING_COMPLETED, tenant_id, "reuniao", reuniao.id,
+                         {"conta_id": reuniao.conta_id, "vendedor_id": reuniao.vendedor_id}, ator_id=ator_id)
     db.commit()
     db.refresh(reuniao)
     return reuniao

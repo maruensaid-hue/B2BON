@@ -217,7 +217,14 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
             assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE segmento = 'PRIVATE' AND preco_licenca IS NOT NULL")).scalar() == 0
             ativas = conexao.execute(sa.text("SELECT codigo, versao FROM politica_comissao WHERE ativa ORDER BY codigo")).fetchall()
             # D-073 (adicionais 10%); BASE_LIQUIDA saiu na D-074; D-075: política da margem; D-076: política de infraestrutura
-            assert [tuple(linha) for linha in ativas] == [("GOVERNMENT", 2), ("INFRASTRUCTURE_COST_POLICY", 2), ("NET_COMMISSIONABLE_MARGIN", 1)]
+            # D-080: políticas do MAP Performance (performance, comissão privada recorrente e Summer Sales Challenge)
+            assert [tuple(linha) for linha in ativas] == [("CAMPAIGN:SUMMER_SALES_CHALLENGE_2026", 1), ("GOVERNMENT", 2),
+                                                          ("INFRASTRUCTURE_COST_POLICY", 2), ("MAP_PERFORMANCE_POLICY", 1),
+                                                          ("NET_COMMISSIONABLE_MARGIN", 1), ("PRIVATE_RECURRING_COMMISSION", 1)]
+            quotas = conexao.execute(sa.text("SELECT competencia, valor, pipeline_alvo FROM quota_comercial WHERE representante_id IS NULL "
+                                             "AND ativa ORDER BY competencia")).fetchall()
+            assert [tuple(q) for q in quotas] == [("2026-10", 7500, 30000), ("2026-11", 10000, None), ("2026-12", 12500, None),
+                                                  ("2027-01", 15000, None), ("2027-02", 17500, None), ("2027-03", 20000, None)]
             perfis = conexao.execute(sa.text("SELECT tipo_receita, item_lista_servico, codigo_servico, vigente_de, vigente_ate FROM perfil_tributario "
                                              "WHERE vigente_ate > vigente_de ORDER BY tipo_receita")).fetchall()
             assert [tuple(p) for p in perfis] == [("IMPLEMENTATION", "1.07", "2919", "2026-01-01", "2027-01-01"),
@@ -245,6 +252,10 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
             tiers = dict(conexao.execute(sa.text("SELECT nome, tier_infraestrutura FROM plano WHERE segmento = 'PRIVATE'")).fetchall())
             assert (tiers.get("MAP Starter"), tiers.get("CRM Professional"), tiers.get("Bid Intelligence"), tiers.get("Strategic Sourcing")) == (
                 "STARTER", "PROFESSIONAL", "BID_INTELLIGENCE", "STRATEGIC_SOURCING")
+        command.downgrade(config, "e2a4c6e8f0b3")  # D-080 volta: quotas, políticas do MAP e vínculo do representante saem
+        with engine.connect() as conexao:
+            assert conexao.execute(sa.text("SELECT count(*) FROM politica_comissao WHERE codigo LIKE 'MAP%' OR codigo LIKE 'CAMPAIGN%'")).scalar() == 0
+            assert "usuario_id" not in {c["name"] for c in sa.inspect(conexao).get_columns("representante")}
         command.downgrade(config, "d0f2b4c6e8a1")  # D-079 volta: 12c-96g de novo com o valor da D-077
         with engine.connect() as conexao:
             assert conexao.execute(sa.text("SELECT modelo_preco, custo_referencia FROM componente_infra WHERE servico = 'WEB_SERVICE_COMPUTE'")

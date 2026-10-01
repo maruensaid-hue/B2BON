@@ -161,6 +161,18 @@ planos novos não entram nelas.
   implementação): proposal analysis, proposal comparison, AI evaluation, supplier intelligence e contract intelligence.
 - Tudo passa pelo AI Gateway e pelo Usage Ledger existentes.
 
+## 6A. Comissão privada recorrente e Summer Sales Challenge (D-080)
+
+- `PRIVATE_RECURRING_COMMISSION` v1: 20% recorrente; só mensalidade efetivamente paga gera comissão (PAYMENT_RECEIVED);
+  base = Margem Comissionável Líquida da mensalidade (D-074; OI-028); inadimplência (30 + 10 dias) retém a comissão a
+  pagar (HOLD); cancelamento encerra as futuras (STOP_FUTURE). Configurável e versionada.
+- Quota NEW_MRR por representante: R$ 7.500 (Out/26) → R$ 20.000 (Mar/27); equipe de 7: R$ 52.500 → R$ 140.000.
+  Pipeline alvo de Out/26: R$ 30.000 por representante; depois, 3x a quota (configurável). Ticket baseline R$ 1.750.
+- Summer Sales Challenge (Dez/26 + Jan/27): meta R$ 27.500 por representante (R$ 192.500 equipe); bônus sobre a comissão das
+  novas vendas da janela: 100–119% +20%, 120–149% +35%, ≥150% +50% (abaixo de 100%: sem bônus); elegibilidade com venda
+  em cada mês, CRM atualizado, carteira adimplente e política comercial cumprida.
+- Government Bookings nunca entram no New MRR privado; a comissão Government segue a própria política.
+
 ## 6. B2B ON Government (D-072)
 
 Modelo comercial próprio para órgãos públicos, no **mesmo catálogo** (tabela `plano`) e nos mesmos mecanismos (entitlements,

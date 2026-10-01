@@ -63,3 +63,7 @@ Index(
     postgresql_where=(Negocio.chave_importacao.isnot(None)),
     sqlite_where=(Negocio.chave_importacao.isnot(None)),
 )
+
+
+# MAP Performance (D-080): pipeline e fechamentos por vendedor.
+Index("ix_negocio_tenant_vendedor", Negocio.tenant_id, Negocio.vendedor_usuario_id)

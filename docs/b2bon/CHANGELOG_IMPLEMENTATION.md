@@ -1,5 +1,16 @@
 # CHANGELOG — IMPLEMENTATION
 
+## MAP: quotas, funil, comissão e campanha dos representantes (2026-10-01, D-080)
+
+- Nova aba "Performance comercial" no MAP. A gestão comercial vê o Daily (só quem precisa de intervenção), a comparação dos representantes e a configuração; cada representante vê o próprio desempenho.
+- Quotas de New MRR por mês (R$ 7.500 em outubro até R$ 20.000 em março por representante), com histórico de versões; New MRR conta a partir da 1ª mensalidade paga do cliente novo.
+- Pipeline e cobertura (alvo de R$ 30.000 em outubro, depois 3x a quota), previsão do mês, ticket médio, mix de produtos (indicador, sem bloquear venda) e velocidade de venda por tipo de produto.
+- Atividade do dia e da semana contra as metas; só conta conta trabalhada com ICP validado, contato alvo e ação registrada por uma pessoa. As taxas do funil passam a usar os dados reais quando há amostra suficiente.
+- Comissão recorrente de 20% (só sobre mensalidade paga), por cliente, produto e mês; comissão de cliente inadimplente fica retida até ele voltar a pagar.
+- Summer Sales Challenge (dezembro e janeiro): bônus de 20%, 35% ou 50% sobre a comissão das novas vendas ao atingir 100%, 120% ou 150% da meta, com regras de elegibilidade.
+- Pipeline governamental aparece separado e nunca conta para a quota privada.
+- Alertas com a ação recomendada: atividade alta com ticket baixo, pipeline abaixo do alvo, propostas paradas, oportunidades estagnadas, conversão baixa, risco de quota.
+
 ## Render Web Service 12c-96g sob consulta (2026-10-01, D-079)
 
 - O maior Web Service do Render (12 CPU / 96 GB) não tem preço publicado pelo Render; os US$ 1.500/mês usados antes saíram e o item passa a "sob consulta" (CUSTOM).

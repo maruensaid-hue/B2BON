@@ -129,6 +129,7 @@ from app.models.conexao_integracao import ConexaoIntegracao
 from app.models.execucao_sync import ExecucaoSync
 from app.models.plano import Plano
 from app.models.proposta_negocio import PropostaNegocio
+from app.models.quota_comercial import QuotaComercial
 from app.models.representante import Representante
 from app.models.template_proposta import ItemTemplateProposta, TemplateProposta
 from app.models.qualificacao import QualificacaoScore
@@ -313,6 +314,7 @@ __all__ = [
     "EmailDireto",
     "EmailRecebido",
     "LinkCapturaLead",
+    "QuotaComercial",
     "Representante",
     "ComissaoRepresentante",
     "AlertaCreditos",

@@ -50,7 +50,7 @@ def test_repassar_pendentes_marca_paga_em_sucesso(db_session):
 
     resultado = cron_repasse_comissoes_service.repassar_pendentes(db_session, payout, email)
 
-    assert resultado == {"repassadas": 1, "falhas": 0, "total_processado": 1}
+    assert resultado == {"repassadas": 1, "falhas": 0, "total_processado": 1, "retidas_inadimplencia": 0}
     db_session.refresh(comissao)
     assert comissao.status == "PAID"
     assert comissao.pago_em is not None
@@ -68,14 +68,14 @@ def test_repassar_pendentes_marca_falhou_e_nao_reprocessa(db_session):
     email = StubEmailProvider()
 
     resultado = cron_repasse_comissoes_service.repassar_pendentes(db_session, payout, email)
-    assert resultado == {"repassadas": 0, "falhas": 1, "total_processado": 1}
+    assert resultado == {"repassadas": 0, "falhas": 1, "total_processado": 1, "retidas_inadimplencia": 0}
     db_session.refresh(comissao)
     assert comissao.status == "FAILED"
     assert comissao.motivo_falha == "falha simulada"
 
     # Uma comissão "falhou" não é reprocessada sozinha na próxima rodada.
     resultado_2 = cron_repasse_comissoes_service.repassar_pendentes(db_session, payout, email)
-    assert resultado_2 == {"repassadas": 0, "falhas": 0, "total_processado": 0}
+    assert resultado_2 == {"repassadas": 0, "falhas": 0, "total_processado": 0, "retidas_inadimplencia": 0}
     assert len(payout.envios) == 1
 
 
@@ -88,7 +88,7 @@ def test_repassar_pendentes_ignora_valor_abaixo_do_minimo(db_session):
 
     resultado = cron_repasse_comissoes_service.repassar_pendentes(db_session, payout, email)
 
-    assert resultado == {"repassadas": 0, "falhas": 0, "total_processado": 0}
+    assert resultado == {"repassadas": 0, "falhas": 0, "total_processado": 0, "retidas_inadimplencia": 0}
     assert payout.envios == []
 
 

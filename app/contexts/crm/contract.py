@@ -8,6 +8,8 @@ CRM externo (Fase 13) entra pela porta do contexto consumidor
 
 from sqlalchemy.orm import Session
 
+from app.contexts.crm import desempenho
+
 from app.models.custo_aquisicao import CustoAquisicao
 from app.models.estagio_funil import EstagioFunil
 from app.models.negocio import Negocio
@@ -60,3 +62,9 @@ def abrir_ou_reaproveitar_oportunidade(
 
 # Fase 12: registra as ferramentas deste contexto no B2B ON Intelligence Agent.
 from app.contexts.crm import ferramentas as _ferramentas  # noqa: E402, F401
+
+
+# MAP Performance (D-080): leituras agregadas por vendedor (atividade, pipeline aberto e ciclos ganhos).
+atividade_comercial = desempenho.atividade_comercial
+pipeline_aberto_por_vendedor = desempenho.pipeline_aberto
+ganhos_por_vendedor = desempenho.ganhos

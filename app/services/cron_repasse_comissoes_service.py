@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.map import contract as map_contract
 from app.core.config import settings
 from app.models.comissao_representante import ComissaoRepresentante
 from app.models.representante import Representante
@@ -29,6 +30,13 @@ def repassar_pendentes(db: Session, payout_provider: PayoutProvider, email_provi
         .filter(ComissaoRepresentante.valor_comissao >= _VALOR_MINIMO_REPASSE)
         .all()
     )
+
+    # D-080: política de inadimplência (HOLD) — comissão privada de cliente inadimplente fica retida em PAYABLE e é
+    # repassada quando o cliente volta a pagar. Governo segue a própria política.
+    retidos = map_contract.performance.tenants_com_comissao_retida(
+        db, list({c.tenant_id for c in pendentes if c.pagamento_licenca_id is not None}), datetime.now(UTC).date())
+    retidas = [c for c in pendentes if c.pagamento_licenca_id is not None and c.tenant_id in retidos]
+    pendentes = [c for c in pendentes if c not in retidas]
 
     repassadas = 0
     falhas = 0
@@ -65,7 +73,7 @@ def repassar_pendentes(db: Session, payout_provider: PayoutProvider, email_provi
         _notificar_representante(db, email_provider, representante, comissao)
 
     db.commit()
-    return {"repassadas": repassadas, "falhas": falhas, "total_processado": len(pendentes)}
+    return {"repassadas": repassadas, "falhas": falhas, "total_processado": len(pendentes), "retidas_inadimplencia": len(retidas)}
 
 
 def _notificar_representante(

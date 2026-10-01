@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -29,3 +29,7 @@ class Atividade(Base):
     tipo: Mapped[str] = mapped_column(String)  # ligacao | nota | reuniao | email | whatsapp | linkedin | tarefa | sistema
     descricao: Mapped[str] = mapped_column(String)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# MAP Performance (D-080): atividade comercial por vendedor e período (contas trabalhadas, contatos, follow-ups).
+Index("ix_atividade_tenant_usuario_criado", Atividade.tenant_id, Atividade.usuario_id, Atividade.criado_em)

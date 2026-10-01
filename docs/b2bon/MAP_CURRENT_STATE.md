@@ -69,3 +69,24 @@ com o mesmo nome**, e parte das métricas vive no código do CRM.
 - `crm_service.dashboard_economia`/`listar_vendedores_com_contas` e
   `metricas_service.calcular_roi/calcular_cs_score` viraram shims para
   `map.contract` (TD-039).
+
+## 6. MAP Performance Comercial (D-080, 2026-10-01)
+
+Terceira visão do MAP, interna da CyberFort: quotas, funil, atividade, comissão recorrente, campanhas e Daily dos
+representantes. Código em `app/contexts/map/performance/` (exposto como `map.contract.performance`); API
+`/api/v1/map/performance/*`; tela `pages/map/performance/` (aba "Performance comercial" do MAP, carregada sob demanda).
+
+| Pergunta | Fonte | Módulo |
+|---|---|---|
+| Quota e versão | `quota_comercial` (padrão ou por representante) | `configuracao.py` |
+| New MRR, ticket, mix | 1ª mensalidade aprovada de tenants com `representante_id` (só PRIVATE) | `receita.py` |
+| Pipeline, cobertura, forecast, velocidade | negócios abertos do usuário vinculado no CRM (via `crm.contract`) | `painel.py`, `crm/desempenho.py` |
+| Contas, contatos, reuniões, oportunidades, propostas, fechamentos | `Atividade` humana, `Reuniao` realizada, `Negocio`, `PropostaNegocio` | `crm/desempenho.py` |
+| Comissão recorrente e carteira | Commission Engine (`comissao_representante` + `apuracao_comissao`), pagamentos | `receita.py` |
+| Campanhas e acelerador | política `CAMPAIGN:*` | `campanha.py` |
+| Alertas e Daily | regras da política (sem IA) | `inteligencia.py` |
+| Permissões | super_admin = gestor; usuário vinculado = só o próprio painel | `servico.py` |
+
+O fluxo é QUOTA → PIPELINE → ACTIVITY → CONVERSION → MRR → COMMISSION → LEARNING: o painel mostra a quota, o pipeline e a
+cobertura, a atividade do dia/semana contra a meta, a conversão do mês contra o baseline e a taxa observada (aprendizado),
+o New MRR realizado e a comissão — e os alertas dizem onde agir.

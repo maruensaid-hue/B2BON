@@ -88,6 +88,12 @@ def _semear(client) -> dict:
             client.put(f"{S}/propostas/{proposta['id']}/avaliacoes", json={"requisito_id": requisito["id"], "status": "COMPLIANT",
                                                                           "nota": 7})
     ids["sourcing"] = rfp["id"]
+    # D-080: 7 representantes; o 1º ligado ao usuário do teste (dono dos negócios semeados acima)
+    eu = client.get("/api/v1/auth/eu").json()
+    reps = [client.post("/api/v1/representantes", json={"nome": f"Rep {i}", "email": f"rep{i}@perf.com", "chave_pix": "pix",
+                                                       "percentual_comissao": 0.2}).json() for i in range(7)]
+    client.put(f"/api/v1/map/performance/representantes/{reps[0]['id']}/usuario", json={"usuario_id": eu["id"]})
+    ids["representante"] = reps[0]["id"]
     return ids
 
 
@@ -107,6 +113,9 @@ def _rotas(ids: dict) -> dict[str, str]:
         "comprador · riscos": f"{P}/riscos",
         "comprador privado · workspace": f"/api/v1/sourcing/processos/{ids['sourcing']}/workspace",
         "comprador privado · comparação": f"/api/v1/sourcing/processos/{ids['sourcing']}/comparacao",
+        "map performance · painel": f"/api/v1/map/performance/painel?representante_id={ids['representante']}&competencia={periodo}",
+        "map performance · equipe (7)": f"/api/v1/map/performance/equipe?competencia={periodo}",
+        "map performance · daily": f"/api/v1/map/performance/daily?competencia={periodo}",
     }
 
 

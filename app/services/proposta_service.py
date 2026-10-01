@@ -1,6 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.contexts.shared import events as eventos
 from app.models.negocio import Negocio
 from app.models.proposta_negocio import PropostaNegocio
 from app.services import atividade_service, auditoria_service
@@ -83,6 +84,8 @@ def anexar(
     auditoria_service.registrar(
         db, tenant_id, "proposta_anexada", "negocio", negocio_id, ator_id, {"versao": versao, "nome_arquivo": nome_arquivo}
     )
+    eventos.publicar(db, eventos.TipoEvento.PROPOSAL_SENT, tenant_id, "negocio", negocio_id,
+                     {"proposta_id": proposta.id, "versao": versao, "gerada_automaticamente": gerada_automaticamente}, ator_id=ator_id)
     db.commit()
     db.refresh(proposta)
     return proposta

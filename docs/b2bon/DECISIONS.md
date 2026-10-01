@@ -1085,3 +1085,53 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   "Valor de contrato, proposta ou fatura (CUSTOM)". A alteração é registrada no audit_log (antes/depois, motivo).
 - **Status**: ACEITA. Migração `e2a4c6e8f0b3` (reversível).
 
+## D-080 · 2026-10-01 · MAP Performance Comercial — quotas, funil, comissão recorrente e Summer Sales Challenge
+- **Contexto**: prompt do PO "Ajuste do MAP: Quotas, Funil, Comissão e Campanha" — gerir quota, ramp-up, funil,
+  produtividade, comissão, campanha e exceções dos 7 representantes autônomos reutilizando CRM/PREDATOR/MAP.
+- **Reuso (sem subsistema novo)**: `Representante` (+ `usuario_id`, o usuário dele no CRM da CyberFort); CRM interno
+  (`Atividade`, `Reuniao`, `Negocio`, `PropostaNegocio`, `Conta`, `Decisor`) lido só via `crm.contract`; New MRR pela 1ª
+  mensalidade aprovada (`PagamentoLicenca` de tenants com `representante_id`); comissão do Commission Engine (D-074);
+  Government pelo pipeline existente (`OportunidadeGoverno`, `ContratoGoverno`); políticas versionadas em
+  `politica_comissao`; eventos de domínio existentes. Única tabela nova: `quota_comercial` (versionada).
+- **Quota**: métrica NEW_MRR = 1ª mensalidade efetivamente paga de cliente novo do representante (PRIVATE).
+  Por representante: Out/26 R$ 7.500, Nov R$ 10.000, Dez R$ 12.500, Jan/27 R$ 15.000, Fev R$ 17.500, Mar R$ 20.000
+  (equipe de 7: R$ 52.500 → R$ 140.000, soma das quotas efetivas). Quota padrão por competência ou específica do
+  representante, versionada e auditada. Ganho no CRM sem 1ª mensalidade aparece como "fechado no CRM", não como New MRR.
+- **Cobertura**: alvo = `pipeline_alvo` da quota (Out/26: R$ 30.000 por representante) ou múltiplo × quota (padrão 3x).
+  Pipeline qualificado = negócios abertos do representante no CRM (valor = MRR esperado).
+- **Funil e atividade**: baseline Out/26 (400 contas → 30% → 35% → 60% → 60% → 33%) e metas diária/semanal na política;
+  taxas observadas numa janela de 90 dias substituem o baseline só com amostra mínima (20). "Conta trabalhada" = ICP
+  validado (ICP vinculado ou aderência ≥ 0,6) + persona/contato alvo (decisor) + ação comercial registrada por uma pessoa;
+  atividade automática (sem usuário) nunca conta — o MAP não premia spam.
+- **Mix e ticket**: ticket baseline R$ 1.750; alvo Suite 50%, PREDATOR 20%, Bid Intelligence 15%, Strategic Sourcing 10%,
+  MAP/CRM 5%; Mix Quality = participação de Suite + Bid Intelligence + Strategic Sourcing ≥ 50% — indicador, nunca bloqueio.
+  Família do plano por regra da política (segmento, categoria ou módulo); do negócio no CRM, por `familia_por_oferta`.
+- **Sales velocity**: FAST (módulos, ~15 dias), CORE (Suite, ~45), STRATEGIC (Government, ~90–180); forecast = New MRR +
+  ponderado dos negócios cujo fechamento previsto (criação + dias da classe) cai na competência. Government aparece em TCV,
+  separado do MRR privado.
+- **Governo**: meta de 2 oportunidades governamentais qualificadas/semana; Government Qualified, License, Annual
+  Subscription Pipeline e Expected Close. A política rejeita `conta_na_quota_privada = true`: pipeline e bookings
+  governamentais nunca compensam a quota privada. Comissão Government segue a política própria (D-072/D-074).
+- **Comissão privada**: política `PRIVATE_RECURRING_COMMISSION` v1 — 20% recorrente, gatilho PAYMENT_RECEIVED (só
+  mensalidade paga gera comissão), por representante, cliente, produto, competência, status e situação da carteira.
+  A base continua a Margem Comissionável Líquida do recebimento (D-074, decisão definitiva do PO); ver OI-028.
+  Inadimplência (ciclo 30 + tolerância 10 dias) com ação HOLD: a comissão PAYABLE do cliente fica retida no repasse até ele
+  voltar a pagar. Cancelamento STOP_FUTURE: sem mensalidade paga, sem comissão.
+- **Summer Sales Challenge** (`CAMPAIGN:SUMMER_SALES_CHALLENGE_2026`): Dez/26 + Jan/27, meta individual R$ 27.500 (equipe
+  R$ 192.500); bônus sobre a comissão das NOVAS vendas da janela (clientes com 1ª mensalidade na janela) — a carteira
+  histórica nunca entra; faixas <100% 0, 100–119% +20%, 120–149% +35%, ≥150% +50%; elegibilidade: venda em cada mês,
+  CRM atualizado (≥ 90% das oportunidades com ação nos últimos 7 dias), carteira adimplente e sem bloqueio por política
+  comercial. Bônus PROJECTED durante a campanha e FINAL depois dela.
+- **MAP Intelligence**: regras determinísticas (atividade alta + ticket baixo, cobertura < alvo, proposta sem atividade,
+  oportunidade estagnada, conversão baixa, mix low-ticket, risco de quota, gap coberto pelo pipeline do mês). IA não é
+  usada: o sinal é reproduzível pela regra. Daily Comercial: só exceções (CRITICAL/HIGH ou pendência), gap, até 5 negócios
+  que destravam a quota e próximas ações.
+- **Permissões**: super_admin = gestão comercial (equipe, Daily, configuração, painel de qualquer representante);
+  usuário vinculado a um representante vê só o próprio painel; dados de CRM sempre do tenant do usuário vinculado.
+- **Eventos**: `MeetingCompleted` passa a ser publicado (`reuniao_service.marcar_resultado`); novo `ProposalSent`
+  (`proposta_service.anexar`). Quota e políticas: versões + `audit_log`.
+- **Desempenho**: agregações agrupadas por vendedor com número fixo de consultas (painel de 1 ou de 7 representantes custa
+  o mesmo); índices compostos em atividade, reunião e negócio; abas carregadas sob demanda; no máximo 20 negócios no
+  painel individual e 5 por representante no Daily. Sem tabela de read model: as agregações medidas (p95 ≈ 45 ms) não
+  justificam a complexidade de manter um snapshot.
+- **Status**: ACEITA. Migração `f3b5d7f9a1c4` (reversível).

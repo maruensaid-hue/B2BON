@@ -1,0 +1,106 @@
+{
+  "medido_em": "2026-10-01T17:32:40+00:00",
+  "volume_por_entidade": 40,
+  "repeticoes": 25,
+  "rotas": {
+    "painel · métrica norte": {
+      "p50_ms": 10.0,
+      "p95_ms": 15.1,
+      "consultas": 5
+    },
+    "painel · funil": {
+      "p50_ms": 13.1,
+      "p95_ms": 14.5,
+      "consultas": 5
+    },
+    "painel · economia": {
+      "p50_ms": 16.9,
+      "p95_ms": 21.1,
+      "consultas": 10
+    },
+    "crm · negócios": {
+      "p50_ms": 17.4,
+      "p95_ms": 21.7,
+      "consultas": 6
+    },
+    "crm · contas": {
+      "p50_ms": 14.3,
+      "p95_ms": 25.0,
+      "consultas": 4
+    },
+    "vendedor · licitações": {
+      "p50_ms": 16.1,
+      "p95_ms": 18.3,
+      "consultas": 5
+    },
+    "vendedor · workspace": {
+      "p50_ms": 22.8,
+      "p95_ms": 42.3,
+      "consultas": 26
+    },
+    "vendedor · go/no-go": {
+      "p50_ms": 14.5,
+      "p95_ms": 16.8,
+      "consultas": 10
+    },
+    "comprador · processos": {
+      "p50_ms": 14.0,
+      "p95_ms": 18.8,
+      "consultas": 4
+    },
+    "comprador · workspace": {
+      "p50_ms": 26.8,
+      "p95_ms": 40.2,
+      "consultas": 19
+    },
+    "comprador · riscos": {
+      "p50_ms": 26.0,
+      "p95_ms": 31.3,
+      "consultas": 10
+    },
+    "comprador privado · workspace": {
+      "p50_ms": 20.9,
+      "p95_ms": 27.0,
+      "consultas": 14
+    },
+    "comprador privado · comparação": {
+      "p50_ms": 16.4,
+      "p95_ms": 20.3,
+      "consultas": 10
+    },
+    "map performance · painel": {
+      "p50_ms": 31.8,
+      "p95_ms": 45.8,
+      "consultas": 53
+    },
+    "map performance · equipe (7)": {
+      "p50_ms": 33.6,
+      "p95_ms": 43.9,
+      "consultas": 44
+    },
+    "map performance · daily": {
+      "p50_ms": 33.5,
+      "p95_ms": 37.3,
+      "consultas": 45
+    }
+  },
+  "fluxos": {
+    "vendedor · criar → requisito → status → go/no-go": {
+      "p50_ms": 78.9,
+      "p95_ms": 89.7,
+      "consultas": 55
+    },
+    "comprador · criar → 3 etapas → workspace": {
+      "p50_ms": 124.4,
+      "p95_ms": 137.5,
+      "consultas": 63
+    }
+  },
+  "inicializacao_ms": 3780.6,
+  "memoria_pico_mb": 261.1,
+  "bundle": {
+    "total_kb": 1433.8,
+    "arquivos": 87,
+    "maior_kb": 322.7
+  }
+}

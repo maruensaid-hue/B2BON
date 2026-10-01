@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -41,3 +41,7 @@ class Reuniao(Base):
     # a Atividade da conta/negócio; guardado aqui pra não precisar reprocessar
     # só pra consultar de novo.
     resumo_ia: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+# MAP Performance (D-080): reuniões realizadas por vendedor e período.
+Index("ix_reuniao_tenant_vendedor_data", Reuniao.tenant_id, Reuniao.vendedor_id, Reuniao.data_hora)

@@ -70,6 +70,7 @@ from app.api.v1.registro_oportunidade import router as registro_oportunidade_rou
 from app.api.v1.relatorio_entrega import router as relatorio_entrega_router
 from app.api.v1.reunioes import router as reunioes_router
 from app.api.v1.ropa import router as ropa_router
+from app.api.v1.map_performance import router as map_performance_router
 from app.api.v1.saude_conta import router as saude_conta_router
 from app.api.v1.template_proposta import router as template_proposta_router
 from app.api.v1.titulares import router as titulares_router
@@ -163,6 +164,8 @@ router.include_router(catalogo_router)
 router.include_router(governo_admin_router)
 # D-074: Commission Engine (Tax Profile, Infrastructure Cost Model, apurações, waterfall), super_admin
 router.include_router(comissoes_router)
+# MAP Performance (D-080): ferramenta interna da CyberFort; o acesso é decidido no contexto (gestor ou o próprio representante).
+router.include_router(map_performance_router)
 router.include_router(governo_router)
 router.include_router(representantes_router)
 router.include_router(central_negocios_router)
