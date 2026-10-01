@@ -231,6 +231,9 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
             assert [tuple(c) for c in no_pool] == [("LUSHA", "SALES_INTELLIGENCE", 399.9), ("NEON", "POSTGRES", None),
                                                    ("RENDER", "WEB_SERVICE_COMPUTE", 1500), ("RENDER", "WORKSPACE", 499)]
             assert conexao.execute(sa.text("SELECT count(*) FROM componente_infra")).scalar() == 9
+            # D-078: CBS/IBS 2026 dispensados mediante conformidade (alíquotas-teste continuam nos perfis)
+            assert conexao.execute(sa.text("SELECT status, vigente_de, vigente_ate FROM periodo_status_tributario")).fetchall() == [
+                ("WAIVED_BY_COMPLIANCE", "2026-01-01", "2026-12-31")]
             assert conexao.execute(sa.text("SELECT benchmark_only, custo_mensal_estimado FROM envelope_capacidade")).fetchall() == [(1, 1404)]
             assert conexao.execute(sa.text("SELECT count(*) FROM cotacao_cambio")).scalar() == 0  # PTAX: obtida/cadastrada, nunca semeada
             planos = conexao.execute(sa.text("SELECT max_usuarios, permite_api_parceiros, franquia_contas_mes, tier_infraestrutura FROM plano "

@@ -241,6 +241,62 @@ export function ParametrosFinanceiros() {
         </form>
       </Card>
 
+      <Card data-testid="status-cbs-ibs">
+        <SectionLabel>CBS/IBS — situação por vigência</SectionLabel>
+        <div className="flex flex-col gap-1 text-[12px]">
+          {(dados?.status_tributario ?? []).map((p) => (
+            <div key={p.id} className="rounded-md border border-border p-2">
+              <span className="font-semibold">
+                {p.status_rotulo ?? p.status}
+              </span>{" "}
+              · {p.vigente_de} a {p.vigente_ate ?? "em aberto"} · aprovado por{" "}
+              {p.aprovado_por}
+              <div className="text-muted">
+                {p.motivo}
+                {p.referencia_legal ? ` · ${p.referencia_legal}` : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+        <form
+          className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-4"
+          onSubmit={(e) =>
+            enviar(e, "/comissoes/status-tributario", (f) => ({
+              status: String(f.get("status")),
+              vigente_de: String(f.get("vigente_de")),
+              vigente_ate: String(f.get("vigente_ate") ?? "") || null,
+              motivo: String(f.get("motivo")),
+              aprovado_por: String(f.get("aprovado_por")),
+              referencia_evidencia: String(f.get("evidencia") ?? "") || null,
+            }))
+          }
+        >
+          <Select name="status">
+            {(dados?.situacoes_reforma ?? []).map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </Select>
+          <Input name="vigente_de" type="date" required />
+          <Input name="vigente_ate" type="date" />
+          <Input name="aprovado_por" required placeholder="Aprovado por" />
+          <Input
+            name="motivo"
+            required
+            placeholder="Motivo (nova vigência; o histórico não muda)"
+            className="sm:col-span-2"
+          />
+          <Input
+            name="evidencia"
+            placeholder="Evidência (parecer, protocolo)"
+          />
+          <Button type="submit" size="sm" variant="ghost">
+            Nova vigência
+          </Button>
+        </form>
+      </Card>
+
       <PainelInfraestrutura onAlterado={setMensagem} />
 
       <Card>
@@ -468,6 +524,25 @@ export function ParametrosFinanceiros() {
         </div>
         {waterfall && (
           <div className="mt-2 flex flex-col gap-1 text-[11px] text-muted">
+            <div data-testid="reforma-tributaria-map">
+              CBS Test Rate:{" "}
+              {pct(
+                (waterfall.total.reforma_tributaria.cbs_test_rate ?? 0.009) *
+                  100,
+              )}{" "}
+              · IBS Test Rate:{" "}
+              {pct(
+                (waterfall.total.reforma_tributaria.ibs_test_rate ?? 0.001) *
+                  100,
+              )}{" "}
+              · Status 2026:{" "}
+              {waterfall.total.reforma_tributaria.status_rotulo ??
+                "sem situação vigente"}{" "}
+              · CBS Cash Tax:{" "}
+              {brl(waterfall.total.reforma_tributaria.cbs_cash_tax ?? 0)} · IBS
+              Cash Tax:{" "}
+              {brl(waterfall.total.reforma_tributaria.ibs_cash_tax ?? 0)}
+            </div>
             <div data-testid="impostos-por-tributo">
               Impostos por tributo:{" "}
               {Object.entries(waterfall.total.impostos_por_tributo)

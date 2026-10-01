@@ -209,11 +209,13 @@ def test_cbs_ibs_so_entram_quando_devidos(db_session, professional):  # noqa: F8
     comissoes.tributos.criar(db_session, {"regime": "LUCRO_PRESUMIDO", "vigente_de": SEMPRE, "componentes": [*base, cbs]}, "teste")
     _pool_zero(db_session)
     assert _apuracao(db_session, _receber(db_session, professional, "LICENSE", 60_000)).impostos == Decimal("930.00")  # 390 + 540
-    for situacao in ("COMPENSATED", "WAIVED_BY_COMPLIANCE", "PENDING_COMPLIANCE_CONFIRMATION"):
+    # D-078: compensado abate do PIS/COFINS da mesma receita; só o excedente (180 − 130 = 50) fica como efeito líquido
+    esperado = {"COMPENSATED": Decimal("180.00"), "WAIVED_BY_COMPLIANCE": Decimal("130.00"), "PENDING_COMPLIANCE_CONFIRMATION": Decimal("130.00")}
+    for situacao, impostos in esperado.items():
         comissoes.tributos.criar(db_session, {"regime": "LUCRO_PRESUMIDO", "vigente_de": SEMPRE + timedelta(days=len(situacao)),
                                               "componentes": [*base, {**cbs, "situacao": situacao}]}, "teste")
         db_session.commit()
-        assert _apuracao(db_session, _receber(db_session, professional, "LICENSE", 20_000)).impostos == Decimal("130.00"), situacao
+        assert _apuracao(db_session, _receber(db_session, professional, "LICENSE", 20_000)).impostos == impostos, situacao
 
 
 def test_saas_sem_iss_aguarda_com_simulacao_e_infra_tem_prioridade_no_status(client, db_session, professional):  # noqa: F811

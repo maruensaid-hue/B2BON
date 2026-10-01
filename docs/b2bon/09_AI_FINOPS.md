@@ -155,3 +155,5 @@ receita/lucro/margem agora vêm de `economia.kpis`. A política
   Capacity Envelope; Lusha Premium no pool de provedores de dados). Componentes disponíveis mas não usados (Render Postgres,
   Key Value, disco) ficam fora. Preço CUSTOM nunca recebe valor inventado. Custos em USD pela PTAX; cada custo guarda fonte,
   data de verificação e próxima revisão. A parte do pool não absorvida pelos tenants aparece como capacidade não alocada.
+- D-078: no MAP, CBS/IBS de 2026 aparecem com a alíquota-teste (0,90% / 0,10%), a situação ("Dispensado de recolhimento
+  mediante conformidade") e o imposto de caixa (R$ 0) — nunca como "0%". A situação muda só por nova vigência auditada.

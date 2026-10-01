@@ -18,6 +18,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.contexts.comissoes import tributos
 from app.contexts.comissoes.motor import status_valor
 from app.contexts.comissoes.tipos import Status
 from app.models.apuracao_comissao import ApuracaoComissao
@@ -70,11 +71,19 @@ def calcular(db: Session, agrupar: str = "tenant", inicio: date | None = None, f
     aguardando = defaultdict(Decimal)
     totais, total_aguardando = dict.fromkeys(CAMPOS, Decimal(0)), Decimal(0)
     por_tributo, por_parametro = defaultdict(Decimal), defaultdict(int)
+    reforma = defaultdict(Decimal)
+    taxas_teste: dict[str, float] = {}
     real_incompleto, total_real_incompleto = set(), False
     for apuracao in consulta.all():
         if apuracao.status == Status.CALCULADA.value:
             for linha in ((apuracao.detalhe or {}).get("tributos") or {}).get("tributos") or []:
                 por_tributo[linha["tributo"]] += Decimal(str(linha.get("valor") or 0))
+            snapshot = ((apuracao.detalhe or {}).get("tributos") or {}).get("reforma") or {}
+            for chave in ("cbs_nominal_test_tax", "ibs_nominal_test_tax", "cbs_cash_tax", "ibs_cash_tax", "pis_cofins_offset"):
+                reforma[chave] += Decimal(str(snapshot.get(chave) or 0))
+            for chave in ("cbs_test_rate", "ibs_test_rate"):
+                if snapshot.get(chave) is not None:
+                    taxas_teste[chave] = snapshot[chave]
         else:
             por_parametro[status_valor(apuracao)] += 1
         comissoes = [c for c in db.query(ComissaoRepresentante).filter_by(apuracao_id=apuracao.id).all() if c.status != Status.ESTORNADA.value]
@@ -108,4 +117,13 @@ def calcular(db: Session, agrupar: str = "tenant", inicio: date | None = None, f
                        for chave, valores in sorted(grupos.items(), key=lambda i: str(i[0]))],
             "total": {**_linha("total", totais, total_aguardando, total_real_incompleto),
                       "impostos_por_tributo": {t: float(v) for t, v in sorted(por_tributo.items())},
-                      "aguardando_por_parametro": dict(sorted(por_parametro.items()))}}
+                      "aguardando_por_parametro": dict(sorted(por_parametro.items())),
+                      "reforma_tributaria": _reforma(db, reforma, taxas_teste)}}
+
+
+def _reforma(db: Session, valores: dict, taxas: dict) -> dict:
+    """CBS/IBS no MAP (D-078): alíquotas-teste e imposto de caixa lado a lado — nunca "CBS = 0%"."""
+    periodo = tributos.status_vigente(db, date.today())
+    return {**taxas, **{k: float(v) for k, v in valores.items()},
+            "status": periodo.status if periodo else None, "status_rotulo": tributos.ROTULOS_SITUACAO.get(periodo.status) if periodo else None,
+            "vigente_ate": periodo.vigente_ate.isoformat() if periodo and periodo.vigente_ate else None}

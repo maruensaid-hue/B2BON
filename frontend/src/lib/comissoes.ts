@@ -194,6 +194,8 @@ export interface Parametros {
   politica_cambio: Record<string, string>;
   politica_margem: { versao: number; regras: { deduzir_custo_ia: boolean } };
   pendentes: string[];
+  status_tributario: StatusTributario[];
+  status_tributario_vigente: StatusTributario | null;
   politica_governo: {
     versao: number;
     regras: {
@@ -225,12 +227,39 @@ export interface LinhaWaterfall {
   aguardando_parametros: number;
 }
 
+/** TaxStatusPeriod (D-078): situação de CBS/IBS numa vigência. */
+export interface StatusTributario {
+  id: number;
+  status: string;
+  status_rotulo: string | null;
+  vigente_de: string;
+  vigente_ate: string | null;
+  motivo: string;
+  aprovado_por: string;
+  referencia_evidencia: string | null;
+  referencia_legal: string | null;
+}
+
+export interface ReformaTributaria {
+  cbs_test_rate?: number;
+  ibs_test_rate?: number;
+  cbs_nominal_test_tax?: number;
+  ibs_nominal_test_tax?: number;
+  cbs_cash_tax?: number;
+  ibs_cash_tax?: number;
+  pis_cofins_offset?: number;
+  status: string | null;
+  status_rotulo: string | null;
+  vigente_ate: string | null;
+}
+
 export interface Waterfall {
   agrupar: string;
   linhas: LinhaWaterfall[];
   total: LinhaWaterfall & {
     impostos_por_tributo: Record<string, number>;
     aguardando_por_parametro: Record<string, number>;
+    reforma_tributaria: ReformaTributaria;
   };
 }
 
@@ -241,9 +270,7 @@ export function descreverTributo(c: ComponenteTributo): string {
       ? "a informar"
       : pct(Math.round(v * 1e6) / 1e4);
   if (c.base === "TESTE_REFORMA")
-    return `${c.tributo} teste ${p(c.aliquota_teste)} (${c.situacao ?? "PENDING_COMPLIANCE_CONFIRMATION"}${
-      c.situacao === "PAYABLE" ? "" : ", fora da carga"
-    })`;
+    return `${c.tributo} alíquota-teste ${p(c.aliquota_teste)} (caixa pela situação vigente de CBS/IBS)`;
   if (c.base === "PRESUNCAO")
     return `${c.tributo} ${p(c.aliquota)} × presunção ${p(c.presuncao)}${
       c.acrescimo_presuncao

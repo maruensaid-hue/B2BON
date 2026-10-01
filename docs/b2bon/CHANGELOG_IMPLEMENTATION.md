@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## CBS/IBS 2026 dispensados mediante conformidade (2026-10-01, D-078)
+
+- Em 2026 a CyberFort fica como "dispensada de recolhimento mediante conformidade": CBS (0,90%) e IBS (0,10%) continuam registrados como alíquotas de teste, mas o imposto efetivamente pago é R$ 0 e não reduz a margem da comissão.
+- Se a contabilidade constatar outra situação (compensado com PIS/COFINS ou recolhimento devido), cadastra-se uma nova vigência em Admin → Parâmetros financeiros, com motivo, aprovador e evidência; o que já foi calculado não muda.
+- No compensado, o valor recolhido abate do PIS/COFINS da mesma receita, sem somar os dois.
+- O MAP mostra as alíquotas de teste, a situação de 2026 e o imposto pago (R$ 0), em vez de "0%".
+
 ## Preços públicos dos fornecedores no custo de infraestrutura (2026-10-01, D-077)
 
 - O custo de infraestrutura da comissão passa a usar os preços públicos verificados em 2026-10-01: Render Scale (US$ 499/mês) e o maior Web Service (US$ 1.500/mês), Neon por uso (US$ 0,222/CU-hora e US$ 0,35/GB-mês) e Lusha Premium (US$ 399,90/mês, como provedor de dados), convertidos pela PTAX.

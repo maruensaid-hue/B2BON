@@ -1047,3 +1047,27 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Comissão**: NET_COMMISSIONABLE_MARGIN = receita comissionável recebida − impostos atribuíveis − infraestrutura
   provisionada atribuível; 20% inicial; 10% renovação Government. Custos em USD pela PTAX de fechamento do Banco Central.
 - **Status**: ACEITA. Migração `c8e0a2b4d6f9` (reversível).
+
+## D-078 · 2026-10-01 · CBS/IBS 2026 — WAIVED_BY_COMPLIANCE (resolução definitiva)
+- **Contexto**: prompt do PO "RESOLUÇÃO DEFINITIVA — CBS / IBS 2026".
+- **Referência legal**: EC 132/2023 (ADCT, art. 125 — em 2026 CBS à alíquota de 0,9% e IBS de 0,1%, compensáveis com
+  PIS/COFINS) e LC 214/2025 (regras de transição de 2026 — dispensa do recolhimento da CBS/IBS para os contribuintes que
+  cumprem as obrigações acessórias). Configuração aprovada pelo PO em 2026-10-01.
+- **Decisão**: "2026 default operational status for CyberFort = WAIVED_BY_COMPLIANCE. CBS test rate = 0.90%. IBS test rate =
+  0.10%. Cash tax effect = zero while compliance conditions for statutory waiver are satisfied. If actual accounting status
+  changes, create a new effective TaxStatusPeriod."
+- **Implementação**:
+  - `periodo_status_tributario` (TaxStatusPeriod): grupo CBS_IBS, situação, vigência (2026-01-01 a 2026-12-31), motivo,
+    aprovador, evidência, referência legal, data da alteração. A situação do período prevalece sobre a do componente.
+  - Alíquotas-teste preservadas nos Tax Profiles (CBS 0,90%, IBS 0,10%, vigência 2026). NOMINAL_TEST_TAX (alíquota × receita,
+    para auditoria) separado do CASH_TAX.
+  - WAIVED_BY_COMPLIANCE e PENDING_COMPLIANCE_CONFIRMATION: caixa zero — CBS/IBS não reduzem a Margem Comissionável Líquida.
+    PAYABLE: recolhimento entra na carga. COMPENSATED: registra CBS_IBS_PAID, PIS_COFINS_OFFSET (até o PIS/COFINS da mesma
+    receita) e NET_TAX_EFFECT (só o excedente) — nunca CBS/IBS + PIS/COFINS integrais. Nenhuma situação é assumida PAYABLE.
+  - NET_COMMISSIONABLE_MARGIN = receita comissionável recebida − impostos de CAIXA atribuíveis − infraestrutura provisionada.
+  - Mudança de situação = nova vigência (o período aberto anterior é encerrado no dia anterior; histórico nunca reescrito),
+    auditada; comissões PAYABLE/PAID guardam o snapshot (tax_profile_id, alíquotas-teste, situação, caixa de CBS e IBS,
+    compensação, total atribuível, calculado em).
+  - MAP: CBS Test Rate 0,90%, IBS Test Rate 0,10%, situação 2026 ("Dispensado de recolhimento mediante conformidade"), CBS e IBS
+    Cash Tax R$ 0 — nunca "CBS = 0%".
+- **Status**: ACEITA. Migração `d0f2b4c6e8a1` (reversível).

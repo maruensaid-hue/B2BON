@@ -236,5 +236,8 @@ rotas de inteligência (`/procurement/riscos`, `/proximas-acoes`, `/fornecedores
   Premium USD 399,90/mês (provedor de dados); Render Postgres/Key Value/disco disponíveis mas não alocados; Render Enterprise e
   Lusha Scale CUSTOM sem preço. Pesos: STARTER/DEPARTMENT 1, PROFESSIONAL 2, ENTERPRISE 4, BID_INTELLIGENCE 2,
   STRATEGIC_SOURCING 4.
+- **CBS/IBS 2026 (D-078)**: WAIVED_BY_COMPLIANCE — alíquotas-teste CBS 0,90% e IBS 0,10% preservadas, caixa zero, sem efeito
+  na Margem Comissionável Líquida; COMPENSATED abate do PIS/COFINS (sem dupla contagem); PAYABLE suportado; mudança por
+  TaxStatusPeriod (EC 132/2023, ADCT art. 125; LC 214/2025).
 - Pendências (OI-026): confirmar componentes Render em uso; Capacity Envelope do Neon; storage envelope; outros fornecedores em
-  uso; CBS/IBS 2026; ISS da subscrição SaaS; perfis de consultoria e suporte.
+  uso; ISS da subscrição SaaS; perfis de consultoria e suporte.

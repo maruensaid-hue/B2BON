@@ -10,7 +10,7 @@ from app.api.deps import exigir_papel, get_ator_id, get_db
 from app.contexts.comissoes import contract as comissoes
 from app.contexts.finops import contract as finops
 from app.contexts.governo import contract as governo
-from app.models.apuracao_comissao import ApuracaoComissao, PerfilTributario
+from app.models.apuracao_comissao import ApuracaoComissao, PerfilTributario, PeriodoStatusTributario
 from app.models.cotacao_cambio import CotacaoCambio
 from app.models.custo_infraestrutura import ComponenteInfra
 from app.schemas.comissoes import (
@@ -24,6 +24,7 @@ from app.schemas.comissoes import (
     PoliticaInfraSchema,
     PoliticaMargemSchema,
     RecalculoSchema,
+    StatusTributarioSchema,
     UsoCapacidadeSchema,
 )
 
@@ -49,6 +50,10 @@ def parametros(db: Session = Depends(get_db)) -> dict:
         "politica_margem": {"versao": margem.versao, "regras": margem.regras},
         "politica_infraestrutura": {"versao": infra.versao, "regras": infra.regras},
         "politica_privada": "% de comissão de cada representante (Admin → Representantes), sobre a Margem Comissionável Líquida",
+        "status_tributario": [comissoes.tributos.status_periodo_dict(p) for p in
+                              db.query(PeriodoStatusTributario).order_by(PeriodoStatusTributario.vigente_de.desc()).all()],
+        "status_tributario_vigente": (comissoes.tributos.status_periodo_dict(v) if (v := comissoes.tributos.status_vigente(db, hoje))
+                                      else None),
         "pendentes": _pendentes(db, hoje, cambio, margem.regras),
     }
     db.commit()
@@ -181,6 +186,15 @@ def sincronizar_ptax(db: Session = Depends(get_db)) -> dict:
     """PTAX de fechamento do Banco Central dos últimos dias úteis (a mesma rotina do cron horário)."""
     resultado = finops.cambio.sincronizar_ptax(db)
     return {**resultado, "aguardando_calculadas": _recalcular(db)}
+
+
+@router.post("/status-tributario", status_code=201)
+def criar_status_tributario(dados: StatusTributarioSchema, ator_id: str | None = Depends(get_ator_id),
+                            db: Session = Depends(get_db)) -> dict:
+    """TaxStatusPeriod (D-078): nova vigência da situação de CBS/IBS. Histórico e comissões fixadas não mudam; apurações
+    ainda aguardando são refeitas."""
+    periodo = comissoes.tributos.criar_status_periodo(db, dados.model_dump(), ator_id)
+    return {"periodo": comissoes.tributos.status_periodo_dict(periodo), "aguardando_calculadas": _recalcular(db)}
 
 
 @router.post("/recalculo")

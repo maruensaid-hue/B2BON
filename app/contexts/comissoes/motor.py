@@ -206,6 +206,17 @@ def estornar(db: Session, *, pagamento_licenca_id: int | None = None, recebiment
     return {"anuladas": anuladas, "a_compensar": compensar}
 
 
+def _snapshot_tributario(apuracao: ApuracaoComissao) -> dict:
+    """Snapshot tributário da apuração (D-078): perfil, CBS/IBS (alíquota-teste, situação, caixa), compensação e total."""
+    tributos_ = (apuracao.detalhe or {}).get("tributos") or {}
+    reforma = tributos_.get("reforma") or {}
+    return {"tax_profile_id": apuracao.perfil_tributario_id, "cbs_test_rate": reforma.get("cbs_test_rate"),
+            "ibs_test_rate": reforma.get("ibs_test_rate"), "cbs_ibs_status": reforma.get("status"),
+            "cbs_cash_tax": reforma.get("cbs_cash_tax"), "ibs_cash_tax": reforma.get("ibs_cash_tax"),
+            "pis_cofins_offset": reforma.get("pis_cofins_offset"), "total_attributable_tax": tributos_.get("total_attributable_tax"),
+            "calculated_at": apuracao.calculado_em.isoformat() if apuracao.calculado_em else None}
+
+
 def status_valor(apuracao: ApuracaoComissao) -> str:
     """commission_amount_status: o status da apuração ou, aguardando, AWAITING_<parâmetro> (infraestrutura, depois Tax
     Profile, depois câmbio). A lista completa fica em `missing_parameters`."""
@@ -226,4 +237,5 @@ def apuracao_dict(apuracao: ApuracaoComissao) -> dict:
             "ai_cost_amount": valor(apuracao.custo_ia), "net_commissionable_margin": valor(apuracao.margem_comissionavel_liquida),
             "status": apuracao.status, "missing_parameters": apuracao.parametros_faltantes or [],
             "commission_amount_status": status_valor(apuracao), "tax_detail": (apuracao.detalhe or {}).get("tributos"),
+            "tax_snapshot": _snapshot_tributario(apuracao),
             "calculated_at": apuracao.calculado_em.isoformat() if apuracao.calculado_em else None}

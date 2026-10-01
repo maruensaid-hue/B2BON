@@ -71,3 +71,23 @@ class ApuracaoComissao(Base):
     detalhe: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     calculado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class PeriodoStatusTributario(Base):
+    """TaxStatusPeriod (D-078): situação efetiva de um grupo de tributos numa vigência — hoje CBS/IBS de 2026
+    (WAIVED_BY_COMPLIANCE, COMPENSATED, PAYABLE, PENDING_COMPLIANCE_CONFIRMATION). Mudança de situação = período novo; o
+    histórico (e as comissões calculadas com ele) não muda."""
+
+    __tablename__ = "periodo_status_tributario"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    grupo: Mapped[str] = mapped_column(String)  # CBS_IBS
+    status: Mapped[str] = mapped_column(String)
+    vigente_de: Mapped[date] = mapped_column(Date)
+    vigente_ate: Mapped[date | None] = mapped_column(Date, nullable=True)  # inclusivo
+    motivo: Mapped[str] = mapped_column(String)
+    aprovado_por: Mapped[str] = mapped_column(String)
+    referencia_evidencia: Mapped[str | None] = mapped_column(String, nullable=True)
+    referencia_legal: Mapped[str | None] = mapped_column(String, nullable=True)
+    alterado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    criado_por: Mapped[str | None] = mapped_column(String, nullable=True)

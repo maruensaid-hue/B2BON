@@ -8,8 +8,10 @@ Regime informado pelo PO: Lucro Presumido. Nenhuma alíquota fica no código e n
   da receita acima do limite (R$ 5 milhões/ano, proporcional ao período de apuração).
 - Adicional de IRPJ: 10% sobre a parte da base do IRPJ do período de apuração acima de R$ 20.000 × meses do período
   (trimestre = R$ 60.000), rateada pelos recebimentos na ordem em que entram no período.
-- CBS/IBS (2026): a alíquota-teste é informativa; só entra na carga com a situação PAYABLE registrada pela
-  contabilidade (COMPENSATED, WAIVED_BY_COMPLIANCE e PENDING_COMPLIANCE_CONFIRMATION = zero) — o 1% nunca é somado sozinho.
+- CBS/IBS (2026, D-078): a alíquota-teste (CBS 0,9%, IBS 0,1%) gera o imposto NOMINAL de teste, guardado para auditoria;
+  o imposto de CAIXA depende da situação do período (TaxStatusPeriod): WAIVED_BY_COMPLIANCE e
+  PENDING_COMPLIANCE_CONFIRMATION = zero; PAYABLE = recolhido; COMPENSATED = recolhido e compensado com PIS/COFINS da mesma
+  receita (só o excedente sobra como efeito líquido — nunca CBS/IBS + PIS/COFINS integrais). O 1% nunca é somado sozinho.
 
 Os cálculos consideram as receitas do B2B ON apuradas por este motor (o que a comissão pode atribuir).
 
@@ -17,14 +19,14 @@ Componente sem valor (alíquota ou presunção ainda não informada) deixa a apu
 tributos aparecem como simulação no detalhe.
 """
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.contexts.comissoes.tipos import PERIODOS_APURACAO, QUALQUER, BaseTributo, SituacaoReforma, Status, Tributo
-from app.models.apuracao_comissao import ApuracaoComissao, PerfilTributario
+from app.models.apuracao_comissao import ApuracaoComissao, PerfilTributario, PeriodoStatusTributario
 from app.services import auditoria_service
 from app.services.errors import ValidacaoFalhou
 
@@ -109,10 +111,46 @@ def _situacao_reforma(componente: dict) -> str:
     return SituacaoReforma.PENDENTE.value
 
 
+GRUPO_REFORMA = "CBS_IBS"
+ROTULOS_SITUACAO = {
+    SituacaoReforma.DISPENSADO.value: "Dispensado de recolhimento mediante conformidade",
+    SituacaoReforma.COMPENSADO.value: "Recolhido e compensado com PIS/COFINS",
+    SituacaoReforma.DEVIDO.value: "Recolhimento devido",
+    SituacaoReforma.PENDENTE.value: "Pendente de confirmação contábil",
+}
+
+
+def status_vigente(db: Session, dia: date, grupo: str = GRUPO_REFORMA) -> PeriodoStatusTributario | None:
+    return (db.query(PeriodoStatusTributario).filter(
+        PeriodoStatusTributario.grupo == grupo, PeriodoStatusTributario.vigente_de <= dia,
+        or_(PeriodoStatusTributario.vigente_ate.is_(None), PeriodoStatusTributario.vigente_ate >= dia))
+        .order_by(PeriodoStatusTributario.vigente_de.desc(), PeriodoStatusTributario.id.desc()).first())
+
+
+def _reforma(linhas: list[dict], periodo: PeriodoStatusTributario | None) -> tuple[Decimal, dict | None]:
+    """(efeito líquido a somar, snapshot) da CBS/IBS. Compensação abate do PIS/COFINS da mesma receita."""
+    reforma = [linha for linha in linhas if linha["base_tipo"] == BaseTributo.TESTE_REFORMA.value]
+    if not reforma:
+        return Decimal(0), None
+    por = {linha["tributo"]: linha for linha in reforma}
+    pago = sum((_d(linha.get("recolhido") or 0) for linha in reforma if linha["situacao"] == SituacaoReforma.COMPENSADO.value), Decimal(0))
+    pis_cofins = sum((_d(linha["valor"] or 0) for linha in linhas if linha["tributo"] in (Tributo.PIS.value, Tributo.COFINS.value)), Decimal(0))
+    compensacao = min(pago, pis_cofins)
+    situacao = reforma[0]["situacao"]
+    return pago - compensacao, {
+        "status": situacao, "status_rotulo": ROTULOS_SITUACAO.get(situacao, situacao), "periodo_status_id": periodo.id if periodo else None,
+        "cbs_test_rate": (por.get("CBS") or {}).get("aliquota_teste"), "ibs_test_rate": (por.get("IBS") or {}).get("aliquota_teste"),
+        "cbs_nominal_test_tax": (por.get("CBS") or {}).get("valor_teste"), "ibs_nominal_test_tax": (por.get("IBS") or {}).get("valor_teste"),
+        "cbs_cash_tax": (por.get("CBS") or {}).get("valor"), "ibs_cash_tax": (por.get("IBS") or {}).get("valor"),
+        "cbs_ibs_paid": float(pago), "pis_cofins_offset": float(compensacao), "net_tax_effect": float(pago - compensacao),
+    }
+
+
 def calcular(db: Session, perfil: PerfilTributario, apuracao: ApuracaoComissao) -> tuple[Decimal | None, dict]:
     """(imposto atribuível ou None se o perfil tiver valor pendente, detalhe por tributo)."""
     bruto = _d(apuracao.receita_bruta)
     linhas, pendencias, total, base_irpj = [], [], Decimal(0), None
+    periodo = status_vigente(db, apuracao.recebido_em)
     componentes = [_normalizar(c) for c in perfil.componentes]
     for componente in componentes:
         if componente["tributo"] == Tributo.IRPJ.value and componente.get("presuncao") is not None:
@@ -122,12 +160,14 @@ def calcular(db: Session, perfil: PerfilTributario, apuracao: ApuracaoComissao) 
         linha = {"tributo": tributo, "base_tipo": base_tipo, "rotulo": componente.get("rotulo")}
         valor: Decimal | None = None
         if base_tipo == BaseTributo.TESTE_REFORMA.value:
-            teste = _q(bruto * _d(componente.get("aliquota_teste") or 0))
-            situacao = _situacao_reforma(componente)
+            teste = _q(bruto * _d(componente.get("aliquota_teste") or 0))  # NOMINAL_TEST_TAX (auditoria)
+            situacao = periodo.status if periodo else _situacao_reforma(componente)  # o período vigente prevalece
             caixa = componente.get("aliquota_caixa_efetiva")
-            valor = _q(bruto * _d(caixa if caixa is not None else componente.get("aliquota_teste") or 0)) \
-                if situacao == SituacaoReforma.DEVIDO.value else Decimal(0)  # 1% nunca somado automaticamente
-            linha.update(aliquota_teste=componente.get("aliquota_teste"), valor_teste=float(teste), situacao=situacao)
+            recolhido = _q(bruto * _d(caixa if caixa is not None else componente.get("aliquota_teste") or 0))
+            # CASH_TAX: só PAYABLE soma direto; COMPENSATED entra pelo efeito líquido depois da compensação com PIS/COFINS
+            valor = recolhido if situacao == SituacaoReforma.DEVIDO.value else Decimal(0)
+            linha.update(aliquota_teste=componente.get("aliquota_teste"), valor_teste=float(teste), situacao=situacao,
+                         recolhido=float(recolhido) if situacao in (SituacaoReforma.DEVIDO.value, SituacaoReforma.COMPENSADO.value) else 0.0)
         elif componente.get("aliquota") is None:
             pendencias.append(f"{tributo}: alíquota")
         elif base_tipo == BaseTributo.RECEITA.value:
@@ -152,9 +192,14 @@ def calcular(db: Session, perfil: PerfilTributario, apuracao: ApuracaoComissao) 
         linhas.append(linha)
         if valor is not None:
             total += valor
+    efeito, reforma = _reforma(linhas, periodo)
+    if efeito:
+        linhas.append({"tributo": "CBS_IBS_NET_EFFECT", "base_tipo": BaseTributo.TESTE_REFORMA.value, "valor": float(efeito)})
+        total += efeito
     detalhe = {"regime": perfil.regime, "versao_legal": perfil.versao_legal, "municipio": perfil.municipio,
                "item_lista_servico": perfil.item_lista_servico, "codigo_servico": perfil.codigo_servico, "tributos": linhas,
-               "base_irpj": float(base_irpj) if base_irpj is not None else None}
+               "base_irpj": float(base_irpj) if base_irpj is not None else None, "reforma": reforma,
+               "total_attributable_tax": None if pendencias else float(_q(total))}
     if pendencias:
         return None, {**detalhe, "pendencias": pendencias, "simulacao_parcial": float(total)}
     return _q(total), detalhe
@@ -243,3 +288,43 @@ def como_dict(perfil: PerfilTributario) -> dict:
             "versao_legal": perfil.versao_legal,
             "componentes": [_normalizar(c) for c in perfil.componentes], "metodo_calculo": perfil.metodo_calculo,
             "fonte": perfil.fonte, "observacoes": perfil.observacoes, "pendencias": pendencias(perfil)}
+
+
+def criar_status_periodo(db: Session, dados: dict, ator_id: str | None) -> PeriodoStatusTributario:
+    """Nova vigência de situação (ex.: a contabilidade constata que a dispensa deixou de valer). O período aberto que
+    começou antes é encerrado no dia anterior; nada já calculado é alterado (comissões PAYABLE/PAID guardam o snapshot)."""
+    situacoes = {s.value for s in SituacaoReforma}
+    if dados.get("status") not in situacoes:
+        raise ValidacaoFalhou(f"Situação: {', '.join(sorted(situacoes))}.")
+    for campo in ("motivo", "aprovado_por"):
+        if not (dados.get(campo) or "").strip():
+            raise ValidacaoFalhou("Informe o motivo e quem aprovou a mudança de situação.")
+    inicio, fim = dados["vigente_de"], dados.get("vigente_ate")
+    if fim is not None and fim < inicio:
+        raise ValidacaoFalhou("O fim da vigência precisa ser no início ou depois.")
+    grupo = dados.get("grupo") or GRUPO_REFORMA
+    for existente in db.query(PeriodoStatusTributario).filter_by(grupo=grupo).all():
+        if (existente.vigente_ate or date.max) < inicio or (fim or date.max) < existente.vigente_de:
+            continue
+        if existente.vigente_de >= inicio:
+            raise ValidacaoFalhou(f"Já existe situação {existente.status} a partir de {existente.vigente_de}; histórico não é reescrito.")
+        existente.vigente_ate = inicio - timedelta(days=1)
+    periodo = PeriodoStatusTributario(grupo=grupo, status=dados["status"], vigente_de=inicio, vigente_ate=fim, motivo=dados["motivo"].strip(),
+                                      aprovado_por=dados["aprovado_por"].strip(), referencia_evidencia=dados.get("referencia_evidencia"),
+                                      referencia_legal=dados.get("referencia_legal"), criado_por=ator_id,
+                                      alterado_em=datetime.now(UTC).replace(tzinfo=None))
+    db.add(periodo)
+    db.flush()
+    auditoria_service.registrar(db, auditoria_service.TENANT_PLATAFORMA, "status_tributario_alterado", "periodo_status_tributario",
+                                periodo.id, ator_id, {"grupo": grupo, "status": periodo.status, "vigente_de": str(inicio),
+                                                      "vigente_ate": str(fim) if fim else None, "motivo": periodo.motivo,
+                                                      "aprovado_por": periodo.aprovado_por, "evidencia": periodo.referencia_evidencia,
+                                                      "origem": "admin"})
+    return periodo
+
+
+def status_periodo_dict(periodo: PeriodoStatusTributario) -> dict:
+    return {"id": periodo.id, "grupo": periodo.grupo, "status": periodo.status, "status_rotulo": ROTULOS_SITUACAO.get(periodo.status),
+            "vigente_de": periodo.vigente_de.isoformat(), "vigente_ate": periodo.vigente_ate.isoformat() if periodo.vigente_ate else None,
+            "motivo": periodo.motivo, "aprovado_por": periodo.aprovado_por, "referencia_evidencia": periodo.referencia_evidencia,
+            "referencia_legal": periodo.referencia_legal, "alterado_em": periodo.alterado_em.isoformat() if periodo.alterado_em else None}

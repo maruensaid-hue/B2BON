@@ -119,3 +119,16 @@ class CotacaoCambioSchema(BaseModel):
 class PoliticaMargemSchema(BaseModel):
     deduzir_custo_ia: bool
     motivo: str = Field(min_length=1)
+
+
+class StatusTributarioSchema(BaseModel):
+    """TaxStatusPeriod (D-078): situação de CBS/IBS numa vigência."""
+
+    grupo: str = "CBS_IBS"
+    status: str
+    vigente_de: date
+    vigente_ate: date | None = None
+    motivo: str = Field(min_length=1)
+    aprovado_por: str = Field(min_length=1)
+    referencia_evidencia: str | None = None
+    referencia_legal: str | None = None
