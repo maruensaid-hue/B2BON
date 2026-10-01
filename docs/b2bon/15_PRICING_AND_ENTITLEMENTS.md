@@ -164,7 +164,7 @@ planos novos não entram nelas.
 ## 6A. Comissão privada recorrente e Summer Sales Challenge (D-080)
 
 - `PRIVATE_RECURRING_COMMISSION` v1: 20% recorrente; só mensalidade efetivamente paga gera comissão (PAYMENT_RECEIVED);
-  base = Margem Comissionável Líquida da mensalidade (D-074; OI-028); inadimplência (30 + 10 dias) retém a comissão a
+  base = Margem Comissionável Líquida da mensalidade (D-074, confirmada pelo PO — OI-028 resolvido); inadimplência (30 + 10 dias) retém a comissão a
   pagar (HOLD); cancelamento encerra as futuras (STOP_FUTURE). Configurável e versionada.
 - Quota NEW_MRR por representante: R$ 7.500 (Out/26) → R$ 20.000 (Mar/27); equipe de 7: R$ 52.500 → R$ 140.000.
   Pipeline alvo de Out/26: R$ 30.000 por representante; depois, 3x a quota (configurável). Ticket baseline R$ 1.750.

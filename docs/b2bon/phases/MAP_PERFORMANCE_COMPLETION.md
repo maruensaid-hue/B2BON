@@ -34,7 +34,7 @@
 - **Governo** (§8): 2 oportunidades qualificadas/semana; Qualified, License, Annual Subscription Pipeline e Expected
   Close; a política rejeita compensar a quota privada com pipeline governamental.
 - **Comissão privada** (§9): 20% recorrente sobre mensalidade efetivamente paga (base: margem do recebimento, D-074 —
-  OI-028), por representante, cliente, produto, competência, status e situação da carteira; inadimplência HOLD e
+  confirmada pelo PO, OI-028 resolvido), por representante, cliente, produto, competência, status e situação da carteira; inadimplência HOLD e
   cancelamento STOP_FUTURE configuráveis; Government com política própria.
 - **Summer Sales Challenge** (§10): Dez/26 + Jan/27, R$ 27.500 individual / R$ 192.500 equipe, faixas +20/+35/+50%,
   bônus só sobre a comissão das novas vendas da janela, elegibilidade configurável.
@@ -71,6 +71,6 @@ da configuração).
 
 ## Pendências
 
-- **OI-028**: base da comissão privada (texto do prompt × D-074) — mantida D-074 até decisão do PO.
+- **OI-028** (resolvido em 2026-10-01): o PO confirmou a base D-074 (margem líquida da mensalidade paga); o texto do prompt estava desatualizado.
 - **OI-029**: vincular cada representante ao usuário do CRM, mapear oferta → família no CRM e confirmar o critério de
   "contato efetivo".

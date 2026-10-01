@@ -1114,7 +1114,8 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   governamentais nunca compensam a quota privada. Comissão Government segue a política própria (D-072/D-074).
 - **Comissão privada**: política `PRIVATE_RECURRING_COMMISSION` v1 — 20% recorrente, gatilho PAYMENT_RECEIVED (só
   mensalidade paga gera comissão), por representante, cliente, produto, competência, status e situação da carteira.
-  A base continua a Margem Comissionável Líquida do recebimento (D-074, decisão definitiva do PO); ver OI-028.
+  A base continua a Margem Comissionável Líquida do recebimento (D-074, decisão definitiva do PO); confirmado pelo PO em
+  2026-10-01 (OI-028 resolvido: "mantenha essa informação, o texto está desatualizado").
   Inadimplência (ciclo 30 + tolerância 10 dias) com ação HOLD: a comissão PAYABLE do cliente fica retida no repasse até ele
   voltar a pagar. Cancelamento STOP_FUTURE: sem mensalidade paga, sem comissão.
 - **Summer Sales Challenge** (`CAMPAIGN:SUMMER_SALES_CHALLENGE_2026`): Dez/26 + Jan/27, meta individual R$ 27.500 (equipe

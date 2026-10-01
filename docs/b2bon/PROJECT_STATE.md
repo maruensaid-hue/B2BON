@@ -32,7 +32,7 @@
 - **OI-017** (comercial): franquias de AI Credits do Public Procurement (50–100K) e da Full Suite (75–100K) e preço-base do Public Procurement — decisão futura do PO; hoje nada concedido por elas.
 - **OI-018** (RESOLVED quanto à política, D-076): PTAX de fechamento do Banco Central (rotina horária/Admin); sem PTAX gravada, `AWAITING_FX_RATE`.
 - **OI-026** (financeiro, alta, PARTIALLY_RESOLVED, D-077): preços públicos dos fornecedores cadastrados (Render, Neon, Lusha); faltam confirmar os componentes Render em uso, o valor de contrato/proposta do Web Service 12c-96g (CUSTOM, D-079), o Capacity Envelope do Neon (sem ele toda comissão fica `AWAITING_INFRASTRUCTURE_COST`), o storage envelope, outros fornecedores em uso, ISS da subscrição SaaS e perfis de consultoria/suporte. CBS/IBS 2026 resolvido (D-078: WAIVED_BY_COMPLIANCE).
-- **OI-028** (comercial): base da comissão privada recorrente — o prompt do MAP diz "20% sobre mensalidade paga"; mantido D-074 (20% × margem da mensalidade paga) até decisão do PO.
+- **OI-028** (RESOLVED pelo PO em 2026-10-01): a comissão privada recorrente segue D-074 — 20% × Margem Comissionável Líquida da mensalidade paga; o texto "20% sobre mensalidade" estava desatualizado.
 - **OI-029** (operação): vincular os 7 representantes aos usuários do CRM, mapear oferta → família e confirmar "contato efetivo" (Admin → MAP → Performance comercial → Configuração).
 - **Troca S6**: pronta atrás de `sourcing_leitura_fonte` (D-070); ligar só após o portão TD-087/088.
 - **OI-022** (comercial): preço do buyer seat adicional e dos bundles futuros.
