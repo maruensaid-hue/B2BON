@@ -168,7 +168,7 @@ planos novos não entram nelas.
   pagar (HOLD); cancelamento encerra as futuras (STOP_FUTURE). Configurável e versionada.
 - Quota NEW_MRR por representante: R$ 7.500 (Out/26) → R$ 20.000 (Mar/27); equipe de 7: R$ 52.500 → R$ 140.000.
   Pipeline alvo de Out/26: R$ 30.000 por representante; depois, 3x a quota (configurável). Ticket baseline R$ 1.750.
-- Summer Sales Challenge (Dez/26 + Jan/27): meta R$ 27.500 por representante (R$ 192.500 equipe); bônus sobre a comissão das
+- Summer Sales Challenge (Dez/26 + Jan/27): meta R$ 27.500 por representante (equipe = R$ 27.500 × representantes ativos; 7 = R$ 192.500); bônus sobre a comissão das
   novas vendas da janela: 100–119% +20%, 120–149% +35%, ≥150% +50% (abaixo de 100%: sem bônus); elegibilidade com venda
   em cada mês, CRM atualizado, carteira adimplente e política comercial cumprida.
 - Government Bookings nunca entram no New MRR privado; a comissão Government segue a própria política.

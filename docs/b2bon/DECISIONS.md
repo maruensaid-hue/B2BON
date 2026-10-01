@@ -1136,3 +1136,23 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   painel individual e 5 por representante no Daily. Sem tabela de read model: as agregações medidas (p95 ≈ 45 ms) não
   justificam a complexidade de manter um snapshot.
 - **Status**: ACEITA. Migração `f3b5d7f9a1c4` (reversível).
+
+## D-081 · 2026-10-01 · MAP Performance pronto para receber a configuração depois (time de tamanho variável)
+- **Contexto**: o PO pediu para deixar tudo pronto para receber depois o vínculo dos representantes, o produto de cada
+  oferta e o critério de contato efetivo: "os representantes estão em processo de contratação e eventualmente o número
+  pode ser diferente de 7 (maior ou menor)".
+- **Decisão**:
+  - Nenhum número de representantes é fixo: quota da equipe = soma das quotas efetivas dos ativos; a quota padrão vale
+    para todo representante ativo (novo entra automaticamente; inativo sai); a meta de equipe do Summer Sales Challenge
+    deixa de ser R$ 192.500 fixos e passa a ser a meta individual × representantes ativos (`meta_equipe` = null, nova
+    versão da campanha). Representantes entram e saem por Admin → Representantes.
+  - Prontidão (`/map/performance/configuracao` → `prontidao`): representantes ativos, vinculados e sem vínculo, ofertas do
+    CRM dos representantes ainda sem produto, critério de contato efetivo provisório ou confirmado e a lista de pendências.
+    As pendências aparecem também no Daily e na Equipe até tudo estar configurado.
+  - Configuração guiada (só gestor, com motivo, versão nova e auditoria): busca de usuário por nome/e-mail para o vínculo
+    (mostra o tenant e se já está vinculado); oferta → produto (só ofertas do CRM dos representantes); confirmação dos tipos
+    de ação que contam como contato efetivo (`definicoes.contato_efetivo_confirmado`). Até lá, ligação e reunião valem
+    como critério provisório.
+  - Semente das políticas segura contra requisições simultâneas (savepoint e releitura) e listagem de quotas com uma
+    linha por escopo.
+- **Status**: ACEITA. Migração `a8c0e2f4b6d9` (reversível).

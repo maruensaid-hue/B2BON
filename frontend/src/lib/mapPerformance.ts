@@ -117,6 +117,7 @@ export interface ResumoEquipe {
 
 export interface PainelEquipe {
   competencia: string;
+  configuracao_pendente: string[];
   equipe: ResumoEquipe;
   representantes: LinhaEquipe[];
   excecoes: LinhaEquipe[];
@@ -125,6 +126,7 @@ export interface PainelEquipe {
 
 export interface Daily {
   data: string;
+  configuracao_pendente: string[];
   competencia: string;
   equipe: ResumoEquipe;
   sem_intervencao: number;
@@ -153,7 +155,41 @@ export interface Quota {
   motivo: string | null;
 }
 
+export interface Prontidao {
+  representantes_ativos: number;
+  vinculados: number;
+  sem_vinculo: { id: number; nome: string }[];
+  tenants_crm: string[];
+  ofertas: { id: number; nome: string; tenant_id: string; familia: string | null }[];
+  ofertas_sem_familia: { id: number; nome: string }[];
+  tipos_contato_efetivo: string[];
+  contato_efetivo_confirmado: boolean;
+  pendencias: string[];
+  pronto: boolean;
+}
+
+export interface UsuarioCrm {
+  id: number;
+  nome: string;
+  email: string;
+  tenant_id: string;
+  vinculado_a: string | null;
+}
+
+export const ROTULOS_TIPO_ATIVIDADE: Record<string, string> = {
+  ligacao: "Ligação",
+  reuniao: "Reunião",
+  email: "E-mail",
+  whatsapp: "WhatsApp",
+  linkedin: "LinkedIn",
+  nota: "Nota",
+  tarefa: "Tarefa",
+};
+
 export interface Configuracao {
+  prontidao: Prontidao;
+  familias: string[];
+  tipos_atividade: string[];
   performance: { versao: number; regras: Record<string, unknown> };
   comissao_privada: { versao: number; regras: Record<string, unknown> };
   campanhas: { codigo: string; versao: number; regras: Record<string, unknown> }[];

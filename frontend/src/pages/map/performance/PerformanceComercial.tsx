@@ -24,6 +24,15 @@ const ConfiguracaoPerformance = lazy(() =>
 
 type Aba = "daily" | "equipe" | "individual" | "configuracao";
 
+function Pendentes({ itens }: { itens: string[] }) {
+  if (itens.length === 0) return null;
+  return (
+    <Card className="border-amber/30 p-3 text-[11.5px] text-amber">
+      Configuração pendente (aba Configuração): {itens.join(" · ")}
+    </Card>
+  );
+}
+
 function Resumo({ equipe }: { equipe: ResumoEquipe }) {
   return (
     <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
@@ -51,6 +60,7 @@ function DailyComercial({ competencia }: { competencia: string }) {
   if (!daily) return <Card className="p-4 text-[12px] text-muted">Carregando Daily…</Card>;
   return (
     <div className="space-y-3">
+      <Pendentes itens={daily.configuracao_pendente} />
       <Resumo equipe={daily.equipe} />
       <div className="text-[11.5px] text-muted">
         {daily.intervencoes.length} representante(s) precisam de intervenção · {daily.sem_intervencao} sem exceção hoje.
@@ -98,6 +108,7 @@ function Equipe({ competencia, abrir }: { competencia: string; abrir: (id: numbe
   if (!dados) return <Card className="p-4 text-[12px] text-muted">Carregando equipe…</Card>;
   return (
     <div className="space-y-3">
+      <Pendentes itens={dados.configuracao_pendente} />
       <Resumo equipe={dados.equipe} />
       <Card className="overflow-x-auto p-4">
         <SectionLabel>Comparação por attainment e indicadores operacionais</SectionLabel>

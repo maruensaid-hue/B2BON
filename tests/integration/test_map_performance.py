@@ -311,7 +311,7 @@ def test_campanha_bonus_so_sobre_novas_vendas_e_com_elegibilidade(db_session):
     assert (linha["new_mrr"], linha["attainment"], linha["faixa_bonus"]) == (33000.0, 1.2, 0.35)  # 120%
     assert linha["base_comissao_novas_vendas"] == 660.0  # a comissão da carteira histórica (1.000) fica fora
     assert (linha["elegivel"], linha["bonus"], linha["status_bonus"]) == (True, 231.0, "FINAL")
-    assert resultado["equipe"]["meta"] == 192500.0
+    assert resultado["equipe"]["meta"] == 27500.0  # meta individual × representantes ativos (1 aqui; 7 = R$ 192.500)
 
 
 def test_campanha_sem_venda_em_um_mes_nao_paga_bonus(db_session):
@@ -453,3 +453,74 @@ def test_numero_de_consultas_nao_cresce_com_a_equipe(db_session):
     um = _contar_consultas(db_session, lambda: painel.calcular(db_session, reps[:1], "2026-10", HOJE))
     sete = _contar_consultas(db_session, lambda: painel.calcular(db_session, reps, "2026-10", HOJE))
     assert sete == um and um <= 45
+
+
+# ---------------------------------------------------------------- D-081: time de tamanho variável e prontidão
+
+@pytest.mark.parametrize("tamanho", [3, 9])
+def test_equipe_e_campanha_acompanham_o_tamanho_do_time(db_session, tamanho):
+    reps = [_rep(db_session, f"T{tamanho}x{i}") for i in range(tamanho)]
+    dados = painel.calcular(db_session, reps, "2026-12", date(2026, 12, 15))
+    assert dados["equipe"]["quota"] == 12500 * tamanho  # quota padrão vale para cada representante ativo
+    assert dados["campanhas"][0]["equipe"]["meta"] == 27500.0 * tamanho  # sem meta de equipe fixa
+
+
+def test_representante_novo_entra_e_inativo_sai_da_equipe(client, db_session):
+    reps = [_rep(db_session, f"E{i}") for i in range(2)]
+    db_session.commit()
+    assert client.get("/api/v1/map/performance/equipe?competencia=2026-10&data_referencia=2026-10-15").json()["equipe"]["quota"] == 15000
+    _rep(db_session, "Novo")
+    reps[0].ativo = False
+    db_session.commit()
+    equipe = client.get("/api/v1/map/performance/equipe?competencia=2026-10&data_referencia=2026-10-15").json()
+    assert {linha["representante"]["nome"] for linha in equipe["representantes"]} == {"E1", "Novo"}
+    assert equipe["equipe"]["quota"] == 15000
+
+
+def test_prontidao_lista_o_que_falta_e_fica_pronto(client, db_session):
+    from app.models.oferta import Oferta
+
+    sem = _rep(db_session, "Pendente", com_usuario=False)
+    ligado = _rep(db_session, "Ligado")
+    db_session.add_all([Oferta(tenant_id=OPERADOR, nome="B2B ON Suite", descricao="x"),
+                        Oferta(tenant_id=OPERADOR, nome="PREDATOR", descricao="x"),
+                        Oferta(tenant_id="tenant-teste", nome="Oferta de cliente", descricao="x")])
+    db_session.commit()
+    pronto = client.get("/api/v1/map/performance/configuracao").json()["prontidao"]
+    assert (pronto["representantes_ativos"], pronto["vinculados"], pronto["pronto"]) == (2, 1, False)
+    assert [r["nome"] for r in pronto["sem_vinculo"]] == ["Pendente"]
+    assert {o["nome"] for o in pronto["ofertas"]} == {"B2B ON Suite", "PREDATOR"}  # só ofertas do CRM dos representantes
+    assert "Confirmar o critério de contato efetivo" in pronto["pendencias"]
+    assert "Confirmar o critério de contato efetivo" in client.get("/api/v1/map/performance/daily?data_referencia=2026-10-15").json()["configuracao_pendente"]
+
+    candidatos = client.get("/api/v1/map/performance/usuarios-crm?busca=ligado").json()
+    assert candidatos[0]["tenant_id"] == OPERADOR and candidatos[0]["vinculado_a"] == "Ligado"
+    novo = Usuario(tenant_id=OPERADOR, nome="Pendente CRM", email="pendente@cyberfort.com.br", papel="user", ativo=True)
+    db_session.add(novo)
+    db_session.commit()
+    client.put(f"/api/v1/map/performance/representantes/{sem.id}/usuario", json={"usuario_id": novo.id})
+
+    ofertas = {o["nome"]: o["id"] for o in pronto["ofertas"]}
+    cliente = db_session.query(Oferta).filter_by(tenant_id="tenant-teste").one()
+    fora = client.put("/api/v1/map/performance/ofertas-familias", json={"familias": {str(cliente.id): "SUITE"}, "motivo": "x"})
+    assert fora.status_code == 422  # oferta de outro tenant
+    invalida = client.put("/api/v1/map/performance/ofertas-familias", json={"familias": {str(ofertas["PREDATOR"]): "XPTO"}, "motivo": "x"})
+    assert invalida.status_code == 422
+    client.put("/api/v1/map/performance/ofertas-familias", json={"familias": {str(ofertas["B2B ON Suite"]): "SUITE",
+                                                                             str(ofertas["PREDATOR"]): "PREDATOR"}, "motivo": "Catálogo"})
+    assert client.put("/api/v1/map/performance/contato-efetivo", json={"tipos": ["voo"], "motivo": "x"}).status_code == 422
+    final = client.put("/api/v1/map/performance/contato-efetivo", json={"tipos": ["ligacao", "reuniao", "whatsapp"],
+                                                                        "motivo": "Critério confirmado"}).json()
+    assert (final["pronto"], final["pendencias"], final["tipos_contato_efetivo"]) == (True, [], ["ligacao", "reuniao", "whatsapp"])
+    regras = configuracao.performance(db_session)
+    assert regras["familia_por_oferta"] == {str(ofertas["B2B ON Suite"]): "SUITE", str(ofertas["PREDATOR"]): "PREDATOR"}
+    assert ligado.id  # o vínculo existente não muda
+
+
+def test_configuracao_guiada_so_para_o_gestor(client, db_session):
+    rep = _rep(db_session, "Rep")
+    db_session.commit()
+    headers = _headers(db_session.get(Usuario, rep.usuario_id))
+    assert client.get("/api/v1/map/performance/usuarios-crm?busca=re", headers=headers).status_code == 403
+    assert client.put("/api/v1/map/performance/contato-efetivo", json={"tipos": ["ligacao"], "motivo": "x"}, headers=headers).status_code == 403
+    assert client.put("/api/v1/map/performance/ofertas-familias", json={"familias": {}, "motivo": "x"}, headers=headers).status_code == 403

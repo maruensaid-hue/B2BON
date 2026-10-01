@@ -87,6 +87,9 @@ representantes. Código em `app/contexts/map/performance/` (exposto como `map.co
 | Alertas e Daily | regras da política (sem IA) | `inteligencia.py` |
 | Permissões | super_admin = gestor; usuário vinculado = só o próprio painel | `servico.py` |
 
+Prontidão (D-081): o time não tem tamanho fixo — tudo é calculado sobre os representantes ativos; a Configuração mostra
+quem falta vincular ao CRM, quais ofertas ainda não têm produto e se o critério de contato efetivo já foi confirmado.
+
 O fluxo é QUOTA → PIPELINE → ACTIVITY → CONVERSION → MRR → COMMISSION → LEARNING: o painel mostra a quota, o pipeline e a
 cobertura, a atividade do dia/semana contra a meta, a conversão do mês contra o baseline e a taxa observada (aprendizado),
 o New MRR realizado e a comissão — e os alertas dizem onde agir.

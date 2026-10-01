@@ -8,6 +8,7 @@ import re
 from copy import deepcopy
 
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.contexts.map.performance.tipos import (
@@ -41,10 +42,13 @@ def politica(db: Session, codigo: str) -> PoliticaComissao | None:
     """Versão ativa; cria a inicial se o código é conhecido e ainda não existe."""
     atual = db.query(PoliticaComissao).filter_by(codigo=codigo, ativa=True).order_by(PoliticaComissao.versao.desc()).first()
     if atual is None and codigo in INICIAIS:
-        atual = PoliticaComissao(codigo=codigo, versao=1, regras=deepcopy(INICIAIS[codigo]), ativa=True,
-                                 motivo="Versão inicial (D-080)", criado_por="semente")
-        db.add(atual)
-        db.flush()
+        try:  # duas requisições simultâneas num banco sem a migração: a segunda relê a versão que a primeira gravou
+            with db.begin_nested():
+                atual = PoliticaComissao(codigo=codigo, versao=1, regras=deepcopy(INICIAIS[codigo]), ativa=True,
+                                         motivo="Versão inicial (D-080)", criado_por="semente")
+                db.add(atual)
+        except IntegrityError:
+            atual = db.query(PoliticaComissao).filter_by(codigo=codigo, ativa=True).order_by(PoliticaComissao.versao.desc()).first()
     return atual
 
 
@@ -170,8 +174,9 @@ def quotas(db: Session, competencias: list[str], representante_ids: list[int]) -
 
 def listar_quotas(db: Session) -> list[QuotaComercial]:
     _garantir_quotas(db)
-    return (db.query(QuotaComercial).filter(QuotaComercial.ativa.is_(True))
-            .order_by(QuotaComercial.competencia, QuotaComercial.representante_id).all())
+    ativas = (db.query(QuotaComercial).filter(QuotaComercial.ativa.is_(True))
+              .order_by(QuotaComercial.competencia, QuotaComercial.representante_id, QuotaComercial.id).all())
+    return list({(q.representante_id, q.competencia): q for q in ativas}.values())  # uma por escopo (a mais recente)
 
 
 def definir_quota(db: Session, dados: dict, motivo: str, ator_id: str | None) -> QuotaComercial:

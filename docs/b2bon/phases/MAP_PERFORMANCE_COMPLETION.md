@@ -72,5 +72,7 @@ da configuração).
 ## Pendências
 
 - **OI-028** (resolvido em 2026-10-01): o PO confirmou a base D-074 (margem líquida da mensalidade paga); o texto do prompt estava desatualizado.
+- **D-081 (mesmo dia)**: pronto para receber a configuração depois — time de tamanho variável (meta de equipe = individual ×
+  ativos), Prontidão na Configuração (vínculo por busca, oferta → produto, contato efetivo) e aviso no Daily/Equipe.
 - **OI-029**: vincular cada representante ao usuário do CRM, mapear oferta → família no CRM e confirmar o critério de
   "contato efetivo".

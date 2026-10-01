@@ -32,6 +32,16 @@ class QuotaSchema(BaseModel):
     motivo: str
 
 
+class FamiliasOfertasSchema(BaseModel):
+    familias: dict[str, str | None]
+    motivo: str
+
+
+class ContatoEfetivoSchema(BaseModel):
+    tipos: list[str]
+    motivo: str
+
+
 class VinculoSchema(BaseModel):
     usuario_id: int | None = Field(default=None)
 
@@ -103,3 +113,22 @@ def vincular(representante_id: int, dados: VinculoSchema, usuario: Usuario = Dep
     rep = map_contract.performance.vincular_usuario(db, usuario, representante_id, dados.usuario_id)
     db.commit()
     return {"id": rep.id, "nome": rep.nome, "usuario_id": rep.usuario_id}
+
+
+@router.get("/usuarios-crm")
+def usuarios_crm(busca: str = "", usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> list[dict]:
+    return map_contract.performance.buscar_usuarios(db, usuario, busca)
+
+
+@router.put("/ofertas-familias")
+def ofertas_familias(dados: FamiliasOfertasSchema, usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> dict:
+    resultado = map_contract.performance.classificar_ofertas(db, usuario, dados.familias, dados.motivo)
+    db.commit()
+    return resultado
+
+
+@router.put("/contato-efetivo")
+def contato_efetivo(dados: ContatoEfetivoSchema, usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> dict:
+    resultado = map_contract.performance.confirmar_contato_efetivo(db, usuario, dados.tipos, dados.motivo)
+    db.commit()
+    return resultado

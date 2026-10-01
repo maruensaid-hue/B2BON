@@ -5,16 +5,16 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { api, mensagemErro } from "@/lib/api";
 import { brl, type Configuracao } from "@/lib/mapPerformance";
+import { ProntidaoPerformance } from "@/pages/map/performance/ProntidaoPerformance";
 
-/** Configuração versionada do MAP Performance (só gestor): quotas por competência/representante, vínculo do representante
- * com o usuário do CRM e as políticas (performance, comissão privada e campanhas). Toda mudança exige motivo, cria uma
+/** Configuração versionada do MAP Performance (só gestor): prontidão (vínculo com o CRM, ofertas, contato efetivo),
+ * quotas por competência/representante e as políticas (performance, comissão privada e campanhas). Toda mudança exige motivo, cria uma
  * versão nova e fica na auditoria. */
 export function ConfiguracaoPerformance() {
   const [config, setConfig] = useState<Configuracao | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [quota, setQuota] = useState({ representante_id: "", competencia: "", valor: "", pipeline_alvo: "", motivo: "" });
   const [politica, setPolitica] = useState({ codigo: "MAP_PERFORMANCE_POLICY", regras: "", motivo: "" });
-  const [vinculo, setVinculo] = useState({ representante_id: "", usuario_id: "" });
 
   const carregar = () =>
     api.get<Configuracao>("/map/performance/configuracao").then((c) => {
@@ -46,6 +46,7 @@ export function ConfiguracaoPerformance() {
   return (
     <div className="space-y-3">
       {mensagem && <Card className="p-3 text-[12px]">{mensagem}</Card>}
+      <ProntidaoPerformance key={JSON.stringify(config.prontidao)} config={config} executar={executar} />
       <Card className="p-4">
         <SectionLabel>Quotas NEW_MRR ativas</SectionLabel>
         <table className="mt-2 w-full text-[11.5px]">
@@ -78,26 +79,6 @@ export function ConfiguracaoPerformance() {
               representante_id: quota.representante_id ? Number(quota.representante_id) : null, competencia: quota.competencia,
               valor: Number(quota.valor), pipeline_alvo: quota.pipeline_alvo ? Number(quota.pipeline_alvo) : null, motivo: quota.motivo,
             }), "Quota registrada (nova versão).")}>Salvar quota</Button>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="p-4">
-        <SectionLabel>Representante ↔ usuário do CRM</SectionLabel>
-        <div className="mt-2 text-[11.5px] text-muted">
-          {config.representantes.map((r) => `${r.nome}: ${r.usuario_id ? `usuário #${r.usuario_id}` : "sem vínculo"}`).join(" · ")}
-        </div>
-        <div className="mt-2 grid gap-2 md:grid-cols-4">
-          <Select label="Representante" value={vinculo.representante_id} onChange={(e) => setVinculo({ ...vinculo, representante_id: e.target.value })}>
-            <option value="">Selecione…</option>
-            {config.representantes.map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}
-          </Select>
-          <Input type="number" label="ID do usuário (vazio = desvincular)" value={vinculo.usuario_id}
-            onChange={(e) => setVinculo({ ...vinculo, usuario_id: e.target.value })} />
-          <div className="flex items-end">
-            <Button size="sm" disabled={!vinculo.representante_id} onClick={() => executar(() =>
-              api.put(`/map/performance/representantes/${vinculo.representante_id}/usuario`,
-                { usuario_id: vinculo.usuario_id ? Number(vinculo.usuario_id) : null }), "Vínculo atualizado.")}>Salvar vínculo</Button>
           </div>
         </div>
       </Card>

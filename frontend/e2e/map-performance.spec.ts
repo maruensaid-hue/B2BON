@@ -14,6 +14,9 @@ test("MAP Performance: Daily, equipe e quotas configuradas", async ({ page }) =>
   await page.getByRole("button", { name: "Equipe" }).click();
   await expect(page.getByText("Comparação por attainment e indicadores operacionais")).toBeVisible();
   await page.getByRole("button", { name: "Configuração" }).click();
+  // D-081: prontidão — o que falta configurar (time de tamanho variável, vínculo, ofertas, contato efetivo)
+  await expect(page.getByText("Prontidão")).toBeVisible();
+  await expect(page.getByText("Confirmar o critério de contato efetivo")).toBeVisible();
   const linha = page.getByRole("row").filter({ hasText: "2026-10" }).first();
   await expect(linha).toContainText("R$ 7.500");
   await expect(linha).toContainText("R$ 30.000");

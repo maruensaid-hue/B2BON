@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## MAP: pronto para o time em contratação (2026-10-01, D-081)
+
+- O número de representantes não é fixo: quem for cadastrado (Admin → Representantes) entra na equipe com a quota padrão do mês, quem for desativado sai, e a meta de equipe da campanha acompanha o tamanho do time.
+- Nova seção "Prontidão" na Configuração da Performance comercial: mostra o que falta e permite vincular cada representante ao usuário do CRM (buscando por nome ou e-mail), dizer o produto de cada oferta do CRM e confirmar o que conta como contato efetivo.
+- Enquanto faltar alguma configuração, o aviso aparece também no Daily e na Equipe.
+
 ## MAP: quotas, funil, comissão e campanha dos representantes (2026-10-01, D-080)
 
 - Nova aba "Performance comercial" no MAP. A gestão comercial vê o Daily (só quem precisa de intervenção), a comparação dos representantes e a configuração; cada representante vê o próprio desempenho.

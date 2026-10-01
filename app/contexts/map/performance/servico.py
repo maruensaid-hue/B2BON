@@ -1,15 +1,19 @@
 """Fachada do MAP Performance (D-080): permissões, painéis individual e de equipe, Daily Comercial e configuração.
 
-Permissões: o gestor comercial da CyberFort é o `super_admin` (vê os 7 representantes, a equipe, o Daily e a
-configuração). Um usuário vinculado a um representante (`Representante.usuario_id`) vê só o próprio painel; os dados de
+Permissões: o gestor comercial da CyberFort é o `super_admin` (vê todos os representantes ativos — o número
+não é fixo —, a equipe, o Daily e a configuração). Um usuário vinculado a um representante (`Representante.usuario_id`) vê só o próprio painel; os dados de
 CRM lidos são sempre os do tenant desse usuário (isolamento por tenant). Qualquer outro usuário recebe 403.
 """
 
+from copy import deepcopy
 from datetime import date
 
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.contexts.map.performance import configuracao, inteligencia, painel, receita
+from app.contexts.map.performance.tipos import TIPOS_ATIVIDADE_HUMANA, Familia
+from app.models.oferta import Oferta
 from app.models.representante import Representante
 from app.models.usuario import Usuario
 from app.services import auditoria_service
@@ -82,6 +86,7 @@ def painel_equipe(db: Session, usuario: Usuario, competencia: str, hoje: date) -
                        "comissao_a_receber": p["comissao"]["a_receber"], "alertas": p["alertas"], "pendencias": p["pendencias"]})
     excecoes = [linha for linha in linhas if any(a["severidade"] in ("CRITICAL", "HIGH") for a in linha["alertas"]) or linha["pendencias"]]
     return {"competencia": competencia, "equipe": dados["equipe"], "representantes": linhas, "excecoes": excecoes,
+            "configuracao_pendente": prontidao(db)["pendencias"],
             "aprendizado": dados["aprendizado"]["equipe"], "campanhas": dados["campanhas"]}
 
 
@@ -91,7 +96,7 @@ def daily_comercial(db: Session, usuario: Usuario, competencia: str, hoje: date)
     dados = painel.calcular(db, _ativos(db), competencia, hoje)
     intervencoes = inteligencia.daily(dados["paineis"], configuracao.performance(db))
     return {"data": hoje, "competencia": competencia, "equipe": dados["equipe"], "intervencoes": intervencoes,
-            "sem_intervencao": len(dados["paineis"]) - len(intervencoes)}
+            "sem_intervencao": len(dados["paineis"]) - len(intervencoes), "configuracao_pendente": prontidao(db)["pendencias"]}
 
 
 def _validar_competencia(competencia: str) -> None:
@@ -127,7 +132,103 @@ def configuracao_atual(db: Session, usuario: Usuario) -> dict:
             "comissao_privada": {"versao": comissao.versao, "regras": comissao.regras},
             "campanhas": [{"codigo": c.codigo, "versao": c.versao, "regras": c.regras} for c in configuracao.campanhas(db)],
             "quotas": [configuracao.quota_dict(q) for q in configuracao.listar_quotas(db)],
-            "representantes": [{"id": r.id, "nome": r.nome, "usuario_id": r.usuario_id} for r in _ativos(db)]}
+            "representantes": [{"id": r.id, "nome": r.nome, "usuario_id": r.usuario_id} for r in _ativos(db)],
+            "prontidao": prontidao(db),
+            "familias": [f.value for f in Familia if f != Familia.NAO_CLASSIFICADA],
+            "tipos_atividade": list(TIPOS_ATIVIDADE_HUMANA)}
+
+
+def _tenants_operadores(db: Session) -> list[str]:
+    """Tenants dos usuários vinculados aos representantes ativos (o CRM de onde o MAP lê)."""
+    ids = [r.usuario_id for r in _ativos(db) if r.usuario_id]
+    return sorted({t for (t,) in db.query(Usuario.tenant_id).filter(Usuario.id.in_(ids)).all()}) if ids else []
+
+
+def _ofertas(db: Session) -> list[Oferta]:
+    tenants = _tenants_operadores(db)
+    return (db.query(Oferta).filter(Oferta.tenant_id.in_(tenants), Oferta.ativo.is_(True)).order_by(Oferta.nome).all()) if tenants else []
+
+
+def prontidao(db: Session) -> dict:
+    """O que ainda falta configurar (OI-029). O time pode ter qualquer tamanho: tudo é por representante ativo."""
+    regras = configuracao.performance(db)
+    ativos = _ativos(db)
+    usuarios = {u.id: u for u in db.query(Usuario).filter(Usuario.id.in_([r.usuario_id for r in ativos if r.usuario_id] or [-1])).all()}
+    mapa = regras["familia_por_oferta"]
+    ofertas = _ofertas(db)
+    definicoes = regras["definicoes"]
+    pendencias = []
+    sem_vinculo = [{"id": r.id, "nome": r.nome} for r in ativos if r.usuario_id not in usuarios]
+    if not ativos:
+        pendencias.append("Cadastrar os representantes (Admin → Representantes)")
+    if sem_vinculo:
+        pendencias.append(f"Vincular {len(sem_vinculo)} representante(s) ao usuário do CRM")
+    sem_familia = [{"id": o.id, "nome": o.nome, "tenant_id": o.tenant_id} for o in ofertas if str(o.id) not in mapa]
+    if sem_familia:
+        pendencias.append(f"Classificar {len(sem_familia)} oferta(s) do CRM por produto")
+    if not definicoes.get("contato_efetivo_confirmado"):
+        pendencias.append("Confirmar o critério de contato efetivo")
+    return {"representantes_ativos": len(ativos), "vinculados": len(ativos) - len(sem_vinculo), "sem_vinculo": sem_vinculo,
+            "tenants_crm": _tenants_operadores(db),
+            "ofertas": [{"id": o.id, "nome": o.nome, "tenant_id": o.tenant_id, "familia": mapa.get(str(o.id))} for o in ofertas],
+            "ofertas_sem_familia": sem_familia, "tipos_contato_efetivo": definicoes["tipos_contato_efetivo"],
+            "contato_efetivo_confirmado": bool(definicoes.get("contato_efetivo_confirmado")), "pendencias": pendencias,
+            "pronto": not pendencias}
+
+
+def buscar_usuarios(db: Session, usuario: Usuario, busca: str) -> list[dict]:
+    """Candidatos ao vínculo (nome ou e-mail); no máximo 20, sempre com o tenant para o gestor conferir o CRM certo."""
+    _exigir_gestor(usuario)
+    termo = (busca or "").strip()
+    if len(termo) < 2:
+        return []
+    vinculados = {r.usuario_id: r.nome for r in db.query(Representante).filter(Representante.usuario_id.isnot(None)).all()}
+    filtro = f"%{termo.lower()}%"
+    candidatos = (db.query(Usuario).filter(Usuario.ativo.is_(True), or_(func.lower(Usuario.nome).like(filtro), func.lower(Usuario.email).like(filtro)))
+                  .order_by(Usuario.nome).limit(20).all())
+    return [{"id": u.id, "nome": u.nome, "email": u.email, "tenant_id": u.tenant_id, "vinculado_a": vinculados.get(u.id)} for u in candidatos]
+
+
+def _nova_versao_performance(db: Session, usuario: Usuario, alterar, motivo: str) -> dict:
+    regras = deepcopy(configuracao.performance(db))
+    alterar(regras)
+    configuracao.nova_politica(db, configuracao.CODIGO_POLITICA_PERFORMANCE, regras, motivo, str(usuario.id))
+    return prontidao(db)
+
+
+def classificar_ofertas(db: Session, usuario: Usuario, familias: dict[str, str | None], motivo: str) -> dict:
+    """Oferta do CRM → família de produto (velocidade, mix e forecast). `None` remove a classificação."""
+    _exigir_gestor(usuario)
+    validas = {f.value for f in Familia if f != Familia.NAO_CLASSIFICADA}
+    conhecidas = {str(o.id) for o in _ofertas(db)}
+    for oferta_id, familia in familias.items():
+        if str(oferta_id) not in conhecidas:
+            raise ValidacaoFalhou(f"Oferta {oferta_id} não pertence ao CRM dos representantes.")
+        if familia is not None and familia not in validas:
+            raise ValidacaoFalhou(f"Família inválida: {familia}. Use {', '.join(sorted(validas))}.")
+
+    def alterar(regras: dict) -> None:
+        mapa = dict(regras["familia_por_oferta"])
+        for oferta_id, familia in familias.items():
+            if familia is None:
+                mapa.pop(str(oferta_id), None)
+            else:
+                mapa[str(oferta_id)] = familia
+        regras["familia_por_oferta"] = mapa
+
+    return _nova_versao_performance(db, usuario, alterar, motivo)
+
+
+def confirmar_contato_efetivo(db: Session, usuario: Usuario, tipos: list[str], motivo: str) -> dict:
+    """Confirma (ou muda) quais ações registradas contam como contato efetivo; deixa de ser pendência."""
+    _exigir_gestor(usuario)
+    if not tipos or set(tipos) - set(TIPOS_ATIVIDADE_HUMANA):
+        raise ValidacaoFalhou(f"Escolha ao menos um tipo entre {', '.join(TIPOS_ATIVIDADE_HUMANA)}.")
+
+    def alterar(regras: dict) -> None:
+        regras["definicoes"] = {**regras["definicoes"], "tipos_contato_efetivo": sorted(set(tipos)), "contato_efetivo_confirmado": True}
+
+    return _nova_versao_performance(db, usuario, alterar, motivo)
 
 
 def nova_politica(db: Session, usuario: Usuario, codigo: str, regras: dict, motivo: str) -> dict:

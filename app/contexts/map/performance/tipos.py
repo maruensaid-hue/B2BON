@@ -12,6 +12,10 @@ CODIGO_CAMPANHA_VERAO = "SUMMER_SALES_CHALLENGE_2026"
 PREFIXO_CAMPANHA = "CAMPAIGN:"
 
 
+# Tipos de `Atividade` que uma pessoa registra no CRM ("sistema" é automático e nunca conta como ação comercial).
+TIPOS_ATIVIDADE_HUMANA = ("ligacao", "reuniao", "email", "whatsapp", "linkedin", "nota", "tarefa")
+
+
 class Metrica(StrEnum):
     NEW_MRR = "NEW_MRR"
 
@@ -68,6 +72,9 @@ POLITICA_PERFORMANCE_INICIAL: dict = {
         "dias_oportunidade_atualizada": 7,
         "dias_proposta_sem_atividade": 5,
         "dias_oportunidade_estagnada": 14,
+        # Critério inicial de "contato efetivo" ainda não confirmado pela gestão comercial (OI-029): o MAP mede com ele e
+        # mostra a pendência até a confirmação na Configuração.
+        "contato_efetivo_confirmado": False,
     },
     "ticket_medio_baseline": 1750.0,
     "mix": {
@@ -116,7 +123,9 @@ CAMPANHA_VERAO_INICIAL: dict = {
     "inicio": "2026-12-01",
     "fim": "2027-01-31",
     "meta_individual": 27500.0,
-    "meta_equipe": 192500.0,
+    # Meta da equipe = meta individual × representantes ativos (7 hoje = R$ 192.500); o time ainda está em contratação, então
+    # o número não é fixo. Um valor aqui fixaria a meta da equipe independentemente do tamanho do time.
+    "meta_equipe": None,
     "faixas": [  # bônus sobre a comissão das NOVAS vendas do período (nunca sobre a carteira histórica)
         {"de": 0.0, "bonus": 0.0}, {"de": 0.80, "bonus": 0.0}, {"de": 1.00, "bonus": 0.20},
         {"de": 1.20, "bonus": 0.35}, {"de": 1.50, "bonus": 0.50},
