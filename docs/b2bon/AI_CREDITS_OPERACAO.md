@@ -49,7 +49,8 @@ Erros: **402** `CreditosInsuficientes` (com `detalhe`), **409**
 `POST /api/v1/cron/creditos-ia` (header `X-Cron-Secret`), **de hora em
 hora**: libera reservas órfãs (> 30 min), expira lotes, concede a franquia
 do mês, registra avisos 80/95/100%, detecta pico de consumo e alertas de
-margem. Idempotente.
+margem. Idempotente. Agendado no `.github/workflows/cron-envios.yml`
+(job `creditos-ia`, minuto 7 de cada hora; TD-093).
 
 ## 2. Billing
 

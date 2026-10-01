@@ -17,11 +17,16 @@ on:
     # CNAE/UF novo, só confere e não baixa nada) — job separado abaixo,
     # com concurrency, pra não sobrepor downloads longos.
     - cron: "*/30 * * * *"
+    # AI Credits (Fase 15, TD-093): de hora em hora, fora do minuto 0 para
+    # não disputar o horário cheio. Job próprio abaixo.
+    - cron: "7 * * * *"
   workflow_dispatch: {}
 
 jobs:
   processar-envios:
     runs-on: ubuntu-latest
+    # O disparo horário é só dos AI Credits (job creditos-ia).
+    if: github.event.schedule != '7 * * * *'
     steps:
       - name: Chamar POST /cron/processar-envios
         run: |
@@ -135,6 +140,23 @@ jobs:
         run: |
           curl --fail --show-error --silent \
             -X POST "${API_BASE_URL}/cron/sourcing-sincronizar" \
+            -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+  # AI Credits (Fase 15, TD-093): libera reservas órfãs, expira lotes,
+  # concede a franquia do mês e registra avisos 80/95/100%, picos de consumo
+  # e alertas de margem. Idempotente (rodar duas vezes na mesma hora não
+  # concede nem expira em dobro).
+  creditos-ia:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '7 * * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Chamar POST /cron/creditos-ia (AI Credits, de hora em hora)
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${API_BASE_URL}/cron/creditos-ia" \
             -H "X-Cron-Secret: ${CRON_SECRET}"
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}

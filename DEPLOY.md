@@ -145,11 +145,10 @@ no repo), com dois grupos de disparo em sequência:
   distribuidor), `podar-recorte-cnpj` (libera espaço de CNAE/UF que
   nenhum ICP ativo usa mais — ver seção 7.1) e `sourcing-sincronizar`
   (backfill das tabelas unificadas de licitações/compras; idempotente).
-- **Ainda não agendado**: `creditos-ia`, que deveria rodar **de hora em
-  hora** (expira lotes de AI Credits, concede a franquia do mês, libera
-  reservas órfãs e registra os avisos de 80/95/100% — ver
-  `docs/b2bon/AI_CREDITS_OPERACAO.md`). Até entrar no workflow, precisa
-  ser chamado por outro agendador.
+- **De hora em hora (minuto 7)**: `creditos-ia`, job próprio
+  (`creditos-ia`) no mesmo workflow — expira lotes de AI Credits, concede
+  a franquia do mês, libera reservas órfãs e registra os avisos de
+  80/95/100% (ver `docs/b2bon/AI_CREDITS_OPERACAO.md`). Idempotente.
 
 Cada rota é `POST /cron/<nome>`, protegida pelo mesmo `X-Cron-Secret`
 (seção abaixo) — nenhuma delas aceita chamada sem esse segredo. O
