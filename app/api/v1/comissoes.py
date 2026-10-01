@@ -81,6 +81,8 @@ def _pendentes(db: Session, hoje: date, cambio, regras_margem: dict) -> list[str
             faltam.append(f"Confirmar uso na arquitetura: {nome}")
         if custos["faltante"] == comissoes.tipos.Faltante.CUSTO_INFRA.value:
             faltam.append(f"Capacity envelope: {nome}" if componente.modelo_preco == comissoes.tipos.ModeloPreco.USO.value
+                          else f"Valor de contrato, proposta ou fatura (CUSTOM): {nome}"
+                          if componente.modelo_preco == comissoes.tipos.ModeloPreco.CUSTOM.value
                           else f"Valor do plano de referência: {nome}")
         elif custos["faltante"] == comissoes.tipos.Faltante.CAMBIO.value:
             faltam.append(f"Cotação PTAX {componente.moeda}/BRL: {nome}")

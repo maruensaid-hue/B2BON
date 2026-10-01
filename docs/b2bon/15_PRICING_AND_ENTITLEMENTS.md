@@ -232,7 +232,7 @@ rotas de inteligência (`/procurement/riscos`, `/proximas-acoes`, `/fornecedores
   registrada (só PAYABLE entra). Custo de IA só entra na margem se a política da margem mandar (v1: não). Câmbio: PTAX de
   fechamento do Banco Central (OI-018 resolvido quanto à política).
 - **Infrastructure Cost Pool (D-077)**: preços públicos verificados em 2026-10-01 — Render Scale USD 499/mês e Web Service
-  12c-96g USD 1.500/mês (a confirmar uso), Neon Scale por uso (USD 0,222/CU-h, USD 0,35/GB-mês, via Capacity Envelope), Lusha
+  12c-96g CUSTOM (D-079: sem preço público; aguarda contrato/proposta/fatura), Neon Scale por uso (USD 0,222/CU-h, USD 0,35/GB-mês, via Capacity Envelope), Lusha
   Premium USD 399,90/mês (provedor de dados); Render Postgres/Key Value/disco disponíveis mas não alocados; Render Enterprise e
   Lusha Scale CUSTOM sem preço. Pesos: STARTER/DEPARTMENT 1, PROFESSIONAL 2, ENTERPRISE 4, BID_INTELLIGENCE 2,
   STRATEGIC_SOURCING 4.

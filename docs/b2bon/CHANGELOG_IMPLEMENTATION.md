@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Render Web Service 12c-96g sob consulta (2026-10-01, D-079)
+
+- O maior Web Service do Render (12 CPU / 96 GB) não tem preço publicado pelo Render; os US$ 1.500/mês usados antes saíram e o item passa a "sob consulta" (CUSTOM).
+- Até haver contrato, proposta ou fatura, o custo de infraestrutura fica incompleto e as comissões aguardam esse valor; a pendência aparece em Admin → Parâmetros financeiros.
+- A alteração fica registrada na auditoria.
+
 ## CBS/IBS 2026 dispensados mediante conformidade (2026-10-01, D-078)
 
 - Em 2026 a CyberFort fica como "dispensada de recolhimento mediante conformidade": CBS (0,90%) e IBS (0,10%) continuam registrados como alíquotas de teste, mas o imposto efetivamente pago é R$ 0 e não reduz a margem da comissão.

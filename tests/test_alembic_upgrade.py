@@ -229,7 +229,10 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
             no_pool = conexao.execute(sa.text("SELECT fornecedor, servico, custo_referencia FROM componente_infra WHERE provisionado_para_comissao "
                                               "AND status_arquitetura <> 'AVAILABLE_NOT_ALLOCATED' ORDER BY fornecedor, servico")).fetchall()
             assert [tuple(c) for c in no_pool] == [("LUSHA", "SALES_INTELLIGENCE", 399.9), ("NEON", "POSTGRES", None),
-                                                   ("RENDER", "WEB_SERVICE_COMPUTE", 1500), ("RENDER", "WORKSPACE", 499)]
+                                                   ("RENDER", "WEB_SERVICE_COMPUTE", None), ("RENDER", "WORKSPACE", 499)]
+            # D-079: o Web Service 12c-96g é CUSTOM (sem preço público), com a alteração auditada
+            assert conexao.execute(sa.text("SELECT modelo_preco FROM componente_infra WHERE servico = 'WEB_SERVICE_COMPUTE'")).scalar() == "CUSTOM"
+            assert conexao.execute(sa.text("SELECT count(*) FROM audit_log WHERE evento_tipo = 'componente_infra_alterado'")).scalar() == 1
             assert conexao.execute(sa.text("SELECT count(*) FROM componente_infra")).scalar() == 9
             # D-078: CBS/IBS 2026 dispensados mediante conformidade (alíquotas-teste continuam nos perfis)
             assert conexao.execute(sa.text("SELECT status, vigente_de, vigente_ate FROM periodo_status_tributario")).fetchall() == [
@@ -242,6 +245,10 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
             tiers = dict(conexao.execute(sa.text("SELECT nome, tier_infraestrutura FROM plano WHERE segmento = 'PRIVATE'")).fetchall())
             assert (tiers.get("MAP Starter"), tiers.get("CRM Professional"), tiers.get("Bid Intelligence"), tiers.get("Strategic Sourcing")) == (
                 "STARTER", "PROFESSIONAL", "BID_INTELLIGENCE", "STRATEGIC_SOURCING")
+        command.downgrade(config, "d0f2b4c6e8a1")  # D-079 volta: 12c-96g de novo com o valor da D-077
+        with engine.connect() as conexao:
+            assert conexao.execute(sa.text("SELECT modelo_preco, custo_referencia FROM componente_infra WHERE servico = 'WEB_SERVICE_COMPUTE'")
+                                   ).fetchall() == [("FIXED_PLAN", 1500)]
         command.downgrade(config, "b7d9f1a3c5e8")  # D-077 volta: preços dos fornecedores, envelopes e pesos novos saem
         with engine.connect() as conexao:
             assert conexao.execute(sa.text("SELECT count(*) FROM componente_infra")).scalar() == 0

@@ -52,6 +52,7 @@
 | Government: componentes, ARR/TCV/Cash-In, renovação, pool anual, catálogo único, comissão por componente | `tests/integration/test_governo.py` (+ `_pg`), `e2e/governo.spec.ts` | D-072 |
 | Comissão sobre a Margem Comissionável Líquida: impostos, infraestrutura e IA antes da taxa, AWAITING_COST_PARAMETERS, recálculo, snapshot, PAID imutável, waterfall | `tests/integration/test_comissao_margem.py` | D-074 |
 | CBS/IBS 2026: alíquotas-teste preservadas, WAIVED = caixa zero e margem intacta, COMPENSATED sem dupla contagem, PAYABLE, vigência do status, PAID imutável, snapshot e MAP | `tests/integration/test_cbs_ibs_2026.py` | D-078 |
+| Render Web Service 12c-96g CUSTOM: sem preço, pool aguarda, pendência CUSTOM, migração auditada e reversível | `tests/integration/test_precos_fornecedores.py`, `tests/test_alembic_upgrade.py` | D-079 |
 | Preços públicos dos fornecedores: Render Scale/Web Service, Postgres e Key Value fora do pool, Neon por envelope (benchmark não é custo), Lusha Premium no pool de dados, CUSTOM sem preço, PTAX, dupla contagem, prioridade da fonte, pesos BID/SOURCING, capacidade não alocada, snapshot imutável | `tests/integration/test_precos_fornecedores.py` | D-077 |
 | Infrastructure Cost Pool: real × provisionado, plano máximo, pesos 1/2/4 configuráveis, atribuição direta, sem dupla contagem IA/API, limiares 70/80/90/100, alertas sem upgrade automático, projeção, Provider Economics, PTAX, isolamento | `tests/integration/test_infraestrutura_pool.py` | D-076 |
 | Entitlements Government do PO no catálogo único; Tax Engine (presunção, ISS SP 1.05, CBS/IBS-teste fora da carga, adicional de IRPJ, pendências); infraestrutura por categoria/método; câmbio por vigência e AWAITING_FX_RATE; IA só pela política | `tests/integration/test_parametros_financeiros.py` | D-075 |
@@ -106,3 +107,4 @@
 | D-076 infraestrutura conservadora (2026-10-01) | 2.163 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |
 | D-077 preços públicos dos fornecedores (2026-10-01) | 2.175 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |
 | D-078 CBS/IBS 2026 (2026-10-01) | 2.181 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |
+| D-079 Render 12c-96g CUSTOM (2026-10-01) | 2.182 passed (+ Postgres 9/9) | ruff 40 (baseline), frontend sem mudança | não afetado |

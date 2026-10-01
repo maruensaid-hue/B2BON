@@ -23,14 +23,23 @@ RAIZ = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("mig_d077", RAIZ / "alembic/versions/c8e0a2b4d6f9_precos_publicos_fornecedores.py")
 MIG = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(MIG)
+spec_d079 = importlib.util.spec_from_file_location("mig_d079", RAIZ / "alembic/versions/e2a4c6e8f0b3_render_web_service_custom.py")
+MIG_D079 = importlib.util.module_from_spec(spec_d079)
+spec_d079.loader.exec_module(MIG_D079)
 DIA = date(2026, 10, 15)
 POOLS = ["INFRASTRUCTURE", "DATA_PROVIDER"]
 
 
-def _semear(db):
-    """Os componentes da migração (a fonte de produção) e o benchmark do Neon."""
+def _semear(db, proposta_web=1500.0):
+    """Os componentes da migração (a fonte de produção: D-077 + D-079) e o benchmark do Neon. O Web Service 12c-96g é CUSTOM
+    (D-079); `proposta_web` simula uma proposta comercial para exercitar a mecânica do pool com valores (None = produção)."""
     for dados in MIG.COMPONENTES:
         comissoes.infraestrutura.criar(db, {k: v for k, v in dados.items() if k != "criado_por"}, "teste")
+    web = _componente(db, "RENDER", "WEB_SERVICE_COMPUTE")
+    comissoes.infraestrutura.atualizar(db, web.id, MIG_D079.DEPOIS, MIG_D079.MOTIVO, "teste")
+    if proposta_web is not None:
+        comissoes.infraestrutura.atualizar(db, web.id, {"custo_contratado": proposta_web, "tipo_fonte": "COMMERCIAL_PROPOSAL"},
+                                           "Proposta comercial de teste", "teste")
     neon = _componente(db, "NEON", "POSTGRES")
     comissoes.infraestrutura.criar_envelope(db, neon.id, {k: v for k, v in MIG.BENCHMARK_NEON.items() if k != "moeda"}, "teste")
     finops.cambio.registrar(db, {"moeda_base": "USD", "moeda_cotacao": "BRL", "taxa": 5.0, "fonte": "BANCO_CENTRAL_DO_BRASIL",
@@ -61,7 +70,7 @@ def test_precos_publicos_verificados_do_render_e_da_lusha():
     workspace, web = por_servico[("RENDER", "WORKSPACE")], por_servico[("RENDER", "WEB_SERVICE_COMPUTE")]
     assert (workspace["plano_referencia"], workspace["custo_referencia"], workspace["moeda"], workspace["ciclo_cobranca"]) == (
         "Scale", 499.00, "USD", "MONTHLY")
-    assert (web["plano_referencia"], web["custo_referencia"]) == ("12c-96g", 1500.00)
+    assert (web["plano_referencia"], web["custo_referencia"]) == ("12c-96g", 1500.00)  # D-077; a D-079 tira o valor (CUSTOM)
     lusha = por_servico[("LUSHA", "SALES_INTELLIGENCE")]
     assert (lusha["plano_referencia"], lusha["custo_referencia"], lusha["contabilizacao"]) == ("Premium", 399.90, "DATA_PROVIDER")
     assert (lusha["atributos"]["creditos_incluidos"], lusha["atributos"]["assentos_incluidos"]) == (3400, 5)
@@ -219,3 +228,20 @@ def test_revisao_de_preco_vencida_aparece_nas_pendencias(client, db_session):
     assert "Confirmar uso na arquitetura: RENDER · WEB_SERVICE_COMPUTE" in pendentes
     assert "Capacity envelope: NEON · POSTGRES" in pendentes
     assert not any("LUSHA" in p and "Valor" in p for p in pendentes) and not any("Enterprise" in p for p in pendentes)
+
+
+def test_web_service_12c_96g_custom_sem_preco_e_pool_aguarda(client, db_session):
+    """D-079: o Render não publica preço para 12 CPU / 96 GB — CUSTOM, sem valor; o pool aguarda contrato/proposta/fatura."""
+    assert (MIG_D079.DEPOIS["modelo_preco"], MIG_D079.DEPOIS["custo_referencia"]) == ("CUSTOM", None)
+    _semear(db_session, proposta_web=None)
+    _envelope_neon(db_session)
+    web = _componente(db_session, "RENDER", "WEB_SERVICE_COMPUTE")
+    assert (web.modelo_preco, web.custo_referencia, web.custo_contratado, web.status_arquitetura) == (
+        "CUSTOM", None, None, "APPLICABLE_PENDING_CONFIRMATION")
+    assert comissoes.infraestrutura.custos_mensais(db_session, web, DIA)["faltante"] == "INFRASTRUCTURE_COST"
+    assert comissoes.infraestrutura.pool(db_session, DIA)["faltantes"] == ["INFRASTRUCTURE_COST"]
+    with pytest.raises(ValidacaoFalhou, match="CUSTOM"):
+        comissoes.infraestrutura.atualizar(db_session, web.id, {"custo_referencia": 1500}, "Preço público inexistente", "teste")
+    db_session.rollback()
+    pendentes = client.get("/api/v1/comissoes/parametros").json()["pendentes"]
+    assert "Valor de contrato, proposta ou fatura (CUSTOM): RENDER · WEB_SERVICE_COMPUTE" in pendentes

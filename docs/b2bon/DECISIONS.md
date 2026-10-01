@@ -1071,3 +1071,17 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - MAP: CBS Test Rate 0,90%, IBS Test Rate 0,10%, situação 2026 ("Dispensado de recolhimento mediante conformidade"), CBS e IBS
     Cash Tax R$ 0 — nunca "CBS = 0%".
 - **Status**: ACEITA. Migração `d0f2b4c6e8a1` (reversível).
+
+## D-079 · 2026-10-01 · Render Web Service 12c-96g como CUSTOM
+- **Contexto**: validação dos preços da D-077 nas fontes dos fornecedores. A página oficial do Render não publica preço para o
+  Web Service 12 CPU / 96 GB (o maior plano padrão com preço é o Pro Ultra; instâncias maiores são sob consulta), então os
+  USD 1.500/mês da D-077 não tinham fonte. O inventário real do Render (2026-10-01) mostra `b2bon-api` e `b2bon-api-staging` no
+  plano free, sem Render Postgres nem Key Value. Os preços do Neon (USD 0,222/CU-hora, USD 0,35/GB-mês) foram confirmados na
+  página oficial; o exemplo de USD 1.404 não aparece nela e segue apenas como benchmark.
+- **Decisão do PO**: "Marque 12c-96g como CUSTOM e aplique a migração."
+- **Implementação**: o componente RENDER · WEB_SERVICE_COMPUTE (12c-96g) passa a `modelo_preco = CUSTOM`, sem
+  `custo_referencia`; continua APPLICABLE_PENDING_CONFIRMATION e provisionado para comissão. Sem contrato, proposta ou fatura,
+  o pool fica com INFRASTRUCTURE_COST faltante e as comissões aguardam — nunca um valor inventado. A pendência aparece como
+  "Valor de contrato, proposta ou fatura (CUSTOM)". A alteração é registrada no audit_log (antes/depois, motivo).
+- **Status**: ACEITA. Migração `e2a4c6e8f0b3` (reversível).
+
