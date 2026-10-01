@@ -20,3 +20,11 @@
 | SSRF | Hosts fixos por conector, sem redirect (Fase 13) | D-042 |
 | Dependências | `pip-audit`: 0 vulnerabilidades. `npm audit`: 1 alta em dependência de build (`fast-uri`, via workbox), atualizada só no lockfile → 0 | `frontend/package-lock.json` |
 | Segredos padrão | A API se recusa a subir fora de SQLite com `SECRET_KEY`/`JWT_SECRET_KEY` padrão (verificado ao subir o teste de carga) | `config.validar_segredos_de_producao` |
+
+## Ambiente de demonstração (D-082)
+
+Rota pública sem senha (`POST /auth/demonstracao`), desligada por padrão. Cada sessão é um tenant próprio e efêmero;
+o token marcado `demo` não alcança dados de outros tenants (rede de empresas, sinais entre empresas, indicações),
+administração da plataforma nem ações que gerem custo, acesso ou contato externo (middleware `bloqueio_demonstracao`).
+Envios do tenant de demonstração usam provedores simulados. Limites: sessões ativas, sessões por IP/hora e créditos
+de IA próprios. Detalhes em `DEMONSTRACAO.md`.

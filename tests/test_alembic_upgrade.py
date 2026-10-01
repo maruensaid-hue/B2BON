@@ -253,6 +253,11 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
             tiers = dict(conexao.execute(sa.text("SELECT nome, tier_infraestrutura FROM plano WHERE segmento = 'PRIVATE'")).fetchall())
             assert (tiers.get("MAP Starter"), tiers.get("CRM Professional"), tiers.get("Bid Intelligence"), tiers.get("Strategic Sourcing")) == (
                 "STARTER", "PROFESSIONAL", "BID_INTELLIGENCE", "STRATEGIC_SOURCING")
+        with engine.connect() as conexao:  # D-082: tenant de demonstração (expiração)
+            assert "demo_expira_em" in {c["name"] for c in sa.inspect(conexao).get_columns("tenant")}
+        command.downgrade(config, "a8c0e2f4b6d9")  # D-082 volta
+        with engine.connect() as conexao:
+            assert "demo_expira_em" not in {c["name"] for c in sa.inspect(conexao).get_columns("tenant")}
         command.downgrade(config, "f3b5d7f9a1c4")  # D-081 volta: as versões 1 da campanha e da performance voltam a valer
         with engine.connect() as conexao:
             assert conexao.execute(sa.text("SELECT versao FROM politica_comissao WHERE codigo = 'CAMPAIGN:SUMMER_SALES_CHALLENGE_2026' "

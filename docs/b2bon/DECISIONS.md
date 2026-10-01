@@ -1156,3 +1156,32 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - Semente das políticas segura contra requisições simultâneas (savepoint e releitura) e listagem de quotas com uma
     linha por escopo.
 - **Status**: ACEITA. Migração `a8c0e2f4b6d9` (reversível).
+
+## D-082 · 2026-10-01 · Ambiente de demonstração público, isolado por sessão e com dados fictícios
+- **Contexto**: o PO pediu uma conta de demonstração com dados fictícios em todos os módulos (empresas, vendedores,
+  oportunidades, RFP, pregão eletrônico, negócios futuros com governo, fornecedores, mapeamento de oportunidades,
+  prospecção, cadência, agenda) e um link para publicar no site, sem login e senha reais, usável pelos representantes
+  ao mesmo tempo.
+- **Decisão**: em vez de uma conta compartilhada (em que um representante mexeria nos dados do outro durante uma
+  apresentação e alguém poderia apagar tudo), **cada acesso ao link cria um tenant de demonstração próprio** — já
+  preenchido, expira em 8 horas e é apagado depois. Desligado por padrão (`DEMO_HABILITADA`).
+- **Implementação**:
+  - `tenant.demo_expira_em` (nulo = tenant real); rota pública `POST /auth/demonstracao` (limite por IP) devolve um
+    token sem senha, marcado `demo`, que expira junto com o ambiente; `GET /auth/demonstracao` diz se está ligada.
+  - Semente (`app/services/demo/semente.py`): empresa fictícia Atlas Soluções Industriais com equipe, ICPs, ofertas,
+    contas, decisores, negócios em todos os estágios, propostas, atividades, reuniões, cadências, fila de aprovação,
+    campanha, sinais do MAP, NPS e necessidades; licitações (pregão, SRP, RFP privado, futuras do PCA, NO-GO, ganha),
+    compras públicas (PCA, demandas, processo em pesquisa de preços, fornecedores, contratos) e sourcing (RFP avaliado,
+    RFQ). Fluxos com regra passam pelas mesmas funções da API. E-mails `*.demo.invalid`, sem CNPJ real. O lado
+    comprador semeia a si mesmo (`procurement/demonstracao.py`), registrado em `shared/demonstracao.py` — a barreira
+    Buy/Sell continua intacta (quem monta a demonstração nunca importa procurement).
+  - Salvaguardas: e-mail e WhatsApp do tenant de demonstração por provedores simulados; middleware bloqueia rede de
+    empresas, administração da plataforma e ações que geram custo, acesso ou contato externo; perfil fora do diretório;
+    sem franquia mensal de IA (só os créditos da demonstração, que expiram); teto de sessões ativas; tenants de
+    demonstração fora das visões da plataforma (lista de tenants, motor de churn).
+  - Limpeza: varredura do schema (`tenant_service.apagar_dados`, a mesma da exclusão definitiva) a cada nova sessão e
+    na rotina horária `/cron/creditos-ia`.
+  - Correção encontrada no caminho: o vínculo representante → usuário (D-080) criava um ciclo de FKs que desordenava a
+    exclusão definitiva de tenants; `use_alter` na FK resolve.
+- **Publicação**: `docs/b2bon/DEMONSTRACAO.md` (passo a passo).
+- **Status**: ACEITA. Migração `b9d1f3a5c7e0` (reversível).

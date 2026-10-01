@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+import jwt
 import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,7 @@ from app.api.v1.router import router as api_v1_router
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.core.observability import CorrelationIdMiddleware
+from app.services.demo import bloqueio as demo_bloqueio
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services.errors import (
@@ -86,6 +88,20 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Request-ID", "X-Proximo-Cursor"],
 )
+
+
+@app.middleware("http")
+async def bloqueio_demonstracao(request: Request, call_next):
+    """D-082: sessão de demonstração (token marcado `demo`) não alcança dados reais nem ações que saem do ambiente fictício."""
+    autorizacao = request.headers.get("authorization", "")
+    if autorizacao.startswith("Bearer ") and demo_bloqueio.bloqueado(request.method, request.url.path):
+        try:
+            payload = jwt.decode(autorizacao[len("Bearer "):], settings.jwt_secret_key, algorithms=["HS256"])
+        except jwt.PyJWTError:
+            payload = {}
+        if payload.get("demo"):
+            return JSONResponse(status_code=403, content={"detalhe": demo_bloqueio.MENSAGEM})
+    return await call_next(request)
 
 
 @app.middleware("http")

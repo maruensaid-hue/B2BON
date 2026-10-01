@@ -63,3 +63,5 @@ class Tenant(Base):
     # de `tenant_pai_id`/`modo_cobranca` acima (hierarquia estrutural
     # entre empresas, não comissão de venda a uma pessoa).
     representante_id: Mapped[int | None] = mapped_column(ForeignKey("representante.id"), nullable=True)
+    # D-082: tenant de demonstração (dados fictícios) — expira e é apagado sozinho; nulo = tenant real.
+    demo_expira_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)

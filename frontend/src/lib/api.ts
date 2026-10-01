@@ -2,6 +2,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localho
 const TOKEN_KEY = "b2bon_token";
 const USUARIO_KEY = "b2bon_usuario";
 const TEM_LICENCA_KEY = "b2bon_tem_licenca";
+const DEMO_KEY = "b2bon_demo_expira_em";
 
 export class ApiError extends Error {
   status: number;
@@ -56,6 +57,17 @@ export function limparSessao(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USUARIO_KEY);
   localStorage.removeItem(TEM_LICENCA_KEY);
+  localStorage.removeItem(DEMO_KEY);
+}
+
+/** D-082: sessão de demonstração (dados fictícios, expira sozinha) — guarda só a expiração para a faixa de aviso. */
+export function setDemoExpiraEm(expiraEm: string | null): void {
+  if (expiraEm) localStorage.setItem(DEMO_KEY, expiraEm);
+  else localStorage.removeItem(DEMO_KEY);
+}
+
+export function getDemoExpiraEm(): string | null {
+  return localStorage.getItem(DEMO_KEY);
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {

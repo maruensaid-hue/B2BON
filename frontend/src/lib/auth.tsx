@@ -6,6 +6,7 @@ import {
   getTemLicencaAtiva,
   getToken,
   limparSessao,
+  setDemoExpiraEm,
   setSessao,
   setTemLicencaAtiva as persistirTemLicencaAtiva,
 } from "@/lib/api";
@@ -107,6 +108,8 @@ interface AuthContextValue {
   temLicencaAtiva: boolean;
   entrar: (email: string, senha: string) => Promise<void>;
   entrarComGoogle: (idToken: string) => Promise<void>;
+  /** D-082: abre um ambiente de demonstração próprio, sem login nem senha. */
+  entrarDemonstracao: () => Promise<void>;
   registrarVitrine: (dados: DadosRegistroVitrine) => Promise<string | null>;
   /** Cadastro público sem convite (raio-X 2026-09-21, página de
    * boas-vindas) — sempre exige um plano pago, nunca o Teste. */
@@ -195,6 +198,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPrimeiroLoginPendente(resposta.primeiro_login);
   }, []);
 
+  const entrarDemonstracao = useCallback(async () => {
+    const resposta = await api.post<TokenResponse & { demo_expira_em: string }>("/auth/demonstracao");
+    setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
+    setDemoExpiraEm(resposta.demo_expira_em);
+    setUsuario(resposta.usuario);
+    setTemLicencaAtiva(resposta.tem_licenca_ativa);
+    setPrimeiroLoginPendente(false);
+  }, []);
+
   const sair = useCallback(() => {
     limparSessao();
     setUsuario(null);
@@ -267,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       temLicencaAtiva,
       entrar,
       entrarComGoogle,
+      entrarDemonstracao,
       registrarVitrine,
       criarContaPublica,
       registrarComConvite,
@@ -284,6 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       temLicencaAtiva,
       entrar,
       entrarComGoogle,
+      entrarDemonstracao,
       registrarVitrine,
       criarContaPublica,
       registrarComConvite,

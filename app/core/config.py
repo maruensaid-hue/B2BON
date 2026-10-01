@@ -208,6 +208,13 @@ class Settings(BaseSettings):
     # secret_key (usada para HMAC de links públicos) para segregar o risco.
     jwt_secret_key: str = "changeme-dev-jwt-secret-key-min-32-bytes-long"
     jwt_expiracao_minutos: int = 1440
+    # Ambiente de demonstração (D-082): cada acesso ao link público cria um tenant próprio, já preenchido com dados
+    # fictícios, que expira sozinho. Desligado por padrão — ligar com DEMO_HABILITADA=true no serviço da API.
+    demo_habilitada: bool = False
+    demo_ttl_horas: int = 8
+    demo_max_sessoes_ativas: int = 60
+    demo_sessoes_por_ip_hora: int = 20
+    demo_creditos_ia: int = 5000
     google_oauth_client_id: str = ""
 
     # Limiares de alerta de risco de churn dos tenants (Onda D — Motor de

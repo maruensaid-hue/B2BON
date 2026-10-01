@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -47,6 +48,7 @@ from app.schemas.auth import (
     UsuarioSchema,
 )
 from app.services import auth_service, pagamento_licenca_service, tenant_service
+from app.services.demo import sessao as demo_sessao
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +136,27 @@ def _resposta_token(
         tem_licenca_ativa=licenca is not None and licenca.status == "ativa",
         checkout_url=checkout_url,
         primeiro_login=primeiro_login,
+    )
+
+
+class DemonstracaoSchema(TokenResponseSchema):
+    demo_expira_em: datetime
+
+
+@router.get("/demonstracao")
+def demonstracao_disponivel() -> dict:
+    """Pública: a tela de login só mostra "Ver demonstração" quando ela está ligada neste ambiente."""
+    return {"habilitada": settings.demo_habilitada, "duracao_horas": settings.demo_ttl_horas}
+
+
+@router.post("/demonstracao", response_model=DemonstracaoSchema, status_code=201,
+             dependencies=[Depends(limitar_por_ip(settings.demo_sessoes_por_ip_hora, 3600))])
+def demonstracao(db: Session = Depends(get_db)) -> DemonstracaoSchema:
+    """D-082: abre um ambiente de demonstração próprio (dados fictícios, expira sozinho) — sem login nem senha."""
+    usuario, expira_em = demo_sessao.criar(db)
+    return DemonstracaoSchema(
+        access_token=auth_service.gerar_token(usuario, expira_em=expira_em.replace(tzinfo=UTC), demo=True),
+        usuario=_construir_usuario_schema(usuario, db), tem_licenca_ativa=True, demo_expira_em=expira_em,
     )
 
 

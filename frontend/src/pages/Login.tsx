@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 // Google Identity Services (GSI) — SDK carregado sob demanda (só quando
@@ -30,6 +30,11 @@ export function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  // D-082: "Ver demonstração" só aparece quando o ambiente de demonstração está ligado no servidor.
+  const [demoHabilitada, setDemoHabilitada] = useState(false);
+  useEffect(() => {
+    api.get<{ habilitada: boolean }>("/auth/demonstracao").then((r) => setDemoHabilitada(r.habilitada)).catch(() => setDemoHabilitada(false));
+  }, []);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [mostrarCadastro, setMostrarCadastro] = useState(false);
@@ -210,6 +215,14 @@ export function Login() {
           <Link to="/planos" className="font-semibold text-cyan hover:underline" data-testid="link-planos">
             Planos e preços
           </Link>
+          {demoHabilitada && (
+            <>
+              {" · "}
+              <Link to="/demo" className="font-semibold text-cyan hover:underline" data-testid="link-demo">
+                Ver demonstração (sem login)
+              </Link>
+            </>
+          )}
         </div>
 
         <div className="mt-3 text-center text-[10px] text-muted">

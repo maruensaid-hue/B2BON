@@ -51,6 +51,7 @@ from app.services import (
     titular_service,
     webhook_parceiro_service,
 )
+from app.services.demo import sessao as demo_sessao
 from app.services.errors import NaoAutorizado
 
 logger = logging.getLogger(__name__)
@@ -317,10 +318,12 @@ def creditos_ia(db: Session = Depends(get_db)) -> dict:
     (80/95/100%), anomalias de consumo e alertas de margem. D-072: concede o
     pool anual dos períodos Government que começaram, encerra os que
     terminaram e marca os avisos de renovação. D-076: grava a PTAX de
-    fechamento do Banco Central dos últimos dias úteis."""
+    fechamento do Banco Central dos últimos dias úteis. D-082: apaga os
+    ambientes de demonstração expirados."""
     governo_resultado = governo.contratos.rotina(db)
     ptax = finops.cambio.sincronizar_ptax(db)  # D-076: PTAX de fechamento do Banco Central (OI-018)
-    return {**finops.creditos_ia_rotina(db), "governo": governo_resultado, "ptax": ptax}
+    demonstracoes = demo_sessao.purgar_expiradas(db, limite=50)
+    return {**finops.creditos_ia_rotina(db), "governo": governo_resultado, "ptax": ptax, "demonstracoes_apagadas": demonstracoes}
 
 
 @router.post("/sourcing-sincronizar", dependencies=[Depends(_exigir_segredo_cron)])

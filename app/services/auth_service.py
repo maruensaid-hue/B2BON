@@ -35,15 +35,17 @@ def verificar_senha(senha: str, senha_hash: str) -> bool:
     return bcrypt.checkpw(senha.encode("utf-8"), senha_hash.encode("utf-8"))
 
 
-def gerar_token(usuario: Usuario) -> str:
+def gerar_token(usuario: Usuario, *, expira_em: datetime | None = None, demo: bool = False) -> str:
     agora = datetime.now(UTC)
     payload = {
         "sub": str(usuario.id),
         "tenant_id": usuario.tenant_id,
         "papel": usuario.papel,
         "iat": agora,
-        "exp": agora + timedelta(minutes=settings.jwt_expiracao_minutos),
+        "exp": expira_em or agora + timedelta(minutes=settings.jwt_expiracao_minutos),
     }
+    if demo:  # D-082: marca a sessão de demonstração (o middleware bloqueia o que não pode sair do ambiente fictício)
+        payload["demo"] = True
     return jwt.encode(payload, settings.jwt_secret_key, algorithm="HS256")
 
 

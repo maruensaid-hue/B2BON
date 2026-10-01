@@ -27,6 +27,9 @@ class Representante(Base):
     percentual_comissao: Mapped[float] = mapped_column(Float)
     # MAP Performance (D-080): usuário do representante no CRM da CyberFort (tenant operador). É por ele que o MAP lê
     # contas trabalhadas, atividades, reuniões, oportunidades e propostas; sem vínculo, só New MRR, comissão e Governo.
-    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True, index=True)
+    # `use_alter`: quebra o ciclo representante → usuário → tenant → representante na ordenação das tabelas (a exclusão
+    # definitiva de tenant varre o schema em ordem topológica).
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", use_alter=True, name="fk_representante_usuario"),
+                                                     nullable=True, index=True)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

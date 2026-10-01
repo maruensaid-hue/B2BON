@@ -227,6 +227,10 @@ def get_tenant_id(usuario: Usuario = Depends(get_usuario_atual)) -> str:
     return usuario.tenant_id
 
 
+def _e_demonstracao(db: Session, tenant_id: str) -> bool:
+    return db.query(Tenant.id).filter(Tenant.id == tenant_id, Tenant.demo_expira_em.isnot(None)).first() is not None
+
+
 def resolver_whatsapp_provider(tenant_id: str, db: Session) -> WhatsAppProvider:
     """Raio-X de produção, endurecido em 2026-08-27: número de WhatsApp é
     por tenant (`ConfiguracaoWhatsApp`), sem fallback compartilhado —
@@ -243,6 +247,8 @@ def resolver_whatsapp_provider(tenant_id: str, db: Session) -> WhatsAppProvider:
     provider tenant a tenant dentro do loop, não uma vez só no nível da
     rota como `get_whatsapp_provider` (que depende de `get_tenant_id`, e
     portanto de um JWT que o cron não tem)."""
+    if _e_demonstracao(db, tenant_id):  # D-082: demonstração "envia" sem sair de verdade
+        return StubWhatsAppProvider()
     config_tenant = db.query(ConfiguracaoWhatsApp).filter_by(tenant_id=tenant_id).one_or_none()
     if config_tenant is not None:
         return MetaWhatsAppProvider(
@@ -276,6 +282,8 @@ def resolver_email_provider(tenant_id: str, db: Session) -> EmailProvider:
     Função simples (não `Depends`), mesmo motivo de `resolver_whatsapp_
     provider`: os dispatchers de cron resolvem por tenant dentro do
     loop, sem JWT."""
+    if _e_demonstracao(db, tenant_id):  # D-082: demonstração "envia" sem sair de verdade
+        return StubEmailProvider()
     config_tenant = db.query(ConfiguracaoEmailSmtp).filter_by(tenant_id=tenant_id).one_or_none()
     if config_tenant is not None:
         return SmtpEmailProvider(

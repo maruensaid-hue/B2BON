@@ -40,7 +40,7 @@ export default defineConfig({
       cwd: repoRoot,
       url: "http://localhost:8000/health",
       reuseExistingServer: !process.env.CI,
-      env: { DATABASE_URL },
+      env: { DATABASE_URL, DEMO_HABILITADA: "true" },  // D-082: o E2E cobre o link público da demonstração
       timeout: 60_000,
     },
     {

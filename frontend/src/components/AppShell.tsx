@@ -3,12 +3,13 @@ import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { BuscaGlobal } from "@/components/busca/BuscaGlobal";
+import { FaixaDemonstracao } from "@/components/FaixaDemonstracao";
 import { InstallBanner } from "@/components/InstallBanner";
 import { PainelAjudaDocado } from "@/components/onboarding/PainelAjudaDocado";
 import { TourGuiado } from "@/components/onboarding/TourGuiado";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { api } from "@/lib/api";
+import { api, getDemoExpiraEm } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth";
 
@@ -468,6 +469,7 @@ function AvisoWhatsappPessoalFaltando() {
 export function AppShell() {
   const { usuario, temLicencaAtiva, sair, primeiroLoginPendente, consumirPrimeiroLoginPendente } = useAuth();
   const navegar = useNavigate();
+  const emDemonstracao = Boolean(getDemoExpiraEm());
   // Logout leva pra Central de Negócios, não direto pro login (raio-X
   // 2026-09-21, página de boas-vindas) — mantém o visitante recém-saído
   // vendo conteúdo da plataforma em vez de cair numa tela em branco.
@@ -561,7 +563,7 @@ export function AppShell() {
   // escopo desta fase). Rede Social é livre pra qualquer tenant (mesmo
   // sem licença ativa), então o sino independe de `temLicencaAtiva`.
   useEffect(() => {
-    if (!usuario) return;
+    if (!usuario || emDemonstracao) return;  // D-082: a demonstração não acessa a rede de empresas reais
     async function buscarContagem() {
       try {
         const resposta = await api.get<{ total: number }>("/rede-social/notificacoes/contagem-nao-lidas");
@@ -573,7 +575,7 @@ export function AppShell() {
     buscarContagem();
     const intervalo = setInterval(buscarContagem, INTERVALO_POLLING_NOTIFICACOES_MS);
     return () => clearInterval(intervalo);
-  }, [usuario]);
+  }, [usuario, emDemonstracao]);
 
   async function abrirNotificacoes() {
     const abrindo = !notificacoesAbertas;
@@ -626,7 +628,7 @@ export function AppShell() {
         ...(temModuloBids ? [NAV_ITEM_BIDS] : []),
         ...(temModuloCompras ? [NAV_ITEM_COMPRAS] : []),
         ...(temModuloSourcing ? [NAV_ITEM_SOURCING] : []),
-        NAV_ITEM_REDE_SOCIAL,
+        ...(emDemonstracao ? [] : [NAV_ITEM_REDE_SOCIAL]),
         NAV_ITEM_CEREBRO,
       ]
     : [NAV_ITEM_REDE_SOCIAL];
@@ -882,6 +884,7 @@ export function AppShell() {
         {temLicencaAtiva && <AvisoCanalEmailPausado />}
 
         <main className="flex-1 overflow-auto pb-20 sm:pb-0">
+          <FaixaDemonstracao />
           <Outlet />
         </main>
       </div>

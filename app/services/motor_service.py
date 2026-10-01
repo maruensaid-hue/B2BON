@@ -85,7 +85,7 @@ def ranking_saude_tenants(db: Session) -> list[dict]:
     tabela `Tenant` real (Onda A)."""
     agora = datetime.now(UTC)
     resultado = []
-    for tenant in db.query(Tenant).all():
+    for tenant in db.query(Tenant).filter(Tenant.demo_expira_em.is_(None)).all():  # D-082: demonstrações fora do motor
         risco = calcular_score_risco(db, tenant.id)
         perfil = rede_social_service.obter_perfil(db, tenant.id)
         licenca = db.query(Licenca).filter_by(tenant_id=tenant.id).one_or_none()

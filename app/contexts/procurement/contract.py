@@ -36,3 +36,6 @@ from app.contexts.procurement import ferramentas as _ferramentas  # noqa: E402, 
 
 # Sourcing S3: espelho nas tabelas unificadas (eventos do ORM + backfill).
 from app.contexts.procurement import espelho as _espelho  # noqa: E402, F401
+
+# D-082: semeador do lado comprador para o ambiente de demonstração (registrado no Shared Kernel).
+from app.contexts.procurement import demonstracao as _demonstracao  # noqa: E402, F401

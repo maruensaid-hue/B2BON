@@ -105,6 +105,7 @@ const RedefinirSenha = lazy(() => import("@/pages/RedefinirSenha").then((m) => (
 const RegistrarConvite = lazy(() => import("@/pages/RegistrarConvite").then((m) => ({ default: m.RegistrarConvite })));
 const Privacidade = lazy(() => import("@/pages/Privacidade").then((m) => ({ default: m.Privacidade })));
 const Termos = lazy(() => import("@/pages/Termos").then((m) => ({ default: m.Termos })));
+const Demonstracao = lazy(() => import("@/pages/Demonstracao").then((m) => ({ default: m.Demonstracao })));
 
 function CarregandoPagina() {
   return <div className="p-5.5 text-[12px] text-muted">Carregando...</div>;
@@ -131,6 +132,7 @@ export default function App() {
         <Route path="/convite/:codigo" element={<RegistrarConvite />} />
         <Route path="/privacidade" element={<Privacidade />} />
         <Route path="/termos" element={<Termos />} />
+        <Route path="/demo" element={<Demonstracao />} />
         <Route path="/pagamento/retorno" element={<PagamentoRetorno />} />
       </Route>
       <Route

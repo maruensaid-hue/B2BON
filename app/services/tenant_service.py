@@ -277,7 +277,7 @@ def criar_tenant_inicial(
 
 def listar_tenants(db: Session) -> list[Tenant]:
     """Visão cross-tenant sem escopo — só para super_admin (Onda A)."""
-    return db.query(Tenant).order_by(Tenant.id).all()
+    return db.query(Tenant).filter(Tenant.demo_expira_em.is_(None)).order_by(Tenant.id).all()  # D-082: sem demonstrações
 
 
 def e_ancestral(db: Session, possivel_ancestral_id: str, tenant_id: str) -> bool:
@@ -647,6 +647,23 @@ def excluir_definitivamente(db: Session, tenant_id: str, ator: Usuario) -> None:
     if _tem_filho(db, tenant_id):
         raise RegraNegocioViolada("Existem tenants abaixo deste — remova-os antes de excluir definitivamente.")
 
+    apagar_dados(db, tenant_id)
+
+    # Log sob o tenant de quem executou, não o que está sumindo — senão o
+    # próprio registro da exclusão desapareceria junto (admin nunca exclui
+    # o próprio tenant, ver checagem acima, então `ator.tenant_id` nunca é
+    # o tenant que acabou de sumir).
+    auditoria_service.registrar(
+        db, ator.tenant_id, "tenant_excluido_definitivamente", "tenant", 0, str(ator.id),
+        {"tenant_id": tenant_id, "razao_social": tenant.razao_social},
+    )
+    db.delete(tenant)
+    db.commit()
+
+
+def apagar_dados(db: Session, tenant_id: str) -> None:
+    """Varredura do schema inteiro (ver `excluir_definitivamente`); também usada para apagar ambientes de demonstração
+    expirados (D-082), que não têm um ator humano."""
     metadata = Base.metadata
     condicoes_indiretas = _condicoes_indiretas(metadata)
 
@@ -662,17 +679,6 @@ def excluir_definitivamente(db: Session, tenant_id: str, ator: Usuario) -> None:
             continue
         db.execute(table.delete().where(or_(*(coluna == tenant_id for coluna in colunas_tenant))))
         db.commit()
-
-    # Log sob o tenant de quem executou, não o que está sumindo — senão o
-    # próprio registro da exclusão desapareceria junto (admin nunca exclui
-    # o próprio tenant, ver checagem acima, então `ator.tenant_id` nunca é
-    # o tenant que acabou de sumir).
-    auditoria_service.registrar(
-        db, ator.tenant_id, "tenant_excluido_definitivamente", "tenant", 0, str(ator.id),
-        {"tenant_id": tenant_id, "razao_social": tenant.razao_social},
-    )
-    db.delete(tenant)
-    db.commit()
 
 
 def _gerar_tenant_id(db: Session, razao_social: str) -> str:

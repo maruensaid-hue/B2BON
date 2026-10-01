@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Demonstração sem login para os representantes (2026-10-01, D-082)
+
+- Novo link público `/demo` (e o botão "Ver demonstração" na tela de login): abre na hora um ambiente da empresa fictícia Atlas Soluções Industriais, com todos os módulos preenchidos — funil, contas, contatos, cadências, aprovações, agenda, MAP, pregões, RFP, licitações futuras, compras públicas e sourcing.
+- Cada acesso tem o próprio ambiente: vários representantes demonstram ao mesmo tempo sem um interferir no outro. O ambiente expira em 8 horas.
+- Nada sai de verdade (e-mails e WhatsApp simulados) e nenhum dado de cliente real aparece. Precisa ser ligado no servidor (ver `docs/b2bon/DEMONSTRACAO.md`).
+
 ## MAP: pronto para o time em contratação (2026-10-01, D-081)
 
 - O número de representantes não é fixo: quem for cadastrado (Admin → Representantes) entra na equipe com a quota padrão do mês, quem for desativado sai, e a meta de equipe da campanha acompanha o tamanho do time.
