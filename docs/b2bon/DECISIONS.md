@@ -1185,3 +1185,26 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
     exclusão definitiva de tenants; `use_alter` na FK resolve.
 - **Publicação**: `docs/b2bon/DEMONSTRACAO.md` (passo a passo).
 - **Status**: ACEITA. Migração `b9d1f3a5c7e0` (reversível).
+
+## D-083 · 2026-10-01 · Endurecimento da demonstração pública antes de ligar em produção
+- **Contexto**: o PO autorizou ligar a demonstração com a condição de que ela não seja "uma porta aberta" para invasores.
+- **Achados da revisão** (corrigidos antes de ligar): a lista de bloqueio da D-082 deixava passar, numa sessão anônima,
+  serviços pagos ou reais da CyberFort — e-mail de sistema (SendGrid), agenda Google, robô de gravação (Recall.ai),
+  enriquecimento (Lusha), busca web (Brave), pagamento (Mercado Pago), acesso a sites e gravação no Neo4j compartilhado
+  — e toda rota nova nasceria aberta para a demonstração. O limite por IP olhava o IP do proxy do Render.
+- **Decisão**:
+  - **Negação por padrão**: o token de demonstração só alcança as rotas das telas de produto listadas em
+    `app/services/demo/bloqueio.py` (dados do próprio tenant fictício); todo o resto — administração, usuários, convites,
+    credenciais, integrações, rede de empresas, pagamentos, LGPD, API de parceiros e qualquer rota futura — responde 403.
+  - **Todo provedor externo simulado** na requisição de demonstração (`demo_contexto`): e-mail, WhatsApp, agenda, robô de
+    reunião, enriquecimento, busca web, pagamento, acesso a sites e grafo (`GrafoNulo`). A IA (Claude) continua real,
+    limitada aos créditos da sessão.
+  - **Desligar invalida na hora**: com `DEMO_HABILITADA=false`, tokens de demonstração já emitidos recebem 403.
+  - **Limites**: 10 novas demonstrações por hora por IP real (último item do X-Forwarded-For, que o cliente não forja),
+    120 por hora no total e 60 abertas ao mesmo tempo.
+  - Mantidos da D-082: tenant isolado e efêmero, usuário sem senha, token assinado que expira com o ambiente, dados de
+    outros tenants inalcançáveis, fora do diretório da rede, créditos de IA próprios, limpeza automática.
+- **Verificação**: testes de rota proibida (incluindo rota inexistente), token adulterado, demonstração desligada,
+  provedores simulados com credenciais reais configuradas, marca de demonstração propagada até a rota e limite por IP
+  real; varredura das 27 telas da demonstração no navegador (146 chamadas, nenhuma bloqueada indevidamente).
+- **Status**: ACEITA. Sem migração.

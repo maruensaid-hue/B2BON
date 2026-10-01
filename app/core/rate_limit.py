@@ -63,3 +63,23 @@ def limitar_por_ip(max_tentativas: int = 5, janela_segundos: int = 300):
         limitador_auth.checar(f"{request.url.path}:{ip}", max_tentativas, janela_segundos)
 
     return _dependencia
+
+
+# Demonstração pública (D-083): por cliente real e um teto global por hora.
+limitador_demo = LimitadorEmMemoria()
+
+
+def _ip_cliente(request: Request) -> str:
+    """Atrás do proxy do Render, `client.host` é o proxy; o IP real é o último item que o próprio proxy acrescenta ao
+    X-Forwarded-For (o primeiro pode ser forjado pelo cliente, o último não)."""
+    encaminhado = request.headers.get("x-forwarded-for", "")
+    ultimo = encaminhado.split(",")[-1].strip() if encaminhado else ""
+    return ultimo or (request.client.host if request.client else "desconhecido")
+
+
+def limitar_demonstracao(por_ip_hora: int, global_hora: int):
+    def _dependencia(request: Request) -> None:
+        limitador_demo.checar("global", global_hora, 3600)
+        limitador_demo.checar(f"ip:{_ip_cliente(request)}", por_ip_hora, 3600)
+
+    return _dependencia

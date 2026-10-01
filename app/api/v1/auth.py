@@ -17,7 +17,7 @@ from app.api.deps import (
     get_web_search_provider,
 )
 from app.core.config import settings
-from app.core.rate_limit import limitar_por_ip
+from app.core.rate_limit import limitar_demonstracao, limitar_por_ip
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
@@ -150,7 +150,7 @@ def demonstracao_disponivel() -> dict:
 
 
 @router.post("/demonstracao", response_model=DemonstracaoSchema, status_code=201,
-             dependencies=[Depends(limitar_por_ip(settings.demo_sessoes_por_ip_hora, 3600))])
+             dependencies=[Depends(limitar_demonstracao(settings.demo_sessoes_por_ip_hora, settings.demo_sessoes_por_hora))])
 def demonstracao(db: Session = Depends(get_db)) -> DemonstracaoSchema:
     """D-082: abre um ambiente de demonstração próprio (dados fictícios, expira sozinho) — sem login nem senha."""
     usuario, expira_em = demo_sessao.criar(db)

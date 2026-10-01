@@ -213,7 +213,8 @@ class Settings(BaseSettings):
     demo_habilitada: bool = False
     demo_ttl_horas: int = 8
     demo_max_sessoes_ativas: int = 60
-    demo_sessoes_por_ip_hora: int = 20
+    demo_sessoes_por_ip_hora: int = 10
+    demo_sessoes_por_hora: int = 120  # teto global de novas demonstrações por hora
     demo_creditos_ia: int = 5000
     google_oauth_client_id: str = ""
 

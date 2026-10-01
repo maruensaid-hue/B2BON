@@ -29,7 +29,7 @@ from app.api.deps import (
     get_whatsapp_provider,
 )
 from app.api.v1.webhooks import _whatsapp_provider_do_webhook_email, _whatsapp_provider_do_webhook_whatsapp
-from app.core.rate_limit import limitador_api, limitador_auth, limitador_ia, limitador_portal
+from app.core.rate_limit import limitador_api, limitador_auth, limitador_demo, limitador_ia, limitador_portal
 from app.db.base import Base
 from app.main import app
 from app.models.conta import Conta
@@ -268,6 +268,7 @@ def client(
     limitador_ia.resetar()
     limitador_api.resetar()
     limitador_portal.resetar()
+    limitador_demo.resetar()
     from app.contexts.intelligence.gateway import limitador_automatico
 
     limitador_automatico.resetar()

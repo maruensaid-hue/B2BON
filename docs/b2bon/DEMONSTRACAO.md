@@ -31,16 +31,21 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
 | Strategic Sourcing | RFP de notebooks com 3 fornecedores, propostas e avaliação por requisito (comparação pronta); RFQ de manutenção predial em rascunho |
 | IA | 5.000 créditos de IA próprios da demonstração (expiram com ela) |
 
-## O que a demonstração não faz (proteções)
+## Segurança (D-083)
 
-- **Nada sai de verdade**: e-mails e WhatsApp de cadências e campanhas usam provedores simulados.
-- **Nenhum dado real entra**: a Rede Social, a inteligência de rede, indicações e oportunidades entre empresas ficam
-  fora (mostrariam clientes reais). A empresa fictícia não aparece no diretório da rede.
-- **Nada que gere custo ou acesso**: pagamento e compra de créditos, criação de usuários e convites, credenciais
-  (SMTP, WhatsApp, chaves de API, webhooks, integrações de CRM, LinkedIn), coleta externa do PNCP, descoberta de
-  fornecedores na rede e acesso ao portal do fornecedor respondem "Indisponível na demonstração".
-- **Administração da plataforma** (comissões, governo, representantes, FinOps, MAP Performance) não aparece.
-- **Limites**: até 60 demonstrações abertas ao mesmo tempo e 20 novas por hora por endereço IP.
+- **Negação por padrão**: a sessão de demonstração só acessa as telas de produto (dados do próprio ambiente fictício).
+  Administração da plataforma, usuários, convites, credenciais, integrações, pagamentos, rede de empresas, LGPD, API de
+  parceiros e qualquer rota nova respondem "Indisponível na demonstração".
+- **Nada sai da plataforma**: e-mail, WhatsApp, agenda, robô de reunião, enriquecimento de contatos, busca web,
+  pagamento, acesso a sites externos e o grafo são simulados na demonstração. Só a IA é real, limitada a 5.000 créditos
+  por ambiente.
+- **Nada de dados reais entra**: cada sessão é um tenant próprio e isolado; outros clientes, a rede de empresas e as
+  visões da plataforma são inalcançáveis; a empresa fictícia não aparece no diretório.
+- **Sem senha a ser roubada**: os usuários fictícios não têm senha e os e-mails usam um domínio que nunca entrega; o
+  acesso é um token assinado que vale só para aquele ambiente e expira com ele.
+- **Contra abuso**: 10 demonstrações novas por hora por endereço IP real, 120 por hora no total, 60 abertas ao mesmo
+  tempo; ambientes vencidos são apagados sozinhos.
+- **Interruptor**: desligar `DEMO_HABILITADA` derruba na hora todas as sessões de demonstração abertas.
 
 ## Passo a passo para publicar
 
@@ -48,7 +53,8 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
    cada atualização do `master`). Confira em Render → serviço → Events que o último deploy terminou.
 2. **Ligar a demonstração na API**: Render → serviço **b2bon-api** → **Environment** → **Add Environment Variable**:
    - `DEMO_HABILITADA` = `true`
-   - (opcional) `DEMO_TTL_HORAS` (padrão 8), `DEMO_MAX_SESSOES_ATIVAS` (60), `DEMO_SESSOES_POR_IP_HORA` (20),
+   - (opcional) `DEMO_TTL_HORAS` (padrão 8), `DEMO_MAX_SESSOES_ATIVAS` (60), `DEMO_SESSOES_POR_IP_HORA` (10),
+     `DEMO_SESSOES_POR_HORA` (120),
      `DEMO_CREDITOS_IA` (5000).
    Salve; o Render reinicia o serviço.
 3. **Testar**: abra `https://b2bon.onrender.com/demo` numa janela anônima — em poucos segundos aparece o painel com a

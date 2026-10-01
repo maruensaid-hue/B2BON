@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.graph.client import Neo4jClient
+from app.graph.nulo import GrafoNulo
 from app.contexts.platform.contract import api_keys
 from app.contexts.shared.entitlements import NOMES_MODULO, Entitlements
 from app.core.config import settings
@@ -25,6 +26,7 @@ from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.licenca import Licenca
 from app.models.tenant import Tenant
+from app.services.demo import contexto as demo_contexto
 from app.models.usuario import Usuario
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.account_data.receita_federal import ReceitaFederalCNPJProvider
@@ -78,6 +80,8 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def get_graph_client() -> Neo4jClient:
+    if demo_contexto.ativo():  # D-083: demonstração não grava no grafo compartilhado
+        return GrafoNulo()
     return Neo4jClient()
 
 
@@ -85,7 +89,14 @@ def get_llm_provider() -> ClaudeProvider:
     return ClaudeProvider()
 
 
+def _site_ficticio(dominio: str) -> str:
+    return (f"{dominio} (demonstração): indústria de médio porte com 3 plantas, expansão anunciada para 2027, foco em "
+            "redução de paradas não planejadas e eficiência energética.")
+
+
 def get_site_fetcher() -> SiteFetcher:
+    if demo_contexto.ativo():  # D-083: a demonstração não faz o servidor acessar sites externos
+        return _site_ficticio
     return buscar_conteudo_site
 
 
@@ -102,6 +113,8 @@ def get_account_data_provider(db: Session = Depends(get_db)) -> AccountDataProvi
 
 
 def get_contact_enrichment_provider() -> ContactEnrichmentProvider:
+    if demo_contexto.ativo():  # D-083: contatos fictícios, sem consumir créditos do Lusha
+        return StubContactEnrichmentProvider()
     if settings.contact_enrichment_api_key:
         return LushaContactEnrichmentProvider(settings.contact_enrichment_api_key)
     if settings.e_ambiente_producao:
@@ -113,6 +126,8 @@ def get_contact_enrichment_provider() -> ContactEnrichmentProvider:
 
 
 def get_web_search_provider() -> WebSearchProvider:
+    if demo_contexto.ativo():  # D-083: sem busca web paga
+        return StubWebSearchProvider()
     if settings.brave_search_api_key:
         return BraveSearchProvider()
     if settings.e_ambiente_producao:
@@ -135,6 +150,8 @@ def get_plan_limits_provider(db: Session = Depends(get_db)) -> PlanLimitsProvide
 
 
 def get_email_provider() -> EmailProvider:
+    if demo_contexto.ativo():  # D-083: nenhum e-mail real sai pela conta da CyberFort numa demonstração
+        return StubEmailProvider()
     # SendGrid tem prioridade sobre SMTP — permite migrar sem precisar
     # remover as env vars de SMTP do Render no mesmo passo.
     if settings.sendgrid_api_key:
@@ -152,7 +169,7 @@ def get_email_provider() -> EmailProvider:
 def get_payment_provider() -> PaymentProvider:
     # Real (Mercado Pago) quando houver credencial configurada; senão,
     # stub de dev/teste (cadastro self-service com escolha de plano).
-    if settings.mercadopago_access_token:
+    if settings.mercadopago_access_token and not demo_contexto.ativo():
         return MercadoPagoProvider()
     return StubPaymentProvider()
 
@@ -170,13 +187,13 @@ def get_payout_provider() -> PayoutProvider:
 
 
 def get_calendar_provider() -> CalendarProvider:
-    if settings.google_calendar_access_token:
+    if settings.google_calendar_access_token and not demo_contexto.ativo():  # D-083: agenda da CyberFort intocada
         return GoogleCalendarProvider()
     return StubCalendarProvider()
 
 
 def get_meeting_bot_provider() -> MeetingBotProvider:
-    if settings.recall_api_key:
+    if settings.recall_api_key and not demo_contexto.ativo():  # D-083: nenhum robô entra em reunião real
         return RecallMeetingBotProvider()
     return StubMeetingBotProvider()
 
@@ -247,7 +264,7 @@ def resolver_whatsapp_provider(tenant_id: str, db: Session) -> WhatsAppProvider:
     provider tenant a tenant dentro do loop, não uma vez só no nível da
     rota como `get_whatsapp_provider` (que depende de `get_tenant_id`, e
     portanto de um JWT que o cron não tem)."""
-    if _e_demonstracao(db, tenant_id):  # D-082: demonstração "envia" sem sair de verdade
+    if demo_contexto.ativo() or _e_demonstracao(db, tenant_id):  # D-082: demonstração "envia" sem sair de verdade
         return StubWhatsAppProvider()
     config_tenant = db.query(ConfiguracaoWhatsApp).filter_by(tenant_id=tenant_id).one_or_none()
     if config_tenant is not None:
@@ -282,7 +299,7 @@ def resolver_email_provider(tenant_id: str, db: Session) -> EmailProvider:
     Função simples (não `Depends`), mesmo motivo de `resolver_whatsapp_
     provider`: os dispatchers de cron resolvem por tenant dentro do
     loop, sem JWT."""
-    if _e_demonstracao(db, tenant_id):  # D-082: demonstração "envia" sem sair de verdade
+    if demo_contexto.ativo() or _e_demonstracao(db, tenant_id):  # D-082: demonstração "envia" sem sair de verdade
         return StubEmailProvider()
     config_tenant = db.query(ConfiguracaoEmailSmtp).filter_by(tenant_id=tenant_id).one_or_none()
     if config_tenant is not None:

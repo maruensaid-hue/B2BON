@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.logging import configure_logging
 from app.core.observability import CorrelationIdMiddleware
 from app.services.demo import bloqueio as demo_bloqueio
+from app.services.demo import contexto as demo_contexto
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services.errors import (
@@ -92,15 +93,18 @@ app.add_middleware(
 
 @app.middleware("http")
 async def bloqueio_demonstracao(request: Request, call_next):
-    """D-082: sessão de demonstração (token marcado `demo`) não alcança dados reais nem ações que saem do ambiente fictício."""
+    """D-082/D-083: sessão de demonstração (token marcado `demo`): negação por padrão (só as rotas das telas de produto) e
+    todo provedor externo simulado. Com a demonstração desligada, tokens de demonstração antigos deixam de valer."""
     autorizacao = request.headers.get("authorization", "")
-    if autorizacao.startswith("Bearer ") and demo_bloqueio.bloqueado(request.method, request.url.path):
+    if autorizacao.startswith("Bearer "):
         try:
             payload = jwt.decode(autorizacao[len("Bearer "):], settings.jwt_secret_key, algorithms=["HS256"])
         except jwt.PyJWTError:
             payload = {}
         if payload.get("demo"):
-            return JSONResponse(status_code=403, content={"detalhe": demo_bloqueio.MENSAGEM})
+            if not settings.demo_habilitada or demo_bloqueio.bloqueado(request.method, request.url.path):
+                return JSONResponse(status_code=403, content={"detalhe": demo_bloqueio.MENSAGEM})
+            demo_contexto.ligar()  # provedores externos viram simulações nesta requisição
     return await call_next(request)
 
 

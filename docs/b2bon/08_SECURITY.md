@@ -28,3 +28,7 @@ o token marcado `demo` não alcança dados de outros tenants (rede de empresas, 
 administração da plataforma nem ações que gerem custo, acesso ou contato externo (middleware `bloqueio_demonstracao`).
 Envios do tenant de demonstração usam provedores simulados. Limites: sessões ativas, sessões por IP/hora e créditos
 de IA próprios. Detalhes em `DEMONSTRACAO.md`.
+
+D-083 (antes de ligar em produção): negação por padrão para tokens de demonstração (só as rotas das telas de produto),
+todos os provedores externos simulados na requisição de demonstração (`app/services/demo/contexto.py`), tokens de
+demonstração invalidados quando o recurso é desligado e limite por IP real (último X-Forwarded-For) + teto global.

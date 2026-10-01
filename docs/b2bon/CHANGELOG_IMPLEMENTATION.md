@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Demonstração protegida antes de ir ao ar (2026-10-01, D-083)
+
+- A demonstração só alcança as telas de produto do próprio ambiente fictício; todo o resto da plataforma fica fechado para ela, inclusive o que for criado no futuro.
+- Nada sai de verdade: e-mail, WhatsApp, agenda, robô de reunião, enriquecimento de contatos, busca web, pagamento e acesso a sites são simulados.
+- Limites contra abuso por endereço de acesso e no total; desligar a demonstração encerra na hora as sessões abertas.
+
 ## Demonstração sem login para os representantes (2026-10-01, D-082)
 
 - Novo link público `/demo` (e o botão "Ver demonstração" na tela de login): abre na hora um ambiente da empresa fictícia Atlas Soluções Industriais, com todos os módulos preenchidos — funil, contas, contatos, cadências, aprovações, agenda, MAP, pregões, RFP, licitações futuras, compras públicas e sourcing.

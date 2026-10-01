@@ -68,13 +68,90 @@ def test_cada_sessao_tem_seu_proprio_ambiente(client, db_session, demo):
 def test_bloqueia_dados_reais_e_acoes_externas(client, demo):
     _, headers = _abrir(client)
     for metodo, rota in (("get", "/api/v1/rede-social/feed"), ("get", "/api/v1/inteligencia/oportunidades"),
-                         ("get", "/api/v1/admin/tenants"), ("get", "/api/v1/comissoes/parametros"),
+                         ("get", "/api/v1/admin/tenants"), ("get", "/api/v1/comissoes/parametros"), ("get", "/api/v1/usuarios"),
+                         ("get", "/api/v1/representantes"), ("get", "/api/v1/chaves-api"), ("get", "/api/v1/auditoria"),
+                         ("get", "/api/v1/map/performance/equipe"), ("get", "/api/v1/finops/dashboard"),
                          ("post", "/api/v1/usuarios"), ("post", "/api/v1/ai-credits/compras"), ("post", "/api/v1/configuracao-whatsapp"),
-                         ("post", "/api/v1/convites"), ("post", "/api/v1/sourcing/processos/1/descoberta")):
+                         ("post", "/api/v1/convites"), ("post", "/api/v1/sourcing/processos/1/descoberta"),
+                         ("post", "/api/v1/auth/declarar-pagamento"), ("get", "/api/v1/rota-que-ainda-nao-existe")):
         resposta = getattr(client, metodo)(rota, headers=headers, **({"json": {}} if metodo == "post" else {}))
         assert resposta.status_code == 403 and "demonstração" in resposta.json()["detalhe"], (metodo, rota)
     # o bloqueio só vale para a sessão de demonstração
     assert client.get("/api/v1/admin/tenants").status_code == 200
+
+
+def test_negacao_por_padrao_so_libera_as_telas_de_produto():
+    from app.services.demo import bloqueio
+
+    assert not bloqueio.bloqueado("GET", "/api/v1/crm/negocios") and not bloqueio.bloqueado("POST", "/api/v1/bids/licitacoes")
+    assert bloqueio.bloqueado("GET", "/api/v1/crmx")  # prefixo parecido não passa
+    assert bloqueio.bloqueado("POST", "/api/v1/ai-credits/compras") and not bloqueio.bloqueado("GET", "/api/v1/ai-credits/carteira")
+    assert bloqueio.bloqueado("PUT", "/api/v1/planos/1") and not bloqueio.bloqueado("GET", "/api/v1/planos")
+    assert bloqueio.bloqueado("POST", "/api/v1/auth/whatsapp-pessoal") and bloqueio.bloqueado("GET", "/api/v1/parceiros/contas")
+
+
+def test_token_de_demonstracao_adulterado_ou_com_demo_desligada_nao_entra(client, demo, monkeypatch):
+    import jwt as pyjwt
+
+    corpo, headers = _abrir(client)
+    falso = pyjwt.encode({"sub": str(corpo["usuario"]["id"]), "demo": False, "papel": "super_admin"}, "chave-errada", algorithm="HS256")
+    assert client.get("/api/v1/admin/tenants", headers={"Authorization": f"Bearer {falso}"}).status_code == 401
+    monkeypatch.setattr(settings, "demo_habilitada", False)  # desligar invalida as sessões abertas na hora
+    assert client.get("/api/v1/crm/negocios", headers=headers).status_code == 403
+
+
+def test_provedores_externos_sao_simulados_na_demonstracao(monkeypatch):
+    import contextvars
+
+    from app.api import deps
+    from app.graph.nulo import GrafoNulo
+    from app.providers.calendar.stub import StubCalendarProvider
+    from app.providers.contact_enrichment.stub import StubContactEnrichmentProvider
+    from app.providers.meeting_bot.stub import StubMeetingBotProvider
+    from app.providers.payment.stub import StubPaymentProvider
+    from app.providers.web_search.stub import StubWebSearchProvider
+    from app.services.demo import contexto
+
+    for chave, valor in (("sendgrid_api_key", "sg"), ("google_calendar_access_token", "g"), ("recall_api_key", "r"),
+                         ("contact_enrichment_api_key", "l"), ("brave_search_api_key", "b"), ("mercadopago_access_token", "m")):
+        monkeypatch.setattr(settings, chave, valor)
+
+    def _na_demo():
+        contexto.ligar()
+        return (deps.get_email_provider(), deps.get_calendar_provider(), deps.get_meeting_bot_provider(),
+                deps.get_contact_enrichment_provider(), deps.get_web_search_provider(), deps.get_payment_provider(),
+                deps.get_graph_client(), deps.get_site_fetcher()("exemplo.com.br"))
+    email, agenda, robo, lusha, busca, pagamento, grafo, site = contextvars.copy_context().run(_na_demo)
+    assert isinstance(email, StubEmailProvider) and isinstance(agenda, StubCalendarProvider)
+    assert isinstance(robo, StubMeetingBotProvider) and isinstance(lusha, StubContactEnrichmentProvider)
+    assert isinstance(busca, StubWebSearchProvider) and isinstance(pagamento, StubPaymentProvider)
+    assert isinstance(grafo, GrafoNulo) and "demonstração" in site
+    assert not isinstance(deps.get_email_provider(), StubEmailProvider)  # fora da demonstração, nada muda
+
+
+def test_marca_de_demonstracao_chega_ate_a_rota(client, demo):
+    from app.main import app
+    from app.services.demo import contexto
+
+    app.add_api_route("/api/v1/busca/_marca_demo", lambda: {"demo": contexto.ativo()})
+    try:
+        _, headers = _abrir(client)
+        assert client.get("/api/v1/busca/_marca_demo", headers=headers).json() == {"demo": True}
+        assert client.get("/api/v1/busca/_marca_demo").json() == {"demo": False}
+    finally:
+        app.router.routes = [r for r in app.router.routes if getattr(r, "path", "") != "/api/v1/busca/_marca_demo"]
+
+
+def test_limite_por_ip_real_atras_do_proxy(client, demo, monkeypatch):
+    monkeypatch.setattr(settings, "demo_max_sessoes_ativas", 100)
+    from app.core import rate_limit
+
+    for _ in range(settings.demo_sessoes_por_ip_hora):
+        assert client.post("/api/v1/auth/demonstracao", headers={"X-Forwarded-For": "1.1.1.1, 200.1.1.1"}).status_code == 201
+    # o primeiro IP do cabeçalho é forjável e não serve para escapar do limite
+    assert client.post("/api/v1/auth/demonstracao", headers={"X-Forwarded-For": "9.9.9.9, 200.1.1.1"}).status_code == 429
+    assert client.post("/api/v1/auth/demonstracao", headers={"X-Forwarded-For": "200.2.2.2"}).status_code == 201
+    rate_limit.limitador_demo.resetar()
 
 
 def test_envios_da_demonstracao_sao_simulados(client, db_session, demo, monkeypatch):
