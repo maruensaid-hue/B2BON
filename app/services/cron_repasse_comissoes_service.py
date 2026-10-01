@@ -12,20 +12,20 @@ from app.services import auditoria_service
 
 logger = logging.getLogger(__name__)
 
-# Abaixo disso, a comissão fica represada em "calculada" até acumular o
+# Abaixo disso, a comissão fica represada em PAYABLE até acumular o
 # suficiente — evita gerar um Pix de centavos a cada mensalidade pequena.
 _VALOR_MINIMO_REPASSE = 10.0
 
 
 def repassar_pendentes(db: Session, payout_provider: PayoutProvider, email_provider: EmailProvider) -> dict:
     """Roda 1x/mês (cron externo) — processa toda `ComissaoRepresentante`
-    ainda `"calculada"`. Nunca re-tenta sozinha uma que `"falhou"`: fica
+    PAYABLE (D-074: margem calculada e receita recebida). Nunca re-tenta sozinha uma FAILED: fica
     visível pra intervenção manual, mesmo espírito de
     `pagamento_licenca_service.enviar_lembretes_cobranca` (idempotente,
     sem retry automático escondido)."""
     pendentes = (
         db.query(ComissaoRepresentante)
-        .filter_by(status="calculada")
+        .filter_by(status="PAYABLE")
         .filter(ComissaoRepresentante.valor_comissao >= _VALOR_MINIMO_REPASSE)
         .all()
     )
@@ -50,11 +50,11 @@ def repassar_pendentes(db: Session, payout_provider: PayoutProvider, email_provi
             motivo_falha = resultado.motivo_falha
 
         if resultado is not None and resultado.sucesso:
-            comissao.status = "paga"
+            comissao.status = "PAID"
             comissao.pago_em = datetime.now(UTC)
             repassadas += 1
         else:
-            comissao.status = "falhou"
+            comissao.status = "FAILED"
             comissao.motivo_falha = motivo_falha
             falhas += 1
 
@@ -72,7 +72,7 @@ def _notificar_representante(
     db: Session, email_provider: EmailProvider, representante: Representante, comissao: ComissaoRepresentante
 ) -> None:
     try:
-        if comissao.status == "paga":
+        if comissao.status == "PAID":
             assunto = "Comissão B2B ON repassada"
             corpo = (
                 f"Olá, {representante.nome}!\n\n"

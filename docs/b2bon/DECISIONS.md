@@ -840,13 +840,13 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - **Comissão Government** sobre o motor existente (`comissao_representante` + repasse mensal): por componente, política
     versionada (`politica_comissao`, cópia no contrato). Inicial: licença 20%, subscrição inicial 20%, renovações 10% (todas),
     implantação não comissionável (flag configurável), serviços e créditos adicionais não comissionáveis até o PO configurar;
-    gatilho **PAYMENT_RECEIVED** (proporcional a cada parcela) ou CONTRACT_SIGNED. Estorno: anula o não pago; o já pago vira
+    gatilho **PAYMENT_RECEIVED** (proporcional a cada parcela). Base de cálculo: corrigida pela D-074 (Margem Comissionável
+    Líquida, nunca a receita bruta); CONTRACT_SIGNED removido na D-074. Estorno: anula o não pago; o já pago vira
     CLAWBACK "a compensar". Dono = representante do contrato ou divisão; transferência e override exigem motivo e aprovador
     e são auditados; histórico preservado.
   - **Pipeline Government** (`oportunidade_governo`, super_admin) separado da quota de New MRR; ponderado = TCV × probabilidade.
   - **Proposta** por template versionado e configurável (`template_documento_comercial`), sem texto jurídico.
-  - **MAP**: margem de contribuição por tenant (receita recebida − impostos − comissões − custo de IA − infraestrutura);
-    o que a plataforma não sabe (impostos sem alíquota configurada, infraestrutura) sai como desconhecido e a margem, parcial.
+  - **MAP**: margem de contribuição por tenant — substituída pela waterfall da D-074.
 - **Status**: ACEITA. Migração `d9e1f3a5b7c9` (reversível; não converte nenhum cliente privado).
 
 ## D-073 · 2026-10-01 · Comissão sobre o lucro líquido (todas as vendas) e adicionais Government a 10%
@@ -863,4 +863,39 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - A **margem de contribuição** do MAP usa as mesmas alíquotas (antes: variável de ambiente sem valor).
   - **Composição dos tiers** Government: confirmado pelo PO que a composição (módulos, usuários, unidades, SLA etc.) é o
     que diferencia Department, Professional e Enterprise; os valores por tier continuam a definir (OI-024).
-- **Status**: ACEITA. Migração `e1f3a5b7c9d2` (reversível). Resolve OI-025; abre OI-026 (valores das alíquotas).
+- **Status**: **SUBSTITUÍDA pela D-074** quanto à base de cálculo (alíquotas soltas → Tax Profile e Infrastructure Cost
+  Model; "lucro líquido" → Margem Comissionável Líquida). Continuam valendo: adicionais Government a 10% e a confirmação da
+  composição dos tiers. Migração `e1f3a5b7c9d2` (reversível).
+
+## D-074 · 2026-10-01 · COMMISSION POLICY DECISION — Margem Comissionável Líquida (correção definitiva do PO)
+- **Contexto**: prompt do PO "CORREÇÃO DEFINITIVA — BASE DE CÁLCULO DAS COMISSÕES B2B ON". Substitui a base de cálculo da
+  D-073 e corrige a D-072 (que calculava sobre a receita bruta).
+- **Decisão**:
+  - **Representative commission is calculated over Net Commissionable Margin**, defined as commissionable revenue received
+    minus attributable taxes and attributable infrastructure costs. Em português: **Margem Comissionável Líquida** = receita
+    comissionável recebida − impostos atribuíveis − custo de infraestrutura atribuível. Nunca sobre Gross Revenue, MRR, ARR,
+    Bookings, TCV ou Cash-In bruto. Não é "lucro líquido da empresa" (despesas corporativas não atribuídas à venda não entram).
+  - **Taxas**: venda privada B2B ON e contratação inicial Government (licença e subscrição inicial) **20%**; renovação da
+    subscrição Government **10%** (em todas as renovações, salvo mudança explícita da política); serviços e AI Credits
+    adicionais 10% (D-073); **implantação Government não comissionável por padrão**. Privado: taxa do representante.
+  - **Commission amount requires valid tax and infrastructure parameters.** Sem Tax Profile ou Infrastructure Cost Model
+    vigentes na data do recebimento, a comissão fica `AWAITING_COST_PARAMETERS` (taxa conhecida, valor não afirmado) com o
+    parâmetro faltante (`TAX_PROFILE`, `INFRASTRUCTURE_COST`) e é recalculada automaticamente quando ele é informado.
+  - **Commission Engine único** (`app/contexts/comissoes`): recebimento → classificação da receita → Tax Profile → alocação
+    de infraestrutura → Margem Comissionável Líquida → política → CALCULATED → ACCRUED → PAYABLE → PAID. Vendas privadas e
+    Government só registram o recebimento; nenhum módulo calcula comissão. Gatilho financeiro: **PAYMENT_RECEIVED**
+    (CONTRACT_SIGNED removido; nota fiscal não existe na plataforma). PAYABLE exige parâmetros + receita recebida; parcela
+    = base proporcional ao recebido.
+  - **Tax Profile** (`perfil_tributario`): regime (PO: Lucro Presumido), vigência, tipo de receita, município, componentes,
+    alíquota efetiva, método, fonte e notas — nenhuma alíquota no código; mudança tributária = perfil novo, sem mexer no motor.
+  - **Infrastructure Cost Model** (`modelo_custo_infra`): componentes percentual, fixo por recebimento, por tenant, por
+    produto/segmento e uso real de IA do tenant (ledger do AI Gateway), combináveis (HYBRID), com vigência. O custo de IA entra
+    só pelo componente de uso, uma vez por recebimento (marca d'água), evitando dupla contagem com o percentual.
+  - **Memória de cálculo** (`apuracao_comissao`, uma por recebimento): receita bruta, Tax Profile e valor dos impostos,
+    modelo e valor de infraestrutura (e de IA), Margem Comissionável Líquida, taxa, valor e data. Mudança futura de parâmetro
+    não altera comissão calculada; só recálculo explícito e auditado altera as **não pagas**; **PAID nunca muda**.
+  - **MAP**: waterfall receita bruta → impostos → infraestrutura → Margem Comissionável Líquida → comissão → margem CyberFort
+    após comissão, com percentuais, por venda, representante, produto, tenant e período.
+  - **Legado**: comissões não pagas calculadas sobre o bruto voltam a `AWAITING_COST_PARAMETERS` (valor antigo guardado em
+    `valor_bruto_legado`) e são recalculadas sobre a margem quando houver parâmetros; pagas ficam como estão.
+- **Status**: ACEITA. Migração `f4a6b8c0d2e3` (reversível). Parâmetros (valores) pendentes do PO: OI-026.

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_usuario_atual, limitar_ia_por_tenant
+from app.contexts.comissoes import contract as comissoes
 from app.contexts.governo import contract as governo
 from app.llm.base import LLMProvider
 from app.models.usuario import Usuario
@@ -64,3 +65,10 @@ def margem_contribuicao(tenant_id: str, inicio: date, fim: date, db: Session = D
     """D-072: Receita bruta − impostos − comissões (inicial e renovação) − custo de IA − infraestrutura.
     O que a plataforma não sabe sai como desconhecido (margem parcial), nunca estimado."""
     return governo.analytics.margem_contribuicao(db, tenant_id, inicio, fim)
+
+
+@router.get("/comissoes/waterfall")
+def waterfall_comissoes(agrupar: str = "tenant", inicio: date | None = None, fim: date | None = None, db: Session = Depends(get_db)) -> dict:
+    """D-074: receita bruta → impostos → infraestrutura → Margem Comissionável Líquida → comissão → margem CyberFort após
+    comissão, por venda, representante, produto, tenant ou período."""
+    return comissoes.waterfall.calcular(db, agrupar, inicio, fim)

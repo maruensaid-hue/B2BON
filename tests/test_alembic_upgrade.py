@@ -216,7 +216,17 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
                 ("B2B ON Government Enterprise", 180000, 30000, 54000, 1200000, 0, 0, "CONTRACT", "GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION")]
             assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE segmento = 'PRIVATE' AND preco_licenca IS NOT NULL")).scalar() == 0
             ativas = conexao.execute(sa.text("SELECT codigo, versao FROM politica_comissao WHERE ativa ORDER BY codigo")).fetchall()
-            assert [tuple(linha) for linha in ativas] == [("BASE_LIQUIDA", 1), ("GOVERNMENT", 2)]  # D-073
+            assert [tuple(linha) for linha in ativas] == [("GOVERNMENT", 2)]  # D-073 (adicionais 10%); BASE_LIQUIDA saiu na D-074
+            assert conexao.execute(sa.text("SELECT count(*) FROM perfil_tributario")).scalar() == 0  # nenhuma alíquota criada
+            assert conexao.execute(sa.text("SELECT count(*) FROM modelo_custo_infra")).scalar() == 0
+        command.downgrade(config, "e1f3a5b7c9d2")  # D-074: comissão antiga sobre o bruto, não paga, volta a aguardar
+        with engine.begin() as conexao:
+            conexao.execute(sa.text("INSERT INTO comissao_representante (representante_id, tenant_id, valor_comissao, status, criado_em) "
+                                    "VALUES (1, 't', 99.5, 'calculada', CURRENT_TIMESTAMP), (1, 't', 50.0, 'paga', CURRENT_TIMESTAMP)"))
+        command.upgrade(config, "head")
+        with engine.connect() as conexao:
+            linhas = conexao.execute(sa.text("SELECT status, valor_comissao, valor_bruto_legado FROM comissao_representante ORDER BY id")).fetchall()
+            assert [tuple(linha) for linha in linhas] == [("AWAITING_COST_PARAMETERS", 0.0, 99.5), ("PAID", 50.0, None)]
         command.downgrade(config, "d9e1f3a5b7c9")
         with engine.connect() as conexao:
             ativas = conexao.execute(sa.text("SELECT codigo, versao FROM politica_comissao WHERE ativa")).fetchall()

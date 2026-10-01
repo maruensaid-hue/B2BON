@@ -215,6 +215,12 @@ const PASSOS_TOUR: PassoGuia[] = [
       "Contratos com órgãos públicos: licença, implantação e subscrição anual separadas, recebimentos, renovações, comissões e o pipeline governamental, com Bookings, ARR, TCV e Cash-In.",
   },
   {
+    id: "nav:/admin/parametros-financeiros",
+    titulo: "Admin — Parâmetros financeiros",
+    descricao:
+      "Tax Profile, custo de infraestrutura e política de comissão: toda comissão é calculada sobre a Margem Comissionável Líquida (receita recebida − impostos − infraestrutura), com a waterfall por tenant, representante, produto e período.",
+  },
+  {
     id: "nav:/assinatura",
     titulo: "Admin — Assinatura",
     descricao:

@@ -192,6 +192,7 @@ carteira de AI Credits, comissões, auditoria). O modelo privado mensal não mud
 - **Comissão**: política versionada `politica_comissao` (licença 20%, subscrição inicial 20%, renovações 10%, serviços e
   AI Credits adicionais 10% — D-073 —, implantação não comissionável; gatilho PAYMENT_RECEIVED), sobre
   `comissao_representante` e o repasse mensal existente.
-- **Base líquida (D-073, todas as vendas)**: comissão = (recebido − impostos − infraestrutura) × taxa. Alíquotas na política
-  `BASE_LIQUIDA`; sem elas, a comissão aguarda (OI-026).
-- Pendências do PO: valores de cada tier (OI-024); valores das alíquotas (OI-026).
+- **Base de cálculo (D-074, todas as vendas)**: **Margem Comissionável Líquida** = receita recebida − impostos atribuíveis (Tax
+  Profile) − infraestrutura atribuível (Infrastructure Cost Model, inclusive IA quando alocada); comissão = margem × taxa.
+  Nunca sobre a receita bruta. Sem parâmetros: AWAITING_COST_PARAMETERS (OI-026). Engine único: `app/contexts/comissoes`.
+- Pendências do PO: valores de cada tier (OI-024); Tax Profile e Infrastructure Cost Model (OI-026).

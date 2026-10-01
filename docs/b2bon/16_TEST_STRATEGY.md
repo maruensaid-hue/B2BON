@@ -50,6 +50,7 @@
 | Leitura unificada responde igual à antiga | `tests/integration/test_leitura_unificada_j1.py` (+ `_pg`) | Phase J |
 | Usuários do Bid Intelligence por entitlement; Supplier Guest não conta; pool de créditos do tenant | `tests/integration/test_usuarios_bid_intelligence_j3.py` | Phase J |
 | Government: componentes, ARR/TCV/Cash-In, renovação, pool anual, catálogo único, comissão por componente | `tests/integration/test_governo.py` (+ `_pg`), `e2e/governo.spec.ts` | D-072 |
+| Comissão sobre a Margem Comissionável Líquida: impostos, infraestrutura e IA antes da taxa, AWAITING_COST_PARAMETERS, recálculo, snapshot, PAID imutável, waterfall | `tests/integration/test_comissao_margem.py` | D-074 |
 
 ## Regras
 
@@ -96,4 +97,4 @@
 | J | 2.094 passed (+ Postgres 8/8) | lint OK (25 warnings), build OK | 12/12 |
 | Docs/onboarding (2026-10-01) | 2.094 passed | lint OK (25 warnings), build OK | 13/13 (+ tutoriais dos módulos) |
 | Government (2026-10-01) | 2.117 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |
-| D-073 base líquida (2026-10-01) | 2.121 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |
+| D-074 margem comissionável (2026-10-01) | 2.128 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |

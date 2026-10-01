@@ -1,15 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db
+from app.api.deps import exigir_papel, get_db
 from app.schemas.representante import (
     AtualizarRepresentanteRequestSchema,
-    BaseLiquidaComissaoSchema,
     CriarRepresentanteRequestSchema,
     RepresentanteSchema,
     RepresentanteSelfServiceSchema,
 )
-from app.services import comissao_service, representante_service
+from app.services import representante_service
 
 router = APIRouter(prefix="/representantes", tags=["representantes"])
 
@@ -19,20 +18,6 @@ def listar_self_service(db: Session = Depends(get_db)) -> list[RepresentanteSelf
     """Pública — alimenta o `<select>` obrigatório de `CriarConta.tsx`.
     Só id+nome dos representantes ativos, nunca CPF/PIX."""
     return representante_service.listar_self_service(db)
-
-
-@router.get("/base-liquida-comissao", dependencies=[Depends(exigir_papel("super_admin"))])
-def base_liquida(db: Session = Depends(get_db)) -> dict:
-    """D-073: alíquotas de impostos e infraestrutura descontadas antes da comissão (todas as vendas)."""
-    aliquotas = comissao_service.aliquotas(db)
-    db.commit()
-    return aliquotas
-
-
-@router.put("/base-liquida-comissao", dependencies=[Depends(exigir_papel("super_admin"))])
-def definir_base_liquida(dados: BaseLiquidaComissaoSchema, ator_id: str | None = Depends(get_ator_id),
-                         db: Session = Depends(get_db)) -> dict:
-    return comissao_service.definir(db, dados.impostos, dados.infraestrutura, dados.motivo, ator_id)
 
 
 @router.get("", response_model=list[RepresentanteSchema], dependencies=[Depends(exigir_papel("super_admin"))])

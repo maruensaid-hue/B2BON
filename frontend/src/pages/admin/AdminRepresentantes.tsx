@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 
-import { BaseLiquidaComissao } from "@/components/BaseLiquidaComissao";
+import { ResumoParametrosComissao } from "@/components/ResumoParametrosComissao";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
@@ -142,7 +142,7 @@ export function AdminRepresentantes() {
         <div>
           <div className="font-head text-xl font-bold">Admin — Representantes</div>
           <div className="mt-0.5 text-[11px] text-muted">
-            Vendedores externos e a % de comissão recorrente sobre o lucro líquido dos tenants que trouxerem
+            Vendedores externos e a % de comissão recorrente sobre a Margem Comissionável Líquida dos tenants que trouxerem
           </div>
         </div>
         <Button size="sm" variant="violet" onClick={abrirCriacao}>
@@ -153,7 +153,7 @@ export function AdminRepresentantes() {
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
       <div className="mb-4">
-        <BaseLiquidaComissao />
+        <ResumoParametrosComissao />
       </div>
 
       <Card>

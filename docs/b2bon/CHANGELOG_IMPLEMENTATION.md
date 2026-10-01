@@ -1,10 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
-## Comissão sobre o lucro líquido (2026-10-01, decisão do PO, D-073)
+## Comissão sobre a Margem Comissionável Líquida (2026-10-01, correção definitiva do PO, D-074)
 
-- Toda comissão de representante, de plano privado ou Government, passa a ser calculada sobre o lucro líquido do recebimento: valor recebido menos impostos e custo de infraestrutura.
-- As alíquotas são definidas em Admin → Representantes (ou Government), com motivo e auditoria; enquanto não forem informadas, as comissões novas ficam "aguardando parâmetros" e não são repassadas, e são recalculadas quando forem definidas.
-- Serviços e AI Credits adicionais do Government passam a pagar 10% de comissão.
+- Toda comissão de representante, de plano privado ou Government, é calculada sobre a Margem Comissionável Líquida do recebimento: receita recebida menos os impostos atribuíveis e o custo de infraestrutura atribuível — nunca sobre a receita bruta.
+- Novo Admin → Parâmetros financeiros: Tax Profile (regime, vigência, componentes e alíquotas), modelo de custo de infraestrutura (percentual, fixo, por produto ou tenant, custo real de IA) e a waterfall receita → impostos → infraestrutura → margem → comissão → margem CyberFort.
+- Sem esses parâmetros, a comissão aparece como "aguardando parâmetros de custo" e não é paga; quando eles são informados, é calculada sozinha. Comissão já paga nunca muda.
+- Serviços e AI Credits adicionais do Government pagam 10% (sobre a margem); implantação não comissiona.
+- Comissões ainda não pagas calculadas sobre o bruto voltam a aguardar e serão recalculadas sobre a margem.
 
 ## B2B ON Government (2026-10-01, pedido do PO, D-072)
 

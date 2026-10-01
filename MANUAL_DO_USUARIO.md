@@ -721,17 +721,23 @@ usa nomenclatura própria (ex.: "Master"/"Vendedor"/"Cliente").
   plataforma inteira.
 - **Government** (exclusivo de `super_admin`): pipeline governamental,
   contratos (licença, implantação e subscrição separadas), recebimentos,
-  renovações e comissões de representante (20% na contratação inicial
-  sobre licença e subscrição, 10% em cada renovação e nos serviços e AI
-  Credits adicionais, conforme a política vigente, devidas quando o
-  pagamento é recebido), com indicadores de Bookings, ARR, TCV e Cash-In
-  separados.
-- **Base das comissões** (Admin → Representantes e Government): toda
-  comissão de representante, de plano privado ou Government, é calculada
-  sobre o lucro líquido do recebimento — valor recebido menos impostos e
-  custo de infraestrutura (alíquotas definidas nessa tela, com motivo,
-  registradas na auditoria). Sem as alíquotas, a comissão fica "aguardando
-  parâmetros" e só é repassada depois de calculada.
+  renovações e comissões de representante (20% da Margem Comissionável
+  Líquida na contratação inicial sobre licença e subscrição, 10% em cada
+  renovação e nos serviços e AI Credits adicionais; implantação não
+  comissiona; devidas quando o pagamento é recebido), com indicadores de
+  Bookings, ARR, TCV e Cash-In separados.
+- **Parâmetros financeiros** (exclusivo de `super_admin`): toda comissão
+  de representante, de plano privado ou Government, é calculada sobre a
+  **Margem Comissionável Líquida** do recebimento — receita recebida menos
+  impostos atribuíveis (Tax Profile, com regime, vigência e componentes)
+  e custo de infraestrutura atribuível (modelo de custo: percentual, fixo
+  por recebimento, por produto/tenant e/ou custo real de IA). Sem esses
+  parâmetros a comissão fica "aguardando parâmetros de custo" e não é
+  paga; ao informá-los, ela é calculada sozinha. Comissão já paga nunca
+  muda; as não pagas só mudam por recálculo com motivo. A tela mostra a
+  waterfall: receita bruta → impostos → infraestrutura → margem
+  comissionável → comissão → margem da CyberFort, por tenant,
+  representante, produto, venda ou período.
 
 ---
 

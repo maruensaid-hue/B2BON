@@ -35,10 +35,9 @@ ADICIONAIS = (Componente.SERVICOS, Componente.CREDITOS)
 
 
 class Gatilho(StrEnum):
-    """Quando a comissão passa a ser devida. PAYMENT_RECEIVED acompanha cada parcela recebida
-    (proporcional). Emissão de nota fiscal não existe na plataforma (OI-024)."""
+    """Quando a comissão passa a ser devida. D-074: só o recebimento (PAYMENT_RECEIVED), proporcional a cada parcela;
+    a comissão também precisa dos parâmetros de custo para chegar a PAYABLE."""
 
-    CONTRATO_ASSINADO = "CONTRACT_SIGNED"
     PAGAMENTO_RECEBIDO = "PAYMENT_RECEIVED"
 
 

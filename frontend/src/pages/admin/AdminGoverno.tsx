@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
-import { BaseLiquidaComissao } from "@/components/BaseLiquidaComissao";
+import { ResumoParametrosComissao } from "@/components/ResumoParametrosComissao";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
@@ -60,7 +60,7 @@ interface Comissao {
   representante_id: number;
   componente_tipo: string;
   numero_renovacao: number | null;
-  base_bruta: number | null;
+  apuracao_id: number | null;
   base_calculo: number | null;
   taxa: number;
   evento: string;
@@ -237,14 +237,14 @@ function DetalheContrato({
                 Rep. {c.representante_id} ·{" "}
                 {ROTULO_COMPONENTE[c.componente_tipo] ?? c.componente_tipo}
                 {c.numero_renovacao ? ` #${c.numero_renovacao}` : ""} ·{" "}
-                {c.base_calculo === null
-                  ? `${brl(c.base_bruta ?? 0)} recebido · aguardando alíquotas`
-                  : `${brl(c.base_bruta ?? c.base_calculo)} recebido → ${brl(c.base_calculo)} líquido`}{" "}
+                {c.status === "AWAITING_COST_PARAMETERS"
+                  ? "margem aguardando parâmetros de custo"
+                  : `margem ${brl(c.base_calculo ?? 0)}`}{" "}
                 × {Math.round(c.taxa * 100)}%
               </span>
               <span>
                 {brl(c.valor)}{" "}
-                <Badge tone={c.status === "paga" ? "green" : "muted"}>
+                <Badge tone={c.status === "PAID" ? "green" : c.status === "AWAITING_COST_PARAMETERS" ? "amber" : "muted"}>
                   {c.status}
                 </Badge>
               </span>
@@ -363,7 +363,7 @@ export function AdminGoverno() {
         </div>
       </div>
       {erro && <div className="text-[12px] text-red">{erro}</div>}
-      <BaseLiquidaComissao />
+      <ResumoParametrosComissao />
 
       {metricas && (
         <div

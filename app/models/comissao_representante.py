@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -20,8 +20,8 @@ class ComissaoRepresentante(Base):
     representante_id: Mapped[int] = mapped_column(ForeignKey("representante.id"), index=True)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenant.id"), index=True)
     pagamento_licenca_id: Mapped[int | None] = mapped_column(ForeignKey("pagamento_licenca.id"), nullable=True)
-    # B2B ON Government (D-072): comissão por componente, gerada pelo recebimento (gatilho PAYMENT_RECEIVED)
-    # ou pela contratação (CONTRACT_SIGNED). Estorno de recebimento já pago vira um CLAWBACK negativo.
+    # B2B ON Government (D-072): comissão por componente, gerada pelo recebimento (PAYMENT_RECEIVED).
+    # Estorno de recebimento já pago vira um CLAWBACK negativo.
     recebimento_governo_id: Mapped[int | None] = mapped_column(ForeignKey("recebimento_governo.id"), nullable=True)
     componente_governo_id: Mapped[int | None] = mapped_column(ForeignKey("componente_contrato_governo.id"), nullable=True, index=True)
     contrato_governo_id: Mapped[int | None] = mapped_column(ForeignKey("contrato_governo.id"), nullable=True, index=True)
@@ -31,12 +31,18 @@ class ComissaoRepresentante(Base):
     fracao_divisao: Mapped[float | None] = mapped_column(Float, nullable=True)
     numero_renovacao: Mapped[int | None] = mapped_column(Integer, nullable=True)
     evento: Mapped[str | None] = mapped_column(String, nullable=True)  # ACCRUAL | CLAWBACK
-    # D-073: comissão sobre o lucro líquido. `base_bruta` = valor recebido; `base_calculo` = bruto − impostos −
-    # infraestrutura; `deducoes` = alíquotas e versão aplicadas. Sem alíquota definida: status "pendente_parametros".
-    base_bruta: Mapped[float | None] = mapped_column(Float, nullable=True)
-    deducoes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # D-074: a base é a Margem Comissionável Líquida da apuração do recebimento (snapshot em `apuracao_comissao`);
+    # `base_calculo` = margem × fração. Sem parâmetros de custo: AWAITING_COST_PARAMETERS e valor 0.
+    apuracao_id: Mapped[int | None] = mapped_column(ForeignKey("apuracao_comissao.id"), nullable=True, index=True)
     valor_comissao: Mapped[float] = mapped_column(Float)
-    status: Mapped[str] = mapped_column(String, default="calculada")  # calculada | pendente_parametros | paga | falhou | estornada | a_compensar
+    # AWAITING_COST_PARAMETERS | CALCULATED | ACCRUED | PAYABLE | PAID | FAILED | REVERSED | CLAWBACK_PENDING
+    status: Mapped[str] = mapped_column(String, default="AWAITING_COST_PARAMETERS")
+    calculado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    provisionado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # ACCRUED
+    pagavel_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # PAYABLE
+    # Comissão anterior à D-074, calculada sobre o valor bruto e ainda não paga: o valor antigo fica guardado para
+    # auditoria e a comissão volta a AWAITING_COST_PARAMETERS para ser calculada sobre a margem.
+    valor_bruto_legado: Mapped[float | None] = mapped_column(Float, nullable=True)
     motivo_falha: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     pago_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -8,19 +8,19 @@
 """
 
 from collections import defaultdict
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.contexts.finops import contract as finops
 from app.contexts.governo import contratos as contratos_mod
 from app.contexts.governo import pipeline
 from app.contexts.governo.tipos import Componente
 from app.models.comissao_representante import ComissaoRepresentante
 from app.models.contrato_governo import ComponenteContratoGoverno, ContratoGoverno, PeriodoAssinaturaGoverno, RecebimentoGoverno
 from app.models.plano import Plano
-from app.services import comissao_service
+from app.contexts.comissoes import contract as comissoes_engine
+from app.contexts.comissoes.contract import tipos as tipos_comissao
 
 ZERO = Decimal(0)
 GRUPO_BOOKING = {
@@ -38,7 +38,7 @@ def _f(valor: Decimal) -> float:
 
 
 def _comissoes(lista: list[ComissaoRepresentante]) -> dict:
-    validas = [c for c in lista if c.status != "estornada"]
+    validas = [c for c in lista if c.status != tipos_comissao.Status.ESTORNADA]
     soma = lambda itens: sum((Decimal(str(c.valor_comissao)) for c in itens), ZERO)  # noqa: E731
     por = defaultdict(lambda: defaultdict(Decimal))
     for c in validas:
@@ -47,12 +47,11 @@ def _comissoes(lista: list[ComissaoRepresentante]) -> dict:
     return {
         "inicial": _f(soma(c for c in validas if c.componente_tipo != Componente.RENOVACAO.value)),
         "renovacao": _f(soma(c for c in validas if c.componente_tipo == Componente.RENOVACAO.value)),
-        "reconhecida": _f(soma(validas)), "paga": _f(soma(c for c in validas if c.status == "paga")),
-        "pendente": _f(soma(c for c in validas if c.status in ("calculada", "falhou"))),
-        # D-073: aguardam as alíquotas de impostos e infraestrutura (valor ainda não calculado)
-        "aguardando_parametros": len([c for c in validas if c.status == comissao_service.PENDENTE]),
-        "base_bruta_aguardando": _f(sum((Decimal(str(c.base_bruta or 0)) for c in validas if c.status == comissao_service.PENDENTE), ZERO)),
-        "a_compensar": _f(soma(c for c in validas if c.status == "a_compensar")),
+        "reconhecida": _f(soma(validas)), "paga": _f(soma(c for c in validas if c.status == tipos_comissao.Status.PAGA)),
+        "pendente": _f(soma(c for c in validas if c.status in (tipos_comissao.Status.PAGAVEL, tipos_comissao.Status.FALHOU))),
+        # D-074: aguardam Tax Profile / Infrastructure Cost Model (valor ainda não pode ser afirmado)
+        "aguardando_parametros": len([c for c in validas if c.status == tipos_comissao.Status.AGUARDANDO]),
+        "a_compensar": _f(soma(c for c in validas if c.status == tipos_comissao.Status.COMPENSAR)),
         **{f"por_{chave}": [{"id": k, "valor": _f(v)} for k, v in sorted(valores.items(), key=lambda i: str(i[0]))]
            for chave, valores in por.items()},
     }
@@ -105,26 +104,8 @@ def metricas(db: Session, inicio: date | None = None, fim: date | None = None, t
 
 
 def margem_contribuicao(db: Session, tenant_id: str, inicio: date, fim: date) -> dict:
-    """MAP: Receita bruta (Cash-In) − impostos − comissões − custo de IA − infraestrutura. Parte desconhecida fica
-    como None e a margem sai `parcial`, nunca com número inventado."""
-    dados = metricas(db, inicio, fim, tenant_id)
-    bruta = Decimal(str(dados["cash_in"]))
-    aliquotas = comissao_service.aliquotas(db)  # D-073: as mesmas alíquotas da base líquida das comissões
-
-    def _deducao(nome: str) -> Decimal | None:
-        return (bruta * Decimal(str(aliquotas[nome]))).quantize(Decimal("0.01")) if aliquotas[nome] is not None else None
-
-    impostos, infraestrutura = _deducao("impostos"), _deducao("infraestrutura")
-    kpis = finops.economia.kpis(db, datetime.combine(inicio, time.min), datetime.combine(fim, time.min), tenant_id)
-    custo_ia = kpis["ai_variable_cost_brl"]
-    partes = {"impostos": impostos, "comissoes_iniciais": Decimal(str(dados["comissoes"]["inicial"])),
-              "comissoes_renovacao": Decimal(str(dados["comissoes"]["renovacao"])),
-              "custo_ia": Decimal(str(custo_ia)) if custo_ia is not None else None, "infraestrutura": infraestrutura}
-    conhecidas = sum((v for v in partes.values() if v is not None), ZERO)
-    return {
-        "tenant_id": tenant_id, "periodo": dados["periodo"], "receita_bruta": _f(bruta),
-        **{chave: (_f(valor) if valor is not None else None) for chave, valor in partes.items()},
-        "margem_contribuicao": _f(bruta - conhecidas), "parcial": any(v is None for v in partes.values()),
-        "desconhecidos": [chave for chave, valor in partes.items() if valor is None],
-        "contrato": contratos_mod.do_tenant(db, tenant_id) is not None,
-    }
+    """MAP (D-074): waterfall do tenant — receita bruta → impostos → infraestrutura → Margem Comissionável Líquida →
+    comissão → margem CyberFort após comissão. Recebimentos sem parâmetros de custo ficam fora dos totais."""
+    dados = comissoes_engine.waterfall.calcular(db, "tenant", inicio, fim, tenant_id)
+    return {"tenant_id": tenant_id, "periodo": dados["periodo"], **dados["total"],
+            "contrato": contratos_mod.do_tenant(db, tenant_id) is not None}

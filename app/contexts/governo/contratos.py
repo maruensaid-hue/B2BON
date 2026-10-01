@@ -15,8 +15,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.contexts.finops import contract as finops
-from app.contexts.governo import comissoes, ofertas, politicas
-from app.contexts.governo.tipos import ADICIONAIS, RECORRENTES, Componente, Gatilho, ModeloCobranca
+from app.contexts.governo import ofertas, politicas
+from app.contexts.governo.tipos import ADICIONAIS, RECORRENTES, Componente, ModeloCobranca
 from app.core.config import settings
 from app.models.carteira_creditos import MovimentoCredito
 from app.models.contrato_governo import ComponenteContratoGoverno, ContratoGoverno, PeriodoAssinaturaGoverno, RecebimentoGoverno
@@ -83,8 +83,6 @@ def _componente(db: Session, contrato: ContratoGoverno, tipo: Componente, valor:
     )
     db.add(componente)
     db.flush()
-    if contrato.politica_comissao.get("gatilho") == Gatilho.CONTRATO_ASSINADO.value:
-        comissoes.reconhecer_na_contratacao(db, contrato, componente)
     return componente
 
 
@@ -341,7 +339,11 @@ def resumo(db: Session, contrato: ContratoGoverno, com_comissoes: bool = False) 
         "periodos": [_periodo_dict(db, p) for p in periodos(db, contrato)],
         "componentes": [{"id": c.id, "tipo": c.tipo, "descricao": c.descricao, "valor": float(c.valor), "recorrente": c.recorrente,
                          "booking_em": c.booking_em.isoformat(), "cancelado": c.cancelado, "recebido": float(recebido.get(c.id, ZERO)),
-                         **({"comissionavel": c.comissionavel, "taxa_comissao": c.taxa_comissao} if com_comissoes else {})}
+                         **({"comissionavel": c.comissionavel, "taxa_comissao": c.taxa_comissao,
+                             # D-074: venda comissionável ainda a receber = taxa definida, valor só na apuração do recebimento
+                             "status_comissao": ("NAO_COMISSIONAVEL" if not c.comissionavel
+                                                 else "RATE_DEFINED" if recebido.get(c.id, ZERO) < Decimal(str(c.valor)) else "RECEBIDO")}
+                            if com_comissoes else {})}
                         for c in itens],
     }
     if com_comissoes:

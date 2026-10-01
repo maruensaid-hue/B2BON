@@ -34,7 +34,7 @@ def _tenant(db_session, tenant_id: str = TENANT_ID) -> Tenant:
 def _comissao(db_session, representante_id: int, valor: float, pagamento_licenca_id: int = 1) -> ComissaoRepresentante:
     comissao = ComissaoRepresentante(
         representante_id=representante_id, tenant_id=TENANT_ID, pagamento_licenca_id=pagamento_licenca_id,
-        valor_comissao=valor, status="calculada",
+        valor_comissao=valor, status="PAYABLE",
     )
     db_session.add(comissao)
     db_session.commit()
@@ -52,7 +52,7 @@ def test_repassar_pendentes_marca_paga_em_sucesso(db_session):
 
     assert resultado == {"repassadas": 1, "falhas": 0, "total_processado": 1}
     db_session.refresh(comissao)
-    assert comissao.status == "paga"
+    assert comissao.status == "PAID"
     assert comissao.pago_em is not None
     assert len(payout.envios) == 1
     assert payout.envios[0]["chave_pix"] == "fulano@pix.com.br"
@@ -70,7 +70,7 @@ def test_repassar_pendentes_marca_falhou_e_nao_reprocessa(db_session):
     resultado = cron_repasse_comissoes_service.repassar_pendentes(db_session, payout, email)
     assert resultado == {"repassadas": 0, "falhas": 1, "total_processado": 1}
     db_session.refresh(comissao)
-    assert comissao.status == "falhou"
+    assert comissao.status == "FAILED"
     assert comissao.motivo_falha == "falha simulada"
 
     # Uma comissão "falhou" não é reprocessada sozinha na próxima rodada.

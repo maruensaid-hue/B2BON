@@ -11,7 +11,8 @@ from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.providers.channels.email.stub import StubEmailProvider
 from app.providers.payment.stub import StubPaymentProvider
-from app.services import comissao_service, pagamento_licenca_service
+from app.services import pagamento_licenca_service
+from tests.parametros_comissao import definir_parametros
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 TENANT_ID = "tenant-teste"
@@ -297,17 +298,16 @@ def test_webhook_aprovado_com_representante_calcula_comissao(db_session):
 
     comissao = db_session.query(ComissaoRepresentante).filter_by(pagamento_licenca_id=pagamento.id).one()
     assert comissao.representante_id == representante.id
-    # D-073: sem as alíquotas de impostos e infraestrutura a comissão aguarda (nunca presumida)
-    assert (comissao.status, comissao.valor_comissao, comissao.base_bruta) == ("pendente_parametros", 0.0, plano.preco_mensal)
-    comissao_service.definir(db_session, 0.15, 0.05, "Alíquotas da CyberFort", "teste")
+    # D-074: sem Tax Profile e Infrastructure Cost Model a comissão aguarda (taxa conhecida, valor não)
+    assert (comissao.status, comissao.valor_comissao, comissao.taxa) == ("AWAITING_COST_PARAMETERS", 0.0, 0.1)
+    definir_parametros(db_session, impostos=0.15, infra=[{"tipo": "PERCENTUAL", "percentual": 0.05}])
     db_session.refresh(comissao)
-    assert comissao.status == "calculada"
-    assert comissao.base_calculo == round(plano.preco_mensal * 0.8, 2)
-    assert comissao.valor_comissao == round(plano.preco_mensal * 0.8 * 0.1, 2)
+    margem = round(plano.preco_mensal * 0.80, 2)  # recebido − 15% − 5%
+    assert (comissao.status, comissao.base_calculo, comissao.valor_comissao) == ("PAYABLE", margem, round(margem * 0.1, 2))
 
 
-def test_comissao_privada_com_aliquotas_ja_definidas_nasce_calculada(db_session):
-    comissao_service.definir(db_session, 0.10, 0.10, "Alíquotas", "teste")
+def test_comissao_privada_com_parametros_ja_definidos_nasce_pagavel(db_session):
+    definir_parametros(db_session, impostos=0.10, infra=[{"tipo": "PERCENTUAL", "percentual": 0.10}])
     plano = _tenant_e_plano(db_session)
     representante = Representante(nome="Ciclano", email="ciclano@vendedor.com.br", chave_pix="ciclano@pix", percentual_comissao=0.2)
     db_session.add(representante)
@@ -320,7 +320,8 @@ def test_comissao_privada_com_aliquotas_ja_definidas_nasce_calculada(db_session)
     pagamento_licenca_service.confirmar_via_webhook(db_session, provider, provider.aprovar(pagamento.preferencia_id_externo),
                                                     StubEmailProvider())
     comissao = db_session.query(ComissaoRepresentante).filter_by(pagamento_licenca_id=pagamento.id).one()
-    assert (comissao.status, comissao.valor_comissao) == ("calculada", round(plano.preco_mensal * 0.8 * 0.2, 2))
+    assert (comissao.status, comissao.valor_comissao) == ("PAYABLE", round(plano.preco_mensal * 0.8 * 0.2, 2))
+    assert comissao.valor_comissao != round(plano.preco_mensal * 0.2, 2)  # nunca sobre a receita bruta
 
 
 def test_webhook_aprovado_sem_representante_nao_gera_comissao(db_session):

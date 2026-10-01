@@ -39,7 +39,7 @@ em Assinatura, margem de contribuição no MAP (`/motor/tenants/{id}/margem-cont
 | AI Credits pelo ledger universal | ✅ | lote da carteira, consumo pelo AI Gateway existente |
 | Subscription Only suportado | ✅ | `test_subscription_only_licenca_zero_valores_configuraveis_20_e_10` |
 | Planos privados sem regressão | ✅ | `test_planos_privados_sem_regressao`; preços privados congelados (`test_precos_preservados`) |
-| Comissão: 20% inicial (licença + subscrição), 10% em todas as renovações, implantação fora, flag configurável, PAYMENT_RECEIVED, parcelas, estorno, reajuste, transferência, override auditado, Subscription Only, isolamento, MAP | ✅ | 9 testes de comissão em `test_governo.py` |
+| Comissão: 20% inicial (licença + subscrição), 10% em todas as renovações — sobre a Margem Comissionável Líquida (D-074), implantação fora, flag configurável, PAYMENT_RECEIVED, parcelas, estorno, reajuste, transferência, override auditado, Subscription Only, isolamento, MAP | ✅ | 9 testes de comissão em `test_governo.py` |
 | Testes, build, typecheck, lint | ✅ | ver abaixo |
 | Documentação | ✅ | D-072, 15 §6, 13 §6, PRICING_CURRENT_STATE, OPEN_ISSUES (OI-024/025), Manual, PROJECT_STATE, CHANGELOG |
 
@@ -73,10 +73,13 @@ Consultas por rota **iguais** em todas as 13 rotas medidas; latências dentro da
   (não existe integração fiscal): OI-025.
 - Preço do Public Procurement para clientes privados continua PENDING_DEFINITION (OI-017).
 
-## Adendo D-073 (mesmo dia) — comissão sobre o lucro líquido
+## Adendo D-073 → D-074 (mesmo dia) — base de cálculo das comissões
 
-- Base de **toda** comissão (privada e Government) = recebido − impostos − infraestrutura (`app/services/comissao_service.py`,
-  política `BASE_LIQUIDA`). Sem alíquotas: `pendente_parametros`, recalculada ao definir (OI-026).
-- Serviços e AI Credits adicionais: 10% (política Government v2). Margem de contribuição do MAP usa as mesmas alíquotas.
-- Migração `e1f3a5b7c9d2` (SQLite e Postgres 16, subida/descida). Suíte **2.121 passed**, Postgres 9/9, E2E 17/17,
-  ruff 40, lint 25, duplicação 42.
+- **D-074 (definitiva)**: comissão = **Margem Comissionável Líquida** × taxa, onde a margem = receita recebida − impostos
+  atribuíveis (Tax Profile) − infraestrutura atribuível (Infrastructure Cost Model, inclusive IA alocada). Vale para vendas
+  privadas e Government; a D-072 calculava sobre o bruto e a D-073 usava alíquotas soltas — ambas corrigidas.
+- Commission Engine único (`app/contexts/comissoes`), memória de cálculo por recebimento (`apuracao_comissao`), status
+  AWAITING_COST_PARAMETERS → CALCULATED → ACCRUED → PAYABLE → PAID, waterfall no MAP e tela Admin → Parâmetros financeiros.
+- Exemplo Professional com parâmetros **de teste** (15% impostos, 5% infraestrutura): licença 120.000 + subscrição 36.000 =
+  156.000 brutos → 124.800 de margem → comissão 24.960 (não 31.200).
+- Migração `f4a6b8c0d2e3`. Suíte **2.128 passed**, Postgres 9/9, E2E 17/17, ruff 40, lint 25, duplicação 42.

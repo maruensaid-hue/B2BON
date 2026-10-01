@@ -74,13 +74,13 @@ test.describe("Admin", () => {
     await expect(professional.getByText("R$ 36.000,00")).toBeVisible();
     await expect(professional.getByText("R$ 176.000,00")).toBeVisible();
     await expect(professional.getByText("600.000/ano")).toBeVisible();
-    await page.goto("/admin/governo");
-    // D-073: alíquotas da base líquida ainda não definidas — comissões aguardam
+    // D-074: sem Tax Profile e modelo de infraestrutura, a tela de parâmetros mostra que as comissões aguardam
+    await page.goto("/admin/parametros-financeiros");
     await expect(
-      page
-        .getByTestId("base-liquida-comissao")
-        .getByText(/Impostos: não definido/),
+      page.getByText("Nenhum Tax Profile — comissões aguardando"),
     ).toBeVisible();
+    await expect(page.getByTestId("waterfall-comissoes")).toBeVisible();
+    await page.goto("/admin/governo");
     await expect(
       page.getByTestId("metricas-governo").getByText("ARR Government"),
     ).toBeVisible();

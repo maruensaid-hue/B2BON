@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class RepresentanteSchema(BaseModel):
@@ -41,10 +41,3 @@ class AtualizarRepresentanteRequestSchema(BaseModel):
     percentual_comissao: float
     ativo: bool
 
-
-class BaseLiquidaComissaoSchema(BaseModel):
-    """D-073: frações sobre o valor recebido (0,15 = 15%)."""
-
-    impostos: float = Field(ge=0, lt=1)
-    infraestrutura: float = Field(ge=0, lt=1)
-    motivo: str = Field(min_length=1)

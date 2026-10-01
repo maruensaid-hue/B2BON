@@ -48,6 +48,7 @@ from app.api.v1.optout import router as optout_router
 from app.api.v1.painel import router as painel_router
 from app.api.v1.parceiros import router as parceiros_router
 from app.api.v1.catalogo import router as catalogo_router
+from app.api.v1.comissoes import router as comissoes_router
 from app.api.v1.governo import admin as governo_admin_router
 from app.api.v1.governo import router as governo_router
 from app.api.v1.planos import router as planos_router
@@ -160,6 +161,8 @@ router.include_router(planos_router)
 router.include_router(catalogo_router)
 # B2B ON Government (D-072): operação comercial é da plataforma (super_admin, sem licença); o cliente lê o próprio contrato.
 router.include_router(governo_admin_router)
+# D-074: Commission Engine (Tax Profile, Infrastructure Cost Model, apurações, waterfall), super_admin
+router.include_router(comissoes_router)
 router.include_router(governo_router)
 router.include_router(representantes_router)
 router.include_router(central_negocios_router)
