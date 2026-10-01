@@ -804,3 +804,47 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
     link, sem usuário (D-066).
   - Migração `c5e7a9b1d3f4` preenche os 10 só onde ainda estava indefinido (não sobrescreve edição do Admin).
 - **Status**: ACEITA. Resolve OI-023.
+
+## D-072 · 2026-10-01 · Government Commercial Model (B2B ON Government)
+- **Contexto**: prompt do PO "B2B ON GOVERNMENT — Licenciamento governamental + subscrição anual + pricing + publicação",
+  com preços, AI Credits e política de comissão definidos por ele. O modelo privado (assinatura mensal) não muda.
+- **Decisão**:
+  - **Modelos de cobrança** (`plano.modelo_cobranca`): `MONTHLY_SUBSCRIPTION` (privado, inalterado),
+    `GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION` (**oferta preferencial**: licença institucional + implantação +
+    subscrição anual) e `GOVERNMENT_ANNUAL_SUBSCRIPTION_ONLY` (alternativa para edital/ETP/TR que exija só subscrição:
+    licença 0; implantação, subscrição e pool informados na contratação; **sem preço público**).
+  - **Ofertas iniciais** (catálogo central, tabela `plano`, `segmento = GOVERNMENT`, `tipo_preco = CONTRACT`, fora do checkout):
+    | Oferta | Licença | Implantação | Subscrição anual | Contratação inicial | AI Credits/ano |
+    |---|---|---|---|---|---|
+    | B2B ON Government Department | R$ 72.000 | R$ 12.000 | R$ 24.000 | R$ 108.000 | 300.000 |
+    | B2B ON Government Professional (**recomendada**) | R$ 120.000 | R$ 20.000 | R$ 36.000 | R$ 176.000 | 600.000 |
+    | B2B ON Government Enterprise | R$ 180.000 | R$ 30.000 | R$ 54.000 | R$ 264.000 | 1.200.000 |
+    Contratação inicial = Licença + Implantação + Subscrição Anual (calculada, não guardada). Diferenciação por
+    **entitlements configuráveis** (`plano.entitlements`); limites por tier não definidos ficam "conforme contrato" (OI-024).
+    Módulo inicial: Compras públicas (`procurement`).
+  - **AI Credits anuais**: pool por período do contrato = um lote SUBSCRIPTION da **carteira universal** (mesmo ledger,
+    FEFO, AI Gateway e trava de linha), com validade até o fim do período; o período seguinte concede um pool novo; plano
+    com pool anual não recebe franquia mensal. Pacotes adicionais pelo catálogo existente ou como componente do contrato.
+  - **Renovação**: período anual novo só com a subscrição (reajuste informado com o motivo/regra contratual; nenhum índice no
+    código). A licença nunca é cobrada de novo. Aviso de renovação dentro da janela configurável
+    (`GOVERNO_AVISO_RENOVACAO_DIAS`, padrão 90), pela rotina horária de AI Credits.
+  - **Separação contábil**: componentes por tipo (LICENSE, IMPLEMENTATION, INITIAL/RENEWAL_ANNUAL_SUBSCRIPTION,
+    ADDITIONAL_SERVICES, ADDITIONAL_AI_CREDITS). Bookings por tipo; **ARR só com subscrição**; New ARR = subscrição inicial;
+    Renewal ARR = renovações; TCV inicial = licença + implantação + subscrição inicial; **Cash-In = recebimentos**.
+  - **Pricing Catalog como source of truth**: página pública (`GET /catalogo` → seção "B2B ON Government"), Admin → Planos,
+    proposta e contrato leem a tabela `plano`. Contrato guarda a cópia dos valores: mudar o preço não muda contrato antigo.
+    Toda criação/alteração de plano é auditada (antes/depois, motivo, ator).
+  - **Publicação**: seção "B2B ON Government" em `/planos` (sem "/mês", Professional destacado, textos de composição,
+    renovação e adaptação ao edital) e link "Planos e preços" na página inicial (login). Admin → Planos ganha a tabela
+    Government; Admin → Government opera pipeline, contratos, recebimentos, renovações e comissões.
+  - **Comissão Government** sobre o motor existente (`comissao_representante` + repasse mensal): por componente, política
+    versionada (`politica_comissao`, cópia no contrato). Inicial: licença 20%, subscrição inicial 20%, renovações 10% (todas),
+    implantação não comissionável (flag configurável), serviços e créditos adicionais não comissionáveis até o PO configurar;
+    gatilho **PAYMENT_RECEIVED** (proporcional a cada parcela) ou CONTRACT_SIGNED. Estorno: anula o não pago; o já pago vira
+    CLAWBACK "a compensar". Dono = representante do contrato ou divisão; transferência e override exigem motivo e aprovador
+    e são auditados; histórico preservado.
+  - **Pipeline Government** (`oportunidade_governo`, super_admin) separado da quota de New MRR; ponderado = TCV × probabilidade.
+  - **Proposta** por template versionado e configurável (`template_documento_comercial`), sem texto jurídico.
+  - **MAP**: margem de contribuição por tenant (receita recebida − impostos − comissões − custo de IA − infraestrutura);
+    o que a plataforma não sabe (impostos sem alíquota configurada, infraestrutura) sai como desconhecido e a margem, parcial.
+- **Status**: ACEITA. Migração `d9e1f3a5b7c9` (reversível; não converte nenhum cliente privado).

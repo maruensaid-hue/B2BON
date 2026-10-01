@@ -49,6 +49,7 @@
 | Planos D-059 e preços congelados | `tests/integration/test_comercializacao_fase_i.py`, `tests/unit/test_precos_preservados.py` | Phase I |
 | Leitura unificada responde igual à antiga | `tests/integration/test_leitura_unificada_j1.py` (+ `_pg`) | Phase J |
 | Usuários do Bid Intelligence por entitlement; Supplier Guest não conta; pool de créditos do tenant | `tests/integration/test_usuarios_bid_intelligence_j3.py` | Phase J |
+| Government: componentes, ARR/TCV/Cash-In, renovação, pool anual, catálogo único, comissão por componente | `tests/integration/test_governo.py` (+ `_pg`), `e2e/governo.spec.ts` | D-072 |
 
 ## Regras
 
@@ -94,3 +95,4 @@
 | I | 2.086 passed (+ Postgres 7/7) | lint OK (25 warnings), build OK | 12/12 |
 | J | 2.094 passed (+ Postgres 8/8) | lint OK (25 warnings), build OK | 12/12 |
 | Docs/onboarding (2026-10-01) | 2.094 passed | lint OK (25 warnings), build OK | 13/13 (+ tutoriais dos módulos) |
+| Government (2026-10-01) | 2.117 passed (+ Postgres 9/9) | lint OK (25 warnings), build OK | 17/17 |

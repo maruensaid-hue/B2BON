@@ -88,28 +88,37 @@ def main() -> None:
         db.close()
 
 
-def _semear_planos_d059() -> None:
-    """Phase I: os planos aprovados (D-059) vêm da própria migração (fonte única), porque o E2E não roda Alembic."""
+def _migracao(arquivo: str):
+    """Constantes de uma migração (fonte única dos planos), porque o E2E não roda Alembic."""
     import importlib.util
 
     raiz = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    spec = importlib.util.spec_from_file_location(
-        "migracao_phase_i", os.path.join(raiz, "alembic", "versions", "a3c5e7f9b1d2_phase_i_planos_comerciais.py"))
-    migracao = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migracao)
+    spec = importlib.util.spec_from_file_location(arquivo, os.path.join(raiz, "alembic", "versions", arquivo))
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+def _semear_planos_d059() -> None:
+    """Phase I: os planos aprovados (D-059); Phase J3: usuários do Bid Intelligence; D-072: ofertas Government."""
+    migracao = _migracao("a3c5e7f9b1d2_phase_i_planos_comerciais.py")
+    j3 = _migracao("c5e7a9b1d3f4_phase_j3_usuarios_bid_intelligence.py")
+    governo = _migracao("d9e1f3a5b7c9_b2bon_government.py")
     db = SessionLocal()
     try:
-        # Phase J3 (OI-023): usuários incluídos definidos depois, na migração seguinte
-        spec_j3 = importlib.util.spec_from_file_location(
-            "migracao_phase_j3", os.path.join(raiz, "alembic", "versions", "c5e7a9b1d3f4_phase_j3_usuarios_bid_intelligence.py"))
-        j3 = importlib.util.module_from_spec(spec_j3)
-        spec_j3.loader.exec_module(j3)
         for nome, preco, usuarios, modulos, self_service, tipo in migracao.PLANOS:
             if nome == j3.PLANO and usuarios is None:
                 usuarios = j3.USUARIOS_INCLUIDOS
             if db.query(Plano).filter_by(nome=nome).one_or_none() is None:
                 db.add(Plano(nome=nome, franquia_contas_mes=0, max_usuarios=usuarios, preco_mensal=preco,
                              visivel_self_service=self_service, modulos_contratados=modulos, categoria="modulo", tipo_preco=tipo))
+        for nome, licenca, implantacao, assinatura, creditos, recomendado in governo.PLANOS:
+            if db.query(Plano).filter_by(nome=nome).one_or_none() is None:
+                db.add(Plano(nome=nome, franquia_contas_mes=0, preco_mensal=0.0, visivel_self_service=False,
+                             modulos_contratados=["procurement"], categoria="governo", tipo_preco="CONTRACT", segmento="GOVERNMENT",
+                             modelo_cobranca=governo.MODELO, preco_licenca=licenca, preco_implantacao=implantacao,
+                             preco_assinatura_anual=assinatura, creditos_ia_anuais=creditos, recomendado=recomendado,
+                             entitlements=dict(governo.ENTITLEMENTS)))
         db.commit()
     finally:
         db.close()

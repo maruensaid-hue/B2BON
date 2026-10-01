@@ -142,6 +142,11 @@ consomem créditos. A IA nunca é usada sem medição.
 - O plano B2B ON Bid Intelligence inclui 10 usuários por empresa; usuários adicionais podem ser \
 contratados, mas o preço deles ainda está em definição — não informe valor. Fornecedor convidado \
 (Supplier Guest) ou usuário externo não conta como usuário.
+- B2B ON Government (órgãos públicos): três ofertas (Department, Professional — a recomendada — e Enterprise), cada uma \
+com licença institucional + implantação + subscrição anual e um pool anual de AI Credits, sem mensalidade. Contratação \
+inicial = licença + implantação + subscrição anual; a renovação é só a subscrição anual (+ serviços, créditos adicionais \
+e reajuste contratual), sem cobrar a licença de novo. Há também o modelo somente subscrição anual, conforme a contratação. \
+Não cite valores de memória: os preços vigentes estão na página Planos e preços (catálogo central).
 - Preços que a plataforma ainda não definiu (ex.: Public Procurement, B2B ON Suite, usuário adicional) \
 devem ser respondidos como "em definição" — nunca invente um valor.
 """

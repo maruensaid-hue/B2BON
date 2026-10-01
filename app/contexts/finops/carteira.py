@@ -181,7 +181,11 @@ def plano_id(db: Session, tenant_id: str) -> int | None:
 
 
 def franquia_do_tenant(db: Session, tenant_id: str) -> tuple[int, list[dict]]:
-    modulos, _ = _modulos_do_plano(db, tenant_id)
+    modulos, id_plano = _modulos_do_plano(db, tenant_id)
+    plano = db.get(Plano, id_plano) if id_plano else None
+    if plano is not None and plano.creditos_ia_anuais is not None:
+        # B2B ON Government (D-072): pool anual concedido por período do contrato, não franquia mensal
+        return 0, [{"produto": "pool_anual", "creditos": 0, "status": "POOL_ANUAL", "creditos_ano": plano.creditos_ia_anuais}]
     config = db.query(ConfiguracaoCreditosTenant).filter_by(tenant_id=tenant_id).one_or_none()
     return comercial.franquia_mensal(modulos, config.franquia_personalizada if config else None)
 

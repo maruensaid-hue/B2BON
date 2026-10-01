@@ -719,6 +719,12 @@ usa nomenclatura própria (ex.: "Master"/"Vendedor"/"Cliente").
   [13](#13-ai-credits-valores-e-assinatura).
 - **FinOps IA** (exclusivo de `super_admin`): custo e margem da IA da
   plataforma inteira.
+- **Government** (exclusivo de `super_admin`): pipeline governamental,
+  contratos (licença, implantação e subscrição separadas), recebimentos,
+  renovações e comissões de representante (20% na contratação inicial
+  sobre licença e subscrição, 10% em cada renovação, conforme a política
+  vigente, devidas quando o pagamento é recebido), com indicadores de
+  Bookings, ARR, TCV e Cash-In separados.
 
 ---
 
@@ -805,6 +811,24 @@ Linhas de licitações e compras (decisão D-059):
 | Strategic Sourcing Enterprise | por contrato | 100.000 | a partir de R$ 5.990 | venda assistida |
 | Public Procurement | — | — | em definição | — |
 | B2B ON Suite | — | — | em definição | — |
+
+**B2B ON Government** (órgãos públicos, decisão D-072) — contratação por
+contrato, nunca mensal:
+
+| Oferta | Licença institucional | Implantação | Subscrição anual | Contratação inicial | AI Credits/ano |
+|---|---|---|---|---|---|
+| Department | R$ 72.000 | R$ 12.000 | R$ 24.000 | R$ 108.000 | 300.000 |
+| Professional (recomendada) | R$ 120.000 | R$ 20.000 | R$ 36.000 | R$ 176.000 | 600.000 |
+| Enterprise | R$ 180.000 | R$ 30.000 | R$ 54.000 | R$ 264.000 | 1.200.000 |
+
+Contratação inicial = Licença Institucional + Implantação + Subscrição
+Anual. A partir do segundo período, a renovação normal é só a subscrição
+anual (mais eventuais serviços, créditos adicionais e reajustes previstos
+no contrato) — a licença não é cobrada de novo. Os AI Credits do
+Government são um pool anual por período, que vence no fim do período.
+Também existe o modelo "somente subscrição anual", com condições
+definidas na contratação. Limites por oferta (usuários, unidades, SLA
+etc.) são definidos em contrato.
 
 Os AI Credits do plano são um saldo único da empresa — não são
 multiplicados pelo número de usuários. No Bid Intelligence, um
@@ -967,7 +991,9 @@ Compras **privadas** da sua empresa. Menu **Strategic Sourcing**.
 - **Valores** (todos): créditos incluídos por plano, pacotes adicionais
   e quanto cada operação consome.
 - **Assinatura** (Admin): plano, módulos contratados e uso do período,
-  inclusive usuários (limite do plano + adicionais contratados).
+  inclusive usuários (limite do plano + adicionais contratados). Em
+  contrato governamental, mostra os componentes contratados e recebidos,
+  o período anual, a data de renovação e o pool anual de AI Credits.
 
 ## 14. Ajuda dentro da plataforma: tour, tutoriais e FAQ com IA
 

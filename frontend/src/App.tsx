@@ -14,6 +14,7 @@ const RevenueIntelligence = lazy(() =>
 const AdminConvites = lazy(() => import("@/pages/admin/AdminConvites").then((m) => ({ default: m.AdminConvites })));
 const AdminLicencas = lazy(() => import("@/pages/admin/AdminLicencas").then((m) => ({ default: m.AdminLicencas })));
 const AdminPlanos = lazy(() => import("@/pages/admin/AdminPlanos").then((m) => ({ default: m.AdminPlanos })));
+const AdminGoverno = lazy(() => import("@/pages/admin/AdminGoverno").then((m) => ({ default: m.AdminGoverno })));
 const AdminRepresentantes = lazy(() =>
   import("@/pages/admin/AdminRepresentantes").then((m) => ({ default: m.AdminRepresentantes })),
 );
@@ -505,6 +506,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <AdminPlanos />
+              </Suspense>
+            }
+          />
+          <Route
+            path="admin/governo"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <AdminGoverno />
               </Suspense>
             }
           />

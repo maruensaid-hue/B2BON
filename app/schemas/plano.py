@@ -3,7 +3,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 # Phase I (D-059): FIXED vai para o checkout; STARTING_AT ("a partir de") é venda assistida.
-TipoPreco = Literal["FIXED", "STARTING_AT"]
+TipoPreco = Literal["FIXED", "STARTING_AT", "CONTRACT"]  # CONTRACT: Government, sempre por contrato (D-072)
+Segmento = Literal["PRIVATE", "GOVERNMENT"]
+ModeloCobranca = Literal["MONTHLY_SUBSCRIPTION", "GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION", "GOVERNMENT_ANNUAL_SUBSCRIPTION_ONLY"]
 
 
 class PlanoSchema(BaseModel):
@@ -30,6 +32,14 @@ class PlanoSchema(BaseModel):
     modulos_contratados: list[str]
     categoria: str
     tipo_preco: str
+    segmento: str = "PRIVATE"
+    modelo_cobranca: str = "MONTHLY_SUBSCRIPTION"
+    preco_licenca: float | None = None
+    preco_implantacao: float | None = None
+    preco_assinatura_anual: float | None = None
+    creditos_ia_anuais: int | None = None
+    recomendado: bool = False
+    entitlements: dict | None = None
 
 
 class CriarPlanoRequestSchema(BaseModel):
@@ -53,6 +63,15 @@ class CriarPlanoRequestSchema(BaseModel):
     modulos_contratados: list[str] = ["map", "predator", "crm"]
     categoria: str = "suite"
     tipo_preco: TipoPreco = "FIXED"
+    segmento: Segmento = "PRIVATE"
+    modelo_cobranca: ModeloCobranca = "MONTHLY_SUBSCRIPTION"
+    preco_licenca: float | None = None
+    preco_implantacao: float | None = None
+    preco_assinatura_anual: float | None = None
+    creditos_ia_anuais: int | None = None
+    recomendado: bool = False
+    entitlements: dict | None = None
+    motivo: str | None = None  # registrado na auditoria (mudança de preço/condição)
 
 
 class AtualizarPlanoRequestSchema(CriarPlanoRequestSchema):

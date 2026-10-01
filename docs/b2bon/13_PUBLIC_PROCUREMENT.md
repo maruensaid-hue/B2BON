@@ -73,3 +73,16 @@ incluindo os achados de documento como requisitos; leituras conferidas contra as
 - Preço continua **PENDING_DEFINITION** e a franquia de AI Credits continua PENDING_FINAL_DEFINITION (OI-017).
 - É distinto do **B2B ON Strategic Sourcing** (comprador privado), mas os dois usam os mesmos engines, cada um com
   ruleset, permissões e barreira próprios.
+
+## 6. B2B ON Government (D-072)
+
+O órgão público contrata pelo modelo **Government**: licença institucional + implantação + subscrição anual (ou só subscrição
+anual, quando o edital exigir), com pool anual de AI Credits. As três ofertas (Department, Professional — recomendada —,
+Enterprise) liberam inicialmente este módulo (`procurement`) e estão em `15_PRICING_AND_ENTITLEMENTS.md` §6.
+
+- O preço mensal do Public Procurement para clientes privados continua **PENDING_DEFINITION** (OI-017): o Government é outro
+  modelo de cobrança, não um preço do módulo avulso.
+- A contratação ativa a licença do tenant no plano Government sem vencimento automático nem cobrança mensal (o contrato e seus
+  períodos mandam); a barreira Buy/Sell e o isolamento por tenant não mudam.
+- Limites por tier (usuários, unidades administrativas, SLA, armazenamento, volume documental...) ficam "conforme contrato"
+  até o PO definir (OI-024).

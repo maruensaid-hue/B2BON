@@ -20,6 +20,7 @@ from app.api.deps import (
     resolver_whatsapp_provider,
 )
 from app.contexts.finops import contract as finops
+from app.contexts.governo import contract as governo
 from app.contexts.platform.contract import webhooks
 from app.contexts.sourcing import contract as sourcing
 from app.contexts.shared import events
@@ -313,8 +314,11 @@ def processar_eventos(db: Session = Depends(get_db)) -> dict:
 def creditos_ia(db: Session = Depends(get_db)) -> dict:
     """Fase 15 — roda de hora em hora: expira lotes vencidos, concede a
     franquia do mês, libera reservas órfãs, registra alertas de uso
-    (80/95/100%), anomalias de consumo e alertas de margem."""
-    return finops.creditos_ia_rotina(db)
+    (80/95/100%), anomalias de consumo e alertas de margem. D-072: concede o
+    pool anual dos períodos Government que começaram, encerra os que
+    terminaram e marca os avisos de renovação."""
+    governo_resultado = governo.contratos.rotina(db)
+    return {**finops.creditos_ia_rotina(db), "governo": governo_resultado}
 
 
 @router.post("/sourcing-sincronizar", dependencies=[Depends(_exigir_segredo_cron)])

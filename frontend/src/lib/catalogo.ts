@@ -60,11 +60,42 @@ export interface LinhaComercial {
   status_preco: "DEFINIDO" | "PENDING_DEFINITION";
 }
 
+/** B2B ON Government (D-072): licença + implantação + subscrição anual, sem valor mensal. */
+export interface OfertaGoverno {
+  id: number;
+  nome: string;
+  segmento: "GOVERNMENT";
+  modelo_cobranca: string;
+  periodicidade: "ANUAL";
+  recomendado: boolean;
+  modulos: string[];
+  licenca: number;
+  implantacao: number;
+  assinatura_anual: number;
+  contratacao_inicial: number;
+  creditos_ia_anuais: number | null;
+  /** Valor null = "conforme contrato". */
+  entitlements: Record<string, number | string | boolean | null>;
+}
+
+export interface CatalogoGoverno {
+  id: string;
+  nome: string;
+  descricao: string;
+  composicao: string;
+  renovacao: string;
+  adaptacao: string;
+  so_assinatura: string;
+  modelos: string[];
+  planos: OfertaGoverno[];
+}
+
 export interface Catalogo {
   moeda: string;
   produtos: ProdutoCatalogo[];
   planos: PlanoCatalogo[];
   linhas: LinhaComercial[];
+  governo: CatalogoGoverno;
 }
 
 export const ROTULO_DISPONIBILIDADE: Record<Disponibilidade, string> = {

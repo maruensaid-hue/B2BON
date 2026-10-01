@@ -42,6 +42,7 @@ banco antes de qualquer decisão comercial.**
 | Bid Intelligence (Phase I, D-059, migração `a3c5e7f9b1d2`) | modulo | bids | 10 incluídos (D-071, `c5e7a9b1d3f4`); adicionais: preço PENDING_DEFINITION | 1.490,00 · FIXED | sim |
 | Strategic Sourcing (idem) | modulo | sourcing | 5 | 2.990,00 · FIXED | sim |
 | Strategic Sourcing Enterprise (idem) | modulo | sourcing + tier `sourcing_enterprise` | por contrato | a partir de 5.990,00 · STARTING_AT | **não** (venda assistida) |
+| B2B ON Government Department / Professional (recomendada) / Enterprise (D-072, migração `d9e1f3a5b7c9`) | governo | procurement | conforme contrato (OI-024) | licença 72.000 / 120.000 / 180.000 + implantação 12.000 / 20.000 / 30.000 + subscrição anual 24.000 / 36.000 / 54.000 · CONTRACT (300K / 600K / 1,2M AI Credits/ano) | **não** (contrato) |
 
 Public Procurement e a B2B ON Suite continuam **sem plano** (PENDING_DEFINITION). AI Credits por plano ficam em
 `finops/comercial.FRANQUIAS`: Bid Intelligence 25.000, Strategic Sourcing 50.000, Enterprise 100.000 (substitui).

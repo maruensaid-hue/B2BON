@@ -6,8 +6,10 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
+import { brl } from "@/lib/aiCredits";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import type { OfertaGoverno } from "@/lib/catalogo";
 
 interface Plano {
   id: number;
@@ -32,7 +34,24 @@ interface Plano {
    * módulos sempre juntos) ou "modulo" (só o(s) contratado(s)). */
   categoria: string;
   modulos_contratados: string[];
+  tipo_preco: string;
+  /** D-072: PRIVATE (assinatura mensal) ou GOVERNMENT (licença + subscrição anual). */
+  segmento: "PRIVATE" | "GOVERNMENT";
+  modelo_cobranca: string;
+  preco_licenca: number | null;
+  preco_implantacao: number | null;
+  preco_assinatura_anual: number | null;
+  creditos_ia_anuais: number | null;
+  recomendado: boolean;
 }
+
+const GOVERNO = "GOVERNMENT";
+const CAMPOS_GOVERNO = [
+  ["preco_licenca", "Licença institucional (R$)"],
+  ["preco_implantacao", "Implantação (R$)"],
+  ["preco_assinatura_anual", "Subscrição anual (R$)"],
+  ["creditos_ia_anuais", "AI Credits por ano"],
+] as const;
 
 const RECURSOS_PLANO: { campo: keyof Plano; rotulo: string }[] = [
   { campo: "permite_ab_teste_cadencia", rotulo: "Teste A/B de cadência" },
@@ -63,12 +82,41 @@ function FormularioPlano({
   onSalvar: (event: FormEvent<HTMLFormElement>) => void;
   salvando: boolean;
 }) {
+  const [segmento, setSegmento] = useState(plano?.segmento ?? "PRIVATE");
+  const governo = segmento === GOVERNO;
   return (
     <form onSubmit={onSalvar} className="flex flex-col gap-3">
       <div>
         <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome</div>
         <Input name="nome" required defaultValue={plano?.nome} placeholder="Ex.: Professional" />
       </div>
+      <div>
+        <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Segmento</div>
+        <select
+          name="segmento"
+          value={segmento}
+          disabled={Boolean(plano)}
+          onChange={(e) => setSegmento(e.target.value as Plano["segmento"])}
+          className="w-full rounded-lg border border-border bg-surf px-2.5 py-2 text-[12px] text-text"
+        >
+          <option value="PRIVATE">Privado — assinatura mensal</option>
+          <option value={GOVERNO}>Government — licença + subscrição anual</option>
+        </select>
+      </div>
+      {governo && (
+        <div className="grid grid-cols-2 gap-3" data-testid="campos-governo">
+          {CAMPOS_GOVERNO.map(([nome, rotulo]) => (
+            <div key={nome}>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">{rotulo}</div>
+              <Input name={nome} type="number" min={0} step="0.01" required defaultValue={plano?.[nome] ?? ""} />
+            </div>
+          ))}
+          <label className="col-span-2 flex items-center gap-1.5 text-[12px] text-muted">
+            <input type="checkbox" name="recomendado" defaultChecked={plano?.recomendado ?? false} />
+            Oferta recomendada (destaque na página de preços)
+          </label>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Franquia (contas/mês)</div>
@@ -79,16 +127,18 @@ function FormularioPlano({
           <Input name="max_usuarios" type="number" min={0} defaultValue={plano?.max_usuarios ?? ""} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Preço mensal (R$)</div>
-          <Input name="preco_mensal" type="number" min={0} step="0.01" required defaultValue={plano?.preco_mensal} />
+      {!governo && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Preço mensal (R$)</div>
+            <Input name="preco_mensal" type="number" min={0} step="0.01" required defaultValue={plano?.preco_mensal} />
+          </div>
+          <label className="flex items-center gap-1.5 self-end pb-2 text-[12px] text-muted">
+            <input type="checkbox" name="visivel_self_service" defaultChecked={plano?.visivel_self_service ?? true} />
+            Visível no cadastro self-service
+          </label>
         </div>
-        <label className="flex items-center gap-1.5 self-end pb-2 text-[12px] text-muted">
-          <input type="checkbox" name="visivel_self_service" defaultChecked={plano?.visivel_self_service ?? true} />
-          Visível no cadastro self-service
-        </label>
-      </div>
+      )}
 
       <div>
         <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Categoria</div>
@@ -99,6 +149,7 @@ function FormularioPlano({
         >
           <option value="suite">Suíte completa</option>
           <option value="modulo">Módulo avulso</option>
+          <option value="governo">Government</option>
         </select>
       </div>
       <div>
@@ -179,6 +230,11 @@ function FormularioPlano({
         </div>
       </div>
 
+      <div>
+        <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Motivo da alteração (vai para a auditoria)</div>
+        <Input name="motivo" placeholder="Ex.: tabela de preços 2027" />
+      </div>
+
       <Button type="submit" disabled={salvando} className="mt-1 w-full justify-center">
         {salvando ? "Salvando..." : plano ? "Salvar alterações" : "Criar plano"}
       </Button>
@@ -189,6 +245,7 @@ function FormularioPlano({
 export function AdminPlanos() {
   const { usuario } = useAuth();
   const [planos, setPlanos] = useState<Plano[]>([]);
+  const [ofertasGoverno, setOfertasGoverno] = useState<OfertaGoverno[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [planoEmEdicao, setPlanoEmEdicao] = useState<Plano | null>(null);
@@ -198,7 +255,9 @@ export function AdminPlanos() {
 
   async function carregar() {
     try {
-      setPlanos(await api.get<Plano[]>("/planos"));
+      const [todos, governo] = await Promise.all([api.get<Plano[]>("/planos"), api.get<OfertaGoverno[]>("/governo/planos")]);
+      setPlanos(todos);
+      setOfertasGoverno(governo);
     } catch {
       setErro("Não foi possível carregar os planos.");
     }
@@ -222,16 +281,32 @@ export function AdminPlanos() {
     event.preventDefault();
     if (salvando) return;
     const form = new FormData(event.currentTarget);
+    const governo = (planoEmEdicao?.segmento ?? form.get("segmento")) === GOVERNO;
+    // Módulos fora das caixas (ex.: bids, procurement, sourcing) não se perdem ao editar
+    const outrosModulos = (planoEmEdicao?.modulos_contratados ?? []).filter(
+      (m) => !MODULOS_DISPONIVEIS.some(({ valor }) => valor === m),
+    );
     const dados = {
       nome: String(form.get("nome")),
       franquia_contas_mes: Number(form.get("franquia_contas_mes")),
       max_usuarios: campoNumeroOuVazio(form.get("max_usuarios")),
-      preco_mensal: Number(form.get("preco_mensal")),
-      visivel_self_service: form.get("visivel_self_service") === "on",
+      preco_mensal: governo ? 0 : Number(form.get("preco_mensal")),
+      visivel_self_service: governo ? false : form.get("visivel_self_service") === "on",
       categoria: String(form.get("categoria")),
-      modulos_contratados: MODULOS_DISPONIVEIS.map(({ valor }) => valor).filter(
-        (valor) => form.get(`modulo_${valor}`) === "on",
-      ),
+      modulos_contratados: [
+        ...MODULOS_DISPONIVEIS.map(({ valor }) => valor).filter((valor) => form.get(`modulo_${valor}`) === "on"),
+        ...outrosModulos,
+      ],
+      ...(governo
+        ? {
+            segmento: GOVERNO,
+            tipo_preco: "CONTRACT",
+            modelo_cobranca: planoEmEdicao?.modelo_cobranca ?? "GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION",
+            ...Object.fromEntries(CAMPOS_GOVERNO.map(([nome]) => [nome, campoNumeroOuVazio(form.get(nome))])),
+            recomendado: form.get("recomendado") === "on",
+          }
+        : {}),
+      motivo: String(form.get("motivo") ?? "") || null,
       limite_enriquecimento_site_semanal: campoNumeroOuVazio(form.get("limite_enriquecimento_site_semanal")),
       limite_enriquecimento_contatos_semanal: campoNumeroOuVazio(form.get("limite_enriquecimento_contatos_semanal")),
       limite_cadencias_mes: campoNumeroOuVazio(form.get("limite_cadencias_mes")),
@@ -279,7 +354,7 @@ export function AdminPlanos() {
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
 
       <Card>
-        <SectionLabel>Planos</SectionLabel>
+        <SectionLabel>Planos privados — assinatura mensal</SectionLabel>
         <table className="w-full border-collapse text-[12px]">
           <thead>
             <tr className="border-b border-border text-[9.5px] tracking-wide text-muted uppercase">
@@ -293,7 +368,7 @@ export function AdminPlanos() {
             </tr>
           </thead>
           <tbody>
-            {planos.map((plano) => (
+            {planos.filter((plano) => plano.segmento !== GOVERNO).map((plano) => (
               <tr key={plano.id} className="border-b border-border">
                 <td className="p-2 font-semibold">{plano.nome}</td>
                 <td className="p-2 text-muted">{plano.franquia_contas_mes}</td>
@@ -332,6 +407,63 @@ export function AdminPlanos() {
             )}
           </tbody>
         </table>
+      </Card>
+
+      <Card className="mt-4" data-testid="tabela-governo">
+        <SectionLabel>B2B ON Government — licença + subscrição anual (catálogo central)</SectionLabel>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="border-b border-border text-[9.5px] tracking-wide text-muted uppercase">
+                {["Nome", "Segmento", "Licença", "Implantação", "Subscrição", "Periodicidade", "Usuários/Entitlements", "AI Credits",
+                  "Status", "Módulos", "Contratação inicial", "Ações"].map((titulo) => (
+                  <th key={titulo} className="p-2 text-left">{titulo}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ofertasGoverno.map((oferta) => {
+                const plano = planos.find((p) => p.id === oferta.id);
+                const definidos = Object.entries(oferta.entitlements).filter(([, v]) => v !== null);
+                return (
+                  <tr key={oferta.id} className="border-b border-border" data-testid="linha-governo">
+                    <td className="p-2 font-semibold">
+                      {oferta.nome} {oferta.recomendado && <Badge tone="cyan">Recomendado</Badge>}
+                    </td>
+                    <td className="p-2 text-muted">{oferta.segmento}</td>
+                    <td className="p-2">{brl(oferta.licenca)}</td>
+                    <td className="p-2">{brl(oferta.implantacao)}</td>
+                    <td className="p-2">{brl(oferta.assinatura_anual)}</td>
+                    <td className="p-2 text-muted">Anual</td>
+                    <td className="p-2 text-muted">
+                      {definidos.length ? definidos.map(([k, v]) => `${k}: ${v}`).join(", ") : "Conforme contrato"}
+                    </td>
+                    <td className="p-2 text-muted">
+                      {oferta.creditos_ia_anuais !== null ? `${oferta.creditos_ia_anuais.toLocaleString("pt-BR")}/ano` : "—"}
+                    </td>
+                    <td className="p-2 text-muted">Por contrato</td>
+                    <td className="p-2 text-muted">{oferta.modulos.map((m) => m.toUpperCase()).join(", ")}</td>
+                    <td className="p-2 font-semibold text-cyan">{brl(oferta.contratacao_inicial)}</td>
+                    <td className="p-2">
+                      {plano && (
+                        <Button size="sm" onClick={() => abrirEdicao(plano)}>
+                          Editar
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {ofertasGoverno.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="p-4 text-center text-muted">
+                    Nenhuma oferta Government cadastrada.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       <Modal title={planoEmEdicao ? `Editar plano — ${planoEmEdicao.nome}` : "Criar plano"} open={modalAberto} onClose={() => setModalAberto(false)}>

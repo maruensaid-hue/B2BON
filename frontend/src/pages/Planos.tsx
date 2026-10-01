@@ -225,6 +225,9 @@ export function Planos() {
             Rede social, inteligência de contas, prospecção com IA e CRM — na mesma licença, com
             desconto progressivo conforme o time cresce.
           </p>
+          <a href="#government" className="mt-4 inline-block text-[12.5px] font-semibold text-cyan hover:underline">
+            Setor público: conheça o B2B ON Government ↓
+          </a>
         </div>
       </header>
 

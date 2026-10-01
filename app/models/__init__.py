@@ -10,6 +10,15 @@ from app.models.comissao_representante import ComissaoRepresentante
 from app.models.conexao_empresa import ConexaoEmpresa
 from app.models.conexao_linkedin import ConexaoLinkedin
 from app.models.conta import Conta
+from app.models.contrato_governo import (
+    ComponenteContratoGoverno,
+    ContratoGoverno,
+    OportunidadeGoverno,
+    PeriodoAssinaturaGoverno,
+    PoliticaComissao,
+    RecebimentoGoverno,
+    TemplateDocumentoComercial,
+)
 from app.models.conta_franquia_consumo import ContaFranquiaConsumo
 from app.models.configuracao_agente_corporativo import ConfiguracaoAgenteCorporativo
 from app.models.configuracao_canal import ConfiguracaoCanal
@@ -185,6 +194,13 @@ __all__ = [
     "ConfiguracaoPainel",
     "ConfiguracaoNps",
     "Conta",
+    "ComponenteContratoGoverno",
+    "ContratoGoverno",
+    "OportunidadeGoverno",
+    "PeriodoAssinaturaGoverno",
+    "PoliticaComissao",
+    "RecebimentoGoverno",
+    "TemplateDocumentoComercial",
     "CampoEnriquecido",
     "ContaFranquiaConsumo",
     "EnriquecimentoSemanalConsumo",

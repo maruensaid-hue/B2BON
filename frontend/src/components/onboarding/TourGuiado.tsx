@@ -209,6 +209,12 @@ const PASSOS_TOUR: PassoGuia[] = [
       "Saldo de AI Credits da empresa (um pool só, não por usuário), uso do mês, créditos que vencem, compra de pacotes, recarga automática, limites de uso e avisos em 80%, 95% e 100%.",
   },
   {
+    id: "nav:/admin/governo",
+    titulo: "Admin — Government",
+    descricao:
+      "Contratos com órgãos públicos: licença, implantação e subscrição anual separadas, recebimentos, renovações, comissões e o pipeline governamental, com Bookings, ARR, TCV e Cash-In.",
+  },
+  {
     id: "nav:/assinatura",
     titulo: "Admin — Assinatura",
     descricao:

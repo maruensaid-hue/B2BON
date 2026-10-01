@@ -206,7 +206,13 @@ export function Login() {
           </form>
         )}
 
-        <div className="mt-5 text-center text-[10px] text-muted">
+        <div className="mt-4 text-center text-[12px]">
+          <Link to="/planos" className="font-semibold text-cyan hover:underline" data-testid="link-planos">
+            Planos e preços
+          </Link>
+        </div>
+
+        <div className="mt-3 text-center text-[10px] text-muted">
           <Link to="/privacidade" className="hover:text-cyan hover:underline">
             Política de Privacidade
           </Link>

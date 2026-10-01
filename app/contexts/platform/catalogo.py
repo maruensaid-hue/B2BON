@@ -26,6 +26,7 @@ from enum import StrEnum
 from sqlalchemy.orm import Session
 
 from app.contexts.finops import contract as finops
+from app.contexts.governo import contract as governo
 from app.contexts.integrations import contract as integracoes
 from app.models.cadencia import Cadencia
 from app.models.campanha import Campanha
@@ -251,7 +252,7 @@ def catalogo(db: Session) -> dict:
     produtos.append(_conectores())
     produtos.append(_creditos_ia(db))
     return {"moeda": "BRL", "produtos": produtos, "planos": [_plano_publico(p) for p in planos],
-            "linhas": _linhas(planos, a_partir_de)}
+            "linhas": _linhas(planos, a_partir_de), "governo": governo.ofertas.catalogo_publico(db)}
 
 
 # --- Assinatura do tenant -------------------------------------------------------------
@@ -284,7 +285,11 @@ def assinatura(db: Session, tenant_id: str, plan_limits: PlanLimitsProvider) -> 
     ia = finops.dashboard.resumo(db, inicio, datetime.now(UTC), tenant_id=tenant_id)
     return {
         "plano": {"nome": plano.nome, "categoria": plano.categoria, "preco_mensal": plano.preco_mensal, "tipo_preco": plano.tipo_preco,
-                  "ai_credits_mensais": finops.comercial.franquia_mensal(list(plano.modulos_contratados or []))[0]} if plano else None,
+                  "segmento": plano.segmento, "modelo_cobranca": plano.modelo_cobranca,
+                  "creditos_ia_anuais": plano.creditos_ia_anuais,  # Government: pool anual, sem franquia mensal
+                  "ai_credits_mensais": 0 if plano.creditos_ia_anuais is not None
+                  else finops.comercial.franquia_mensal(list(plano.modulos_contratados or []))[0]} if plano else None,
+        "governo": governo.contratos.do_tenant(db, tenant_id),  # D-072: contrato, períodos e pool anual (sem comissões)
         "licenca": {"status": licenca.status, "expira_em": licenca.data_expiracao.isoformat() if licenca and licenca.data_expiracao else None}
         if licenca else {"status": "sem_licenca", "expira_em": None},
         "modulos": modulos,

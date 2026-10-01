@@ -6,7 +6,8 @@
 | Última fase concluída | PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION (2026-09-25) |
 | Fase 15 | Desbloqueada pelo PO em 2026-09-25 com o prompt "PHASE 15 — PRICING, AI CREDITS & COMMERCIAL MONETIZATION" (substitui o escopo "Public Procurement Pricing") e concluída no mesmo dia. Preço-base do Public Procurement e franquias do Procurement/Full Suite continuam PENDING_FINAL_DEFINITION por decisão do PO |
 | Branch de trabalho | `staging` |
-| Relatório da última fase | `phases/PHASE_J_COMPLETION.md` (antes: `PHASE_I_COMPLETION.md` com o aceite final §46–§47, `PHASE_H_COMPLETION.md`, `PHASE_G_COMPLETION.md`, `PHASE_F_COMPLETION.md`, `PHASE_E_COMPLETION.md`, `PHASE_D_COMPLETION.md`, `PHASE_C_COMPLETION.md`, `PHASE_B_COMPLETION.md`, `PHASE_A_COMPLETION.md`, `SOURCING_S4_COMPLETION.md`, `SOURCING_S3_COMPLETION.md`, `SOURCING_S0_S2_COMPLETION.md`, `PHASE_15_COMPLETION.md`) |
+| Relatório da última fase | `phases/GOVERNMENT_COMPLETION.md` (antes: `PHASE_J_COMPLETION.md`, `PHASE_I_COMPLETION.md` com o aceite final §46–§47, `PHASE_H_COMPLETION.md`, `PHASE_G_COMPLETION.md`, `PHASE_F_COMPLETION.md`, `PHASE_E_COMPLETION.md`, `PHASE_D_COMPLETION.md`, `PHASE_C_COMPLETION.md`, `PHASE_B_COMPLETION.md`, `PHASE_A_COMPLETION.md`, `SOURCING_S4_COMPLETION.md`, `SOURCING_S3_COMPLETION.md`, `SOURCING_S0_S2_COMPLETION.md`, `PHASE_15_COMPLETION.md`) |
+| B2B ON Government | 2026-10-01 — prompt do PO "B2B ON GOVERNMENT" (D-072): licença institucional + subscrição anual, três ofertas no catálogo central, pool anual de AI Credits, contratos/renovação/recebimentos, Bookings/ARR/TCV/Cash-In, comissão por componente (20% inicial, 10% renovação, PAYMENT_RECEIVED), pipeline Government, página pública e Admin → Planos. Relatório: `phases/GOVERNMENT_COMPLETION.md` |
 | Documentação e onboarding | 2026-10-01 — pedido do PO ("Atualize toda a documentação e os tours"): tour guiado, tutoriais por módulo (Licitações, Compras públicas, Strategic Sourcing, Convites de compra), FAQ com IA, Manual do Usuário, README e `16_TEST_STRATEGY.md` atualizados. Sem mudança de regra de negócio. TD-093 resolvido com autorização do PO ("Sim pode agendar"): `/cron/creditos-ia` de hora em hora no workflow |
 | Correção arquitetural | 2026-09-26 — Strategic Sourcing & Bids (D-055, `18_STRATEGIC_SOURCING.md`). Plano S0–S8; **S0–S4 autorizadas e concluídas** em 2026-09-26 (OI-020); S5–S8 não autorizadas. Após o deploy da S3: rodar o backfill (`/cron/sourcing-sincronizar`) uma vez |
 
@@ -29,6 +30,7 @@
 - **OI-001** (crítica): limites 0 nos planos PREDATOR avulsos. Depende de valores do PO.
 - **OI-017** (comercial): franquias de AI Credits do Public Procurement (50–100K) e da Full Suite (75–100K) e preço-base do Public Procurement — decisão futura do PO; hoje nada concedido por elas.
 - **OI-018** (financeiro): câmbio USD→BRL para a margem de IA (sem ele a margem aparece indisponível).
+- **OI-024 / OI-025** (comercial): composição dos tiers Government e política de adicionais, impostos e infraestrutura.
 - **Troca S6**: pronta atrás de `sourcing_leitura_fonte` (D-070); ligar só após o portão TD-087/088.
 - **OI-022** (comercial): preço do buyer seat adicional e dos bundles futuros.
 - **Plano A–I**: A–I concluídas, uma por vez (`18_STRATEGIC_SOURCING.md` §10).
@@ -44,6 +46,6 @@
 - Desempenho: `docs/b2bon/perf/baseline.json` (antes da expansão) e `fase_a.json` … `fase_i.json`; repetir com `tests/desempenho` a cada fase (§36).
 - Duplicação: `scripts/qualidade/duplicacao.py` — 42 blocos / ~1.877 linhas repetidas (janela 8).
 
-- Backend: 2.094 passed, 9 skipped (medição de desempenho sob demanda + 8 testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 8/8 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `c5e7a9b1d3f4`).
+- Backend: 2.117 passed, 10 skipped (medição de desempenho sob demanda + 9 testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 9/9 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `d9e1f3a5b7c9`).
 - Ruff: 40 (sem novos). Frontend: lint OK (25 warnings), build OK.
 - E2E: 12/12 (setup de login + 11 specs).

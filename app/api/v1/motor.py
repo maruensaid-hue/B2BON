@@ -1,7 +1,10 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_usuario_atual, limitar_ia_por_tenant
+from app.contexts.governo import contract as governo
 from app.llm.base import LLMProvider
 from app.models.usuario import Usuario
 from app.schemas.motor import (
@@ -54,3 +57,10 @@ def script_resgate(
     usuario: Usuario = Depends(get_usuario_atual),
 ) -> ScriptResgateSchema:
     return motor_service.gerar_script_resgate(db, tenant_id, llm, tenant_id_operador=usuario.tenant_id)
+
+
+@router.get("/tenants/{tenant_id}/margem-contribuicao")
+def margem_contribuicao(tenant_id: str, inicio: date, fim: date, db: Session = Depends(get_db)) -> dict:
+    """D-072: Receita bruta − impostos − comissões (inicial e renovação) − custo de IA − infraestrutura.
+    O que a plataforma não sabe sai como desconhecido (margem parcial), nunca estimado."""
+    return governo.analytics.margem_contribuicao(db, tenant_id, inicio, fim)

@@ -1,4 +1,6 @@
-from sqlalchemy import JSON, Boolean, Float, Integer, String
+from decimal import Decimal
+
+from sqlalchemy import JSON, Boolean, Float, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -67,3 +69,14 @@ class Plano(Base):
     categoria: Mapped[str] = mapped_column(String, default="suite", server_default="suite")
     # Phase I (D-059): FIXED vai para o checkout; STARTING_AT é "a partir de", venda assistida (nunca self-service).
     tipo_preco: Mapped[str] = mapped_column(String, default="FIXED", server_default="FIXED")
+    # B2B ON Government (D-072): o mesmo catálogo serve outro modelo de cobrança. Planos privados ficam
+    # PRIVATE / MONTHLY_SUBSCRIPTION e os campos abaixo vazios; `preco_mensal` não é usado no Government.
+    segmento: Mapped[str] = mapped_column(String, default="PRIVATE", server_default="PRIVATE")
+    modelo_cobranca: Mapped[str] = mapped_column(String, default="MONTHLY_SUBSCRIPTION", server_default="MONTHLY_SUBSCRIPTION")
+    preco_licenca: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    preco_implantacao: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    preco_assinatura_anual: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    creditos_ia_anuais: Mapped[int | None] = mapped_column(Integer, nullable=True)  # pool anual (substitui a franquia mensal)
+    recomendado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Entitlements configuráveis por oferta (usuários, unidades, SLA, armazenamento...): valor None = "conforme contrato".
+    entitlements: Mapped[dict | None] = mapped_column(JSON, nullable=True)

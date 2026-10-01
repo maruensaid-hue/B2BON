@@ -180,7 +180,7 @@ def test_migracao_phase_i_cria_os_planos_aprovados(monkeypatch):
             assert [tuple(linha) for linha in linhas] == [
                 ("Bid Intelligence", 1490.0, 10, 1, "FIXED"), ("Strategic Sourcing", 2990.0, 5, 1, "FIXED"),
                 ("Strategic Sourcing Enterprise", 5990.0, None, 0, "STARTING_AT")]
-            assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE tipo_preco <> 'FIXED'")).scalar() == 1
+            assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE tipo_preco <> 'FIXED' AND segmento = 'PRIVATE'")).scalar() == 1
         command.downgrade(config, "a3c5e7f9b1d2")  # Phase J3 volta: usuários do Bid Intelligence de novo indefinidos
         with engine.connect() as conexao:
             assert conexao.execute(sa.text("SELECT max_usuarios FROM plano WHERE nome = 'Bid Intelligence'")).scalar() is None
@@ -188,6 +188,38 @@ def test_migracao_phase_i_cria_os_planos_aprovados(monkeypatch):
         command.upgrade(config, "head")  # idempotente: não duplica
         with engine.connect() as conexao:
             assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE nome LIKE 'Strategic Sourcing%'")).scalar() == 2
+    finally:
+        engine.dispose()
+        if os.path.exists(caminho_db):
+            os.remove(caminho_db)
+
+
+def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
+    """D-072: três ofertas Government com os valores do PO, por contrato (fora do checkout); downgrade remove tudo."""
+    import sqlalchemy as sa
+
+    fd, caminho_db = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(caminho_db)
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{caminho_db}")
+    engine = sa.create_engine(f"sqlite:///{caminho_db}")
+    try:
+        config = Config("alembic.ini")
+        command.upgrade(config, "head")
+        with engine.connect() as conexao:
+            linhas = conexao.execute(sa.text(
+                "SELECT nome, preco_licenca, preco_implantacao, preco_assinatura_anual, creditos_ia_anuais, recomendado, "
+                "visivel_self_service, tipo_preco, modelo_cobranca FROM plano WHERE segmento = 'GOVERNMENT' ORDER BY preco_licenca")).fetchall()
+            assert [tuple(linha) for linha in linhas] == [
+                ("B2B ON Government Department", 72000, 12000, 24000, 300000, 0, 0, "CONTRACT", "GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION"),
+                ("B2B ON Government Professional", 120000, 20000, 36000, 600000, 1, 0, "CONTRACT", "GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION"),
+                ("B2B ON Government Enterprise", 180000, 30000, 54000, 1200000, 0, 0, "CONTRACT", "GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION")]
+            assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE segmento = 'PRIVATE' AND preco_licenca IS NOT NULL")).scalar() == 0
+            assert conexao.execute(sa.text("SELECT versao FROM politica_comissao WHERE codigo = 'GOVERNMENT'")).scalar() == 1
+        command.downgrade(config, "c5e7a9b1d3f4")
+        with engine.connect() as conexao:
+            assert conexao.execute(sa.text("SELECT count(*) FROM plano WHERE nome LIKE 'B2B ON Government%'")).scalar() == 0
+        command.upgrade(config, "head")
     finally:
         engine.dispose()
         if os.path.exists(caminho_db):

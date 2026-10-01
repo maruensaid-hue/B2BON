@@ -117,6 +117,7 @@ const ADMIN_NAV_ITEM_CONVITES: NavItem = { path: "/admin/convites", label: "Conv
 const ADMIN_NAV_ITEMS_SUPER_ADMIN: NavItem[] = [
   { path: "/admin/planos", label: "Planos", icon: "💳" },
   { path: "/admin/representantes", label: "Representantes", icon: "🤝" },
+  { path: "/admin/governo", label: "Government", icon: "🏛️" },
   { path: "/admin/verificacoes-empresa", label: "Verificações", icon: "🛡️" },
 ];
 // API de provisionamento/billing (Fase 2 da hierarquia, raio-X) — exclusivo

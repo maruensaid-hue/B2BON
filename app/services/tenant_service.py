@@ -3,10 +3,12 @@ import re
 import secrets
 import unicodedata
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from app.contexts.governo import contract as governo
 from app.core.config import settings
 from app.db.base import Base
 from app.graph.client import Neo4jClient
@@ -73,7 +75,7 @@ _CAMPOS_NUMERICOS_NAO_NEGATIVOS = (
 
 
 def _validar_dados_plano(db: Session, dados: dict, plano_id: int | None = None) -> None:
-    existente = db.query(Plano).filter_by(nome=dados["nome"]).one_or_none()
+    existente = db.query(Plano).filter_by(nome=dados["nome"]).one_or_none() if "nome" in dados else None
     if existente is not None and existente.id != plano_id:
         raise RegraNegocioViolada(f'Já existe um plano chamado "{dados["nome"]}".')
     for campo in _CAMPOS_NUMERICOS_NAO_NEGATIVOS:
@@ -82,25 +84,65 @@ def _validar_dados_plano(db: Session, dados: dict, plano_id: int | None = None) 
             raise ValidacaoFalhou(f'"{campo}" não pode ser negativo.')
 
 
-def criar_plano(db: Session, dados: dict) -> Plano:
+def _validar_segmento(plano: Plano) -> None:
+    """D-072: plano Government é sempre por contrato e tem preço por componente; plano privado não tem os campos Government."""
+    componentes = (plano.preco_licenca, plano.preco_implantacao, plano.preco_assinatura_anual)
+    plano.segmento = plano.segmento or "PRIVATE"
+    plano.modelo_cobranca = plano.modelo_cobranca or "MONTHLY_SUBSCRIPTION"
+    if plano.segmento == governo.tipos.SEGMENTO_GOVERNO:
+        if plano.modelo_cobranca not in {m.value for m in governo.tipos.MODELOS_GOVERNO}:
+            raise ValidacaoFalhou("Plano Government usa um modelo de cobrança Government.")
+        if plano.tipo_preco != "CONTRACT" or plano.visivel_self_service:
+            raise ValidacaoFalhou("Plano Government é contratado por contrato (tipo de preço CONTRACT), nunca no checkout.")
+        obrigatorios = componentes if plano.modelo_cobranca == governo.tipos.ModeloCobranca.LICENCA_MAIS_ASSINATURA else ()
+        if any(v is None for v in obrigatorios) or plano.creditos_ia_anuais is None:
+            raise ValidacaoFalhou("Plano Government precisa de licença, implantação, subscrição anual e AI Credits anuais.")
+        if any(v is not None and v < 0 for v in componentes) or (plano.creditos_ia_anuais or 0) < 0:
+            raise ValidacaoFalhou("Valores do plano Government não podem ser negativos.")
+    elif plano.modelo_cobranca != "MONTHLY_SUBSCRIPTION" or any(v is not None for v in componentes) or plano.creditos_ia_anuais is not None:
+        raise ValidacaoFalhou("Plano privado é assinatura mensal, sem licença, implantação ou pool anual.")
+
+
+def _auditar_plano(db: Session, plano: Plano, antes: dict | None, ator_id: str | None, motivo: str | None) -> None:
+    depois = _foto_plano(plano)
+    mudancas = {c: {"antes": (antes or {}).get(c), "depois": v} for c, v in depois.items() if antes is None or antes.get(c) != v}
+    if mudancas:
+        auditoria_service.registrar(db, auditoria_service.TENANT_PLATAFORMA, "plano_criado" if antes is None else "plano_alterado", "plano",
+                                    plano.id, ator_id, {"nome": plano.nome, "mudancas": mudancas, "motivo": motivo, "origem": "admin_planos"})
+
+
+def _foto_plano(plano: Plano) -> dict:
+    return {c.name: (float(v) if isinstance(v, Decimal) else v) for c in Plano.__table__.columns if c.name != "id"
+            for v in [getattr(plano, c.name)]}
+
+
+def criar_plano(db: Session, dados: dict, ator_id: str | None = None, motivo: str | None = None) -> Plano:
     """CRUD de planos pela tela (raio-X 2026-09-09) — antes disso, planos só
     nasciam via `scripts/bootstrap_tenant.py`; agora quem decide os
-    recursos exclusivos de cada plano ajusta direto em Admin → Planos."""
+    recursos exclusivos de cada plano ajusta direto em Admin → Planos.
+    D-072: toda criação/alteração (preço, condição, entitlement) é auditada; contratos Government guardam
+    a cópia dos valores, então mudar o preço não altera contrato existente."""
     _validar_dados_plano(db, dados)
     plano = Plano(**dados)
+    _validar_segmento(plano)
     db.add(plano)
+    db.flush()
+    _auditar_plano(db, plano, None, ator_id, motivo)
     db.commit()
     db.refresh(plano)
     return plano
 
 
-def atualizar_plano(db: Session, plano_id: int, dados: dict) -> Plano:
+def atualizar_plano(db: Session, plano_id: int, dados: dict, ator_id: str | None = None, motivo: str | None = None) -> Plano:
     plano = db.query(Plano).filter_by(id=plano_id).one_or_none()
     if plano is None:
         raise NaoEncontrado(f"Plano {plano_id} não encontrado")
     _validar_dados_plano(db, dados, plano_id)
+    antes = _foto_plano(plano)
     for campo, valor in dados.items():
         setattr(plano, campo, valor)
+    _validar_segmento(plano)
+    _auditar_plano(db, plano, antes, ator_id, motivo)
     db.commit()
     db.refresh(plano)
     return plano

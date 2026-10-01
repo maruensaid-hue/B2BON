@@ -160,3 +160,35 @@ planos novos não entram nelas.
 - Workloads Enterprise/Sourcing entram no catálogo versionado como nova versão (`CREDIT_CATALOG_V2`, na
   implementação): proposal analysis, proposal comparison, AI evaluation, supplier intelligence e contract intelligence.
 - Tudo passa pelo AI Gateway e pelo Usage Ledger existentes.
+
+## 6. B2B ON Government (D-072)
+
+Modelo comercial próprio para órgãos públicos, no **mesmo catálogo** (tabela `plano`) e nos mesmos mecanismos (entitlements,
+carteira de AI Credits, comissões, auditoria). O modelo privado mensal não muda.
+
+| Campo do plano | Privado | Government |
+|---|---|---|
+| `segmento` | PRIVATE | GOVERNMENT |
+| `modelo_cobranca` | MONTHLY_SUBSCRIPTION | GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION (preferencial) · GOVERNMENT_ANNUAL_SUBSCRIPTION_ONLY |
+| `tipo_preco` | FIXED / STARTING_AT | CONTRACT (nunca no checkout) |
+| preço | `preco_mensal` | `preco_licenca`, `preco_implantacao`, `preco_assinatura_anual` (o `preco_mensal` fica 0 e não é usado) |
+| AI Credits | franquia mensal por módulo (`FRANQUIAS`) | `creditos_ia_anuais` (pool por período do contrato) |
+| entitlements | colunas do plano | colunas + `entitlements` (JSON configurável; vazio = "conforme contrato") |
+
+| Oferta | Licença | Implantação | Subscrição anual | Contratação inicial | AI Credits/ano |
+|---|---|---|---|---|---|
+| Department | R$ 72.000 | R$ 12.000 | R$ 24.000 | R$ 108.000 | 300.000 |
+| **Professional (recomendada)** | R$ 120.000 | R$ 20.000 | R$ 36.000 | R$ 176.000 | 600.000 |
+| Enterprise | R$ 180.000 | R$ 30.000 | R$ 54.000 | R$ 264.000 | 1.200.000 |
+
+- **Fonte única**: `GET /catalogo` (seção `governo`), `GET /planos` e `GET /governo/planos` leem a tabela `plano`; o frontend não
+  tem preço Government no código (teste `test_pagina_publica_e_admin_iguais_ao_catalogo`). Mudar preço = Admin → Planos (auditado);
+  contratos guardam a cópia e não mudam.
+- **Contrato** (`contrato_governo` + `periodo_assinatura_governo` + `componente_contrato_governo` + `recebimento_governo`):
+  ano 1 = licença + implantação + subscrição inicial; ano 2+ = renovação da subscrição (+ serviços/créditos adicionais).
+- **Métricas** (`GET /governo/metricas`): bookings por tipo, ARR (só subscrição vigente), New/Renewal ARR, TCV inicial, Cash-In,
+  receita comissionável × não comissionável, comissões (inicial, renovação, paga, pendente, a compensar; por representante,
+  contrato, cliente) e pipeline ponderado.
+- **Comissão**: política versionada `politica_comissao` (licença 20%, subscrição inicial 20%, renovações 10%, implantação não
+  comissionável; gatilho PAYMENT_RECEIVED), sobre `comissao_representante` e o repasse mensal existente.
+- Pendências do PO: composição de cada tier (OI-024); comissão de adicionais, impostos e infraestrutura (OI-025).

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { ContratoGovernoCard } from "@/components/ContratoGovernoCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { brl } from "@/lib/aiCredits";
@@ -11,6 +12,7 @@ import {
   TOM_DISPONIBILIDADE,
   type Disponibilidade,
 } from "@/lib/catalogo";
+import type { ContratoGoverno } from "@/lib/governo";
 
 interface Uso {
   usado: number;
@@ -23,8 +25,11 @@ interface AssinaturaResposta {
     nome: string;
     categoria: string;
     preco_mensal: number;
-    tipo_preco: "FIXED" | "STARTING_AT";
+    tipo_preco: "FIXED" | "STARTING_AT" | "CONTRACT";
+    segmento?: string;
+    creditos_ia_anuais?: number | null;
   } | null;
+  governo?: ContratoGoverno | null;
   licenca: { status: string; expira_em: string | null };
   modulos: {
     id: string;
@@ -120,6 +125,8 @@ export function Assinatura() {
         </div>
       </div>
 
+      {dados.governo && <ContratoGovernoCard contrato={dados.governo} />}
+
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
         <Card>
           <SectionLabel>Plano atual</SectionLabel>
@@ -129,11 +136,13 @@ export function Assinatura() {
                 {dados.plano.nome}
               </div>
               <div className="text-muted">
-                {dados.plano.tipo_preco === "STARTING_AT"
-                  ? `Condições por contrato (a partir de ${brl(dados.plano.preco_mensal)} / mês)`
-                  : dados.plano.preco_mensal > 0
-                    ? `${brl(dados.plano.preco_mensal)} / mês`
-                    : "Sem cobrança"}
+                {dados.plano.segmento === "GOVERNMENT"
+                  ? `Contrato governamental · ${(dados.plano.creditos_ia_anuais ?? 0).toLocaleString("pt-BR")} AI Credits/ano`
+                  : dados.plano.tipo_preco === "STARTING_AT"
+                    ? `Condições por contrato (a partir de ${brl(dados.plano.preco_mensal)} / mês)`
+                    : dados.plano.preco_mensal > 0
+                      ? `${brl(dados.plano.preco_mensal)} / mês`
+                      : "Sem cobrança"}
               </div>
               <div>
                 Licença{" "}

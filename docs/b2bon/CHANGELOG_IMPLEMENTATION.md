@@ -1,5 +1,13 @@
 # CHANGELOG — IMPLEMENTATION
 
+## B2B ON Government (2026-10-01, pedido do PO, D-072)
+
+- Três ofertas para órgãos públicos — Department, Professional (recomendada) e Enterprise — com licença institucional, implantação e subscrição anual separadas e AI Credits anuais (300 mil, 600 mil e 1,2 milhão).
+- Página de preços com a seção B2B ON Government (sem valor mensal) e link "Planos e preços" na página inicial; Admin → Planos mostra as ofertas Government do mesmo catálogo.
+- Contratos governamentais: renovação anual só da subscrição (a licença não é cobrada de novo), pool anual de AI Credits por período, recebimentos, Bookings, ARR, TCV e Cash-In separados.
+- Comissão de representantes por componente: 20% na contratação inicial (licença e subscrição), 10% nas renovações, devida quando o pagamento é recebido; estorno, divisão e transferência auditados.
+- Modelo "somente subscrição anual" suportado para editais que o exijam; pipeline governamental e propostas por template.
+
 ## Documentação e onboarding (2026-10-01, pedido do PO)
 
 - Tour guiado com passos para Licitações, Compras públicas, Strategic Sourcing, Convites de compra, Revenue Intelligence, Cérebro Corporativo, Valores, AI Credits e Assinatura.
