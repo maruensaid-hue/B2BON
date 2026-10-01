@@ -729,9 +729,14 @@ usa nomenclatura própria (ex.: "Master"/"Vendedor"/"Cliente").
 - **Parâmetros financeiros** (exclusivo de `super_admin`): toda comissão
   de representante, de plano privado ou Government, é calculada sobre a
   **Margem Comissionável Líquida** do recebimento — receita recebida menos
-  impostos atribuíveis (Tax Profile, com regime, vigência e componentes)
-  e custo de infraestrutura atribuível (modelo de custo: percentual, fixo
-  por recebimento, por produto/tenant e/ou custo real de IA). Sem esses
+  impostos atribuíveis (Tax Profile: regime, vigência, tipo de receita,
+  município e código de serviço, com cada tributo — PIS, COFINS, IRPJ e
+  CSLL pela presunção, ISS, CBS/IBS-teste — calculado separadamente) e
+  custo de infraestrutura atribuível (categorias de custo alocadas por
+  valor fixo, percentual, por tenant, por usuário ou por uso; o custo de
+  IA só entra se a política da margem mandar). A cotação do dólar para o
+  custo de IA também é cadastrada aqui, com fonte e vigência. No topo, a
+  tela lista exatamente o que ainda falta informar. Sem esses
   parâmetros a comissão fica "aguardando parâmetros de custo" e não é
   paga; ao informá-los, ela é calculada sozinha. Comissão já paga nunca
   muda; as não pagas só mudam por recálculo com motivo. A tela mostra a
@@ -840,8 +845,20 @@ anual (mais eventuais serviços, créditos adicionais e reajustes previstos
 no contrato) — a licença não é cobrada de novo. Os AI Credits do
 Government são um pool anual por período, que vence no fim do período.
 Também existe o modelo "somente subscrição anual", com condições
-definidas na contratação. Limites por oferta (usuários, unidades, SLA
-etc.) são definidos em contrato.
+definidas na contratação.
+
+| Inclui | Department | Professional | Enterprise |
+|---|---|---|---|
+| Usuários internos | 20 | 50 | 100 |
+| Unidades administrativas | 1 | 5 | 20 |
+| Armazenamento | 100 GB | 500 GB | 2 TB |
+| Retenção operacional | 12 meses | 24 meses | 60 meses |
+| CRM, MAP, PREDATOR, Bid Intelligence, Business Network, Corporate Brain | sim | sim | sim |
+| Public Procurement | Básico | Completo | Completo |
+| API | não | sim | sim |
+| SSO | não | opcional | sim |
+| Suporte | 8x5 horário comercial | 8x5 prioritário | 8x5 crítico |
+| Onboarding | padrão | avançado | dedicado |
 
 Os AI Credits do plano são um saldo único da empresa — não são
 multiplicados pelo número de usuários. No Bid Intelligence, um

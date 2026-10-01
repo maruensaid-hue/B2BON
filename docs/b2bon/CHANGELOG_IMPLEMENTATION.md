@@ -1,5 +1,14 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Parâmetros do PO: entitlements Government, Tax Engine e câmbio (2026-10-01, D-075)
+
+- Os planos Government passam a mostrar o que cada tier inclui (usuários, unidades administrativas, armazenamento, retenção, módulos, Public Procurement, API, SSO, suporte e onboarding), na página pública e em Admin → Planos, a partir do catálogo central. Usuários, módulos e API valem de verdade na plataforma.
+- Impostos da comissão calculados tributo a tributo (Lucro Presumido): PIS 0,65% e COFINS 3% sobre a receita; IRPJ 15% e CSLL 9% sobre a base presumida do tipo de receita (serviços 32%); ISS de São Paulo/SP 2,90% para licenciamento de software (item 1.05). CBS 0,9% e IBS 0,1% de 2026 aparecem como teste e não somam à carga.
+- Modelo de custo de infraestrutura por categoria (cloud, banco, armazenamento, rede, observabilidade, terceiros, IA) e método (fixo, percentual, por tenant, por usuário, por uso). Sem custo real informado, a comissão fica "aguardando custo de infraestrutura".
+- Cotação do dólar cadastrada em Admin → Parâmetros financeiros, com fonte e vigência (sai a variável de ambiente). Sem cotação, o custo de IA em reais fica "aguardando câmbio".
+- O custo de IA só entra na margem da comissão se a política da margem mandar (hoje não).
+- A tela de parâmetros mostra no topo exatamente o que falta informar.
+
 ## Comissão sobre a Margem Comissionável Líquida (2026-10-01, correção definitiva do PO, D-074)
 
 - Toda comissão de representante, de plano privado ou Government, é calculada sobre a Margem Comissionável Líquida do recebimento: receita recebida menos os impostos atribuíveis e o custo de infraestrutura atribuível — nunca sobre a receita bruta.

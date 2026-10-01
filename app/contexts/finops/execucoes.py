@@ -24,7 +24,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from decimal import Decimal
 
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, object_session, sessionmaker
 
 from app.contexts.finops import carteira, catalogos, comercial, limites
 from app.contexts.finops.comercial import Evento
@@ -148,7 +148,7 @@ def registrar_chamada(sessao: Session, execucao_id: str, custo_usd: Decimal | No
 
 
 def _atualizar_economia(execucao: ExecucaoIa) -> None:
-    cambio = comercial.cambio_usd_brl()
+    cambio = comercial.cambio_usd_brl(object_session(execucao), execucao.criado_em)
     execucao.cambio_usd_brl = cambio
     custo_brl = None if cambio is None or execucao.custo_desconhecido else (_d(execucao.custo_total_usd) * cambio).quantize(Decimal("0.0001"))
     execucao.custo_total_brl = custo_brl

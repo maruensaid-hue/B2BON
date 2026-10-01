@@ -20,7 +20,7 @@ from tests.parametros_comissao import definir_parametros
 RAIZ = Path(__file__).resolve().parents[2]
 TENANT = "orgao-margem"
 HOJE = date.today()
-INFRA_5 = [{"tipo": "PERCENTUAL", "percentual": 0.05}]
+INFRA_5 = [{"categoria": "cloud_cost", "metodo": "PERCENTAGE", "percentual": 0.05}]
 
 
 def _mig():
@@ -69,8 +69,8 @@ def test_licenca_e_subscricao_inicial_20_da_margem_e_nao_do_bruto(db_session, pr
 
 
 def test_impostos_e_infraestrutura_descontados_antes_da_comissao(db_session, professional):
-    definir_parametros(db_session, impostos=0.1133, infra=[{"tipo": "PERCENTUAL", "percentual": 0.04},
-                                                           {"tipo": "FIXO_POR_RECEBIMENTO", "valor": 100}])
+    definir_parametros(db_session, impostos=0.1133, infra=[{"categoria": "cloud_cost", "metodo": "PERCENTAGE", "percentual": 0.04},
+                                                           {"categoria": "database_cost", "metodo": "FIXED", "valor": 100}])
     recebimento = _receber(db_session, professional, "LICENSE", 120_000)
     apuracao = db_session.query(ApuracaoComissao).filter_by(recebimento_governo_id=recebimento.id).one()
     assert (apuracao.impostos, apuracao.custo_infra) == (Decimal("13596.00"), Decimal("4900.00"))
@@ -78,9 +78,12 @@ def test_impostos_e_infraestrutura_descontados_antes_da_comissao(db_session, pro
     assert _comissoes(db_session)[0].valor_comissao == 20_300.8
 
 
-def test_custo_de_ia_entra_na_infraestrutura_sem_contar_duas_vezes(db_session, professional, monkeypatch):
-    definir_parametros(db_session, impostos=0.15, infra=[{"tipo": "PERCENTUAL", "percentual": 0.05}, {"tipo": "USO_IA", "janela_dias": 30}])
-    monkeypatch.setattr(comissoes.infraestrutura, "custo_ia_brl", lambda db, tenant, inicio, fim: Decimal("1200.00"))
+def test_custo_de_ia_descontado_antes_da_comissao_quando_a_politica_manda_sem_contar_duas_vezes(db_session, professional, monkeypatch):
+    infra = [{"categoria": "cloud_cost", "metodo": "PERCENTAGE", "percentual": 0.05},
+             {"categoria": "allocated_ai_infrastructure_cost", "metodo": "USAGE_BASED", "janela_dias": 30}]
+    definir_parametros(db_session, impostos=0.15, infra=infra)
+    comissoes.politica.nova(db_session, {"deduzir_custo_ia": True}, "PO: IA entra na margem", "teste")
+    monkeypatch.setattr(comissoes.infraestrutura, "custo_ia_brl", lambda db, tenant, inicio, fim: (Decimal("1200.00"), None))
     _receber(db_session, professional, "LICENSE", 40_000)
     primeira = db_session.query(ApuracaoComissao).order_by(ApuracaoComissao.id).all()[-1]
     assert (primeira.custo_ia, primeira.custo_infra, primeira.margem_comissionavel_liquida) == (
@@ -89,8 +92,20 @@ def test_custo_de_ia_entra_na_infraestrutura_sem_contar_duas_vezes(db_session, p
     segunda = db_session.query(ApuracaoComissao).order_by(ApuracaoComissao.id).all()[-1]
     assert segunda.custo_ia == 0 and segunda.margem_comissionavel_liquida == Decimal("32000.00")
     with pytest.raises(Exception, match="IA"):
-        comissoes.infraestrutura.criar(db_session, {"nome": "x", "vigente_de": HOJE + timedelta(days=1),
-                                                    "componentes": [{"tipo": "USO_IA"}, {"tipo": "USO_IA"}]}, "teste")
+        comissoes.infraestrutura.criar(db_session, {"nome": "x", "vigente_de": HOJE + timedelta(days=1), "componentes": [
+            {"categoria": "allocated_ai_infrastructure_cost", "metodo": "USAGE_BASED"},
+            {"categoria": "allocated_ai_infrastructure_cost", "metodo": "PERCENTAGE", "percentual": 0.01}]}, "teste")
+
+
+def test_custo_de_ia_nao_entra_sem_a_politica_mesmo_existindo_no_finops(db_session, professional, monkeypatch):
+    infra = [{"categoria": "cloud_cost", "metodo": "PERCENTAGE", "percentual": 0.05},
+             {"categoria": "allocated_ai_infrastructure_cost", "metodo": "USAGE_BASED"}]
+    definir_parametros(db_session, impostos=0.15, infra=infra)
+    monkeypatch.setattr(comissoes.infraestrutura, "custo_ia_brl", lambda db, tenant, inicio, fim: (Decimal("1200.00"), None))
+    _receber(db_session, professional, "LICENSE", 40_000)
+    apuracao = db_session.query(ApuracaoComissao).one()
+    assert (apuracao.custo_ia, apuracao.custo_infra, apuracao.margem_comissionavel_liquida) == (None, Decimal("2000.00"), Decimal("32000.00"))
+    assert apuracao.detalhe["politica_margem"] == {"versao": 1, "deduzir_custo_ia": False}
 
 
 def test_renovacao_10_da_margem_em_todas(db_session, professional):
@@ -151,7 +166,7 @@ def test_snapshot_preserva_calculo_e_paga_nunca_muda(db_session, professional, c
     client.post("/api/v1/comissoes/perfis-tributarios", json={"regime": "LUCRO_PRESUMIDO", "vigente_de": (HOJE - timedelta(days=1)).isoformat(),
                                                              "componentes": [{"nome": "CARGA", "aliquota": 0.20}]})
     client.post("/api/v1/comissoes/modelos-custo-infra", json={"nome": "Infra 2", "vigente_de": (HOJE - timedelta(days=1)).isoformat(),
-                                                              "componentes": [{"tipo": "PERCENTUAL", "percentual": 0.10}]})
+                                                              "componentes": [{"categoria": "cloud_cost", "metodo": "PERCENTAGE", "percentual": 0.10}]})
     resposta = client.post("/api/v1/comissoes/recalculo", json={"motivo": "Novos parâmetros"})
     assert resposta.status_code == 200 and resposta.json()["alteradas"] == 1  # só a não paga
     db_session.refresh(paga)

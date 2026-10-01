@@ -1,7 +1,7 @@
 """Parâmetros financeiros e memória de cálculo das comissões (D-074).
 
-- `PerfilTributario` (Tax Profile): carga tributária por regime, vigência, tipo de receita e município, com componentes
-  (ex.: IRPJ, CSLL, PIS, COFINS, ISS) — nenhuma alíquota no código.
+- `PerfilTributario` (Tax Profile): tributos por regime, vigência, tipo de receita, município e código de serviço, um
+  componente por tributo (IRPJ, adicional de IRPJ, CSLL, PIS, COFINS, ISS, CBS, IBS, outros) — nenhuma alíquota no código.
 - `ModeloCustoInfra` (Infrastructure Cost Model): alocação do custo de infraestrutura atribuível à receita (fixa,
   percentual, por uso de IA, por tenant, por produto ou híbrida), com vigência.
 - `ApuracaoComissao`: uma por recebimento (pagamento de plano privado ou recebimento Government). Guarda o snapshot do
@@ -27,8 +27,11 @@ class PerfilTributario(Base):
     vigente_ate: Mapped[date | None] = mapped_column(Date, nullable=True)  # exclusivo
     tipo_receita: Mapped[str] = mapped_column(String, default="*")  # SAAS | LICENCA_SOFTWARE | SERVICO | * (qualquer)
     municipio: Mapped[str | None] = mapped_column(String, nullable=True)
-    componentes: Mapped[list] = mapped_column(JSON)  # [{"nome": "PIS", "aliquota": 0.0065}, ...]
-    aliquota_efetiva: Mapped[float] = mapped_column(Float)
+    codigo_servico: Mapped[str | None] = mapped_column(String, nullable=True)  # item da lista de serviços (ISS), ex.: 1.05
+    # D-075: um componente por tributo — {"tributo": "IRPJ", "aliquota": 0.15, "base": "PRESUNCAO", "presuncao": 0.32}.
+    # O imposto é calculado pelo Tax Engine componente a componente; nenhuma alíquota efetiva única vira regra.
+    componentes: Mapped[list] = mapped_column(JSON)
+    aliquota_efetiva: Mapped[float | None] = mapped_column(Float, nullable=True)  # legado D-074 (não usado no cálculo)
     metodo_calculo: Mapped[str] = mapped_column(String, default="SOBRE_RECEITA_RECEBIDA")
     fonte: Mapped[str | None] = mapped_column(String, nullable=True)
     observacoes: Mapped[str | None] = mapped_column(String, nullable=True)

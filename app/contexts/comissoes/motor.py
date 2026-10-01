@@ -17,8 +17,8 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy.orm import Session
 
-from app.contexts.comissoes import infraestrutura, tributos
-from app.contexts.comissoes.tipos import Faltante, Origem, Status
+from app.contexts.comissoes import infraestrutura, politica, tributos
+from app.contexts.comissoes.tipos import STATUS_VALOR, Faltante, Origem, Status
 from app.models.apuracao_comissao import ApuracaoComissao
 from app.models.comissao_representante import ComissaoRepresentante
 from app.services import auditoria_service
@@ -37,27 +37,31 @@ def _d(valor) -> Decimal:
 
 
 def apurar(db: Session, apuracao: ApuracaoComissao) -> ApuracaoComissao:
-    """Receita bruta → impostos (Tax Profile vigente na data) → infraestrutura (modelo vigente) → margem."""
+    """Receita bruta → impostos (Tax Engine, perfil vigente na data) → infraestrutura (modelo vigente; IA só se a Commission
+    Policy mandar) → margem."""
     bruto = _d(apuracao.receita_bruta)
     faltantes, detalhe = [], {}
     perfil = tributos.aplicavel(db, apuracao.tipo_receita, apuracao.recebido_em)
-    if perfil is None:
+    apuracao.perfil_tributario_id = perfil.id if perfil else None
+    apuracao.impostos = apuracao.aliquota_tributaria = None
+    if perfil is not None:
+        apuracao.impostos, detalhe["tributos"] = tributos.calcular(db, perfil, apuracao)
+        if apuracao.impostos is not None and bruto:
+            apuracao.aliquota_tributaria = float((apuracao.impostos / bruto).quantize(Decimal("0.000001")))
+    if apuracao.impostos is None:
         faltantes.append(Faltante.PERFIL_TRIBUTARIO.value)
-        apuracao.perfil_tributario_id = apuracao.aliquota_tributaria = apuracao.impostos = None
-    else:
-        apuracao.perfil_tributario_id, apuracao.aliquota_tributaria = perfil.id, perfil.aliquota_efetiva
-        apuracao.impostos = tributos.imposto(perfil, bruto)
-        detalhe["tributos"] = {"regime": perfil.regime, "componentes": perfil.componentes}
+    politica_margem = politica.vigente(db)
+    detalhe["politica_margem"] = {"versao": politica_margem.versao, **politica_margem.regras}
     modelo = infraestrutura.aplicavel(db, apuracao.recebido_em)
     custo = None
     if modelo is not None:
-        custo, detalhe["infraestrutura"] = infraestrutura.alocar(db, modelo, apuracao)
+        custo, detalhe["infraestrutura"] = infraestrutura.alocar(db, modelo, apuracao, bool(politica_margem.regras.get("deduzir_custo_ia")))
     if custo is None:
-        faltantes.append(Faltante.CUSTO_INFRA.value)
+        faltantes.append((detalhe.get("infraestrutura") or {}).get("faltante") or Faltante.CUSTO_INFRA.value)
     apuracao.modelo_custo_infra_id = modelo.id if modelo else None
     apuracao.custo_infra = custo
     apuracao.parametros_faltantes = faltantes or None
-    apuracao.detalhe = detalhe or None
+    apuracao.detalhe = detalhe
     if faltantes:
         apuracao.status, apuracao.margem_comissionavel_liquida, apuracao.calculado_em = Status.AGUARDANDO.value, None, None
     else:
@@ -194,6 +198,15 @@ def estornar(db: Session, *, pagamento_licenca_id: int | None = None, recebiment
     return {"anuladas": anuladas, "a_compensar": compensar}
 
 
+def status_valor(apuracao: ApuracaoComissao) -> str:
+    """commission_amount_status: o status da apuração ou, aguardando, AWAITING_<parâmetro> (infraestrutura, depois Tax
+    Profile, depois câmbio). A lista completa fica em `missing_parameters`."""
+    faltantes = apuracao.parametros_faltantes or []
+    if apuracao.status != Status.AGUARDANDO.value or not faltantes:
+        return apuracao.status
+    return next((rotulo for chave, rotulo in STATUS_VALOR.items() if chave in faltantes), Status.AGUARDANDO.value)
+
+
 def apuracao_dict(apuracao: ApuracaoComissao) -> dict:
     valor = lambda v: float(v) if v is not None else None  # noqa: E731
     return {"id": apuracao.id, "tenant_id": apuracao.tenant_id, "origem": apuracao.origem, "segmento": apuracao.segmento,
@@ -203,4 +216,5 @@ def apuracao_dict(apuracao: ApuracaoComissao) -> dict:
             "infrastructure_cost_model_id": apuracao.modelo_custo_infra_id, "infrastructure_cost_amount": valor(apuracao.custo_infra),
             "ai_cost_amount": valor(apuracao.custo_ia), "net_commissionable_margin": valor(apuracao.margem_comissionavel_liquida),
             "status": apuracao.status, "missing_parameters": apuracao.parametros_faltantes or [],
+            "commission_amount_status": status_valor(apuracao), "tax_detail": (apuracao.detalhe or {}).get("tributos"),
             "calculated_at": apuracao.calculado_em.isoformat() if apuracao.calculado_em else None}

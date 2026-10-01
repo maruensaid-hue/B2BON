@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.contexts.finops import (
+    cambio,
     carteira,
     catalogos,
     comercial,
@@ -21,7 +22,7 @@ from app.contexts.finops import (
 from app.contexts.finops.rotinas import creditos_ia_rotina
 
 __all__ = [
-    "carteira", "catalogos", "comercial", "compras", "creditos", "custear", "dashboard", "economia", "execucoes", "limites",
+    "cambio", "carteira", "catalogos", "comercial", "compras", "creditos", "custear", "dashboard", "economia", "execucoes", "limites",
     "orcamentos", "precos", "rotinas", "creditos_ia_rotina",
 ]
 

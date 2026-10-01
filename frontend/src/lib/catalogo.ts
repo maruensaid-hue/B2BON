@@ -142,3 +142,51 @@ export function formatarLimite(valor: number | null | undefined): string {
   if (valor === 0) return "—";
   return valor.toLocaleString("pt-BR");
 }
+
+/** Rótulos dos entitlements Government (D-075). Os valores vêm sempre do catálogo central (`GET /catalogo`). */
+const ROTULOS_ENTITLEMENT: Record<string, string> = {
+  internal_users: "Usuários internos",
+  administrative_units: "Unidades administrativas",
+  storage_gb: "Armazenamento",
+  operational_retention_months: "Retenção operacional",
+  crm: "CRM",
+  map: "MAP",
+  predator: "PREDATOR",
+  bid_intelligence: "Bid Intelligence",
+  public_procurement: "Public Procurement",
+  business_network: "Business Network",
+  corporate_brain: "Corporate Brain",
+  api_access: "API",
+  sso: "SSO",
+  support_sla: "Suporte",
+  onboarding: "Onboarding",
+};
+
+const VALORES_ENTITLEMENT: Record<string, string> = {
+  BASIC: "Básico",
+  FULL: "Completo",
+  OPTIONAL: "Opcional",
+  BUSINESS_HOURS_8X5: "8x5 horário comercial",
+  PRIORITY_BUSINESS_HOURS_8X5: "8x5 prioritário",
+  CRITICAL_BUSINESS_HOURS_8X5: "8x5 crítico",
+  STANDARD: "Padrão",
+  ADVANCED: "Avançado",
+  DEDICATED: "Dedicado",
+};
+
+export function linhasEntitlements(
+  entitlements: OfertaGoverno["entitlements"],
+): [string, string][] {
+  return Object.entries(entitlements).map(([chave, valor]) => {
+    let texto: string;
+    if (valor === null) texto = "Conforme contrato";
+    else if (valor === true) texto = "Incluído";
+    else if (valor === false) texto = "Não incluído";
+    else if (chave === "storage_gb")
+      texto =
+        Number(valor) >= 1024 ? `${Number(valor) / 1024} TB` : `${valor} GB`;
+    else if (chave === "operational_retention_months") texto = `${valor} meses`;
+    else texto = VALORES_ENTITLEMENT[String(valor)] ?? String(valor);
+    return [ROTULOS_ENTITLEMENT[chave] ?? chave, texto];
+  });
+}

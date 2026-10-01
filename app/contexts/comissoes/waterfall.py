@@ -3,7 +3,8 @@
     Receita bruta → impostos → infraestrutura → Margem Comissionável Líquida → comissão → margem CyberFort após comissão
 
 Por venda, representante, produto, tenant ou período. Recebimentos ainda sem parâmetros de custo não entram nos totais
-(seriam números inventados): aparecem separados em `aguardando`.
+(seriam números inventados): aparecem separados em `aguardando`, com a contagem por parâmetro faltante. O total traz os
+impostos por tributo (D-075), como o Tax Engine os calculou.
 """
 
 from collections import defaultdict
@@ -12,6 +13,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.contexts.comissoes.motor import status_valor
 from app.contexts.comissoes.tipos import Status
 from app.models.apuracao_comissao import ApuracaoComissao
 from app.models.comissao_representante import ComissaoRepresentante
@@ -52,7 +54,13 @@ def calcular(db: Session, agrupar: str = "tenant", inicio: date | None = None, f
     grupos = defaultdict(lambda: dict.fromkeys(CAMPOS, Decimal(0)))
     aguardando = defaultdict(Decimal)
     totais, total_aguardando = dict.fromkeys(CAMPOS, Decimal(0)), Decimal(0)
+    por_tributo, por_parametro = defaultdict(Decimal), defaultdict(int)
     for apuracao in consulta.all():
+        if apuracao.status == Status.CALCULADA.value:
+            for linha in ((apuracao.detalhe or {}).get("tributos") or {}).get("tributos") or []:
+                por_tributo[linha["tributo"]] += Decimal(str(linha.get("valor") or 0))
+        else:
+            por_parametro[status_valor(apuracao)] += 1
         comissoes = [c for c in db.query(ComissaoRepresentante).filter_by(apuracao_id=apuracao.id).all() if c.status != Status.ESTORNADA.value]
         accruals = [c for c in comissoes if c.evento == "ACCRUAL"] or [None]
         for comissao in accruals:
@@ -76,4 +84,6 @@ def calcular(db: Session, agrupar: str = "tenant", inicio: date | None = None, f
                 totais[campo] += valor
     return {"agrupar": agrupar, "periodo": {"inicio": inicio.isoformat() if inicio else None, "fim": fim.isoformat() if fim else None},
             "linhas": [_linha(chave, valores, aguardando[chave]) for chave, valores in sorted(grupos.items(), key=lambda i: str(i[0]))],
-            "total": _linha("total", totais, total_aguardando)}
+            "total": {**_linha("total", totais, total_aguardando),
+                      "impostos_por_tributo": {t: float(v) for t, v in sorted(por_tributo.items())},
+                      "aguardando_por_parametro": dict(sorted(por_parametro.items()))}}

@@ -34,17 +34,20 @@ def _migracao(arquivo: str = "d9e1f3a5b7c9_b2bon_government.py"):
 
 MIG = _migracao()
 MIG_D073 = _migracao("e1f3a5b7c9d2_comissao_base_liquida.py")
+MIG_D075 = _migracao("a6c8e0f2b4d7_parametros_financeiros_entitlements_gov.py")
 
 
 @pytest.fixture()
 def planos_gov(db_session):
-    """Os três planos com os valores da migração (a fonte que cria os planos em produção)."""
+    """Os três planos com os valores das migrações (a fonte que cria os planos em produção): preços da D-072 e
+    entitlements da D-075."""
     criados = {}
     for nome, licenca, implantacao, assinatura, creditos, recomendado in MIG.PLANOS:
-        plano = Plano(nome=nome, franquia_contas_mes=0, max_usuarios=None, preco_mensal=0.0, visivel_self_service=False,
-                      modulos_contratados=["procurement"], categoria="governo", tipo_preco="CONTRACT", segmento="GOVERNMENT",
+        usuarios, api, extras = MIG_D075.ENTITLEMENTS[nome]
+        plano = Plano(nome=nome, franquia_contas_mes=0, max_usuarios=usuarios, preco_mensal=0.0, visivel_self_service=False,
+                      modulos_contratados=list(MIG_D075.MODULOS), categoria="governo", tipo_preco="CONTRACT", segmento="GOVERNMENT",
                       modelo_cobranca=MIG.MODELO, preco_licenca=licenca, preco_implantacao=implantacao, preco_assinatura_anual=assinatura,
-                      creditos_ia_anuais=creditos, recomendado=recomendado, entitlements=dict(MIG.ENTITLEMENTS))
+                      creditos_ia_anuais=creditos, recomendado=recomendado, permite_api_parceiros=api, entitlements=dict(extras))
         db_session.add(plano)
         criados[nome.split()[-1]] = plano
     for tenant_id in (TENANT, "orgao-outro"):
@@ -345,4 +348,4 @@ def test_politica_e_template_iniciais_iguais_a_migracao():
     assert governo.tipos.POLITICA_INICIAL == MIG.POLITICA_V1
     assert governo.tipos.POLITICA_ATUAL == MIG_D073.POLITICA_V2
     assert governo.tipos.TEMPLATE_PROPOSTA_INICIAL == MIG.TEMPLATE_V1
-    assert tuple(governo.tipos.CHAVES_ENTITLEMENT) == tuple(MIG.ENTITLEMENTS)
+    assert all(set(extras) == set(governo.tipos.CHAVES_ENTITLEMENT) for _, _, extras in MIG_D075.ENTITLEMENTS.values())

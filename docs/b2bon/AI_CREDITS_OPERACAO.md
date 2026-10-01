@@ -68,7 +68,8 @@ margem. Idempotente. Agendado no `.github/workflows/cron-envios.yml`
 ## 3. Administração (super_admin: menu "FinOps IA")
 
 - Acompanhar margem (alvo 80%) e alertas; margem sem câmbio aparece como
-  indisponível até configurar `FINOPS_CAMBIO_USD_BRL`.
+  indisponível (`AWAITING_FX_RATE`) até registrar a cotação USD/BRL em
+  Admin → Parâmetros financeiros (D-075).
 - Recalibrar pesos: ler recomendações → criar rascunho → ativar com motivo.
 - Mudar preço de pacote: só com decisão do PO → nova versão.
 - Ajustes e promoções: sempre com motivo; ficam no audit log com valor anterior e novo.

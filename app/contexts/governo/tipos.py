@@ -47,11 +47,25 @@ ESTAGIOS = (
 )
 ESTAGIOS_FECHADOS = frozenset({"CONTRACT", "BOOKING", "PAYMENT", "COMMISSION_EVENT", "LOST"})
 
-# Chaves de entitlement por oferta. Valor None = "conforme contrato" (o PO ainda não definiu por tier).
-CHAVES_ENTITLEMENT = (
-    "usuarios", "unidades_administrativas", "volume_operacional", "integracoes", "api", "nivel_suporte", "sla",
-    "armazenamento_gb", "volume_documental", "bid_intelligence", "business_network", "corporate_brain", "agentes_ia",
+# Entitlements Government (D-075, OI-024). Cada valor vive num lugar só do catálogo central (tabela `plano`):
+# - internal_users → `max_usuarios` (o mesmo limite de assentos que a plataforma já aplica);
+# - crm, map, predator, bid_intelligence → `modulos_contratados` (o acesso real aos módulos);
+# - public_procurement → nível no JSON, liberado só com "procurement" em `modulos_contratados`;
+# - api_access → `permite_api_parceiros`;
+# - demais → JSON `entitlements` (CHAVES_ENTITLEMENT). Valor None = "conforme contrato".
+ORDEM_ENTITLEMENTS = (
+    "internal_users", "administrative_units", "storage_gb", "operational_retention_months", "crm", "map", "predator",
+    "bid_intelligence", "public_procurement", "business_network", "corporate_brain", "api_access", "sso", "support_sla", "onboarding",
 )
+MODULO_POR_ENTITLEMENT = {"crm": "crm", "map": "map", "predator": "predator", "bid_intelligence": "bids"}
+CHAVES_ENTITLEMENT = (
+    "administrative_units", "storage_gb", "operational_retention_months", "public_procurement", "business_network",
+    "corporate_brain", "sso", "support_sla", "onboarding",
+)
+NIVEIS_PUBLIC_PROCUREMENT = ("BASIC", "FULL")
+VALORES_SSO = (True, False, "OPTIONAL")
+SLAS_SUPORTE = ("BUSINESS_HOURS_8X5", "PRIORITY_BUSINESS_HOURS_8X5", "CRITICAL_BUSINESS_HOURS_8X5")
+ONBOARDINGS = ("STANDARD", "ADVANCED", "DEDICATED")
 
 POLITICA_INICIAL = {
     "gatilho": Gatilho.PAGAMENTO_RECEBIDO.value,

@@ -91,8 +91,9 @@ com valor anterior, novo e motivo. Execuções guardam a versão usada.
 
 - Custo: `preco_modelo_ia` (USD/MTok versionado) × tokens das quatro
   categorias. Modelo sem preço → custo desconhecido, nunca zero.
-- Custo em BRL = USD × `FINOPS_CAMBIO_USD_BRL`. Sem câmbio, lucro e margem
-  são `null` com motivo (UNKNOWN em vez de invenção).
+- Custo em BRL = USD × cotação USD/BRL vigente (tabela `cotacao_cambio`,
+  D-075, Admin → Parâmetros financeiros). Sem cotação, lucro e margem são
+  `null` com motivo `AWAITING_FX_RATE` (UNKNOWN em vez de invenção).
 - Cache de resposta (FAQ e orquestrador): hit registra `cache_hit`,
   custo 0 e `economia_cache_usd`; o crédito é cobrado (política comercial).
 - Cost guard: se o custo estimado passar do teto do workload

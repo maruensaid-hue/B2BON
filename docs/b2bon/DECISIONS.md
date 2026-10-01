@@ -899,3 +899,46 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   - **Legado**: comissões não pagas calculadas sobre o bruto voltam a `AWAITING_COST_PARAMETERS` (valor antigo guardado em
     `valor_bruto_legado`) e são recalculadas sobre a margem quando houver parâmetros; pagas ficam como estão.
 - **Status**: ACEITA. Migração `f4a6b8c0d2e3` (reversível). Parâmetros (valores) pendentes do PO: OI-026.
+
+## D-075 · 2026-10-01 · Resolução dos Open Issues OI-024, OI-026 e OI-018 (parâmetros do PO)
+- **Contexto**: prompt do PO "RESOLUÇÃO DOS OPEN ISSUES — OI-024, OI-026 E OI-018". Complementa a D-072 (catálogo
+  Government) e a D-074 (Commission Engine); a fórmula da comissão não muda.
+- **OI-024 — entitlements Government (RESOLVED)**. Preços inalterados (Department 72k + 12k + 24k = 108k, 300k AI
+  Credits/ano; Professional 120k + 20k + 36k = 176k, 600k, recomendado; Enterprise 180k + 30k + 54k = 264k, 1,2M).
+  Entitlements do PO por tier — usuários internos 20/50/100; unidades administrativas 1/5/20; armazenamento 100/500/2.048 GB;
+  retenção operacional 12/24/60 meses; CRM, MAP, PREDATOR, Bid Intelligence, Business Network e Corporate Brain em todos;
+  Public Procurement BASIC/FULL/FULL; API não/sim/sim; SSO não/opcional/sim; suporte 8x5 horário comercial / 8x5
+  prioritário / 8x5 crítico; onboarding padrão/avançado/dedicado. Persistidos no catálogo central (migração), cada valor num
+  lugar só: usuários em `max_usuarios` (limite de assentos já aplicado), módulos em `modulos_contratados` (acesso real), API
+  em `permite_api_parceiros`, o restante no JSON `entitlements` (validado). Página pública e Admin → Planos leem do mesmo
+  `GET /catalogo`; o frontend só tem rótulos.
+- **OI-026 — Tax Engine (PARTIALLY_RESOLVED)**. Regime **LUCRO_PRESUMIDO**. Nenhuma alíquota efetiva única vira regra: o
+  Tax Profile é versionado por vigência (`effective_from/until`), tipo de receita, município e código de serviço, com um
+  componente por tributo (IRPJ, IRPJ_ADDITIONAL, CSLL, PIS, COFINS, ISS, CBS, IBS, OTHER_TAX), e a comissão usa o imposto
+  calculado tributo a tributo:
+  - PIS 0,65% e COFINS 3,00% (cumulativos) sobre a receita;
+  - IRPJ 15% e CSLL 9% sobre a **base presumida** (receita × percentual de presunção do tipo de receita). Serviços: 32%.
+    Licença de software e SaaS: presunção **não assumida** (a informar);
+  - adicional de IRPJ suportado (alíquota sobre a base presumida do período de apuração acima do limite configurado,
+    rateada pelos recebimentos do período), sem valor criado;
+  - ISS por município e código de serviço: **São Paulo/SP, 1.05** (licenciamento ou cessão de direito de uso de programas de
+    computação) **2,90%** — não nacional; ISS de SaaS e de serviços de implantação a informar;
+  - CBS 0,90% e IBS 0,10% (2026) como **alíquota-teste informativa**, com `aliquota_caixa_efetiva`, `compensado`,
+    `dispensado` e `status_conformidade`: só o imposto de caixa efetivo entra na carga, e nada quando compensado ou
+    dispensado — o 1% nunca é somado automaticamente.
+  Perfis iniciais (São Paulo/SP, vigência 2026) para LICENCA_SOFTWARE, SAAS e SERVICO; componente sem valor deixa a
+  apuração em `AWAITING_COST_PARAMETERS` com `TAX_PROFILE` faltante e os demais tributos como simulação no detalhe.
+- **Infrastructure Cost Model**: estrutura pronta, **sem valor** (o PO não informou custo real validado). Categorias
+  cloud, database, storage, network, observability, third_party e allocated_ai_infrastructure_cost; métodos FIXED,
+  PER_TENANT, PER_USER, USAGE_BASED (só IA, medida no ledger) e PERCENTAGE; vários componentes = HYBRID. Enquanto não houver
+  modelo, `commission_amount_status = AWAITING_INFRASTRUCTURE_COST` (prioridade sobre os demais faltantes; a lista completa
+  fica em `missing_parameters`).
+- **OI-018 — câmbio (OPEN)**: `FINOPS_CAMBIO_USD_BRL` (variável de ambiente) sai; a cotação vem da tabela
+  `cotacao_cambio` (base, cotação, taxa, fonte, vigência), registrada no Admin e auditada. `AI_COST_BRL = AI_COST_USD ×
+  cotação USD/BRL vigente no instante do custo`. Sem cotação: `AWAITING_FX_RATE` (FinOps e comissão), nunca estimado.
+- **Custo de IA na comissão**: só quando a **Commission Policy da margem** (`NET_COMMISSIONABLE_MARGIN`, versionada e
+  auditada) define `deduzir_custo_ia = true`. A versão 1 não deduz: existir no FinOps não basta. Impostos e infraestrutura
+  continuam sempre deduzidos.
+- **Fórmula mantida**: NET_COMMISSIONABLE_MARGIN = receita comissionável recebida − impostos atribuíveis − infraestrutura
+  atribuível; 20% inicial, 10% renovação Government, implantação não comissionável por padrão; nunca Gross Revenue × taxa.
+- **Status**: ACEITA. Migração `a6c8e0f2b4d7` (reversível).

@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 import app.models  # noqa: E402 — registra todas as tabelas em Base.metadata
 from app.db.base import Base  # noqa: E402
 from app.db.session import SessionLocal, engine  # noqa: E402
+from app.models.apuracao_comissao import PerfilTributario  # noqa: E402
 from app.models.licenca import Licenca  # noqa: E402
 from app.models.plano import Plano  # noqa: E402
 from app.models.tenant import Tenant  # noqa: E402
@@ -100,10 +101,12 @@ def _migracao(arquivo: str):
 
 
 def _semear_planos_d059() -> None:
-    """Phase I: os planos aprovados (D-059); Phase J3: usuários do Bid Intelligence; D-072: ofertas Government."""
+    """Phase I: os planos aprovados (D-059); Phase J3: usuários do Bid Intelligence; D-072: ofertas Government;
+    D-075: entitlements Government e perfis tributários iniciais do PO."""
     migracao = _migracao("a3c5e7f9b1d2_phase_i_planos_comerciais.py")
     j3 = _migracao("c5e7a9b1d3f4_phase_j3_usuarios_bid_intelligence.py")
     governo = _migracao("d9e1f3a5b7c9_b2bon_government.py")
+    d075 = _migracao("a6c8e0f2b4d7_parametros_financeiros_entitlements_gov.py")
     db = SessionLocal()
     try:
         for nome, preco, usuarios, modulos, self_service, tipo in migracao.PLANOS:
@@ -114,11 +117,17 @@ def _semear_planos_d059() -> None:
                              visivel_self_service=self_service, modulos_contratados=modulos, categoria="modulo", tipo_preco=tipo))
         for nome, licenca, implantacao, assinatura, creditos, recomendado in governo.PLANOS:
             if db.query(Plano).filter_by(nome=nome).one_or_none() is None:
-                db.add(Plano(nome=nome, franquia_contas_mes=0, preco_mensal=0.0, visivel_self_service=False,
-                             modulos_contratados=["procurement"], categoria="governo", tipo_preco="CONTRACT", segmento="GOVERNMENT",
+                usuarios, api, extras = d075.ENTITLEMENTS[nome]
+                db.add(Plano(nome=nome, franquia_contas_mes=0, max_usuarios=usuarios, preco_mensal=0.0, visivel_self_service=False,
+                             modulos_contratados=list(d075.MODULOS), categoria="governo", tipo_preco="CONTRACT", segmento="GOVERNMENT",
                              modelo_cobranca=governo.MODELO, preco_licenca=licenca, preco_implantacao=implantacao,
                              preco_assinatura_anual=assinatura, creditos_ia_anuais=creditos, recomendado=recomendado,
-                             entitlements=dict(governo.ENTITLEMENTS)))
+                             permite_api_parceiros=api, entitlements=dict(extras)))
+        if db.query(PerfilTributario).count() == 0:
+            for tipo, codigo, presuncao, iss, observacao in d075.PERFIS:
+                db.add(PerfilTributario(regime="LUCRO_PRESUMIDO", vigente_de=d075.VIGENCIA[0], vigente_ate=d075.VIGENCIA[1], tipo_receita=tipo,
+                                        municipio=d075.MUNICIPIO, codigo_servico=codigo, componentes=d075._componentes(presuncao, iss),
+                                        metodo_calculo="POR_TRIBUTO", fonte=d075.FONTE, observacoes=observacao, criado_por="seed"))
         db.commit()
     finally:
         db.close()

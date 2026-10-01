@@ -8,9 +8,19 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.contexts.governo import politicas
-from app.contexts.governo.tipos import CHAVES_ENTITLEMENT, SEGMENTO_GOVERNO, ModeloCobranca
+from app.contexts.governo.tipos import (
+    CHAVES_ENTITLEMENT,
+    MODULO_POR_ENTITLEMENT,
+    NIVEIS_PUBLIC_PROCUREMENT,
+    ONBOARDINGS,
+    ORDEM_ENTITLEMENTS,
+    SEGMENTO_GOVERNO,
+    SLAS_SUPORTE,
+    VALORES_SSO,
+    ModeloCobranca,
+)
 from app.models.plano import Plano
-from app.services.errors import NaoEncontrado, RegraNegocioViolada
+from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 ZERO = Decimal(0)
 
@@ -37,16 +47,45 @@ def obter_plano(db: Session, plano_id: int) -> Plano:
     return plano
 
 
+def entitlements(plano: Plano) -> dict:
+    """Entitlements da oferta (D-075), lidos de onde a plataforma os aplica — ver `tipos.ORDEM_ENTITLEMENTS`."""
+    extras, modulos = plano.entitlements or {}, set(plano.modulos_contratados or [])
+    valores = {chave: extras.get(chave) for chave in CHAVES_ENTITLEMENT}
+    valores.update({chave: modulo in modulos for chave, modulo in MODULO_POR_ENTITLEMENT.items()})
+    valores["internal_users"] = plano.max_usuarios
+    valores["api_access"] = bool(plano.permite_api_parceiros)
+    if "procurement" not in modulos:
+        valores["public_procurement"] = False
+    return {chave: valores[chave] for chave in ORDEM_ENTITLEMENTS}
+
+
+def validar_entitlements(dados: dict | None) -> None:
+    """JSON `entitlements` de um plano Government: só as chaves do catálogo, com valores do domínio."""
+    dados = dados or {}
+    desconhecidas = set(dados) - set(CHAVES_ENTITLEMENT)
+    if desconhecidas:
+        raise ValidacaoFalhou(f"Entitlements desconhecidos: {sorted(desconhecidas)} (usuários, módulos e API têm campo próprio no plano).")
+    for chave in ("administrative_units", "storage_gb", "operational_retention_months"):
+        valor = dados.get(chave)
+        if valor is not None and (not isinstance(valor, int) or isinstance(valor, bool) or valor < 0):
+            raise ValidacaoFalhou(f"{chave} deve ser inteiro não negativo.")
+    dominios = {"public_procurement": NIVEIS_PUBLIC_PROCUREMENT, "sso": VALORES_SSO, "support_sla": SLAS_SUPORTE, "onboarding": ONBOARDINGS,
+                "business_network": (True, False), "corporate_brain": (True, False)}
+    for chave, permitidos in dominios.items():
+        valor = dados.get(chave)
+        if valor is not None and not any(valor is p or (not isinstance(p, bool) and valor == p) for p in permitidos):
+            raise ValidacaoFalhou(f"{chave}: {', '.join(map(str, permitidos))}.")
+
+
 def oferta(plano: Plano) -> dict:
     """Componentes separados; nunca um valor mensal. Entitlement sem valor = "conforme contrato"."""
-    entitlements = {chave: (plano.entitlements or {}).get(chave) for chave in CHAVES_ENTITLEMENT}
     licenca, implantacao, assinatura = _d(plano.preco_licenca), _d(plano.preco_implantacao), _d(plano.preco_assinatura_anual)
     return {
         "id": plano.id, "nome": plano.nome, "segmento": plano.segmento, "modelo_cobranca": plano.modelo_cobranca,
         "periodicidade": "ANUAL", "recomendado": plano.recomendado, "modulos": list(plano.modulos_contratados or []),
         "licenca": float(licenca), "implantacao": float(implantacao), "assinatura_anual": float(assinatura),
         "contratacao_inicial": float(contratacao_inicial(licenca, implantacao, assinatura)),
-        "creditos_ia_anuais": plano.creditos_ia_anuais, "entitlements": entitlements,
+        "creditos_ia_anuais": plano.creditos_ia_anuais, "entitlements": entitlements(plano),
     }
 
 

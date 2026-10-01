@@ -99,6 +99,7 @@ def _validar_segmento(plano: Plano) -> None:
             raise ValidacaoFalhou("Plano Government precisa de licença, implantação, subscrição anual e AI Credits anuais.")
         if any(v is not None and v < 0 for v in componentes) or (plano.creditos_ia_anuais or 0) < 0:
             raise ValidacaoFalhou("Valores do plano Government não podem ser negativos.")
+        governo.ofertas.validar_entitlements(plano.entitlements)
     elif plano.modelo_cobranca != "MONTHLY_SUBSCRIPTION" or any(v is not None for v in componentes) or plano.creditos_ia_anuais is not None:
         raise ValidacaoFalhou("Plano privado é assinatura mensal, sem licença, implantação ou pool anual.")
 

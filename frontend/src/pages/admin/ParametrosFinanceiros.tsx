@@ -8,7 +8,12 @@ import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { brl } from "@/lib/aiCredits";
 import { api, mensagemErro } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { pct, type Parametros, type Waterfall } from "@/lib/comissoes";
+import {
+  descreverTributo,
+  pct,
+  type Parametros,
+  type Waterfall,
+} from "@/lib/comissoes";
 
 const AGRUPAR = [
   ["tenant", "Tenant"],
@@ -18,34 +23,23 @@ const AGRUPAR = [
   ["periodo", "Período"],
 ] as const;
 
-const fracao = (form: FormData, campo: string) => {
-  const texto = String(form.get(campo) ?? "").trim();
-  return texto ? Number(texto) / 100 : null;
-};
-
-/** "IRPJ=4,8; CSLL=2,88" → componentes com alíquota em fração. */
-function lerComponentes(texto: string) {
-  return texto
-    .split(/[;\n]/)
-    .map((parte) => parte.trim())
-    .filter(Boolean)
-    .map((parte) => {
-      const [nome, valor] = parte.split("=");
-      return {
-        nome: nome.trim(),
-        aliquota: Number(String(valor ?? "").replace(",", ".")) / 100,
-      };
-    });
+/** Lista JSON de componentes (tributos ou custos); erro de digitação vira mensagem, não tela quebrada. */
+function lerJson(texto: string): Record<string, unknown>[] {
+  const valor: unknown = JSON.parse(texto);
+  if (!Array.isArray(valor)) throw new Error("Informe uma lista JSON.");
+  return valor as Record<string, unknown>[];
 }
 
-/** Parâmetros financeiros do Commission Engine (D-074): Tax Profile, Infrastructure Cost Model, política e waterfall.
- * Nenhum valor vem pronto: o PO informa, com vigência; o histórico só muda por recálculo explícito. */
+/** Parâmetros financeiros do Commission Engine (D-074, D-075): Tax Profile por tributo, Infrastructure Cost Model,
+ * câmbio, Commission Policy e waterfall. Nenhum valor vem pronto: o PO informa, com vigência e fonte; o histórico só muda
+ * por recálculo explícito. */
 export function ParametrosFinanceiros() {
   const { usuario } = useAuth();
   const [dados, setDados] = useState<Parametros | null>(null);
   const [waterfall, setWaterfall] = useState<Waterfall | null>(null);
   const [agrupar, setAgrupar] = useState("tenant");
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [tributosJson, setTributosJson] = useState("");
   const isSuperAdmin = usuario?.papel === "super_admin";
 
   const carregar = useCallback(async () => {
@@ -75,10 +69,11 @@ export function ParametrosFinanceiros() {
     evento.preventDefault();
     const formulario = evento.currentTarget;
     try {
+      const dadosEnvio = corpo(new FormData(formulario));
       const resposta = await api.post<{
         aguardando_calculadas?: number;
         alteradas?: number;
-      }>(rota, corpo(new FormData(formulario)));
+      }>(rota, dadosEnvio);
       setMensagem(
         `Salvo. ${resposta.aguardando_calculadas ?? 0} recebimento(s) que aguardavam foram calculados` +
           (resposta.alteradas !== undefined
@@ -112,26 +107,67 @@ export function ParametrosFinanceiros() {
       </div>
       {mensagem && <div className="text-[12px] text-muted">{mensagem}</div>}
 
+      <Card data-testid="parametros-pendentes">
+        <SectionLabel>
+          O que falta para as comissões saírem de AWAITING
+        </SectionLabel>
+        {dados && dados.pendentes.length === 0 ? (
+          <Badge tone="green">Todos os parâmetros informados</Badge>
+        ) : (
+          <ul className="list-disc pl-5 text-[12px] text-muted">
+            {(dados?.pendentes ?? []).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
       <Card>
-        <SectionLabel>Tax Profile (carga tributária atribuível)</SectionLabel>
+        <SectionLabel>
+          Tax Profile (Tax Engine, um componente por tributo)
+        </SectionLabel>
+        <div className="mb-1.5 text-[11px] text-muted">
+          IRPJ e CSLL: receita × presunção do tipo de receita × alíquota. ISS
+          por município e código de serviço. CBS/IBS-teste não somam à carga: só
+          o imposto de caixa efetivo, e nada quando compensado ou dispensado.
+        </div>
         <div className="flex flex-col gap-1 text-[12px]">
           {(dados?.perfis_tributarios ?? []).map((p) => (
             <div
               key={p.id}
-              className="flex flex-wrap justify-between gap-2 rounded-md border border-border p-2"
+              className="flex flex-col gap-1 rounded-md border border-border p-2"
+              data-testid="perfil-tributario"
             >
-              <span>
-                <span className="font-semibold">{p.regime}</span> ·{" "}
-                {p.tipo_receita} ·{" "}
-                {p.componentes
-                  .map((c) => `${c.nome} ${pct(c.aliquota * 100)}`)
-                  .join(", ")}
-              </span>
-              <span>
-                efetiva {pct(Math.round(p.aliquota_efetiva * 10000) / 100)} · de{" "}
-                {p.vigente_de}{" "}
-                {p.vigente_ate ? `até ${p.vigente_ate}` : "(vigente)"}
-              </span>
+              <div className="flex flex-wrap justify-between gap-2">
+                <span>
+                  <span className="font-semibold">{p.tipo_receita}</span> ·{" "}
+                  {p.regime}
+                  {p.municipio ? ` · ${p.municipio}` : ""}
+                  {p.codigo_servico ? ` · serviço ${p.codigo_servico}` : ""}
+                </span>
+                <span className="flex items-center gap-2">
+                  de {p.vigente_de}{" "}
+                  {p.vigente_ate ? `até ${p.vigente_ate}` : "(vigente)"}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setTributosJson(JSON.stringify(p.componentes, null, 1))
+                    }
+                  >
+                    Copiar
+                  </Button>
+                </span>
+              </div>
+              <div className="text-muted">
+                {p.componentes.map(descreverTributo).join(" · ")}
+              </div>
+              {p.pendencias.length > 0 && (
+                <Badge tone="amber">
+                  A informar: {p.pendencias.join(", ")}
+                </Badge>
+              )}
             </div>
           ))}
           {dados?.perfis_tributarios.length === 0 && (
@@ -146,15 +182,18 @@ export function ParametrosFinanceiros() {
             enviar(e, "/comissoes/perfis-tributarios", (f) => ({
               regime: String(f.get("regime")),
               vigente_de: String(f.get("vigente_de")),
+              vigente_ate: String(f.get("vigente_ate") ?? "") || null,
               tipo_receita: String(f.get("tipo_receita")),
               municipio: String(f.get("municipio") ?? "") || null,
-              componentes: lerComponentes(String(f.get("componentes"))),
+              codigo_servico: String(f.get("codigo_servico") ?? "") || null,
+              componentes: lerJson(tributosJson),
               fonte: String(f.get("fonte") ?? "") || null,
             }))
           }
         >
           <Input name="regime" required defaultValue="LUCRO_PRESUMIDO" />
           <Input name="vigente_de" type="date" required />
+          <Input name="vigente_ate" type="date" title="Fim (opcional)" />
           <Select name="tipo_receita">
             {(dados?.tipos_receita ?? ["*"]).map((t) => (
               <option key={t} value={t}>
@@ -162,16 +201,23 @@ export function ParametrosFinanceiros() {
               </option>
             ))}
           </Select>
-          <Input name="municipio" placeholder="Município (opcional)" />
+          <Input name="municipio" placeholder="Município (ex.: São Paulo/SP)" />
+          <Input name="codigo_servico" placeholder="Código de serviço (ISS)" />
           <Input
-            name="componentes"
-            required
-            placeholder="Componentes em %: IRPJ=…; CSLL=…; PIS=…; COFINS=…; ISS=…"
-            className="sm:col-span-3"
+            name="fonte"
+            placeholder="Fonte (contador, parecer...)"
+            className="sm:col-span-2"
           />
-          <Input name="fonte" placeholder="Fonte (contador, parecer...)" />
+          <textarea
+            required
+            value={tributosJson}
+            onChange={(e) => setTributosJson(e.target.value)}
+            rows={4}
+            placeholder={`Tributos (JSON; frações): [{"tributo":"IRPJ","base":"PRESUNCAO","aliquota":0.15,"presuncao":0.32}, ...] — tributos: ${(dados?.tributos ?? []).join(", ")}`}
+            className="rounded-lg border border-border bg-surf px-2.5 py-2 font-mono text-[11px] text-text sm:col-span-4"
+          />
           <Button type="submit" size="sm" className="sm:col-span-4">
-            Salvar Tax Profile
+            Salvar Tax Profile (nova versão)
           </Button>
         </form>
       </Card>
@@ -205,25 +251,25 @@ export function ParametrosFinanceiros() {
           onSubmit={(e) =>
             enviar(e, "/comissoes/modelos-custo-infra", (f) => {
               const componentes: Record<string, unknown>[] = [];
-              const percentual = fracao(f, "percentual");
-              if (percentual !== null)
-                componentes.push({ tipo: "PERCENTUAL", percentual });
-              const fixo = String(f.get("fixo") ?? "").trim();
-              if (fixo)
+              const valor = String(f.get("valor") ?? "").trim();
+              const metodo = String(f.get("metodo"));
+              if (valor || metodo === "USAGE_BASED") {
+                const numero = Number(valor.replace(",", "."));
+                const campo: Record<string, Record<string, unknown>> = {
+                  PERCENTAGE: { percentual: numero / 100 },
+                  FIXED: { valor: numero },
+                  PER_TENANT: { padrao: numero },
+                  PER_USER: { valor_por_usuario: numero },
+                  USAGE_BASED: { janela_dias: numero || 30 },
+                };
                 componentes.push({
-                  tipo: "FIXO_POR_RECEBIMENTO",
-                  valor: Number(fixo),
+                  categoria: String(f.get("categoria")),
+                  metodo,
+                  ...campo[metodo],
                 });
-              if (f.get("uso_ia") === "on")
-                componentes.push({
-                  tipo: "USO_IA",
-                  janela_dias: Number(f.get("janela_dias") || 30),
-                });
+              }
               const extra = String(f.get("extra") ?? "").trim();
-              if (extra)
-                componentes.push(
-                  ...(JSON.parse(extra) as Record<string, unknown>[]),
-                );
+              if (extra) componentes.push(...lerJson(extra));
               return {
                 nome: String(f.get("nome")),
                 vigente_de: String(f.get("vigente_de")),
@@ -235,34 +281,28 @@ export function ParametrosFinanceiros() {
         >
           <Input name="nome" required placeholder="Nome do modelo" />
           <Input name="vigente_de" type="date" required />
+          <Select name="categoria">
+            {(dados?.categorias_infra ?? []).map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
+          <Select name="metodo">
+            {Object.entries(dados?.metodos_infra ?? {}).map(([m, ajuda]) => (
+              <option key={m} value={m} title={ajuda}>
+                {m}
+              </option>
+            ))}
+          </Select>
           <Input
-            name="percentual"
-            type="number"
-            min={0}
-            max={99}
-            step="0.01"
-            placeholder="% da receita"
-          />
-          <Input
-            name="fixo"
-            type="number"
-            min={0}
-            step="0.01"
-            placeholder="R$ fixo por recebimento"
-          />
-          <label className="flex items-center gap-1.5 text-[12px] text-muted">
-            <input type="checkbox" name="uso_ia" /> Custo real de IA do tenant
-            (não use se o % já inclui IA)
-          </label>
-          <Input
-            name="janela_dias"
-            type="number"
-            min={1}
-            placeholder="Janela IA (dias)"
+            name="valor"
+            placeholder="Valor (% p/ PERCENTAGE, R$ p/ FIXED/PER_TENANT/PER_USER, dias p/ USAGE_BASED)"
+            className="sm:col-span-2"
           />
           <Input
             name="extra"
-            placeholder='Opcional: [{"tipo":"POR_PRODUTO","percentuais":{"GOVERNMENT":0.04}}]'
+            placeholder='Outros componentes (HYBRID): [{"categoria":"storage_cost","metodo":"FIXED","valor":40}]'
             className="sm:col-span-2"
           />
           <Input
@@ -279,6 +319,16 @@ export function ParametrosFinanceiros() {
       <Card>
         <SectionLabel>Commission Policy</SectionLabel>
         <div className="flex flex-col gap-1 text-[12px] text-muted">
+          <div data-testid="politica-margem">
+            Margem (versão {dados?.politica_margem.versao}): impostos e
+            infraestrutura sempre deduzidos; custo de IA{" "}
+            <span className="font-semibold text-text">
+              {dados?.politica_margem.regras.deduzir_custo_ia
+                ? "deduzido"
+                : "não deduzido"}
+            </span>
+            .
+          </div>
           <div>Privado: {dados?.politica_privada}</div>
           <div>
             Government (versão {dados?.politica_governo.versao}, gatilho{" "}
@@ -307,6 +357,75 @@ export function ParametrosFinanceiros() {
           />
           <Button type="submit" size="sm" variant="ghost">
             Recalcular comissões não pagas
+          </Button>
+        </form>
+        <form
+          className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4"
+          onSubmit={(e) =>
+            enviar(e, "/comissoes/politica-margem", (f) => ({
+              deduzir_custo_ia: f.get("deduzir_custo_ia") === "on",
+              motivo: String(f.get("motivo")),
+            }))
+          }
+        >
+          <label className="flex items-center gap-1.5 text-[12px] text-muted">
+            <input type="checkbox" name="deduzir_custo_ia" /> Deduzir custo de
+            IA da margem
+          </label>
+          <Input
+            name="motivo"
+            required
+            placeholder="Motivo da nova política (auditoria)"
+            className="sm:col-span-2"
+          />
+          <Button type="submit" size="sm" variant="ghost">
+            Nova versão da política
+          </Button>
+        </form>
+      </Card>
+
+      <Card data-testid="cambio">
+        <SectionLabel>Câmbio (custos de IA em USD)</SectionLabel>
+        <div className="flex flex-col gap-1 text-[12px]">
+          {dados?.cotacao_vigente ? (
+            <div>
+              Vigente: {dados.cotacao_vigente.moeda_base}/
+              {dados.cotacao_vigente.moeda_cotacao}{" "}
+              {dados.cotacao_vigente.taxa.toLocaleString("pt-BR")} ·{" "}
+              {dados.cotacao_vigente.fonte} · desde{" "}
+              {dados.cotacao_vigente.vigente_em}
+            </div>
+          ) : (
+            <Badge tone="amber">
+              Sem cotação — custo de IA em reais: AWAITING_FX_RATE
+            </Badge>
+          )}
+        </div>
+        <form
+          className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-4"
+          onSubmit={(e) =>
+            enviar(e, "/comissoes/cotacoes-cambio", (f) => ({
+              moeda_base: "USD",
+              moeda_cotacao: "BRL",
+              taxa: Number(String(f.get("taxa")).replace(",", ".")),
+              fonte: String(f.get("fonte")),
+              vigente_em: String(f.get("vigente_em") ?? "") || null,
+            }))
+          }
+        >
+          <Input
+            name="taxa"
+            required
+            placeholder="USD/BRL (ex.: cotação PTAX)"
+          />
+          <Input
+            name="fonte"
+            required
+            placeholder="Fonte (ex.: PTAX venda BCB)"
+          />
+          <Input name="vigente_em" type="datetime-local" />
+          <Button type="submit" size="sm">
+            Registrar cotação
           </Button>
         </form>
       </Card>
@@ -396,6 +515,22 @@ export function ParametrosFinanceiros() {
             </tbody>
           </table>
         </div>
+        {waterfall && (
+          <div className="mt-2 flex flex-col gap-1 text-[11px] text-muted">
+            <div data-testid="impostos-por-tributo">
+              Impostos por tributo:{" "}
+              {Object.entries(waterfall.total.impostos_por_tributo)
+                .map(([t, v]) => `${t} ${brl(v)}`)
+                .join(" · ") || "—"}
+            </div>
+            <div>
+              Aguardando por parâmetro:{" "}
+              {Object.entries(waterfall.total.aguardando_por_parametro)
+                .map(([status, n]) => `${status}: ${n}`)
+                .join(" · ") || "nenhum"}
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

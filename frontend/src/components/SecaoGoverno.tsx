@@ -1,6 +1,10 @@
 import { Badge } from "@/components/ui/Badge";
 import { brl } from "@/lib/aiCredits";
-import type { CatalogoGoverno, OfertaGoverno } from "@/lib/catalogo";
+import {
+  linhasEntitlements,
+  type CatalogoGoverno,
+  type OfertaGoverno,
+} from "@/lib/catalogo";
 
 const TIER: Record<string, string> = {
   "B2B ON Government Department": "Department",
@@ -46,6 +50,17 @@ function OfertaCard({ oferta }: { oferta: OfertaGoverno }) {
         <span className="font-head text-[18px] font-bold text-text">
           {brl(oferta.contratacao_inicial)}
         </span>
+      </div>
+      <div
+        className="flex flex-col gap-0.5 border-t border-dashed border-border2 pt-2"
+        data-testid="entitlements-governo"
+      >
+        {linhasEntitlements(oferta.entitlements).map(([rotulo, valor]) => (
+          <div key={rotulo} className="flex justify-between gap-2 text-[11px]">
+            <span className="text-muted">{rotulo}</span>
+            <span className="text-text">{valor}</span>
+          </div>
+        ))}
       </div>
       <div className="text-[11px] text-muted">
         {oferta.creditos_ia_anuais !== null

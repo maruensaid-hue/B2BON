@@ -8,7 +8,7 @@ voltam `None` com o motivo em `indisponivel` — nunca um número inventado:
 - AI Cost / Bid e / Procurement Process: ver `economia.economia_unitaria`
   (procurement fica no painel do comprador — barreira Buy/Sell);
 - AI Cost / Revenue Generated: custo em USD × receita em BRL exige
-  câmbio configurado (`FINOPS_CAMBIO_USD_BRL`).
+  câmbio cadastrado (`cotacao_cambio`, D-075).
 """
 
 from datetime import datetime
@@ -17,8 +17,7 @@ from decimal import Decimal
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.contexts.finops import creditos
-from app.core.config import settings
+from app.contexts.finops import comercial, creditos
 from app.models.estagio_funil import EstagioFunil
 from app.models.negocio import Negocio
 from app.models.registro_uso_ia import RegistroUsoIa
@@ -78,7 +77,7 @@ def resumo(db: Session, inicio: datetime, fim: datetime, tenant_id: str | None =
                 *([Negocio.tenant_id == tenant_id] if tenant_id else []))
         .scalar()
     )
-    cambio = settings.finops_cambio_usd_brl
+    cambio = comercial.cambio_usd_brl(db)
     politica = creditos.politica_vigente(db)
     from app.contexts.finops import economia  # import local: economia também lê o ledger
 
@@ -115,7 +114,7 @@ def resumo(db: Session, inicio: datetime, fim: datetime, tenant_id: str | None =
             "margem_bruta_ia": financeiro["motivo_indisponivel"],
             "custo_por_bid_usd": "ver /finops/economia-unitaria (ai_cost_per_bid, em BRL)",
             "custo_por_processo_compra_usd": "exibido no painel de Compras públicas (barreira Buy/Sell)",
-            "custo_ia_sobre_receita_ganha": None if cambio else "defina FINOPS_CAMBIO_USD_BRL (custo em USD, receita em BRL)",
+            "custo_ia_sobre_receita_ganha": None if cambio else "AWAITING_FX_RATE: cadastre a cotação USD/BRL (custo em USD, receita em BRL)",
         },
         "por_tenant": _agrupar(db, RegistroUsoIa.tenant_id, filtros) if tenant_id is None else [],
         "por_modulo": _agrupar(db, RegistroUsoIa.modulo, filtros),

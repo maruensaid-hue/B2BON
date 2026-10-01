@@ -29,7 +29,7 @@ def test_dashboard_da_plataforma_agrega_por_tenant_modulo_e_modelo(client, db_se
     assert {t["chave"] for t in resumo["por_tenant"]} == {TENANT, "outro-tenant"}
     assert resumo["por_modelo"][0]["chave"] == "claude-sonnet-5"
     assert resumo["receita_ia"] > 0  # Fase 15: créditos da franquia × receita de referência
-    assert resumo["margem_bruta_ia"] is None and "FINOPS_CAMBIO_USD_BRL" in resumo["indisponivel"]["margem_bruta_ia"]
+    assert resumo["margem_bruta_ia"] is None and "AWAITING_FX_RATE" in resumo["indisponivel"]["margem_bruta_ia"]
     assert resumo["unitarios"]["custo_por_bid_usd"] is None
 
 

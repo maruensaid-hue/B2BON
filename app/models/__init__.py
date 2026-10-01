@@ -1,5 +1,6 @@
 from app.models.alerta_detrator import AlertaDetrator
 from app.models.apuracao_comissao import ApuracaoComissao, ModeloCustoInfra, PerfilTributario
+from app.models.cotacao_cambio import CotacaoCambio
 from app.models.aprovacao import Aprovacao
 from app.models.atividade import Atividade
 from app.models.auditoria import AuditLog
@@ -196,6 +197,7 @@ __all__ = [
     "ConfiguracaoNps",
     "Conta",
     "ApuracaoComissao",
+    "CotacaoCambio",
     "ModeloCustoInfra",
     "PerfilTributario",
     "ComponenteContratoGoverno",

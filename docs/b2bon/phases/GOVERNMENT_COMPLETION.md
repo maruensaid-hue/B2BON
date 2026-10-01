@@ -83,3 +83,15 @@ Consultas por rota **iguais** em todas as 13 rotas medidas; latências dentro da
 - Exemplo Professional com parâmetros **de teste** (15% impostos, 5% infraestrutura): licença 120.000 + subscrição 36.000 =
   156.000 brutos → 124.800 de margem → comissão 24.960 (não 31.200).
 - Migração `f4a6b8c0d2e3`. Suíte **2.128 passed**, Postgres 9/9, E2E 17/17, ruff 40, lint 25, duplicação 42.
+
+## Adendo D-075 — parâmetros do PO (OI-024, OI-026, OI-018)
+
+- **OI-024 resolvido**: entitlements dos três tiers no catálogo central (usuários 20/50/100 em `max_usuarios`; CRM, MAP,
+  PREDATOR, Bid Intelligence e Public Procurement em `modulos_contratados`; API em `permite_api_parceiros`; unidades,
+  armazenamento, retenção, Public Procurement BASIC/FULL, Business Network, Corporate Brain, SSO, suporte e onboarding no
+  JSON validado). Página pública e Admin → Planos leem do mesmo `GET /catalogo`.
+- **OI-026 parcialmente resolvido**: Tax Engine por tributo e perfis iniciais (São Paulo/SP, 2026). Exemplo com a presunção
+  de licença de **teste** (32%) e infraestrutura de **teste** (5%): licença 120.000 → PIS 780 + COFINS 3.600 + ISS 3.480 +
+  IRPJ 5.760 + CSLL 3.456 = 17.076 de impostos (CBS/IBS-teste 1.200 fora da carga) → margem 96.924 → comissão 19.384,80.
+- **OI-018 aberto**: câmbio por tabela com fonte e vigência; sem cotação, `AWAITING_FX_RATE`.
+- Migração `a6c8e0f2b4d7`. Suíte **2.143 passed**, Postgres 9/9, E2E 17/17, ruff 40, lint 25, duplicação 42.

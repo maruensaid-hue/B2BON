@@ -173,13 +173,33 @@ carteira de AI Credits, comissões, auditoria). O modelo privado mensal não mud
 | `tipo_preco` | FIXED / STARTING_AT | CONTRACT (nunca no checkout) |
 | preço | `preco_mensal` | `preco_licenca`, `preco_implantacao`, `preco_assinatura_anual` (o `preco_mensal` fica 0 e não é usado) |
 | AI Credits | franquia mensal por módulo (`FRANQUIAS`) | `creditos_ia_anuais` (pool por período do contrato) |
-| entitlements | colunas do plano | colunas + `entitlements` (JSON configurável; vazio = "conforme contrato") |
+| entitlements | colunas do plano | usuários = `max_usuarios`; módulos = `modulos_contratados`; API = `permite_api_parceiros`; demais = `entitlements` (JSON validado; vazio = "conforme contrato") |
 
 | Oferta | Licença | Implantação | Subscrição anual | Contratação inicial | AI Credits/ano |
 |---|---|---|---|---|---|
 | Department | R$ 72.000 | R$ 12.000 | R$ 24.000 | R$ 108.000 | 300.000 |
 | **Professional (recomendada)** | R$ 120.000 | R$ 20.000 | R$ 36.000 | R$ 176.000 | 600.000 |
 | Enterprise | R$ 180.000 | R$ 30.000 | R$ 54.000 | R$ 264.000 | 1.200.000 |
+
+**Entitlements (D-075, OI-024 resolvido)** — no catálogo central, exibidos pela página pública e pelo Admin → Planos:
+
+| Entitlement | Department | Professional | Enterprise |
+|---|---|---|---|
+| internal_users | 20 | 50 | 100 |
+| administrative_units | 1 | 5 | 20 |
+| storage_gb | 100 | 500 | 2.048 |
+| operational_retention_months | 12 | 24 | 60 |
+| crm · map · predator · bid_intelligence | sim | sim | sim |
+| public_procurement | BASIC | FULL | FULL |
+| business_network · corporate_brain | sim | sim | sim |
+| api_access | não | sim | sim |
+| sso | não | OPTIONAL | sim |
+| support_sla | BUSINESS_HOURS_8X5 | PRIORITY_BUSINESS_HOURS_8X5 | CRITICAL_BUSINESS_HOURS_8X5 |
+| onboarding | STANDARD | ADVANCED | DEDICATED |
+
+Aplicados pela plataforma: usuários (assentos), módulos (acesso) e API. Os demais são contratuais/declarativos: a
+plataforma ainda não mede unidades administrativas, armazenamento, retenção, SSO nem o que separa Public Procurement BASIC
+de FULL. A franquia mensal de contas do MAP/PREDATOR nos planos Government é 0 (não definida pelo PO).
 
 - **Fonte única**: `GET /catalogo` (seção `governo`), `GET /planos` e `GET /governo/planos` leem a tabela `plano`; o frontend não
   tem preço Government no código (teste `test_pagina_publica_e_admin_iguais_ao_catalogo`). Mudar preço = Admin → Planos (auditado);
@@ -195,4 +215,9 @@ carteira de AI Credits, comissões, auditoria). O modelo privado mensal não mud
 - **Base de cálculo (D-074, todas as vendas)**: **Margem Comissionável Líquida** = receita recebida − impostos atribuíveis (Tax
   Profile) − infraestrutura atribuível (Infrastructure Cost Model, inclusive IA quando alocada); comissão = margem × taxa.
   Nunca sobre a receita bruta. Sem parâmetros: AWAITING_COST_PARAMETERS (OI-026). Engine único: `app/contexts/comissoes`.
-- Pendências do PO: valores de cada tier (OI-024); Tax Profile e Infrastructure Cost Model (OI-026).
+- **Tax Engine (D-075)**: Lucro Presumido, um componente por tributo — PIS 0,65% e COFINS 3% sobre a receita; IRPJ 15% e
+  CSLL 9% sobre a base presumida (presunção por tipo de receita: serviços 32%; licença e SaaS a informar); ISS por município e
+  código de serviço (São Paulo/SP item 1.05: 2,90%); CBS 0,9%/IBS 0,1% de 2026 só como teste (entra apenas o caixa efetivo);
+  adicional de IRPJ suportado. Custo de IA só entra na margem se a Commission Policy da margem mandar (v1: não). Câmbio por
+  tabela `cotacao_cambio` (OI-018).
+- Pendências do PO: custo real de infraestrutura e parâmetros tributários faltantes (OI-026); fonte do câmbio (OI-018).

@@ -300,14 +300,14 @@ def test_webhook_aprovado_com_representante_calcula_comissao(db_session):
     assert comissao.representante_id == representante.id
     # D-074: sem Tax Profile e Infrastructure Cost Model a comissão aguarda (taxa conhecida, valor não)
     assert (comissao.status, comissao.valor_comissao, comissao.taxa) == ("AWAITING_COST_PARAMETERS", 0.0, 0.1)
-    definir_parametros(db_session, impostos=0.15, infra=[{"tipo": "PERCENTUAL", "percentual": 0.05}])
+    definir_parametros(db_session, impostos=0.15, infra=[{"categoria": "cloud_cost", "metodo": "PERCENTAGE", "percentual": 0.05}])
     db_session.refresh(comissao)
     margem = round(plano.preco_mensal * 0.80, 2)  # recebido − 15% − 5%
     assert (comissao.status, comissao.base_calculo, comissao.valor_comissao) == ("PAYABLE", margem, round(margem * 0.1, 2))
 
 
 def test_comissao_privada_com_parametros_ja_definidos_nasce_pagavel(db_session):
-    definir_parametros(db_session, impostos=0.10, infra=[{"tipo": "PERCENTUAL", "percentual": 0.10}])
+    definir_parametros(db_session, impostos=0.10, infra=[{"categoria": "cloud_cost", "metodo": "PERCENTAGE", "percentual": 0.10}])
     plano = _tenant_e_plano(db_session)
     representante = Representante(nome="Ciclano", email="ciclano@vendedor.com.br", chave_pix="ciclano@pix", percentual_comissao=0.2)
     db_session.add(representante)

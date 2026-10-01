@@ -43,6 +43,18 @@ for (const tamanho of TAMANHOS) {
     await expect(
       ofertas.filter({ hasText: "Enterprise" }).getByText("R$ 264.000,00"),
     ).toBeVisible();
+    // D-075 (OI-024): entitlements do catálogo central
+    const entProfessional = professional.getByTestId("entitlements-governo");
+    await expect(entProfessional.getByText("Usuários internos")).toBeVisible();
+    await expect(
+      entProfessional.getByText("50", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      ofertas
+        .filter({ hasText: "Enterprise" })
+        .getByTestId("entitlements-governo")
+        .getByText("2 TB"),
+    ).toBeVisible();
     await expect(secao.getByText(/\/mês/)).toHaveCount(0);
     await expect(
       secao.getByText(
@@ -74,10 +86,19 @@ test.describe("Admin", () => {
     await expect(professional.getByText("R$ 36.000,00")).toBeVisible();
     await expect(professional.getByText("R$ 176.000,00")).toBeVisible();
     await expect(professional.getByText("600.000/ano")).toBeVisible();
-    // D-074: sem Tax Profile e modelo de infraestrutura, a tela de parâmetros mostra que as comissões aguardam
+    await expect(professional.getByText(/Usuários internos: 50/)).toBeVisible();
+    // D-075: perfis tributários iniciais do PO; sem custo de infraestrutura nem câmbio, a tela mostra o que falta
     await page.goto("/admin/parametros-financeiros");
+    await expect(page.getByTestId("perfil-tributario")).toHaveCount(3);
     await expect(
-      page.getByText("Nenhum Tax Profile — comissões aguardando"),
+      page
+        .getByTestId("parametros-pendentes")
+        .getByText(
+          "Infrastructure Cost Model (custos reais de infraestrutura)",
+        ),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("cambio").getByText(/AWAITING_FX_RATE/),
     ).toBeVisible();
     await expect(page.getByTestId("waterfall-comissoes")).toBeVisible();
     await page.goto("/admin/governo");

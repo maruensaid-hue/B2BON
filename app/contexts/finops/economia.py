@@ -36,7 +36,7 @@ AMOSTRA_MINIMA = 20
 DIMENSOES = ("tenant", "modulo", "workload", "agente", "plano", "provider", "modelo", "pacote")
 _COLUNA = {"tenant": ExecucaoIa.tenant_id, "modulo": ExecucaoIa.modulo, "workload": ExecucaoIa.workload_codigo,
            "agente": ExecucaoIa.agente, "plano": ExecucaoIa.plano_id}
-_MOTIVO_SEM_CAMBIO = "Configure FINOPS_CAMBIO_USD_BRL: custo é medido em USD e a receita em BRL."
+_MOTIVO_SEM_CAMBIO = "AWAITING_FX_RATE: cadastre a cotação USD/BRL em Admin → Parâmetros financeiros (custo em USD, receita em BRL)."
 
 
 def _d(valor) -> Decimal:
@@ -191,7 +191,7 @@ def kpis(db: Session, inicio: datetime, fim: datetime, tenant_id: str | None = N
         "ai_revenue_brl": receita, "ai_variable_cost_brl": custo_brl, "ai_variable_cost_usd": geral["custo_usd"],
         "ai_gross_profit_brl": geral["lucro_bruto_brl"], "ai_gross_margin": geral["margem_bruta"], "nivel_margem": geral["nivel"],
         "margem_alvo": float(comercial.faixas_margem().alvo),
-        "motivo_indisponivel": _MOTIVO_SEM_CAMBIO if comercial.cambio_usd_brl() is None else (
+        "motivo_indisponivel": _MOTIVO_SEM_CAMBIO if comercial.cambio_usd_brl(db) is None else (
             "Há execuções com modelo sem preço cadastrado." if custo_brl is None and execucoes else None),
         "execucoes": len(execucoes),
         "credits_sold": int(vendidos or 0), "credits_sold_revenue_brl": _f(faturado_pacotes, 2) or 0.0,

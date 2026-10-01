@@ -9,7 +9,7 @@ import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { brl } from "@/lib/aiCredits";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { OfertaGoverno } from "@/lib/catalogo";
+import { linhasEntitlements, type OfertaGoverno } from "@/lib/catalogo";
 
 interface Plano {
   id: number;
@@ -43,6 +43,8 @@ interface Plano {
   preco_assinatura_anual: number | null;
   creditos_ia_anuais: number | null;
   recomendado: boolean;
+  /** D-075: entitlements Government que não têm campo próprio (usuários = max_usuarios, módulos, API). */
+  entitlements: Record<string, number | string | boolean | null> | null;
 }
 
 const GOVERNO = "GOVERNMENT";
@@ -52,6 +54,36 @@ const CAMPOS_GOVERNO = [
   ["preco_assinatura_anual", "Subscrição anual (R$)"],
   ["creditos_ia_anuais", "AI Credits por ano"],
 ] as const;
+// D-075 (OI-024): entitlements Government guardados no JSON do plano. Usuários, módulos e API usam os campos do plano.
+const ENTITLEMENTS_NUMERICOS = [
+  ["administrative_units", "Unidades administrativas"],
+  ["storage_gb", "Armazenamento (GB)"],
+  ["operational_retention_months", "Retenção operacional (meses)"],
+] as const;
+const ENTITLEMENTS_OPCOES = [
+  ["public_procurement", "Public Procurement", ["BASIC", "FULL"]],
+  ["sso", "SSO", ["false", "OPTIONAL", "true"]],
+  ["support_sla", "Suporte", ["BUSINESS_HOURS_8X5", "PRIORITY_BUSINESS_HOURS_8X5", "CRITICAL_BUSINESS_HOURS_8X5"]],
+  ["onboarding", "Onboarding", ["STANDARD", "ADVANCED", "DEDICATED"]],
+] as const;
+const ENTITLEMENTS_SIM_NAO = [
+  ["business_network", "Business Network"],
+  ["corporate_brain", "Corporate Brain"],
+] as const;
+
+function lerEntitlementsGoverno(form: FormData) {
+  const valor = (nome: string) => String(form.get(`ent_${nome}`) ?? "").trim();
+  return {
+    ...Object.fromEntries(ENTITLEMENTS_NUMERICOS.map(([nome]) => [nome, valor(nome) ? Number(valor(nome)) : null])),
+    ...Object.fromEntries(
+      ENTITLEMENTS_OPCOES.map(([nome]) => {
+        const texto = valor(nome);
+        return [nome, texto === "" ? null : texto === "true" ? true : texto === "false" ? false : texto];
+      }),
+    ),
+    ...Object.fromEntries(ENTITLEMENTS_SIM_NAO.map(([nome]) => [nome, form.get(`ent_${nome}`) === "on"])),
+  };
+}
 
 const RECURSOS_PLANO: { campo: keyof Plano; rotulo: string }[] = [
   { campo: "permite_ab_teste_cadencia", rotulo: "Teste A/B de cadência" },
@@ -115,6 +147,37 @@ function FormularioPlano({
             <input type="checkbox" name="recomendado" defaultChecked={plano?.recomendado ?? false} />
             Oferta recomendada (destaque na página de preços)
           </label>
+          <div className="col-span-2 text-[10px] tracking-wide text-muted uppercase">
+            Entitlements (usuários internos = Máx. usuários; CRM/MAP/PREDATOR = módulos; API = API de parceiros)
+          </div>
+          {ENTITLEMENTS_NUMERICOS.map(([nome, rotulo]) => (
+            <div key={nome}>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">{rotulo}</div>
+              <Input name={`ent_${nome}`} type="number" min={0} defaultValue={String(plano?.entitlements?.[nome] ?? "")} />
+            </div>
+          ))}
+          {ENTITLEMENTS_OPCOES.map(([nome, rotulo, opcoes]) => (
+            <div key={nome}>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">{rotulo}</div>
+              <select
+                name={`ent_${nome}`}
+                defaultValue={plano?.entitlements?.[nome] === undefined || plano?.entitlements?.[nome] === null
+                  ? "" : String(plano.entitlements[nome])}
+                className="w-full rounded-lg border border-border bg-surf px-2.5 py-2 text-[12px] text-text"
+              >
+                <option value="">Conforme contrato</option>
+                {opcoes.map((opcao) => (
+                  <option key={opcao} value={opcao}>{opcao}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+          {ENTITLEMENTS_SIM_NAO.map(([nome, rotulo]) => (
+            <label key={nome} className="flex items-center gap-1.5 text-[12px] text-muted">
+              <input type="checkbox" name={`ent_${nome}`} defaultChecked={plano?.entitlements?.[nome] === true} />
+              {rotulo}
+            </label>
+          ))}
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
@@ -304,6 +367,7 @@ export function AdminPlanos() {
             modelo_cobranca: planoEmEdicao?.modelo_cobranca ?? "GOVERNMENT_LICENSE_PLUS_ANNUAL_SUBSCRIPTION",
             ...Object.fromEntries(CAMPOS_GOVERNO.map(([nome]) => [nome, campoNumeroOuVazio(form.get(nome))])),
             recomendado: form.get("recomendado") === "on",
+            entitlements: lerEntitlementsGoverno(form),
           }
         : {}),
       motivo: String(form.get("motivo") ?? "") || null,
@@ -436,7 +500,9 @@ export function AdminPlanos() {
                     <td className="p-2">{brl(oferta.assinatura_anual)}</td>
                     <td className="p-2 text-muted">Anual</td>
                     <td className="p-2 text-muted">
-                      {definidos.length ? definidos.map(([k, v]) => `${k}: ${v}`).join(", ") : "Conforme contrato"}
+                      {definidos.length
+                        ? linhasEntitlements(Object.fromEntries(definidos)).map(([k, v]) => `${k}: ${v}`).join(", ")
+                        : "Conforme contrato"}
                     </td>
                     <td className="p-2 text-muted">
                       {oferta.creditos_ia_anuais !== null ? `${oferta.creditos_ia_anuais.toLocaleString("pt-BR")}/ano` : "—"}

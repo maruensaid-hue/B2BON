@@ -10,8 +10,11 @@ inteligência; tokens são unidade técnica interna.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 
@@ -146,8 +149,11 @@ def receita_por_credito_excedente() -> Decimal:
     return Decimal(str(settings.ai_creditos_receita_ref_excedente_1k_brl)) / 1000
 
 
-def cambio_usd_brl() -> Decimal | None:
-    return Decimal(str(settings.finops_cambio_usd_brl)) if settings.finops_cambio_usd_brl else None
+def cambio_usd_brl(db: Session, em: datetime | None = None) -> Decimal | None:
+    """Cotação USD/BRL aplicável (tabela `cotacao_cambio`, D-075). None = sem cotação: nada é estimado."""
+    from app.contexts.finops import cambio  # import local: cambio não depende de comercial
+
+    return cambio.taxa(db, "USD", "BRL", em)
 
 
 def horas_cache_resposta() -> int:
