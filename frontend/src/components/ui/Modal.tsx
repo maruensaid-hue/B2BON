@@ -11,16 +11,25 @@ export function Modal({ title, open, onClose, children }: ModalProps) {
   const idTitulo = useId();
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // `onClose` costuma ser uma função nova a cada render da tela que usa o modal. Antes ele estava nas dependências do
+  // efeito abaixo, que então rodava a cada tecla digitada num campo do modal e devolvia o foco ao contêiner — o campo
+  // só aceitava um caractere por vez (bug real 2026-10-02: confirmação de exclusão de tenant). Guardado numa ref, o
+  // foco vai para o modal só quando ele ABRE.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
     containerRef.current?.focus();
 
     function aoTeclar(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     }
     document.addEventListener("keydown", aoTeclar);
     return () => document.removeEventListener("keydown", aoTeclar);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

@@ -1,5 +1,9 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Campos de texto em janelas aceitam o texto inteiro (2026-10-02)
+
+- Corrigido: em qualquer janela com campo de texto (por exemplo, a confirmação "Excluir tenant definitivamente"), só entrava um caractere por vez — a janela puxava o foco de volta a cada tecla. Agora o foco vai para a janela só quando ela abre.
+
 ## Demonstração abre na hora (2026-10-02, D-085)
 
 - O link da demonstração passa a abrir em segundos: o servidor deixa alguns ambientes já preenchidos esperando, e o clique só pega um deles. Antes, cada acesso montava a empresa fictícia na hora e levava de 1 a 3 minutos.
