@@ -347,7 +347,12 @@ def processar_lembretes(
     for reuniao in reunioes:
         if reuniao.horario_confirmado is None:
             continue
-        faltam = reuniao.horario_confirmado - agora
+        horario = reuniao.horario_confirmado
+        # A coluna é `timestamp` sem fuso (o Postgres devolve "ingênuo", em UTC): sem isto, a subtração estourava
+        # TypeError e o cron do tenant inteiro falhava (Sentry, 2026-10-02).
+        if horario.tzinfo is None:
+            horario = horario.replace(tzinfo=UTC)
+        faltam = horario - agora
         decisor = db.query(Decisor).filter_by(id=reuniao.decisor_id).one()
 
         if reuniao.lembrete_d1_enviado_em is None and timedelta(hours=20) <= faltam <= timedelta(hours=28):

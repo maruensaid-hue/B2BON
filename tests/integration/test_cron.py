@@ -276,3 +276,18 @@ def test_processar_fila_enriquecimento_processa_conta_importada(client, com_segr
     corpo = resposta.json()
     assert corpo["processados"] == 1
     assert corpo["concluidos"] == 1
+
+
+def test_rotinas_de_envio_nao_percorrem_ambientes_de_demonstracao(client, db_session, com_segredo_cron):
+    """D-082: nada sai de um ambiente de demonstração fora da sessão do visitante — as rotinas de envio, lembrete,
+    campanha e retenção ignoram esses tenants (antes o cron de retorno quebrava em cada demonstração)."""
+    from datetime import datetime, timedelta
+
+    _criar_tenant_ativo(db_session, "tenant-real-cron")
+    db_session.add(Tenant(id="demo-cron", razao_social="Atlas", demo_expira_em=datetime.now() + timedelta(hours=8)))
+    db_session.commit()
+
+    for rota in ("processar-envios", "processar-retorno", "processar-campanhas", "expirar-titulares"):
+        corpo = client.post(f"/api/v1/cron/{rota}", headers={"X-Cron-Secret": SEGREDO}).json()
+        assert "demo-cron" not in str(corpo), rota
+        assert "tenant-real-cron" in str(corpo), rota

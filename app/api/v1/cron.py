@@ -85,6 +85,13 @@ def _registrar_falha_tenant(tenant_id: str) -> None:
         sentry_sdk.capture_exception()
 
 
+def _tenants_reais(db: Session) -> list[Tenant]:
+    """Tenants ativos que as rotinas de envio, lembrete, campanha e retenção percorrem. Ambientes de demonstração
+    (D-082) ficam de fora: nada sai deles fora da sessão do visitante — que já usa provedores simulados — e as datas
+    fictícias não podem disparar nada de verdade."""
+    return db.query(Tenant).filter(Tenant.ativo.is_(True), Tenant.demo_expira_em.is_(None)).order_by(Tenant.id).all()
+
+
 @router.post("/processar-envios", dependencies=[Depends(_exigir_segredo_cron)])
 def processar_envios_todos_os_tenants(
     db: Session = Depends(get_db),
@@ -98,7 +105,7 @@ def processar_envios_todos_os_tenants(
     tenants_com_falha: list[str] = []
     totais = {"enviadas": 0, "falhas": 0, "adiadas": 0, "tarefas_linkedin_criadas": 0, "descartadas_email_invalido": 0}
 
-    for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
+    for tenant in _tenants_reais(db):
         try:
             whatsapp = resolver_whatsapp_provider(tenant.id, db)
             # E-mail resolvido por tenant, dentro do loop (raio-X
@@ -131,7 +138,7 @@ def processar_retorno_todos_os_tenants(
     tenants_com_falha: list[str] = []
     totais = {"lembretes_d1_enviados": 0, "lembretes_h2_enviados": 0, "pesquisas_disparadas": 0}
 
-    for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
+    for tenant in _tenants_reais(db):
         try:
             whatsapp = resolver_whatsapp_provider(tenant.id, db)
             email = resolver_email_provider(tenant.id, db)
@@ -163,7 +170,7 @@ def processar_campanhas_todos_os_tenants(
     tenants_com_falha: list[str] = []
     totais = {"enviadas": 0, "falhas": 0}
 
-    for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
+    for tenant in _tenants_reais(db):
         try:
             whatsapp = resolver_whatsapp_provider(tenant.id, db)
             email = resolver_email_provider(tenant.id, db)
@@ -189,7 +196,7 @@ def expirar_titulares_todos_os_tenants(db: Session = Depends(get_db)) -> dict:
     tenants_com_falha: list[str] = []
     total_expirados = 0
 
-    for tenant in db.query(Tenant).filter_by(ativo=True).order_by(Tenant.id).all():
+    for tenant in _tenants_reais(db):
         try:
             resultado = titular_service.expirar_inativos(db, tenant.id, settings.dias_retencao_titular_inativo)
         except Exception:

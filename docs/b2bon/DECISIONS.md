@@ -1250,3 +1250,8 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   (Private/Local Network Access) pedem `Access-Control-Request-Private-Network`, que o Starlette recusa por padrão.
   `allow_private_network=True` (a origem continua restrita a `CORS_ORIGINS`; a API já é pública) e toda recusa de
   checagem prévia passa a ser registrada com o motivo (`b2bon.cors`).
+- **Adendo 2 (2026-10-02)**: o Sentry acusou `TypeError` no cron `/processar-retorno` em cada ambiente de
+  demonstração — `horario_confirmado` volta do Postgres sem fuso e era subtraído de `datetime.now(UTC)` (afetaria
+  qualquer tenant com reunião confirmada). Corrigido em `reuniao_service.processar_lembretes`. E as rotinas de envio,
+  retorno (lembretes/NPS), campanhas e retenção passam a ignorar tenants de demonstração (`_tenants_reais`): nada sai
+  deles fora da sessão do visitante. Verificado em produção que nenhum envio real partiu das demonstrações.
