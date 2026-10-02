@@ -1,5 +1,10 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Demonstração abre na hora (2026-10-02, D-085)
+
+- O link da demonstração passa a abrir em segundos: o servidor deixa alguns ambientes já preenchidos esperando, e o clique só pega um deles. Antes, cada acesso montava a empresa fictícia na hora e levava de 1 a 3 minutos.
+- Cada representante continua com o próprio ambiente, isolado e válido por 8 horas.
+
 ## Correções: exclusão de tenant, câmbio e notícias (2026-10-01, D-084)
 
 - Excluir definitivamente um tenant desligado volta a funcionar mesmo quando um vendedor dele era responsável por contas de outra empresa da rede: essas contas ficam sem responsável, em vez de travar a exclusão. Tenants que já pagaram também podem ser excluídos; o histórico de pagamento é mantido.

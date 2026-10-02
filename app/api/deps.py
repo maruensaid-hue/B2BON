@@ -79,6 +79,11 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def get_sessao_factory():
+    """Fábrica de sessões para tarefas em segundo plano (que rodam depois da resposta, sem a sessão da requisição)."""
+    return SessionLocal
+
+
 def get_graph_client() -> Neo4jClient:
     if demo_contexto.ativo():  # D-083: demonstração não grava no grafo compartilhado
         return GrafoNulo()

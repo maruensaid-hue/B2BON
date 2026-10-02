@@ -14,6 +14,7 @@ from app.api.deps import (
     get_contact_enrichment_provider,
     get_crm_provider,
     get_db,
+    get_sessao_factory,
     get_email_provider,
     get_email_provider_do_tenant,
     get_email_validation_provider,
@@ -278,6 +279,8 @@ def client(
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
+    # Reserva de demonstrações (D-085) não roda em segundo plano nos testes; test_demonstracao a exercita direto.
+    app.dependency_overrides[get_sessao_factory] = lambda: None
     app.dependency_overrides[get_graph_client] = lambda: fake_graph
     app.dependency_overrides[get_llm_provider] = lambda: fake_llm
     app.dependency_overrides[get_account_data_provider] = lambda: fake_account_data

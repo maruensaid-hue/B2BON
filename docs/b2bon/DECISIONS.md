@@ -1231,3 +1231,17 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   reversível) — gerir tenants de todas as redes e representantes é atribuição do Super Admin, que continua não podendo
   ser concedido pela interface.
 - **Status**: ACEITA. Migração `c0e2a4b6d8f1` (reversível; o downgrade descarta pagamentos de tenants já apagados).
+
+## D-085 · 2026-10-02 · Demonstração abre na hora: reserva de ambientes já preenchidos
+- **Contexto**: com a demonstração ligada em produção, cada clique levava de 65 a 171 s (logs do Render) e 4 de 7
+  tentativas foram abandonadas pelo navegador. Preencher um ambiente custa ~635 consultas (e a limpeza de vencidos, ~200
+  por ambiente); no Postgres local é 1,5 s, mas em produção cada consulta é uma ida e volta de rede até o Neon.
+- **Decisão**: manter `DEMO_RESERVAS` (padrão 3) ambientes já preenchidos. Reserva = tenant de demonstração com
+  `demo_expira_em` além de agora + TTL + 1 h (vale TTL + 24 h); o clique reivindica a mais antiga com
+  `FOR UPDATE SKIP LOCKED` (dois cliques nunca levam a mesma), traz a expiração para agora + TTL e entra como a
+  gestora — 5 consultas. Sem reserva, preenche na hora (comportamento anterior). A limpeza de vencidos e a reposição
+  rodam em segundo plano (após cada clique, na consulta de disponibilidade e na rotina horária), uma por processo de
+  cada vez. Reservas não contam no teto de sessões ativas.
+- **Segurança**: inalterada — cada sessão continua com tenant próprio, token que expira com ele, negação por padrão
+  e provedores simulados (D-083). A reserva nunca é entregue a duas sessões.
+- **Status**: ACEITA. Sem migração.

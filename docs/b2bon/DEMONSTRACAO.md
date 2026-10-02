@@ -12,6 +12,10 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
   proposta) não aparece para o outro.
 - A sessão entra como **Marina Costa, gestora comercial** da empresa fictícia **Atlas Soluções Industriais**, com
   todos os módulos: CRM, MAP, PREDATOR, Bid Intelligence, Public Procurement e Strategic Sourcing.
+- **Abre na hora** (D-085): o servidor mantém alguns ambientes já preenchidos de reserva (3, ajustável por
+  `DEMO_RESERVAS`). O clique só pega um deles e outro é preparado em segundo plano. Se vários representantes abrirem ao
+  mesmo tempo e a reserva acabar, o próximo ambiente é preenchido na hora (pode levar 1 a 3 minutos — não feche a aba);
+  a rotina horária e cada novo acesso repõem a reserva.
 - Uma faixa no topo avisa que é demonstração e mostra a hora em que expira; **"Nova demonstração"** abre outro ambiente
   limpo (útil para começar a próxima apresentação do zero).
 
@@ -54,7 +58,7 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
 2. **Ligar a demonstração na API**: Render → serviço **b2bon-api** → **Environment** → **Add Environment Variable**:
    - `DEMO_HABILITADA` = `true`
    - (opcional) `DEMO_TTL_HORAS` (padrão 8), `DEMO_MAX_SESSOES_ATIVAS` (60), `DEMO_SESSOES_POR_IP_HORA` (10),
-     `DEMO_SESSOES_POR_HORA` (120),
+     `DEMO_SESSOES_POR_HORA` (120), `DEMO_RESERVAS` (3 ambientes prontos à espera),
      `DEMO_CREDITOS_IA` (5000).
    Salve; o Render reinicia o serviço.
 3. **Testar**: abra `https://b2bon.onrender.com/demo` numa janela anônima — em poucos segundos aparece o painel com a
@@ -62,8 +66,9 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
 4. **Divulgar aos representantes**: envie o link `https://b2bon.onrender.com/demo`. Cada clique abre um ambiente novo; o
    representante pode deixar a aba aberta durante a reunião (vale 8 horas) e usar "Nova demonstração" para recomeçar.
 5. **No site institucional** (opcional): um botão "Ver demonstração" apontando para o mesmo link.
-6. **Limpeza**: automática — a rotina horária (`/cron/creditos-ia`) apaga os ambientes vencidos, e cada nova
-   demonstração também apaga até 5 vencidos antes de começar.
+6. **Limpeza e reserva**: automáticas — em segundo plano, a rotina horária (`/cron/creditos-ia`) e cada novo acesso
+   apagam os ambientes vencidos e repõem a reserva. Uma reserva não usada em 1 dia deixa de ser oferecida (as datas
+   fictícias, como "reunião amanhã", são relativas ao momento em que foi preparada) e é apagada ao vencer.
 
 **Desligar**: remova `DEMO_HABILITADA` (ou mude para `false`). O link passa a mostrar "A demonstração não está
 habilitada" (o botão DEMO continua no rodapé do login) e as sessões abertas caem na hora.

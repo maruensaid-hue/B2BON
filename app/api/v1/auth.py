@@ -1,13 +1,14 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
     get_account_data_provider,
     get_contact_enrichment_provider,
     get_db,
+    get_sessao_factory,
     get_email_provider,
     get_graph_client,
     get_llm_provider,
@@ -144,16 +145,22 @@ class DemonstracaoSchema(TokenResponseSchema):
 
 
 @router.get("/demonstracao")
-def demonstracao_disponivel() -> dict:
-    """Pública: a tela de login só mostra "Ver demonstração" quando ela está ligada neste ambiente."""
+def demonstracao_disponivel(tarefas: BackgroundTasks, sessao_factory=Depends(get_sessao_factory)) -> dict:
+    """Pública: a página /demo consulta antes de abrir. D-085: aproveita para deixar a reserva pronta em segundo plano
+    (sem efeito se já estiver cheia ou se outro reabastecimento estiver rodando)."""
+    if settings.demo_habilitada:
+        tarefas.add_task(demo_sessao.reabastecer, sessao_factory)
     return {"habilitada": settings.demo_habilitada, "duracao_horas": settings.demo_ttl_horas}
 
 
 @router.post("/demonstracao", response_model=DemonstracaoSchema, status_code=201,
              dependencies=[Depends(limitar_demonstracao(settings.demo_sessoes_por_ip_hora, settings.demo_sessoes_por_hora))])
-def demonstracao(db: Session = Depends(get_db)) -> DemonstracaoSchema:
-    """D-082: abre um ambiente de demonstração próprio (dados fictícios, expira sozinho) — sem login nem senha."""
+def demonstracao(tarefas: BackgroundTasks, db: Session = Depends(get_db),
+                 sessao_factory=Depends(get_sessao_factory)) -> DemonstracaoSchema:
+    """D-082: abre um ambiente de demonstração próprio (dados fictícios, expira sozinho) — sem login nem senha.
+    D-085: reivindica um ambiente da reserva e repõe a reserva em segundo plano."""
     usuario, expira_em = demo_sessao.criar(db)
+    tarefas.add_task(demo_sessao.reabastecer, sessao_factory)
     return DemonstracaoSchema(
         access_token=auth_service.gerar_token(usuario, expira_em=expira_em.replace(tzinfo=UTC), demo=True),
         usuario=_construir_usuario_schema(usuario, db), tem_licenca_ativa=True, demo_expira_em=expira_em,

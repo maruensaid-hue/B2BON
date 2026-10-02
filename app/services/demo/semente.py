@@ -98,6 +98,11 @@ def _slug(nome: str) -> str:
     return "-".join(p for p in base.split("-") if p)[:30]
 
 
+def email_gestora(tenant_id: str) -> str:
+    """E-mail da gestora (primeira da equipe, usuária da sessão) — é por ele que uma reserva reivindicada é aberta."""
+    return f"{_slug(EQUIPE[0][0])}@{tenant_id}.demo.invalid"
+
+
 def _equipe(db: Session, tenant_id: str) -> list[Usuario]:
     usuarios = []
     for nome, papel, _ in EQUIPE:

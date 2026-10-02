@@ -50,6 +50,6 @@
 - Desempenho: `docs/b2bon/perf/baseline.json` (antes da expansão) e `fase_a.json` … `fase_i.json`, `governo.json`, `map_performance.json` (D-080); repetir com `tests/desempenho` a cada fase (§36).
 - Duplicação: `scripts/qualidade/duplicacao.py` — 42 blocos / ~1.877 linhas repetidas (janela 8).
 
-- Backend: 2.230 passed, 13 skipped (medição de desempenho sob demanda + testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 12/12 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `c0e2a4b6d8f1`).
+- Backend: 2.233 passed, 13 skipped (medição de desempenho sob demanda + testes de Postgres rodam com `B2BON_TESTE_PG_URL`: 12/12 em Postgres 16). Leitura dupla de sourcing ESTRITA em toda a suíte. Migrações validadas também em Postgres 16 (head `c0e2a4b6d8f1`).
 - Ruff: 40 (sem novos). Frontend: lint OK (25 warnings), build OK.
 - E2E: 19/19 (setup de login + specs, incluindo MAP Performance e a demonstração pública).

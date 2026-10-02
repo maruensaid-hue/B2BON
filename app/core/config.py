@@ -216,6 +216,7 @@ class Settings(BaseSettings):
     demo_sessoes_por_ip_hora: int = 10
     demo_sessoes_por_hora: int = 120  # teto global de novas demonstrações por hora
     demo_creditos_ia: int = 5000
+    demo_reservas: int = 3  # D-085: ambientes já semeados à espera do próximo clique (abre na hora)
     google_oauth_client_id: str = ""
 
     # Limiares de alerta de risco de churn dos tenants (Onda D — Motor de

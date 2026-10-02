@@ -1,13 +1,14 @@
 import logging
 
 import sentry_sdk
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
     get_account_data_provider,
     get_contact_enrichment_provider,
     get_db,
+    get_sessao_factory,
     get_email_provider,
     get_email_validation_provider,
     get_graph_client,
@@ -312,7 +313,7 @@ def processar_eventos(db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/creditos-ia", dependencies=[Depends(_exigir_segredo_cron)])
-def creditos_ia(db: Session = Depends(get_db)) -> dict:
+def creditos_ia(tarefas: BackgroundTasks, db: Session = Depends(get_db), sessao_factory=Depends(get_sessao_factory)) -> dict:
     """Fase 15 — roda de hora em hora: expira lotes vencidos, concede a
     franquia do mês, libera reservas órfãs, registra alertas de uso
     (80/95/100%), anomalias de consumo e alertas de margem. D-072: concede o
@@ -323,6 +324,7 @@ def creditos_ia(db: Session = Depends(get_db)) -> dict:
     governo_resultado = governo.contratos.rotina(db)
     ptax = finops.cambio.sincronizar_ptax(db)  # D-076: PTAX de fechamento do Banco Central (OI-018)
     demonstracoes = demo_sessao.purgar_expiradas(db, limite=50)
+    tarefas.add_task(demo_sessao.reabastecer, sessao_factory)  # D-085: mantém a reserva de demonstrações cheia
     return {**finops.creditos_ia_rotina(db), "governo": governo_resultado, "ptax": ptax, "demonstracoes_apagadas": demonstracoes}
 
 

@@ -194,3 +194,63 @@ def test_paineis_e_areas_de_trabalho_abrem_com_os_dados_da_demonstracao(client, 
              "/api/v1/ai-credits/carteira", "/api/v1/busca?q=Horizonte")
     falhas = {r: client.get(r, headers=headers).status_code for r in rotas}
     assert {r: s for r, s in falhas.items() if s >= 400} == {}
+
+
+class _MesmaSessao:
+    """Fábrica para `reabastecer` que devolve a sessão do teste (o banco em memória é um só)."""
+
+    def __init__(self, db):
+        self.db = db
+
+    def __call__(self):
+        return self
+
+    def __enter__(self):
+        return self.db
+
+    def __exit__(self, *_):
+        return False
+
+
+def test_reserva_abre_na_hora_e_e_reposta(client, db_session, demo, monkeypatch):
+    """D-085: semear leva ~600 consultas (minutos em produção). A reserva já vem semeada; o clique só a reivindica."""
+    monkeypatch.setattr(settings, "demo_reservas", 2)
+    assert sessao.reabastecer(_MesmaSessao(db_session)) == {"apagadas": 0, "criadas": 2}
+    reservadas = {t.id for t in db_session.query(Tenant).filter(Tenant.demo_expira_em.isnot(None))}
+    assert sessao.ativas(db_session) == 0 and sessao.reservas(db_session) == 2  # reserva não ocupa vaga de sessão
+
+    corpo, headers = _abrir(client)
+
+    tenant_id = corpo["usuario"]["tenant_id"]
+    assert tenant_id in reservadas
+    assert corpo["usuario"]["email"] == sessao.semente.email_gestora(tenant_id)
+    db_session.expire_all()
+    expira_em = db_session.get(Tenant, tenant_id).demo_expira_em
+    assert expira_em <= sessao._agora() + timedelta(hours=settings.demo_ttl_horas)  # vale 8 h a partir do clique
+    assert sessao.ativas(db_session) == 1 and sessao.reservas(db_session) == 1
+    assert len(client.get("/api/v1/crm/negocios", headers=headers).json()) > 0
+
+    # Dois cliques nunca levam o mesmo ambiente; sem reserva, semeia na hora.
+    segundo, _ = _abrir(client)
+    terceiro, _ = _abrir(client)
+    assert len({tenant_id, segundo["usuario"]["tenant_id"], terceiro["usuario"]["tenant_id"]}) == 3
+    assert sessao.reabastecer(_MesmaSessao(db_session))["criadas"] == 2
+
+
+def test_reserva_velha_nao_e_entregue(db_session, demo, monkeypatch):
+    """As datas fictícias são relativas à semeadura: reserva perto de vencer não é mais oferecida (só expira)."""
+    monkeypatch.setattr(settings, "demo_reservas", 1)
+    sessao.reabastecer(_MesmaSessao(db_session))
+    reserva = db_session.query(Tenant).filter(Tenant.demo_expira_em.isnot(None)).one()
+    reserva.demo_expira_em = sessao._agora() + timedelta(hours=settings.demo_ttl_horas)  # dentro da folga
+    db_session.commit()
+
+    usuario, _ = sessao.criar(db_session)
+
+    assert usuario.tenant_id != reserva.id
+
+
+def test_reabastecer_desligado_ou_sem_fabrica_nao_faz_nada(db_session, monkeypatch):
+    assert sessao.reabastecer(_MesmaSessao(db_session)) == {"apagadas": 0, "criadas": 0}  # demonstração desligada
+    monkeypatch.setattr(settings, "demo_habilitada", True)
+    assert sessao.reabastecer(None) == {"apagadas": 0, "criadas": 0}
