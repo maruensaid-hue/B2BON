@@ -254,3 +254,43 @@ def test_reabastecer_desligado_ou_sem_fabrica_nao_faz_nada(db_session, monkeypat
     assert sessao.reabastecer(_MesmaSessao(db_session)) == {"apagadas": 0, "criadas": 0}  # demonstração desligada
     monkeypatch.setattr(settings, "demo_habilitada", True)
     assert sessao.reabastecer(None) == {"apagadas": 0, "criadas": 0}
+
+
+def test_ataques_de_quem_tem_um_token_de_demonstracao(client, db_session, demo):
+    """Revisão de segurança (pedido do PO, 2026-10-02): o visitante anônimo da demonstração tenta sair do ambiente
+    fictício. Truques de caminho, métodos, papéis e IDs de dados reais — tudo tem que falhar."""
+    # Dado REAL de outro tenant (o `client` padrão autentica como um tenant real).
+    real = client.post("/api/v1/leads/contas", json={"nome": "Cliente Real Ltda"})
+    assert real.status_code in (200, 201), real.text
+    conta_real_id = real.json()["id"]
+    _, headers = _abrir(client)
+
+    # 1) Truques de caminho para alcançar rotas administrativas a partir de um prefixo permitido.
+    for rota in ("/api/v1/crm/../admin/tenants", "/api/v1/crm/%2E%2E/admin/tenants", "/api/v1/crm%2F..%2Fadmin%2Ftenants",
+                 "/api/v1//admin/tenants", "/api/v1/ADMIN/tenants", "/api/v1/admin/tenants/", "/api/v1/crmx/../admin/tenants",
+                 "/api/v1/auth/demonstracao/../../admin/tenants", "/api/v1/contas;/../admin/tenants"):
+        resposta = client.get(rota, headers=headers)
+        assert resposta.status_code in (403, 404, 405), (rota, resposta.status_code, resposta.text[:120])
+        assert "Cliente Real" not in resposta.text
+
+    # 2) Métodos inesperados em rota administrativa.
+    for metodo in ("HEAD", "PUT", "PATCH", "DELETE"):
+        assert client.request(metodo, "/api/v1/admin/tenants", headers=headers).status_code in (403, 405), metodo
+
+    # 3) Ler ou alterar dado real por ID numa rota permitida (isolamento por tenant).
+    for metodo, rota in (("get", f"/api/v1/leads/contas/{conta_real_id}"), ("put", f"/api/v1/leads/contas/{conta_real_id}"),
+                         ("delete", f"/api/v1/leads/contas/{conta_real_id}")):
+        resposta = getattr(client, metodo)(rota, headers=headers, **({"json": {"nome": "invadido"}} if metodo == "put" else {}))
+        assert resposta.status_code in (403, 404, 405, 422), (metodo, rota, resposta.status_code)
+    db_session.expire_all()
+    assert db_session.get(Conta, conta_real_id).nome == "Cliente Real Ltda"
+
+    # 4) Virar outro usuário ou ganhar senha/papel: rotas de conta e usuários fechadas.
+    for metodo, rota in (("post", "/api/v1/auth/login"), ("post", "/api/v1/auth/trocar-senha"), ("post", "/api/v1/auth/registrar"),
+                         ("put", "/api/v1/usuarios/1"), ("post", "/api/v1/auth/impersonar"), ("get", "/api/v1/auth/tokens")):
+        resposta = client.request(metodo.upper(), rota, headers=headers, json={})
+        assert resposta.status_code == 403, (metodo, rota, resposta.status_code)
+
+    # 5) Busca global não devolve nada de fora do ambiente fictício.
+    busca = client.get("/api/v1/busca?q=Cliente Real", headers=headers)
+    assert "Cliente Real" not in busca.text
