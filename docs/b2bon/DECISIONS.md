@@ -1267,3 +1267,5 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   soma todas as demonstrações na última hora (`DEMO_CREDITOS_IA_HORA`, padrão 20.000) contra abertura em série. Toda
   chamada de IA passa por `gateway.gerar` → `execucoes.abrir` (não há chamada direta ao modelo fora do gateway).
   Dimensionamento: uma demonstração pesada usa ~1.200 créditos; 5.000 cobrem ~4.
+- **Adendo 5 (2026-10-02, PO)**: teto global de IA das demonstrações reduzido para 10.000 créditos por hora
+  (`DEMO_CREDITOS_IA_HORA`) — comporta ~8 demonstrações pesadas por hora.

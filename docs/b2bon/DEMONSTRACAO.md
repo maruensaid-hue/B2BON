@@ -49,7 +49,7 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
   acesso é um token assinado que vale só para aquele ambiente e expira com ele.
 - **IA com teto rígido**: os 5.000 créditos são o limite de cada demonstração — acabou, a IA para naquele ambiente
   ("Os créditos de IA desta demonstração acabaram"), em qualquer modo de cobrança, sem excedente, recarga ou compra
-  (essas telas são bloqueadas). Além disso, todas as demonstrações juntas não passam de 20.000 créditos por hora
+  (essas telas são bloqueadas). Além disso, todas as demonstrações juntas não passam de 10.000 créditos por hora
   (`DEMO_CREDITOS_IA_HORA`), contra quem abre várias seguidas; o resto das telas continua funcionando.
 - **Contra abuso**: 10 demonstrações novas por hora por endereço IP real, 120 por hora no total, 60 abertas ao mesmo
   tempo; ambientes vencidos são apagados sozinhos.
@@ -63,7 +63,7 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
    - `DEMO_HABILITADA` = `true`
    - (opcional) `DEMO_TTL_HORAS` (padrão 8), `DEMO_MAX_SESSOES_ATIVAS` (60), `DEMO_SESSOES_POR_IP_HORA` (10),
      `DEMO_SESSOES_POR_HORA` (120), `DEMO_RESERVAS` (3 ambientes prontos à espera),
-     `DEMO_CREDITOS_IA` (5000), `DEMO_CREDITOS_IA_HORA` (20000).
+     `DEMO_CREDITOS_IA` (5000), `DEMO_CREDITOS_IA_HORA` (10000).
    Salve; o Render reinicia o serviço.
 3. **Testar**: abra `https://b2bon.onrender.com/demo` numa janela anônima — em poucos segundos aparece o painel com a
    faixa "Ambiente de demonstração". O botão **DEMO** no rodapé da tela de login leva ao mesmo link.

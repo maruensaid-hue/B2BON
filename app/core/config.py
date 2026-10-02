@@ -217,7 +217,7 @@ class Settings(BaseSettings):
     demo_sessoes_por_hora: int = 120  # teto global de novas demonstrações por hora
     demo_creditos_ia: int = 5000  # teto de IA de cada demonstração (bloqueia ao acabar, em qualquer modo de cobrança)
     # Teto global somando TODAS as demonstrações na última hora — contra abrir várias seguidas para somar créditos.
-    demo_creditos_ia_hora: int = 20000
+    demo_creditos_ia_hora: int = 10000
     demo_reservas: int = 3  # D-085: ambientes já semeados à espera do próximo clique (abre na hora)
     google_oauth_client_id: str = ""
 
