@@ -1245,3 +1245,8 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Segurança**: inalterada — cada sessão continua com tenant próprio, token que expira com ele, negação por padrão
   e provedores simulados (D-083). A reserva nunca é entregue a duas sessões.
 - **Status**: ACEITA. Sem migração.
+- **Adendo (2026-10-02)**: no celular (Samsung Internet, base Chrome 143) o /demo mostrava "Não foi possível abrir a
+  demonstração agora" — a checagem prévia de CORS (OPTIONS) voltava 400 antes de chegar à rota. Navegadores recentes
+  (Private/Local Network Access) pedem `Access-Control-Request-Private-Network`, que o Starlette recusa por padrão.
+  `allow_private_network=True` (a origem continua restrita a `CORS_ORIGINS`; a API já é pública) e toda recusa de
+  checagem prévia passa a ser registrada com o motivo (`b2bon.cors`).

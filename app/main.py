@@ -81,13 +81,32 @@ app = FastAPI(title="B2B ON — PREDATOR", version="0.1.0", lifespan=lifespan)
 # erro) sai com `X-Request-ID`.
 app.add_middleware(CorrelationIdMiddleware)
 
+class _CORSComDiagnostico(CORSMiddleware):
+    """CORS padrão + log do motivo quando a checagem prévia (OPTIONS) é recusada — em produção o navegador só mostra
+    "não foi possível" e o log do Render só o 400 (caso real 2026-10-02: /demo no Samsung Internet)."""
+
+    def preflight_response(self, request_headers):
+        resposta = super().preflight_response(request_headers)
+        if resposta.status_code == 400:
+            logging.getLogger("b2bon.cors").warning(
+                "Preflight recusado: %s | origin=%r método=%r cabeçalhos=%r rede-privada=%r",
+                resposta.body.decode(errors="replace"), request_headers.get("origin"),
+                request_headers.get("access-control-request-method"), request_headers.get("access-control-request-headers"),
+                request_headers.get("access-control-request-private-network"))
+        return resposta
+
+
 app.add_middleware(
-    CORSMiddleware,
+    _CORSComDiagnostico,
     allow_origins=settings.origens_cors,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Request-ID", "X-Proximo-Cursor"],
+    # Chrome/Samsung Internet recentes (Private/Local Network Access) mandam `Access-Control-Request-Private-Network`
+    # na checagem prévia; sem isto o Starlette responde 400 e a página não abre. A API já é pública: aceitar não abre
+    # nada novo — a origem continua restrita a `origens_cors`.
+    allow_private_network=True,
 )
 
 

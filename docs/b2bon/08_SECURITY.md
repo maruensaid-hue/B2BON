@@ -32,3 +32,9 @@ de IA próprios. Detalhes em `DEMONSTRACAO.md`.
 D-083 (antes de ligar em produção): negação por padrão para tokens de demonstração (só as rotas das telas de produto),
 todos os provedores externos simulados na requisição de demonstração (`app/services/demo/contexto.py`), tokens de
 demonstração invalidados quando o recurso é desligado e limite por IP real (último X-Forwarded-For) + teto global.
+
+## CORS: checagem prévia de rede privada (2026-10-02)
+
+- `allow_private_network=True` no CORS: navegadores recentes pedem `Access-Control-Request-Private-Network` na
+  checagem prévia; recusar quebrava o /demo no celular. Não amplia o acesso — só origens de `CORS_ORIGINS` recebem
+  `Access-Control-Allow-Origin`; recusas são registradas com o motivo (logger `b2bon.cors`).
