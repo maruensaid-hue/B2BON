@@ -240,6 +240,10 @@ class Settings(BaseSettings):
     # texto num painel como o do Render é fácil de preencher sem colchetes
     # e aspas exatas — ver `origens_cors` abaixo para o parsing tolerante.
     cors_origins: str = "http://localhost:5173"
+    # Frontends da própria B2B ON publicados a partir deste repositório e que não dependem do painel: o site estático
+    # do Render (`b2bon.onrender.com`, destino do botão DEMO e do link /demo) ficava fora de `CORS_ORIGINS` em produção
+    # e a demonstração não abria (2026-10-02). Somam-se a `cors_origins`; vazio desliga.
+    cors_origins_proprias: str = "https://b2bon.onrender.com"
 
     # Segredo compartilhado do disparador de envio agendado (Onda I) — sem
     # ele, POST /cron/processar-envios sempre recusa (nunca abre exceção
@@ -261,10 +265,12 @@ class Settings(BaseSettings):
     def origens_cors(self) -> list[str]:
         """Aceita tanto JSON (`["https://a.com"]`) quanto uma lista simples
         separada por vírgula (`https://a.com,https://b.com`) (Onda G)."""
-        texto = self.cors_origins.strip()
-        if texto.startswith("["):
-            return json.loads(texto)
-        return [origem.strip() for origem in texto.split(",") if origem.strip()]
+        origens: list[str] = []
+        for bruto in (self.cors_origins, self.cors_origins_proprias):
+            texto = bruto.strip()
+            lista = json.loads(texto) if texto.startswith("[") else [o.strip() for o in texto.split(",") if o.strip()]
+            origens.extend(o.rstrip("/") for o in lista if o.rstrip("/") not in origens)
+        return origens
 
     @property
     def e_ambiente_producao(self) -> bool:

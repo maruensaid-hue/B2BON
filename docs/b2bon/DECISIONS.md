@@ -1255,3 +1255,8 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   qualquer tenant com reunião confirmada). Corrigido em `reuniao_service.processar_lembretes`. E as rotinas de envio,
   retorno (lembretes/NPS), campanhas e retenção passam a ignorar tenants de demonstração (`_tenants_reais`): nada sai
   deles fora da sessão do visitante. Verificado em produção que nenhum envio real partiu das demonstrações.
+- **Adendo 3 (2026-10-02)**: com o log novo, o motivo real apareceu: "Disallowed CORS origin" para
+  `https://b2bon.onrender.com`. O frontend oficial roda em `b2bon.maruen-said.workers.dev` (único em `CORS_ORIGINS`);
+  o site estático do Render — destino do botão DEMO — é publicado pelo mesmo repositório mas nunca foi liberado na API.
+  Novo `CORS_ORIGINS_PROPRIAS` (padrão `https://b2bon.onrender.com`) soma-se a `CORS_ORIGINS`: só frontends da própria
+  B2B ON; nenhuma origem de terceiros.

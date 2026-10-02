@@ -38,3 +38,5 @@ demonstração invalidados quando o recurso é desligado e limite por IP real (�
 - `allow_private_network=True` no CORS: navegadores recentes pedem `Access-Control-Request-Private-Network` na
   checagem prévia; recusar quebrava o /demo no celular. Não amplia o acesso — só origens de `CORS_ORIGINS` recebem
   `Access-Control-Allow-Origin`; recusas são registradas com o motivo (logger `b2bon.cors`).
+- `CORS_ORIGINS_PROPRIAS` (padrão `https://b2bon.onrender.com`): frontends da própria B2B ON publicados por este
+  repositório, somados a `CORS_ORIGINS` do painel. Nunca incluir origem de terceiros aqui.
