@@ -1260,3 +1260,10 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   o site estático do Render — destino do botão DEMO — é publicado pelo mesmo repositório mas nunca foi liberado na API.
   Novo `CORS_ORIGINS_PROPRIAS` (padrão `https://b2bon.onrender.com`) soma-se a `CORS_ORIGINS`: só frontends da própria
   B2B ON; nenhuma origem de terceiros.
+- **Adendo 4 (2026-10-02, pedido do PO)**: créditos de IA da demonstração como TETO rígido. Antes, o bloqueio por falta
+  de saldo dependia do modo de cobrança (`AI_CREDITOS_MODO=MEASURE` mede sem bloquear) e do excedente — o teste novo
+  provou que a demonstração passava do limite nessas condições. Agora `execucoes.abrir` recusa sempre que o saldo de
+  um tenant de demonstração não cobre a operação ("Os créditos de IA desta demonstração acabaram"), e um teto global
+  soma todas as demonstrações na última hora (`DEMO_CREDITOS_IA_HORA`, padrão 20.000) contra abertura em série. Toda
+  chamada de IA passa por `gateway.gerar` → `execucoes.abrir` (não há chamada direta ao modelo fora do gateway).
+  Dimensionamento: uma demonstração pesada usa ~1.200 créditos; 5.000 cobrem ~4.

@@ -294,3 +294,54 @@ def test_ataques_de_quem_tem_um_token_de_demonstracao(client, db_session, demo):
     # 5) Busca global não devolve nada de fora do ambiente fictício.
     busca = client.get("/api/v1/busca?q=Cliente Real", headers=headers)
     assert "Cliente Real" not in busca.text
+
+
+@pytest.mark.parametrize("modo", ["ENFORCE", "MEASURE"])
+def test_creditos_da_demonstracao_sao_teto_e_a_ia_para_quando_acabam(client, db_session, demo, monkeypatch, modo):
+    """Pedido do PO (2026-10-02): os créditos da demonstração são o limite de consumo; acabou, bloqueia — em qualquer
+    modo de cobrança (MEASURE mede sem bloquear para clientes, nunca para a demonstração), mesmo com excedente ligado,
+    e sem como comprar, recarregar ou liberar excedente pela demonstração."""
+    from app.contexts.finops import carteira, execucoes
+    from app.services.errors import CreditosInsuficientes
+
+    monkeypatch.setattr(settings, "demo_creditos_ia", 100)
+    monkeypatch.setattr(settings, "ai_creditos_modo", modo)
+    corpo, headers = _abrir(client)
+    tenant_id = corpo["usuario"]["tenant_id"]
+    config = carteira.configuracao(db_session, tenant_id)
+    config.excedente_ativo, config.excedente_aprovado_por = True, "alguem"  # nem assim
+    db_session.commit()
+
+    for _ in range(2):  # 2 × análise de edital (50) = os 100 créditos
+        execucao = execucoes.abrir(db_session, tenant_id, "tender_analysis", confirmado=True)
+        execucoes.liquidar(db_session, execucao.id)
+    with pytest.raises(CreditosInsuficientes) as erro:
+        execucoes.abrir(db_session, tenant_id, "short_summary", confirmado=True)
+    assert "demonstração acabaram" in str(erro.value)
+    assert carteira.disponivel(db_session, tenant_id) <= 0
+
+    for rota in ("/api/v1/ai-credits/compras", "/api/v1/ai-credits/recarga-automatica", "/api/v1/ai-credits/excedente",
+                 "/api/v1/ai-credits/orcamento", "/api/v1/ai-credits/alocacoes"):
+        assert client.post(rota, headers=headers, json={}).status_code == 403, rota
+        assert client.put(rota, headers=headers, json={}).status_code == 403, rota
+
+
+def test_teto_global_de_ia_somando_todas_as_demonstracoes(client, db_session, demo, monkeypatch):
+    """Abrir várias demonstrações seguidas não soma créditos sem limite: o consumo de todas, na última hora, tem teto."""
+    from app.contexts.finops import execucoes
+    from app.services.errors import CreditosInsuficientes
+
+    monkeypatch.setattr(settings, "demo_creditos_ia_hora", 120)
+    a, _ = _abrir(client)
+    b, _ = _abrir(client)
+    execucoes.liquidar(db_session, execucoes.abrir(db_session, a["usuario"]["tenant_id"], "tender_analysis", confirmado=True).id)
+    execucoes.liquidar(db_session, execucoes.abrir(db_session, b["usuario"]["tenant_id"], "tender_analysis", confirmado=True).id)
+    with pytest.raises(CreditosInsuficientes, match="limite desta hora"):
+        execucoes.abrir(db_session, b["usuario"]["tenant_id"], "tender_analysis", confirmado=True)  # 150 > 120
+    # clientes reais não são afetados pelo teto das demonstrações
+    from app.contexts.finops import carteira
+    from app.contexts.finops.comercial import TipoLote
+    from decimal import Decimal
+    carteira.conceder(db_session, "tenant-teste", TipoLote.PROMOTIONAL, Decimal(500), "TESTE")
+    db_session.commit()
+    assert execucoes.abrir(db_session, "tenant-teste", "tender_analysis", confirmado=True).status == "RESERVADA"

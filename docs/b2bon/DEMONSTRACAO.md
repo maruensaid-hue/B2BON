@@ -33,7 +33,7 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
 | Licitações | Pregão Eletrônico em análise, Pregão SRP com decisão GO, RFP privado com proposta enviada, licitações **futuras** do PCA (concorrência e dispensa), NO-GO justificado e pregão ganho — cada um com requisitos (habilitação, atestado, SLA, garantia) |
 | Compras públicas | órgão, unidade, PCA do próximo ano, demandas, pregão em pesquisa de preços (3 fontes), fornecedores e contratos (um vencendo em 35 dias) |
 | Strategic Sourcing | RFP de notebooks com 3 fornecedores, propostas e avaliação por requisito (comparação pronta); RFQ de manutenção predial em rascunho |
-| IA | 5.000 créditos de IA próprios da demonstração (expiram com ela) |
+| IA | 5.000 créditos de IA próprios da demonstração (expiram com ela) — dá para ~4 demonstrações completas e pesadas (uma com 2 análises de edital, 2 Go/No-Go, 2 matrizes de conformidade, comparações de propostas, cadências e resumos usa ~1.200) |
 
 ## Segurança (D-083)
 
@@ -47,6 +47,10 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
   visões da plataforma são inalcançáveis; a empresa fictícia não aparece no diretório.
 - **Sem senha a ser roubada**: os usuários fictícios não têm senha e os e-mails usam um domínio que nunca entrega; o
   acesso é um token assinado que vale só para aquele ambiente e expira com ele.
+- **IA com teto rígido**: os 5.000 créditos são o limite de cada demonstração — acabou, a IA para naquele ambiente
+  ("Os créditos de IA desta demonstração acabaram"), em qualquer modo de cobrança, sem excedente, recarga ou compra
+  (essas telas são bloqueadas). Além disso, todas as demonstrações juntas não passam de 20.000 créditos por hora
+  (`DEMO_CREDITOS_IA_HORA`), contra quem abre várias seguidas; o resto das telas continua funcionando.
 - **Contra abuso**: 10 demonstrações novas por hora por endereço IP real, 120 por hora no total, 60 abertas ao mesmo
   tempo; ambientes vencidos são apagados sozinhos.
 - **Interruptor**: desligar `DEMO_HABILITADA` derruba na hora todas as sessões de demonstração abertas.
@@ -59,7 +63,7 @@ Link público para os representantes mostrarem o B2B ON a clientes, sem login ne
    - `DEMO_HABILITADA` = `true`
    - (opcional) `DEMO_TTL_HORAS` (padrão 8), `DEMO_MAX_SESSOES_ATIVAS` (60), `DEMO_SESSOES_POR_IP_HORA` (10),
      `DEMO_SESSOES_POR_HORA` (120), `DEMO_RESERVAS` (3 ambientes prontos à espera),
-     `DEMO_CREDITOS_IA` (5000).
+     `DEMO_CREDITOS_IA` (5000), `DEMO_CREDITOS_IA_HORA` (20000).
    Salve; o Render reinicia o serviço.
 3. **Testar**: abra `https://b2bon.onrender.com/demo` numa janela anônima — em poucos segundos aparece o painel com a
    faixa "Ambiente de demonstração". O botão **DEMO** no rodapé da tela de login leva ao mesmo link.

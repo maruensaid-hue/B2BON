@@ -21,14 +21,18 @@ import logging
 import time
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from contextlib import contextmanager
 from decimal import Decimal
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, object_session, sessionmaker
 
 from app.contexts.finops import carteira, catalogos, comercial, limites
 from app.contexts.finops.comercial import Evento
+from app.core.config import settings
 from app.models.creditos_ia import ExecucaoIa
+from app.models.tenant import Tenant
 from app.services.errors import ConfirmacaoNecessaria, CreditosInsuficientes, LimiteDeTaxaExcedido, NaoEncontrado
 
 logger = logging.getLogger("b2bon.creditos")
@@ -91,11 +95,15 @@ def abrir(db: Session, tenant_id: str, workload_codigo: str, *, feature: str | N
                                     usuario_id=usuario_id, gatilho=gatilho)
 
         disponivel = carteira.disponivel(sessao, tenant_id)
-        if creditos > disponivel and not _pode_exceder(sessao, tenant_id, creditos - disponivel):
+        demonstracao = _e_demonstracao(sessao, tenant_id)
+        if demonstracao and creditos > 0:
+            _verificar_teto_global_demonstracoes(sessao, creditos)
+        if creditos > disponivel and (demonstracao or not _pode_exceder(sessao, tenant_id, creditos - disponivel)):
             raise CreditosInsuficientes(
-                "Créditos de IA insuficientes para esta operação.",
+                "Os créditos de IA desta demonstração acabaram." if demonstracao else "Créditos de IA insuficientes para esta operação.",
                 {"creditos_necessarios": float(creditos), "creditos_disponiveis": float(max(disponivel, ZERO)),
-                 "acao": "Compre um pacote de AI Credits em Assinatura → AI Credits."},
+                 "acao": "Abra uma nova demonstração para continuar usando a IA." if demonstracao
+                 else "Compre um pacote de AI Credits em Assinatura → AI Credits."},
             )
         reserva = min(creditos, max(disponivel, ZERO))
         execucao = ExecucaoIa(
@@ -117,6 +125,28 @@ def abrir(db: Session, tenant_id: str, workload_codigo: str, *, feature: str | N
         raise
     finally:
         sessao.close()
+
+
+def _e_demonstracao(sessao: Session, tenant_id: str) -> bool:
+    """Ambiente de demonstração (D-082): o saldo próprio é o TETO — nunca excede, em nenhum modo de cobrança (nem em
+    MEASURE, que mede sem bloquear), sem excedente nem recarga. Acabou, a IA para naquele ambiente."""
+    return sessao.query(Tenant.id).filter(Tenant.id == tenant_id, Tenant.demo_expira_em.isnot(None)).first() is not None
+
+
+def _verificar_teto_global_demonstracoes(sessao: Session, creditos: Decimal) -> None:
+    """Contra abuso por várias demonstrações seguidas: a soma do consumo de IA de TODAS as demonstrações na última hora
+    não passa de `demo_creditos_ia_hora` (cada uma já tem o próprio teto). Conta reservadas e liquidadas."""
+    desde = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+    usados = (sessao.query(func.coalesce(func.sum(ExecucaoIa.creditos_estimados), 0))
+              .join(Tenant, Tenant.id == ExecucaoIa.tenant_id)
+              .filter(Tenant.demo_expira_em.isnot(None), ExecucaoIa.criado_em >= desde,
+                      ExecucaoIa.status.in_(("RESERVADA", "LIQUIDADA"))).scalar())
+    if Decimal(str(usados)) + creditos > Decimal(settings.demo_creditos_ia_hora):
+        logger.warning("DEMO_TETO_GLOBAL_IA usados=%s pedido=%s", usados, creditos)
+        raise CreditosInsuficientes(
+            "A IA das demonstrações atingiu o limite desta hora. As demais telas continuam funcionando.",
+            {"acao": "Tente de novo daqui a alguns minutos."},
+        )
 
 
 def _pode_exceder(sessao: Session, tenant_id: str, falta: Decimal) -> bool:
