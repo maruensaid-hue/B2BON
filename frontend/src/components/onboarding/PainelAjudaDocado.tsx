@@ -63,7 +63,7 @@ export function PainelAjudaDocado({ open, onOpen, onClose, onRefazerTour }: Pain
         type="button"
         onClick={onOpen}
         title="Assistente da B2B ON"
-        className="fixed right-5 bottom-5 z-[90] flex h-12 w-12 items-center justify-center rounded-full bg-cyan text-xl text-white shadow-xl transition-transform hover:scale-105"
+        className="fixed right-5 bottom-5 z-[90] flex h-12 w-12 items-center justify-center rounded-full bg-cyan text-xl text-on-accent shadow-xl transition-transform hover:scale-105"
       >
         💬
       </button>

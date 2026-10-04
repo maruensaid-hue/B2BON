@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   api,
@@ -59,6 +59,8 @@ export interface Usuario {
   /** Tutorial por módulo (raio-X 2026-09-21) — chaves de módulo já
    * vistas (ex.: ["crm", "prospeccao"]); `null` = nenhum ainda. */
   tutoriais_modulo_vistos: string[] | null;
+  /** D-086: tema da interface escolhido pelo usuário (null = ainda não escolheu; padrão claro). */
+  tema_preferido?: "light" | "dark" | null;
 }
 
 interface TokenResponse {
@@ -136,6 +138,8 @@ interface AuthContextValue {
   dispensarBannerBoasVindas: () => Promise<void>;
   /** Tutorial por módulo (raio-X 2026-09-21) — marca um módulo como já
    * visto, idempotente, pra não reabrir sozinho de novo. */
+  /** D-086: grava o tema no usuário (servidor) e na sessão salva. */
+  definirTemaPreferido: (tema: "light" | "dark") => Promise<void>;
   marcarTutorialModuloVisto: (modulo: string) => Promise<void>;
 }
 
@@ -272,6 +276,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Gravações de tema em FILA: dois cliques rápidos geram duas requisições, e a resposta da primeira podia chegar
+  // depois da segunda e deixar a preferência errada (achado no E2E). A sessão é atualizada na hora (otimista) e o
+  // servidor recebe as escolhas na ordem em que foram feitas.
+  const filaTema = useRef<Promise<unknown>>(Promise.resolve());
+  const definirTemaPreferido = useCallback((tema: "light" | "dark") => {
+    // Mesmo merge seguro dos demais: nunca substitui a sessão inteira por uma resposta.
+    setUsuario((atual) => {
+      if (!atual || atual.tema_preferido === tema) return atual;
+      const atualizado = { ...atual, tema_preferido: tema };
+      atualizarUsuarioSalvo(atualizado);
+      return atualizado;
+    });
+    const envio = filaTema.current.catch(() => undefined).then(() => api.put("/auth/preferencia-tema", { tema }));
+    filaTema.current = envio;
+    return envio.then(() => undefined);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       usuario,
@@ -291,6 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       atualizarWhatsappPessoal,
       dispensarBannerBoasVindas,
       marcarTutorialModuloVisto,
+      definirTemaPreferido,
     }),
     [
       usuario,
@@ -309,6 +331,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       atualizarWhatsappPessoal,
       dispensarBannerBoasVindas,
       marcarTutorialModuloVisto,
+      definirTemaPreferido,
     ],
   );
 

@@ -24,6 +24,12 @@ const PASSOS_TOUR: PassoGuia[] = [
     descricao: "Visão geral com os principais indicadores: funil de vendas, atividade recente e franquia do mês.",
   },
   {
+    id: "tema",
+    titulo: "Modo claro e escuro",
+    descricao:
+      "No canto superior direito: a lua (🌙) ativa o modo escuro e o sol (☀️) volta ao claro. A escolha é sua e vale em qualquer aparelho.",
+  },
+  {
     id: "crm",
     titulo: "CRM",
     descricao:

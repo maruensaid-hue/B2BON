@@ -9,10 +9,10 @@ const variantClasses: Record<Variant, string> = {
   // (`--color-cyan`) — raio-X 2026-09-21, padronização de botões: antes
   // o degradê criava um segundo tom de azul visualmente diferente do
   // `bg-cyan` usado em outros pontos da UI (ex.: item ativo do menu).
-  primary: "bg-cyan text-white",
-  violet: "bg-gradient-to-br from-violet to-[#5B21B6] text-white",
-  green: "bg-gradient-to-br from-green to-[#059669] text-white",
-  amber: "bg-gradient-to-br from-amber to-[#B45309] text-bg",
+  primary: "bg-cyan text-on-accent",
+  violet: "bg-gradient-to-br from-violet to-violet-deep text-on-accent",
+  green: "bg-gradient-to-br from-green to-green-deep text-on-accent",
+  amber: "bg-gradient-to-br from-amber to-amber-deep text-on-accent",
   ghost: "bg-transparent text-muted border border-border hover:text-text",
   danger: "bg-red/15 text-red border border-red/30",
 };

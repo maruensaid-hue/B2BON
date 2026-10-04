@@ -150,7 +150,7 @@ export function BuscaGlobal({ open, onClose }: BuscaGlobalProps) {
                     onMouseEnter={() => setIndiceSelecionado(indiceGlobal)}
                     onClick={() => irParaResultado(item)}
                     className={`flex w-full flex-col rounded-lg px-3 py-2 text-left transition-colors ${
-                      selecionado ? "bg-cyan/15" : "hover:bg-white/5"
+                      selecionado ? "bg-cyan/15" : "hover:bg-surf2"
                     }`}
                   >
                     <span className="text-[13px] font-semibold text-text">{item.titulo}</span>

@@ -37,6 +37,74 @@
   --color-nav-muted: #94a3b8;
   --color-nav-border: rgba(255, 255, 255, 0.08);
   --color-nav-hover: rgba(255, 255, 255, 0.06);
+
+  /* D-086: texto sobre cor de destaque sólida (botões, badges, item ativo). No claro é branco; no escuro os tons de
+     destaque ficam claros (contraste sobre fundo escuro), então o texto em cima deles passa a ser escuro. */
+  --color-on-accent: #ffffff;
+  /* Fim do degradê dos botões violeta/verde/âmbar — antes um hex fixo dentro do componente. */
+  --color-violet-deep: #5b21b6;
+  --color-green-deep: #047857;
+  --color-amber-deep: #92400e;
+  /* Marca (logo "B"): fixa nos dois temas — não muda com o tema para não descaracterizar a identidade. */
+  --color-brand: #0087c4;
+  --color-brand-deep: #005f7a;
+}
+
+/* D-086 — MODO ESCURO pelos mesmos tokens semânticos (nenhuma folha de estilo duplicada, nenhum invert()).
+   O tema é um atributo no <html> (`data-theme`), aplicado antes da primeira pintura pelo script do index.html.
+   Hierarquia de superfícies: página (bg) → cartões (surf) → campos/elevados (surf2) → hover/realce (surf3).
+   Acentos mais claros que no tema claro para manter contraste AA sobre fundo escuro (texto ≥ 4,5:1 em todas as
+   superfícies — conferido). */
+:root {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #0b1220;
+  --color-surf: #111a2b;
+  --color-surf2: #18233a;
+  --color-surf3: #22304a;
+
+  --color-cyan: #38bdf8;
+  --color-violet: #a78bfa;
+  --color-green: #34d399;
+  --color-amber: #fbbf24;
+  --color-red: #f87171;
+
+  --color-text: #e6edf7;
+  --color-muted: #9fb0c7;
+  --color-border: rgba(226, 232, 240, 0.1);
+  --color-border2: rgba(226, 232, 240, 0.18);
+
+  /* Menu lateral um degrau abaixo da página, separado por borda — no claro ele já era escuro. */
+  --color-nav-bg: #070c16;
+  --color-nav-text: #f1f5fb;
+  --color-nav-muted: #94a3b8;
+  --color-nav-border: rgba(255, 255, 255, 0.07);
+  --color-nav-hover: rgba(255, 255, 255, 0.05);
+
+  --color-on-accent: #0b1220;
+  --color-violet-deep: #9b80f9;
+  --color-green-deep: #10b981;
+  --color-amber-deep: #f59e0b;
+}
+
+/* Troca de tema suave (≈200 ms) só durante a troca — a classe é posta pelo ThemeProvider e retirada em seguida, para
+   não deixar transição permanente em toda a árvore. Só existe sem prefers-reduced-motion (a regra global de movimento
+   reduzido não venceria esta, que é mais específica). */
+@media (prefers-reduced-motion: no-preference) {
+  :root.tema-em-transicao,
+  :root.tema-em-transicao *,
+  :root.tema-em-transicao *::before,
+  :root.tema-em-transicao *::after {
+    transition:
+      background-color 200ms ease,
+      border-color 200ms ease,
+      color 200ms ease,
+      fill 200ms ease,
+      stroke 200ms ease !important;
+  }
 }
 
 * {
@@ -71,6 +139,22 @@ body {
 
 #root {
   height: 100%;
+}
+
+/* D-086: detalhes nativos de formulário seguindo os tokens nos dois temas (o resto vem do `color-scheme`). */
+::placeholder {
+  color: var(--color-muted);
+  opacity: 0.75;
+}
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+progress {
+  accent-color: var(--color-cyan);
+}
+select option {
+  background-color: var(--color-surf);
+  color: var(--color-text);
 }
 
 h1,

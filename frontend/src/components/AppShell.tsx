@@ -9,6 +9,7 @@ import { PainelAjudaDocado } from "@/components/onboarding/PainelAjudaDocado";
 import { TourGuiado } from "@/components/onboarding/TourGuiado";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { api, getDemoExpiraEm } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth";
@@ -377,7 +378,7 @@ function BannerLicencaSuspensa() {
         type="button"
         onClick={aoClicar}
         disabled={enviando}
-        className="flex-shrink-0 rounded-lg bg-amber px-3 py-1.5 font-semibold text-white disabled:opacity-60"
+        className="flex-shrink-0 rounded-lg bg-amber px-3 py-1.5 font-semibold text-on-accent disabled:opacity-60"
       >
         {enviando ? "Enviando..." : "Já fiz o pagamento"}
       </button>
@@ -456,7 +457,7 @@ function AvisoWhatsappPessoalFaltando() {
         Você ainda não cadastrou seu WhatsApp pessoal — sem ele, o botão de redirecionamento dos templates de
         WhatsApp da cadência não leva o cliente a lugar nenhum.
       </span>
-      <NavLink to="/perfil" className="flex-shrink-0 rounded-lg bg-cyan px-3 py-1.5 font-semibold text-white">
+      <NavLink to="/perfil" className="flex-shrink-0 rounded-lg bg-cyan px-3 py-1.5 font-semibold text-on-accent">
         Cadastrar agora
       </NavLink>
       <button onClick={() => setDispensado(true)} className="flex-shrink-0 text-[11px] text-muted hover:text-text">
@@ -646,7 +647,7 @@ export function AppShell() {
         )}
       >
         <div className="flex items-center gap-2.5 border-b border-nav-border p-3.5">
-          <div className="flex h-8.5 w-8.5 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan to-[#005F7A] font-head text-[17px] font-black text-white">
+          <div className="flex h-8.5 w-8.5 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand to-brand-deep font-head text-[17px] font-black text-white">
             B
           </div>
           {!collapsed && (
@@ -693,7 +694,7 @@ export function AppShell() {
               <span className={collapsed ? CLASSE_ICONE_COLAPSADO : CLASSE_ICONE_EXPANDIDO}>🔔</span>
               {!collapsed && <span className="flex-1 overflow-hidden text-left text-ellipsis">Notificações</span>}
               {contagemNaoLidas > 0 && (
-                <span className="flex-shrink-0 rounded-full bg-red px-1.5 text-[9px] font-semibold text-white">
+                <span className="flex-shrink-0 rounded-full bg-red px-1.5 text-[9px] font-semibold text-on-accent">
                   {contagemNaoLidas}
                 </span>
               )}
@@ -872,11 +873,16 @@ export function AppShell() {
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center gap-3 border-b border-border p-3 sm:hidden">
-          <button onClick={() => setMobileOpen(true)} className="text-lg text-text">
+        {/* Cabeçalho global (D-086): no celular, menu + marca; em qualquer tela, o seletor de tema no canto superior
+            direito — uma implementação só, para a plataforma inteira. */}
+        <header className="flex items-center gap-3 border-b border-border bg-surf px-3 py-2 sm:px-4 sm:py-1.5">
+          <button onClick={() => setMobileOpen(true)} aria-label="Abrir menu" className="text-lg text-text sm:hidden">
             ☰
           </button>
-          <div className="font-head text-sm font-bold">B2B ON</div>
+          <div className="font-head text-sm font-bold sm:hidden">B2B ON</div>
+          <div className="ml-auto flex items-center gap-2" data-tour-id="tema">
+            <ThemeToggle />
+          </div>
         </header>
 
         {!temLicencaAtiva && <BannerLicencaSuspensa />}

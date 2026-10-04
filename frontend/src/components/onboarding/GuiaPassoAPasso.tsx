@@ -144,7 +144,7 @@ export function GuiaPassoAPasso({ open, onClose, passos, atributoSeletor, atribu
                 return atual + 1;
               })
             }
-            className="rounded-lg bg-cyan px-3 py-1.5 text-[12px] font-bold text-bg"
+            className="rounded-lg bg-cyan px-3 py-1.5 text-[12px] font-bold text-on-accent"
           >
             {ultimoPasso ? "Concluir" : "Próximo →"}
           </button>

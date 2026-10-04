@@ -1269,3 +1269,28 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   Dimensionamento: uma demonstração pesada usa ~1.200 créditos; 5.000 cobrem ~4.
 - **Adendo 5 (2026-10-02, PO)**: teto global de IA das demonstrações reduzido para 10.000 créditos por hora
   (`DEMO_CREDITOS_IA_HORA`) — comporta ~8 demonstrações pesadas por hora.
+
+## D-086 · 2026-10-04 · Tema claro/escuro por usuário no App Shell
+- **Decisão (texto do PO)**: "B2B ON supports persistent per-user Light/Dark theme selection through the global App
+  Shell. ThemeToggle is displayed in the upper-right header. The displayed icon represents the available action: moon
+  activates Dark Mode and sun activates Light Mode."
+- **Arquitetura (sem segundo sistema de temas)**: os tokens semânticos que já existiam no `@theme` do Tailwind v4
+  (`--color-bg/surf/surf2/surf3/text/muted/border/border2/cyan/violet/green/amber/red/nav-*`) ganham valores escuros
+  em `:root[data-theme="dark"]` (`index.css`). Nenhum `filter: invert()`, nenhuma folha duplicada; componentes não
+  escolhem cor por tema. Tokens novos: `on-accent` (texto sobre acento sólido — branco no claro, escuro no escuro),
+  `violet/green/amber-deep` (fim dos degradês, antes hex fixo) e `brand/brand-deep` (logo, fixo nos dois temas).
+  `color-scheme` acompanha o tema (controles nativos, datas, scroll).
+- **Escuro**: hierarquia página → cartões → campos/elevados → realce (#0b1220 → #111a2b → #18233a → #22304a), sem preto
+  puro; menu lateral um degrau abaixo. Acentos clareados para contraste AA: texto, texto secundário e acentos ≥ 4,5:1
+  em todas as superfícies (conferido).
+- **Preferência do USUÁRIO** (não do tenant): coluna `usuario.tema_preferido` ("light" | "dark"; nulo = claro), no
+  mesmo padrão das outras preferências de UI (`preferencias_dashboard`, `boas_vindas_banner_dispensado`) — sem tabela
+  nova. `PUT /auth/preferencia-tema`; volta no login (`UsuarioSchema.tema_preferido`), então vale em qualquer aparelho.
+  `localStorage["b2bon.theme"]` é o cache lido por um script no `index.html` antes da primeira pintura (sem flash).
+  Gravações em fila e sessão atualizada na hora (dois cliques rápidos não invertem a escolha — achado no E2E).
+- **ThemeToggle**: no cabeçalho global do App Shell (que passou a existir também no desktop), canto superior direito;
+  claro mostra 🌙 ("Ativar modo escuro"), escuro mostra ☀️ ("Ativar modo claro") — `aria-label` + `title`, botão nativo
+  (Tab/Enter/Espaço), foco visível. Transição de 200 ms só durante a troca e só sem `prefers-reduced-motion`.
+- **Não muda**: regras de negócio, permissões, isolamento, APIs (só a rota nova de preferência), cálculos, preços,
+  comissões, AI Credits, integrações, dados. Demonstração pode trocar o tema (rota liberada: só o próprio usuário).
+- **Status**: ACEITA. Migração `d1f3b5c7e9a2` (reversível).

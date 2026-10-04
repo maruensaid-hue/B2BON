@@ -204,7 +204,7 @@ export function Planos() {
       <header className="border-b border-nav-border bg-nav-bg">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5.5 py-4">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="flex h-8.5 w-8.5 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan to-[#005F7A] font-head text-[17px] font-black text-white">
+            <div className="flex h-8.5 w-8.5 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand to-brand-deep font-head text-[17px] font-black text-white">
               B
             </div>
             <div className="font-head text-[15px] font-extrabold text-nav-text">
@@ -332,7 +332,7 @@ export function Planos() {
               }`}
             >
               {plano.destaque && (
-                <span className="absolute -top-2.5 left-5 rounded-full bg-cyan px-2.5 py-0.5 text-[10px] font-bold text-white">
+                <span className="absolute -top-2.5 left-5 rounded-full bg-cyan px-2.5 py-0.5 text-[10px] font-bold text-on-accent">
                   Mais escolhido
                 </span>
               )}
@@ -359,7 +359,7 @@ export function Planos() {
                 <Link
                   to={`/criar-conta?plano=${encodeURIComponent(plano.checkoutPlanoNome)}`}
                   className={`mt-1 rounded-lg px-4 py-2.5 text-center text-[13px] font-bold transition-transform hover:scale-[1.02] ${
-                    plano.destaque ? "bg-cyan text-white" : "border border-border text-text hover:bg-surf2"
+                    plano.destaque ? "bg-cyan text-on-accent" : "border border-border text-text hover:bg-surf2"
                   }`}
                 >
                   Assine aqui
@@ -392,7 +392,7 @@ export function Planos() {
           </div>
           <Link
             to="/criar-conta"
-            className="mt-4 inline-block rounded-lg bg-cyan px-6 py-3 text-[13.5px] font-bold text-white transition-transform hover:scale-[1.02]"
+            className="mt-4 inline-block rounded-lg bg-cyan px-6 py-3 text-[13.5px] font-bold text-on-accent transition-transform hover:scale-[1.02]"
           >
             Comece a usar gratuitamente
           </Link>

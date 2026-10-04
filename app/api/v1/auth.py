@@ -39,6 +39,7 @@ from app.schemas.auth import (
     LoginGoogleRequestSchema,
     LoginRequestSchema,
     MarcarTutorialModuloVistoRequestSchema,
+    PreferenciaTemaRequestSchema,
     RecursosPlanoSchema,
     RedefinirSenhaRequestSchema,
     RegistrarPublicoRequestSchema,
@@ -325,6 +326,20 @@ def dispensar_banner_boas_vindas(
     usuario.boas_vindas_banner_dispensado = True
     db.commit()
     db.refresh(usuario)
+    return _construir_usuario_schema(usuario, db)
+
+
+@router.put("/preferencia-tema", response_model=UsuarioSchema)
+def definir_preferencia_tema(
+    dados: PreferenciaTemaRequestSchema,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> UsuarioSchema:
+    """D-086: tema claro/escuro do próprio usuário logado (preferência individual, não do tenant)."""
+    if usuario.tema_preferido != dados.tema:
+        usuario.tema_preferido = dados.tema
+        db.commit()
+        db.refresh(usuario)
     return _construir_usuario_schema(usuario, db)
 
 

@@ -15,7 +15,7 @@ import re
 API = "/api/v1"
 # (prefixo, métodos permitidos) — "*" = leitura e escrita no próprio tenant fictício
 PERMITIDAS: tuple[tuple[str, str], ...] = tuple((API + p, m) for p, m in (
-    ("/auth/eu", "GET"), ("/auth/dispensar-banner-boas-vindas", "POST"), ("/auth/marcar-tutorial-modulo-visto", "POST"),
+    ("/auth/eu", "GET"), ("/auth/dispensar-banner-boas-vindas", "POST"), ("/auth/marcar-tutorial-modulo-visto", "POST"), ("/auth/preferencia-tema", "PUT"),
     ("/auth/demonstracao", "*"),
     ("/contas", "*"), ("/leads", "*"), ("/decisores", "*"), ("/icp", "*"), ("/ofertas", "*"), ("/listas-prospeccao", "*"),
     ("/crm", "*"), ("/cadencias", "*"), ("/campanhas", "*"), ("/aprovacoes", "*"), ("/envios", "*"), ("/reunioes", "*"),

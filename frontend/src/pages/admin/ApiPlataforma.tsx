@@ -154,7 +154,7 @@ export function ApiPlataforma() {
       {segredo && (
         <div className="mb-4 rounded-lg border border-amber bg-amber/10 p-3 text-[12px]">
           <div className="mb-1 font-bold text-amber">{segredo.titulo}</div>
-          <code className="block break-all rounded bg-black/30 p-2 text-[11px]">{segredo.valor}</code>
+          <code className="block break-all rounded bg-surf3 p-2 text-[11px]">{segredo.valor}</code>
           <Button size="sm" className="mt-2" onClick={() => setSegredo(null)}>
             Já copiei
           </Button>

@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
@@ -66,6 +68,9 @@ class UsuarioSchema(BaseModel):
     # no banco (nulo = nenhum módulo visto ainda) — frontend trata `null`
     # com `?? []` antes de checar `.includes(...)`.
     tutoriais_modulo_vistos: list[str] | None = None
+    # D-086: tema da interface escolhido pelo próprio usuário ("light" | "dark"; nulo = padrão claro). Vem direto de
+    # `Usuario.tema_preferido` — o frontend aplica no login, então a escolha acompanha o usuário em qualquer aparelho.
+    tema_preferido: Literal["light", "dark"] | None = None
 
 
 class LoginRequestSchema(BaseModel):
@@ -154,3 +159,7 @@ class RedefinirSenhaRequestSchema(BaseModel):
 
 class RespostaMensagemSchema(BaseModel):
     mensagem: str
+
+
+class PreferenciaTemaRequestSchema(BaseModel):
+    tema: Literal["light", "dark"]

@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <meta name="theme-color" content="#050D1A" />
+    <script>
+      /* D-086: aplica o tema escolhido ANTES da primeira pintura (sem flash claro → escuro). A preferência do servidor
+         (Usuario.tema_preferido) é sincronizada para esta chave pelo ThemeProvider a cada login. */
+      (function () {
+        try {
+          var tema = localStorage.getItem("b2bon.theme");
+          if (tema === "dark" || tema === "light") document.documentElement.setAttribute("data-theme", tema);
+        } catch (e) {}
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="B2B ON" />

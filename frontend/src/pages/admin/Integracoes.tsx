@@ -118,7 +118,7 @@ export function Integracoes() {
       {chaveGerada && (
         <div className="mb-4 rounded-lg border border-amber bg-amber/10 p-3 text-[12px]">
           <div className="mb-1 font-bold text-amber">Copie a chave agora — ela não aparece de novo:</div>
-          <code className="block break-all rounded bg-black/30 p-2 text-[11px]">{chaveGerada}</code>
+          <code className="block break-all rounded bg-surf3 p-2 text-[11px]">{chaveGerada}</code>
           <Button size="sm" className="mt-2" onClick={() => setChaveGerada(null)}>
             Já copiei
           </Button>
@@ -130,7 +130,7 @@ export function Integracoes() {
           <div className="mb-1 font-bold text-amber">
             Copie o segredo de assinatura agora — ele não aparece de novo (usado pra verificar `X-B2BON-Signature`):
           </div>
-          <code className="block break-all rounded bg-black/30 p-2 text-[11px]">{segredoGerado}</code>
+          <code className="block break-all rounded bg-surf3 p-2 text-[11px]">{segredoGerado}</code>
           <Button size="sm" className="mt-2" onClick={() => setSegredoGerado(null)}>
             Já copiei
           </Button>

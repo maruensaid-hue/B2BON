@@ -52,6 +52,8 @@ class Usuario(Base):
     # ao FECHAR o tutorial por qualquer motivo (concluiu ou pulou), nunca
     # reaberto sozinho depois disso — só via botão manual "Rever tutorial".
     tutoriais_modulo_vistos: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Tema da interface (D-086): preferência do USUÁRIO, não do tenant — "light" | "dark"; nulo = padrão (claro).
+    tema_preferido: Mapped[str | None] = mapped_column(String, nullable=True)
     # Webmail (raio-X 2026-09-24) — configuração pessoal do vendedor pro
     # e-mail direto, mesmo molde de `whatsapp_pessoal` (por usuário, não
     # por tenant). Opcional — sem `email_nome_exibicao`, cai no `nome`;

@@ -122,7 +122,7 @@ export function Login() {
     <div className="flex h-screen items-center justify-center p-4">
       <Card glow className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan to-[#005F7A] font-head text-2xl font-black text-bg">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-deep font-head text-2xl font-black text-white">
             B
           </div>
           <div className="font-head text-lg font-extrabold">
@@ -217,7 +217,7 @@ export function Login() {
         <div className="mt-4 flex justify-center">
           <a
             href={URL_DEMO}
-            className="rounded-lg border border-cyan px-6 py-2 text-[12px] font-bold tracking-widest text-cyan hover:bg-cyan hover:text-white"
+            className="rounded-lg border border-cyan px-6 py-2 text-[12px] font-bold tracking-widest text-cyan hover:bg-cyan hover:text-on-accent"
             data-testid="link-demo"
           >
             DEMO

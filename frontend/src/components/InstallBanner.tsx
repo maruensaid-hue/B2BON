@@ -21,7 +21,7 @@ export function InstallBanner() {
   if (!deferredPrompt || dismissed) return null;
 
   return (
-    <div className="fixed top-0 right-0 left-0 z-[200] flex items-center justify-between gap-2.5 bg-cyan px-4 py-2.5 text-sm font-semibold text-bg">
+    <div className="fixed top-0 right-0 left-0 z-[200] flex items-center justify-between gap-2.5 bg-cyan px-4 py-2.5 text-sm font-semibold text-on-accent">
       <span>📱 Instalar B2B ON na tela inicial?</span>
       <div className="flex gap-2">
         <button
@@ -34,7 +34,7 @@ export function InstallBanner() {
         >
           Instalar
         </button>
-        <button className="text-lg text-bg" onClick={() => setDismissed(true)}>
+        <button className="text-lg text-on-accent" onClick={() => setDismissed(true)}>
           ✕
         </button>
       </div>

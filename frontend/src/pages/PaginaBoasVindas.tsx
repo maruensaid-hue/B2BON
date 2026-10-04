@@ -55,7 +55,7 @@ export function PaginaBoasVindas() {
       <header className="border-b border-nav-border bg-nav-bg">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5.5 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8.5 w-8.5 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan to-[#005F7A] font-head text-[17px] font-black text-white">
+            <div className="flex h-8.5 w-8.5 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand to-brand-deep font-head text-[17px] font-black text-white">
               B
             </div>
             <div className="font-head text-[15px] font-extrabold text-nav-text">
@@ -79,7 +79,7 @@ export function PaginaBoasVindas() {
           <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
               to="/criar-conta"
-              className="w-full rounded-lg bg-cyan px-6 py-3 text-center text-[13.5px] font-bold text-white transition-transform hover:scale-[1.02] sm:w-auto"
+              className="w-full rounded-lg bg-cyan px-6 py-3 text-center text-[13.5px] font-bold text-on-accent transition-transform hover:scale-[1.02] sm:w-auto"
             >
               Comece a usar gratuitamente
             </Link>
@@ -128,7 +128,7 @@ export function PaginaBoasVindas() {
           </div>
           <Link
             to="/criar-conta"
-            className="mt-4 inline-block rounded-lg bg-cyan px-6 py-3 text-[13.5px] font-bold text-white transition-transform hover:scale-[1.02]"
+            className="mt-4 inline-block rounded-lg bg-cyan px-6 py-3 text-[13.5px] font-bold text-on-accent transition-transform hover:scale-[1.02]"
           >
             Comece a usar gratuitamente
           </Link>

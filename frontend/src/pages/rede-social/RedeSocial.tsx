@@ -673,7 +673,7 @@ export function RedeSocial() {
         key={post.id}
         className={
           embutido
-            ? "rounded-lg border border-border/60 bg-black/[0.02] p-2 text-[12px]"
+            ? "rounded-lg border border-border/60 bg-surf2/60 p-2 text-[12px]"
             : "rounded-lg border border-border p-3 text-[12px]"
         }
       >

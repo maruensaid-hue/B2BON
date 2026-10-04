@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Modo claro e modo escuro (2026-10-04, D-086)
+
+- Novo botão no canto superior direito de todas as telas: 🌙 ativa o modo escuro; ☀️ volta ao claro. A troca é instantânea, sem recarregar.
+- A escolha é de cada usuário e acompanha a pessoa: continua depois de atualizar a página, sair e entrar de novo ou entrar por outro aparelho.
+- O modo escuro cobre a plataforma inteira (menus, cartões, tabelas, formulários, janelas, gráficos, Kanban, MAP, PREDATOR, Shoal, Licitações, Compras, Sourcing, Admin), com contraste adequado para leitura; o modo claro continua como era.
+
 ## Campos de texto em janelas aceitam o texto inteiro (2026-10-02)
 
 - Corrigido: em qualquer janela com campo de texto (por exemplo, a confirmação "Excluir tenant definitivamente"), só entrava um caractere por vez — a janela puxava o foco de volta a cada tecla. Agora o foco vai para a janela só quando ela abre.

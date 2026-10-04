@@ -266,7 +266,7 @@ export function SalaCorporativaModal({ salaId, nomeExibicao, onClose }: Props) {
               key={canal.id}
               onClick={() => setCanalAtivoId(canal.id)}
               className={`flex-shrink-0 rounded-full px-3 py-1 text-[11px] ${
-                canalAtivoId === canal.id ? "bg-cyan text-white" : "bg-surf2 text-muted"
+                canalAtivoId === canal.id ? "bg-cyan text-on-accent" : "bg-surf2 text-muted"
               }`}
             >
               {canal.escopo === "interno" && "🔒 "}

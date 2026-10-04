@@ -171,7 +171,7 @@ export function CerebroCorporativo() {
           <div key={item.id} className="border-b border-border py-2 text-[12px]">
             <div className="flex items-center justify-between">
               <div>
-                <span className="mr-2 rounded bg-black/20 px-1.5 py-0.5 text-[10px] uppercase">{item.tipo}</span>
+                <span className="mr-2 rounded bg-surf3 px-1.5 py-0.5 text-[10px] uppercase">{item.tipo}</span>
                 <span className="font-semibold">{item.titulo}</span>
                 <span className={`ml-2 text-[10px] ${item.visibilidade === "rede" ? "text-cyan" : "text-muted"}`}>
                   {item.visibilidade === "rede" ? "compartilhável com a rede" : "interno"}

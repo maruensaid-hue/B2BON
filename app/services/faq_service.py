@@ -163,6 +163,8 @@ responsável (não somem); o histórico de pagamento é mantido por obrigação 
 ambiente próprio com dados fictícios que expira em 8 horas — vários representantes podem demonstrar ao \
 mesmo tempo sem interferência. Nada sai da plataforma (e-mail, WhatsApp, agenda e integrações são \
 simulados) e a área administrativa não abre na demonstração.
+- Modo claro/escuro: botão no canto superior direito de qualquer tela — a lua (🌙) ativa o modo escuro e o sol (☀️) \
+volta ao claro. A escolha é de cada usuário e vale em qualquer aparelho depois do login.
 - Central de Negócios (página que aparece ao sair): índices de bolsa, câmbio/cripto/ouro e notícias de \
 negócios reais dos portais (UOL, G1, InfoMoney), atualizadas sozinhas com a página aberta; quando uma fonte \
 falha, mostra a última cotação real conhecida — nunca um número inventado.

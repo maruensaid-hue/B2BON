@@ -157,7 +157,7 @@ export function CriarConta() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card glow className="w-full max-w-md">
         <div className="mb-6 text-center">
-          <Link to="/" className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan to-[#005F7A] font-head text-2xl font-black text-bg">
+          <Link to="/" className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-deep font-head text-2xl font-black text-white">
             B
           </Link>
           <div className="font-head text-lg font-extrabold">
