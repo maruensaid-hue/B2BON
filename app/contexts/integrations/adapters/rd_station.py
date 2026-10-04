@@ -1,6 +1,6 @@
-"""Conector RD Station CRM → modelo canônico (Fase 13, conector 4 de 4).
+"""Conector RD Station CRM ↔ modelo canônico (Fase 13, conector 4 de 4; escrita D-087).
 
-Somente leitura, via API v1 (`https://crm.rdstation.com/api/v1`, host
+Leitura via API v1 (`https://crm.rdstation.com/api/v1`, host
 fixo). A v1 só aceita o token na query string (`?token=`): o filtro de
 log do `http_base` mascara o valor e o erro do sync também é mascarado.
 Paginação por `page`/`limit` + `has_more`. A v1 não filtra por data de
@@ -14,6 +14,13 @@ aberto (ganho/perda é o `win` do negócio).
 
 Configuração: `moeda` (padrão BRL; a v1 não informa moeda) e
 `campo_cnpj` (`custom_field_id` do campo personalizado da organização).
+
+Escrita (D-087): organização procurada pelo nome exato e contato pelo
+e-mail — encontrados, não são alterados; negociação, anotação e tarefa
+criadas. No RD Station CRM anotações e tarefas SEMPRE pertencem a uma
+negociação: sem negociação vinculada, a atividade é pulada (não inventamos
+negociação). Sinais do MAP e opt-out em campos personalizados PRÓPRIOS
+(informe os `custom_field_id`; a v1 não cria campos).
 """
 
 import json
@@ -25,7 +32,21 @@ import httpx
 
 from app.contexts.integrations.adapters import interacoes
 from app.contexts.integrations.adapters.http_base import ClienteHttp
-from app.contexts.integrations.contract import AdapterCapabilities, CrmAdapter, Page
+from app.contexts.integrations.contract import (
+    ESCRITAS,
+    AdapterCapabilities,
+    AtividadeSaida,
+    CamposProprios,
+    CrmAdapter,
+    EmpresaSaida,
+    NegocioSaida,
+    OperacaoNaoSuportada,
+    Page,
+    PessoaSaida,
+    SinaisContaSaida,
+    TarefaSaida,
+    TipoAtividadeSaida,
+)
 from app.contexts.shared.canonical.base import SourceRef, canonical_id
 from app.contexts.shared.canonical.commercial import (
     Account,
@@ -33,6 +54,7 @@ from app.contexts.shared.canonical.commercial import (
     Activity,
     ActivityKind,
     Contact,
+    CSMetric,
     Customer,
     Interaction,
     Money,
@@ -71,6 +93,9 @@ def validar(credenciais: dict, configuracao: dict) -> None:
     campo = configuracao.get("campo_cnpj")
     if campo is not None and not (isinstance(campo, str) and _ID.match(campo)):
         raise ValueError("campo_cnpj deve ser o id do campo personalizado da organização.")
+    nps = configuracao.get("campo_nps")
+    if nps is not None and not (isinstance(nps, str) and _ID.match(nps)):
+        raise ValueError("campo_nps deve ser o nome/id do campo com a nota NPS (0–10) da empresa.")
     moeda = configuracao.get("moeda", "BRL")
     if not (isinstance(moeda, str) and _MOEDA.match(moeda)):
         raise ValueError("moeda deve ser um código ISO 4217 (ex.: BRL).")
@@ -112,6 +137,7 @@ class RdStationCrmAdapter(CrmAdapter):
         self._token = credenciais["token"]
         self._moeda = configuracao.get("moeda", "BRL")
         self._campo_cnpj = configuracao.get("campo_cnpj")
+        self._campo_nps = configuracao.get("campo_nps")
         self._negocios: list[dict] | None = None
         self._ganhos: dict[str, datetime] | None = None
         self._pipelines: list[dict] | None = None
@@ -158,7 +184,7 @@ class RdStationCrmAdapter(CrmAdapter):
 
     # --- Contrato ----------------------------------------------------------------
     def capabilities(self) -> AdapterCapabilities:
-        return AdapterCapabilities(system=SYSTEM, readable_entities=_LEGIVEIS, incremental_sync=False)
+        return AdapterCapabilities(system=SYSTEM, readable_entities=_LEGIVEIS, writable_entities=ESCRITAS, incremental_sync=False, webhooks=True)
 
     def _cnpj(self, r: dict) -> str | None:
         if not self._campo_cnpj:
@@ -309,7 +335,18 @@ class RdStationCrmAdapter(CrmAdapter):
         return interacoes.pagina(self._interacoes, account_id)
 
     def list_cs_metrics(self, tenant_id, cursor=None, limit=100):
-        return Page(items=[])  # RD Station CRM não tem NPS
+        """RD Station CRM não tem NPS nativo: lê o campo personalizado `campo_nps` (D-087)."""
+        if not self._campo_nps:
+            return Page(items=[])
+        return self._pagina(tenant_id, "organizations", "organizations", cursor, self._metrica_nps)
+
+    def _metrica_nps(self, r: dict, agora: datetime) -> CSMetric | None:
+        valor = next((c.get("value") for c in r.get("custom_fields") or [] if c.get("custom_field_id") == self._campo_nps), None)
+        nota = interacoes.nota_nps(valor)
+        if nota is None:
+            return None
+        return CSMetric(id=cid("cs_metric", f"nps-{r['id']}"), tenant_id=self._tenant_id, source=_src("organization", r["id"], agora),
+                        account_id=cid("account", r["id"]), metric="NPS", value=nota, scale_max=10, collected_at=_data(r.get("updated_at")))
 
     def list_offers(self, tenant_id):
         if not self._meu(tenant_id):
@@ -320,6 +357,107 @@ class RdStationCrmAdapter(CrmAdapter):
                   name=r.get("name") or f"Produto {r['id']}", description=r.get("description"), active=r.get("visible", True) is not False)
             for r in self._todos("products", "products")
         ]
+
+
+    # --- Escrita (D-087) ----------------------------------------------------------
+    def _exigir_meu(self, tenant_id: str) -> None:
+        if not self._meu(tenant_id):
+            raise PermissionError("Conexão de outro tenant.")
+
+    def _enviar(self, metodo: str, recurso: str, corpo: dict) -> dict:
+        return self._http.escrever(metodo, f"/api/v1/{recurso}", corpo, params={"token": self._token})
+
+    @staticmethod
+    def _id_resposta(resposta: dict) -> str:
+        valor = resposta.get("_id") or resposta.get("id")
+        if not valor:
+            raise ValueError("RD Station não devolveu o id do registro criado.")
+        return str(valor)
+
+    def garantir_empresa(self, tenant_id: str, empresa: EmpresaSaida) -> str:
+        self._exigir_meu(tenant_id)
+        resposta = self._get("organizations", q=empresa.nome, limit=20)
+        alvo = empresa.nome.strip().lower()
+        existente = next((o for o in resposta.get("organizations") or [] if (o.get("name") or "").strip().lower() == alvo), None)
+        if existente:
+            return str(existente.get("_id") or existente["id"])
+        organizacao: dict = {"name": empresa.nome}
+        if empresa.dominio:
+            organizacao["url"] = f"https://{empresa.dominio}"
+        if empresa.dono_externo_id:
+            organizacao["user_id"] = _rd_id(empresa.dono_externo_id)
+        if self._campo_cnpj and empresa.cnpj:
+            organizacao["organization_custom_fields"] = [{"custom_field_id": self._campo_cnpj, "value": empresa.cnpj}]
+        return self._id_resposta(self._enviar("POST", "organizations", {"organization": organizacao}))
+
+    def garantir_pessoa(self, tenant_id: str, pessoa: PessoaSaida) -> str:
+        self._exigir_meu(tenant_id)
+        if pessoa.email:
+            resposta = self._get("contacts", email=pessoa.email.lower())
+            contatos = resposta.get("contacts") or []
+            if contatos:
+                return str(contatos[0].get("_id") or contatos[0]["id"])
+        contato: dict = {"name": pessoa.nome}
+        if pessoa.cargo:
+            contato["title"] = pessoa.cargo
+        if pessoa.email:
+            contato["emails"] = [{"email": pessoa.email}]
+        if pessoa.telefone:
+            contato["phones"] = [{"phone": pessoa.telefone}]
+        if pessoa.empresa_id:
+            contato["organization_id"] = _rd_id(pessoa.empresa_id)
+        return self._id_resposta(self._enviar("POST", "contacts", {"contact": contato}))
+
+    def criar_negocio(self, tenant_id: str, negocio: NegocioSaida) -> str:
+        self._exigir_meu(tenant_id)
+        dados: dict = {"name": negocio.nome, "deal_stage_id": _rd_id(negocio.estagio_id)}
+        if negocio.dono_externo_id:
+            dados["user_id"] = _rd_id(negocio.dono_externo_id)
+        if negocio.previsao_fechamento:
+            dados["prediction_date"] = negocio.previsao_fechamento.isoformat()
+        corpo: dict = {"deal": dados, "organization": {"_id": _rd_id(negocio.empresa_id)}}
+        if negocio.pessoa_id:
+            corpo["contacts"] = [{"_id": _rd_id(negocio.pessoa_id)}]
+        return self._id_resposta(self._enviar("POST", "deals", corpo))
+
+    def registrar_atividade(self, tenant_id: str, atividade: AtividadeSaida) -> str:
+        self._exigir_meu(tenant_id)
+        if not atividade.negocio_id:
+            raise OperacaoNaoSuportada("RD Station CRM só registra atividades dentro de uma negociação (ainda não há negociação para esta conta).")
+        canal = {TipoAtividadeSaida.WHATSAPP: "WhatsApp", TipoAtividadeSaida.LINKEDIN: "LinkedIn", TipoAtividadeSaida.EMAIL: "E-mail",
+                 TipoAtividadeSaida.LIGACAO: "Ligação", TipoAtividadeSaida.REUNIAO: "Reunião"}.get(atividade.tipo, "Nota")
+        texto = f"[{canal}] {atividade.assunto}\n{atividade.descricao}".strip()
+        corpo: dict = {"deal_id": _rd_id(atividade.negocio_id), "text": texto[:5000]}
+        if atividade.dono_externo_id:
+            corpo["user_id"] = _rd_id(atividade.dono_externo_id)
+        return self._id_resposta(self._enviar("POST", "activities", {"activity": corpo}))
+
+    def criar_tarefa(self, tenant_id: str, tarefa: TarefaSaida) -> str:
+        raise OperacaoNaoSuportada("RD Station CRM só cria tarefas dentro de uma negociação; o sinal de risco foi gravado na organização.")
+
+    def _campo_personalizado(self, recurso: str, chave: str, id_: str, campo: str, valor) -> None:
+        self._enviar("PUT", f"{recurso}/{_rd_id(id_)}", {chave.removesuffix("s"): {f"{chave.removesuffix('s')}_custom_fields": [{"custom_field_id": _rd_id(campo), "value": valor}]}})
+
+    def marcar_optout(self, tenant_id: str, pessoa_id: str, campos: CamposProprios) -> None:
+        self._exigir_meu(tenant_id)
+        if not campos.optout:
+            raise OperacaoNaoSuportada("RD Station CRM não tem opt-out padrão: informe o campo personalizado de opt-out da B2B ON.")
+        self._campo_personalizado("contacts", "contacts", pessoa_id, campos.optout, "sim")
+
+    def gravar_sinais_conta(self, tenant_id: str, sinais: SinaisContaSaida, campos: CamposProprios) -> None:
+        self._exigir_meu(tenant_id)
+        valores = [(c, v) for c, v in ((campos.score_risco, str(round(sinais.score_risco, 1))), (campos.nivel_risco, sinais.nivel_risco)) if c]
+        if not valores:
+            raise OperacaoNaoSuportada("Nenhum campo de risco configurado.")
+        self._enviar("PUT", f"organizations/{_rd_id(sinais.empresa_id)}", {"organization": {
+            "organization_custom_fields": [{"custom_field_id": _rd_id(c), "value": v} for c, v in valores]}})
+
+
+def _rd_id(valor: str) -> str:
+    """Id vai para o caminho/corpo: só o formato de id do RD Station."""
+    if not _ID.match(str(valor)):
+        raise ValueError("Id RD Station inválido.")
+    return str(valor)
 
 
 def fabrica(db, conexao) -> RdStationCrmAdapter:

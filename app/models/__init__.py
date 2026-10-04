@@ -127,6 +127,7 @@ from app.models.assinatura_webhook_tenant import AssinaturaWebhookTenant
 from app.models.entrega_webhook import EntregaWebhook
 from app.models.conexao_integracao import ConexaoIntegracao
 from app.models.execucao_sync import ExecucaoSync
+from app.models.integracao_crm import AutorizacaoOauthPendente, EnvioCrm, RegistroCrmExterno, VinculoExterno
 from app.models.plano import Plano
 from app.models.proposta_negocio import PropostaNegocio
 from app.models.quota_comercial import QuotaComercial
@@ -310,6 +311,10 @@ __all__ = [
     "EntregaWebhook",
     "ConexaoIntegracao",
     "ExecucaoSync",
+    "AutorizacaoOauthPendente",
+    "EnvioCrm",
+    "RegistroCrmExterno",
+    "VinculoExterno",
     "CacheMercadoExterno",
     "EmailDireto",
     "EmailRecebido",

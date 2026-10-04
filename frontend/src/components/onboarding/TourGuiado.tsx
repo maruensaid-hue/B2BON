@@ -222,6 +222,12 @@ const PASSOS_TOUR: PassoGuia[] = [
       "Saldo de AI Credits da empresa (um pool só, não por usuário), uso do mês, créditos que vencem, compra de pacotes, recarga automática, limites de uso e avisos em 80%, 95% e 100%.",
   },
   {
+    id: "nav:/admin/api",
+    titulo: "Admin — API & Webhooks (CRMs)",
+    descricao:
+      "Conecte Salesforce, HubSpot, Pipedrive ou RD Station CRM (com 1 clique quando disponível). Em \"Escrita no CRM\" você liga, por conexão: não abordar quem o CRM já conhece (cliente, negócio aberto, opt-out), PREDATOR → CRM (empresa, contato, mensagens, negócio na reunião, opt-out) e MAP → CRM (risco de churn e tarefa de resgate). Tudo começa desligado e o que já existe no seu CRM nunca é alterado.",
+  },
+  {
     id: "nav:/admin/governo",
     titulo: "Admin — Government",
     descricao:

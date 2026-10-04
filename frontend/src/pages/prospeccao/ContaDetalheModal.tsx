@@ -7,6 +7,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
 import { api, ApiError, getBlob } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { CrmExternoConta } from "@/pages/prospeccao/CrmExternoConta";
 
 interface ContaCompleta {
   id: number;
@@ -484,6 +485,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
               {carregando === "estrategia-venda" ? "Gerando..." : "🧭 Sugerir estratégia"}
             </Button>
           </div>
+          <CrmExternoConta contaId={contaId} />
           {estrategiaVenda && (
             <div className="mb-4 rounded-md bg-surf2 p-2 text-[11px] whitespace-pre-line text-text">
               {estrategiaVenda}

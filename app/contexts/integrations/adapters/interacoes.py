@@ -25,3 +25,13 @@ def pagina(interacoes: dict[str, list[Interaction]], account_id: str | None) -> 
     if account_id is not None:
         return Page(items=list(interacoes.get(account_id, [])))
     return Page(items=[i for itens in interacoes.values() for i in itens])
+
+
+def nota_nps(valor) -> float | None:
+    """Nota NPS (0–10) de um campo do CRM; fora da escala ou vazio = None
+    (nunca inventada nem ajustada)."""
+    try:
+        nota = float(str(valor).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+    return nota if 0 <= nota <= 10 else None

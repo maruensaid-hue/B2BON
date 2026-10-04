@@ -60,6 +60,16 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      # D-087: fila de escrita no CRM do cliente + webhooks de entrada (a cada 15 min).
+      - name: Chamar POST /cron/integracoes-crm (escrita no CRM do cliente)
+        if: always()
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${API_BASE_URL}/cron/integracoes-crm" \
+            -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
       - name: Chamar POST /cron/processar-retorno (lembretes de reunião + NPS)
         if: always()
         run: |
@@ -128,6 +138,16 @@ jobs:
         run: |
           curl --fail --show-error --silent \
             -X POST "${API_BASE_URL}/cron/podar-recorte-cnpj" \
+            -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      # D-087: índice de deduplicação do PREDATOR + sinais do MAP no CRM (1x/dia).
+      - name: Chamar POST /cron/integracoes-crm-diario (índice CRM + sinais MAP, 1x/dia)
+        if: always() && (github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch')
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${API_BASE_URL}/cron/integracoes-crm-diario" \
             -H "X-Cron-Secret: ${CRON_SECRET}"
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}

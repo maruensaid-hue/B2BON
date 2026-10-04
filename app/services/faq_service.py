@@ -163,6 +163,16 @@ responsável (não somem); o histórico de pagamento é mantido por obrigação 
 ambiente próprio com dados fictícios que expira em 8 horas — vários representantes podem demonstrar ao \
 mesmo tempo sem interferência. Nada sai da plataforma (e-mail, WhatsApp, agenda e integrações são \
 simulados) e a área administrativa não abre na demonstração.
+- Integração com CRMs (Salesforce, HubSpot, Pipedrive, RD Station CRM): Admin → API & Webhooks. Conecte com \
+1 clique (quando disponível) ou colando o token. Em "Escrita no CRM", por conexão e tudo desligado no começo: \
+(1) não abordar quem o CRM já conhece — antes de cada envio do PREDATOR confere se a empresa já é cliente, tem \
+negócio aberto ou se o contato pediu opt-out lá; (2) PREDATOR → CRM — cria empresa e contato (o que já existe \
+no CRM não é alterado), registra as mensagens enviadas, cria o negócio no funil/estágio escolhido quando a \
+reunião é agendada e leva o opt-out; (3) MAP → CRM — grava score e nível de risco de churn em campos próprios da \
+B2B ON nas contas-cliente e cria uma tarefa de resgate (no máximo uma por conta por mês). Na ficha da conta há \
+o botão "Enviar ao CRM". O envio acontece em até 15 minutos; falhas aparecem em "Últimos envios" com o botão \
+Reprocessar. No RD Station CRM as atividades só entram depois que existe uma negociação. Os conectores ainda \
+estão em BETA: a CyberFort libera cada CRM.
 - Modo claro/escuro: botão no canto superior direito de qualquer tela — a lua (🌙) ativa o modo escuro e o sol (☀️) \
 volta ao claro. A escolha é de cada usuário e vale em qualquer aparelho depois do login.
 - Central de Negócios (página que aparece ao sair): índices de bolsa, câmbio/cripto/ouro e notícias de \

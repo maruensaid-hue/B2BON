@@ -1,6 +1,7 @@
 # 19 — Integrações com CRMs externos para MAP e PREDATOR (plano)
 
-- **Data**: 2026-10-02 · **Status**: PROPOSTA (aguarda decisões do PO, §7)
+- **Data**: 2026-10-02 · **Status**: IMPLEMENTADO para os 4 CRMs (D-087, 2026-10-04) — conectores em BETA até a
+  validação em contas sandbox reais (§8.4)
 - **CRMs**: Salesforce, HubSpot, Pipedrive e RD Station (CRM)
 - **Base**: Integration Hub (`14_INTEGRATION_HUB.md`), contrato canônico (`ADAPTER_CONTRACT.md`), D-041/D-043
 
@@ -114,3 +115,53 @@ Postgres), E2E, medição, docs (14, ENTITY_MAPPING, DECISIONS, CHANGELOG) e só
 6. **Contas sandbox e apps OAuth**: criar/ceder contas de teste e registrar os apps (Salesforce Connected App,
    HubSpot app, Pipedrive Marketplace app, RD Station app) em nome da CyberFort.
 7. **Comercial**: integração com CRM externo entra em algum plano/entitlement específico? (preço não é definido aqui)
+
+## 8. Implementação (D-087, 2026-10-04)
+
+Pedido do PO: "Faça para os 4 CRMs indicados". As decisões 2–5 e 7 do §7 seguiram as recomendações deste plano
+(revisáveis): RD Station **CRM**; regra do §3.5; PREDATOR escreve empresa + contato + atividades + negócio na reunião;
+escrita opt-in por conexão; entitlement do Hub (sem preço novo). A decisão 6 (sandbox e apps OAuth) segue com o PO.
+
+### 8.1 O que cada CRM faz
+
+| | Salesforce | HubSpot | Pipedrive | RD Station CRM |
+|---|---|---|---|---|
+| Conectar com 1 clique | OAuth + PKCE (produção e sandbox) | OAuth | OAuth (domínio da empresa) | — (token da instância) |
+| Procura antes de criar | Account por CNPJ/Website; Contact por e-mail (SOQL escapado) | empresa por CNPJ/domínio; contato por e-mail (Search API) | organização por CNPJ/nome exato; pessoa por e-mail | organização por nome exato; contato por e-mail |
+| Negócio na reunião | Opportunity (StageName + CloseDate do prazo configurado) + papel do contato | deal (pipeline/estágio) com associações | deal (stage_id) | negociação (deal_stage_id) |
+| Atividades | Task concluída / Event (reunião) | e-mail, ligação, reunião, nota (WhatsApp/LinkedIn como nota) | activity concluída / nota (HTML escapado) | anotação **só dentro de negociação** |
+| Tarefa de resgate (MAP) | Task aberta, prioridade alta | task | activity "task" em aberto | não (exige negociação) — o sinal é gravado |
+| Opt-out | `HasOptedOutOfEmail` + campo próprio opcional | propriedade `b2bon_opt_out` | campo próprio (ou `marketing_status`) | campo personalizado próprio (obrigatório) |
+| Campos próprios | criados pelo admin (ex.: `B2BON_Score_Risco__c`) | criados pela B2B ON (`preparar-campos`) | criados pela B2B ON (`preparar-campos`) | criados pelo admin (`custom_field_id`) |
+| NPS (TD-071) | campo da Account (`campo_nps`) | propriedade da empresa | campo da organização | campo personalizado da organização |
+
+### 8.2 Fluxos
+
+- **PREDATOR → CRM**: mensagem de cadência enviada → atividade; reunião agendada → negócio (um por conta) + reunião;
+  resultado/qualificação da reunião → nota; opt-out → CRM; "Enviar ao CRM" na ficha da conta → empresa + contatos.
+- **CRM → PREDATOR**: índice de hashes (CNPJ, domínio, e-mail) com cliente / negócio aberto / opt-out, refeito 1x/dia e
+  após webhook de entrada; o envio cancela a mensagem e importa o opt-out.
+- **MAP ↔ CRM**: NPS lido do campo configurado; score/nível de risco gravados nas contas-cliente quando mudam; conta
+  crítica → tarefa para o dono (no máximo 1 por conta por mês).
+- **Rotinas**: `POST /cron/integracoes-crm` (15 min: webhooks de entrada + fila de escrita) e
+  `POST /cron/integracoes-crm-diario` (06:00 UTC: índices + sinais do MAP), no workflow `cron-envios.yml`.
+
+### 8.3 Segurança (como §4 pedia)
+
+Escrita desligada por padrão e por capacidade; interruptor geral `ESCRITA_CRM_ATIVA` e pausa por conexão; contato com
+opt-out nunca escrito; demo nunca enfileira; vínculo por passo (sem duplicar em retentativa); auditoria de cada escrita e
+de cada desistência; índice só com hashes; OAuth com `state` cifrado e conclusão pelo mesmo usuário; credencial
+`oauth_app` não pode ser colada; webhook de entrada com token de 256 bits (só o hash no banco) que só marca a conexão;
+hosts fixos, ids validados antes de URL/SOQL, SOQL escapado, HTML escapado, erros curtos e mascarados.
+
+### 8.4 Para liberar a um cliente (checklist do operador)
+
+1. Criar contas sandbox de cada CRM e validar leitura + escrita de ponta a ponta (TD-069); ajustar o que divergir.
+2. Registrar os apps OAuth da CyberFort e preencher no Render: `OAUTH_SALESFORCE_CLIENT_ID/SECRET`,
+   `OAUTH_HUBSPOT_CLIENT_ID/SECRET`, `OAUTH_PIPEDRIVE_CLIENT_ID/SECRET`. Redirect URI de cada app:
+   `https://b2bon-api.onrender.com/api/v1/hub-integracoes/oauth/<sistema>/callback`. HubSpot: escopos da lista em
+   `integrations/oauth.py`; Pipedrive: escopos de leitura/escrita de deals, contacts, activities e notes no Marketplace.
+3. Liberar o conector em `CONECTORES_CRM_HABILITADOS` (ex.: `hubspot,pipedrive`).
+4. No cliente: conectar, abrir "Escrita no CRM", escolher funil/estágio, criar/informar os campos próprios, ligar a
+   capacidade desejada, e (opcional) cadastrar a URL de webhook no CRM.
+

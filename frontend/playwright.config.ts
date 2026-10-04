@@ -40,7 +40,8 @@ export default defineConfig({
       cwd: repoRoot,
       url: "http://localhost:8000/health",
       reuseExistingServer: !process.env.CI,
-      env: { DATABASE_URL, DEMO_HABILITADA: "true" },  // D-082: o E2E cobre o link público da demonstração
+      // D-082: o E2E cobre o link público da demonstração; D-087: HubSpot liberado para a tela de escrita no CRM
+      env: { DATABASE_URL, DEMO_HABILITADA: "true", CONECTORES_CRM_HABILITADOS: "hubspot" },
       timeout: 60_000,
     },
     {

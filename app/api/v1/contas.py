@@ -9,6 +9,7 @@ from app.api.deps import (
     get_tenant_id,
     limitar_ia_por_tenant,
 )
+from app.contexts.integrations import contract as integracoes
 from app.graph.client import Neo4jClient
 from app.llm.base import LLMProvider
 from app.models.decisor import Decisor
@@ -30,11 +31,13 @@ from app.schemas.decisor import (
 )
 from app.services import (
     atividade_service,
+    auditoria_service,
     conta_service,
     descarte_service,
     linkedin_conexao_service,
     optout_service,
 )
+from app.services.errors import ValidacaoFalhou
 
 router = APIRouter(tags=["contas"])
 
@@ -181,6 +184,42 @@ def suprimir_decisor(
     decisor isolado nova; exclusão de conta/decisor continua
     deliberadamente restrita."""
     return optout_service.processar(db, tenant_id, decisor_id, origem="manual")
+
+
+@router.get("/contas/{conta_id}/crm-externo")
+def situacao_no_crm_externo(conta_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    """D-087: o que o CRM do cliente diz sobre esta conta e seus contatos
+    (já é cliente, negócio aberto, opt-out) — o mesmo bloqueio que o envio
+    aplica — e se a conta já foi enviada ao CRM."""
+    conta = conta_service.obter(db, tenant_id, conta_id)
+    escrita = integracoes.obter_escrita()
+    conexoes = escrita.conexoes_com(db, tenant_id, "deduplicar")
+    ids = [c.id for c in conexoes]
+    bloqueio_conta = escrita.bloqueio_prospeccao(db, tenant_id, conta.cnpj, conta.dominio, None, ids)
+    contatos = []
+    for decisor in db.query(Decisor).filter_by(conta_id=conta.id, tenant_id=tenant_id).all():
+        bloqueio = escrita.bloqueio_prospeccao(db, tenant_id, None, None, decisor.email, ids)
+        contatos.append({"decisor_id": decisor.id, "bloqueio": bloqueio[0] if bloqueio else None})
+    enviada = [c.nome for c in escrita.conexoes_com(db, tenant_id, "predator") if escrita.vinculo(db, c, "empresa", conta.id)]
+    return {"verificado": bool(ids), "bloqueio": bloqueio_conta[0] if bloqueio_conta else None, "contatos": contatos,
+            "enviada_para": enviada, "escrita_disponivel": bool(escrita.conexoes_com(db, tenant_id, "predator"))}
+
+
+@router.post("/contas/{conta_id}/enviar-crm")
+def enviar_ao_crm_externo(conta_id: int, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
+                          db: Session = Depends(get_db)) -> dict:
+    """D-087: enfileira empresa + contatos (sem opt-out) para o CRM do
+    cliente. Encontrados lá, não são alterados; só cria o que falta."""
+    conta = conta_service.obter(db, tenant_id, conta_id)
+    escrita = integracoes.obter_escrita()
+    if not escrita.conexoes_com(db, tenant_id, "predator"):
+        raise ValidacaoFalhou("Nenhuma conexão de CRM com PREDATOR → CRM ligado. Configure em Admin → API e integrações.")
+    total = escrita.enfileirar(db, tenant_id, "empresa", conta.id, ator_id=ator_id)
+    for decisor in db.query(Decisor).filter_by(conta_id=conta.id, tenant_id=tenant_id, suprimido_em=None).all():
+        total += escrita.enfileirar(db, tenant_id, "pessoa", decisor.id, ator_id=ator_id)
+    auditoria_service.registrar(db, tenant_id, "conta_enviada_crm_externo", "conta", conta.id, ator_id, {"envios": total}, conta_id=conta.id)
+    db.commit()
+    return {"enfileirados": total}
 
 
 @router.post(

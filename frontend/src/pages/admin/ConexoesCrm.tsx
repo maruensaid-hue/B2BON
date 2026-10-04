@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { api, ApiError } from "@/lib/api";
+import { ConexaoEscrita } from "@/pages/admin/ConexaoEscrita";
 
 export interface ConectorHub {
   sistema: string;
@@ -11,6 +12,10 @@ export interface ConectorHub {
   status: "AVAILABLE" | "BETA" | "COMING_SOON";
   descricao: string;
   conectavel: boolean;
+  /** D-087: "Conectar com 1 clique" disponível (app OAuth da B2B ON configurado). */
+  oauth?: boolean;
+  /** D-087: o conector escreve no CRM (PREDATOR/MAP → CRM). */
+  escrita?: boolean;
 }
 
 interface Conexao {
@@ -65,6 +70,11 @@ const CAMPOS: Record<string, Campo[]> = {
       rotulo: "Moeda dos valores (padrão BRL)",
       configuracao: true,
     },
+    {
+      nome: "campo_nps",
+      rotulo: "Campo de NPS na Account (opcional, ex.: NPS__c)",
+      configuracao: true,
+    },
   ],
   hubspot: [
     {
@@ -93,6 +103,11 @@ const CAMPOS: Record<string, Campo[]> = {
       rotulo: "Moeda padrão (quando o negócio não informa)",
       configuracao: true,
     },
+    {
+      nome: "campo_nps",
+      rotulo: "Propriedade de NPS da empresa (opcional)",
+      configuracao: true,
+    },
   ],
   pipedrive: [
     {
@@ -104,6 +119,11 @@ const CAMPOS: Record<string, Campo[]> = {
     {
       nome: "campo_cnpj",
       rotulo: "Chave do campo de CNPJ da organização",
+      configuracao: true,
+    },
+    {
+      nome: "campo_nps",
+      rotulo: "Chave do campo de NPS da organização (opcional)",
       configuracao: true,
     },
   ],
@@ -122,6 +142,11 @@ const CAMPOS: Record<string, Campo[]> = {
     {
       nome: "moeda",
       rotulo: "Moeda dos valores (padrão BRL)",
+      configuracao: true,
+    },
+    {
+      nome: "campo_nps",
+      rotulo: "Id do campo personalizado de NPS (opcional)",
       configuracao: true,
     },
   ],
@@ -156,6 +181,8 @@ export function ConexoesCrm({ conectores }: { conectores: ConectorHub[] }) {
   const [sistema, setSistema] = useState<string>("");
   const [reconectando, setReconectando] = useState<number | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [escritaAberta, setEscritaAberta] = useState<number | null>(null);
+  const comOauth = conectores.filter((c) => c.conectavel && c.oauth);
 
   const carregar = useCallback(async () => {
     try {
@@ -168,6 +195,45 @@ export function ConexoesCrm({ conectores }: { conectores: ConectorHub[] }) {
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  // D-087: volta do CRM depois do "Conectar com 1 clique". A conexão só é
+  // criada aqui, com o login de quem iniciou (anti-CSRF no backend).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const referencia = params.get("oauth");
+    const falha = params.get("oauth_erro");
+    if (!referencia && !falha) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    if (falha) {
+      setMensagem(falha);
+      return;
+    }
+    api
+      .post("/hub-integracoes/oauth/concluir", { referencia })
+      .then(async () => {
+        setMensagem("CRM conectado.");
+        await carregar();
+      })
+      .catch((error) =>
+        setMensagem(error instanceof ApiError ? error.message : "Não foi possível concluir a conexão."),
+      );
+  }, [carregar]);
+
+  async function conectarUmClique(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const alvo = String(form.get("sistema_oauth"));
+    try {
+      const { url } = await api.post<{ url: string }>(`/hub-integracoes/oauth/${alvo}/iniciar`, {
+        nome: String(form.get("nome_oauth") || alvo),
+        escrita: form.get("escrita_oauth") === "on",
+        sandbox: form.get("sandbox_oauth") === "on",
+      });
+      window.location.assign(url);
+    } catch (error) {
+      setMensagem(error instanceof ApiError ? error.message : "Não foi possível iniciar a conexão.");
+    }
+  }
 
   const escolhido = sistema || conectaveis[0]?.sistema || "";
 
@@ -286,7 +352,26 @@ export function ConexoesCrm({ conectores }: { conectores: ConectorHub[] }) {
                 Reconectar
               </Button>
             )}
+            {conectores.find((c) => c.sistema === conexao.sistema)?.escrita && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setEscritaAberta(escritaAberta === conexao.id ? null : conexao.id)
+                }
+                data-testid="abrir-escrita"
+              >
+                {escritaAberta === conexao.id ? "Fechar escrita no CRM" : "Escrita no CRM"}
+              </Button>
+            )}
           </div>
+          {escritaAberta === conexao.id && (
+            <ConexaoEscrita
+              conexaoId={conexao.id}
+              pausada={conexao.status === "pausada"}
+              aoMudar={carregar}
+            />
+          )}
           {reconectando === conexao.id && (
             <form
               onSubmit={(e) => reconectar(e, conexao)}
@@ -311,6 +396,37 @@ export function ConexoesCrm({ conectores }: { conectores: ConectorHub[] }) {
           )}
         </div>
       ))}
+
+      {comOauth.length > 0 && (
+        <form
+          onSubmit={conectarUmClique}
+          className="flex flex-col gap-1.5 rounded-lg border border-border p-3"
+          data-testid="conectar-oauth"
+        >
+          <div className="font-semibold">Conectar com 1 clique</div>
+          <div className="flex flex-wrap gap-2">
+            <Select name="sistema_oauth" className="w-44" aria-label="CRM">
+              {comOauth.map((c) => (
+                <option key={c.sistema} value={c.sistema}>
+                  {c.nome}
+                </option>
+              ))}
+            </Select>
+            <Input name="nome_oauth" placeholder="Nome da conexão" className="flex-1" />
+          </div>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="escrita_oauth" />
+            Pedir permissão de escrita (para PREDATOR/MAP → CRM; a escrita continua desligada até você ligar)
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="sandbox_oauth" />
+            Salesforce sandbox (test.salesforce.com)
+          </label>
+          <Button type="submit" size="sm" className="self-start">
+            Conectar
+          </Button>
+        </form>
+      )}
 
       {conectaveis.length > 0 && (
         <form

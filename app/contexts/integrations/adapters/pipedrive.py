@@ -1,8 +1,17 @@
-"""Conector Pipedrive → modelo canônico (Fase 13, conector 3 de 4).
+"""Conector Pipedrive ↔ modelo canônico (Fase 13, conector 3 de 4; escrita D-087).
 
-Somente leitura, via API v1 (`https://api.pipedrive.com/v1`, host fixo).
+Leitura via API v1 (`https://api.pipedrive.com/v1`, host fixo).
 Autenticação por API token no header `x-api-token` (nunca na URL, que
-acaba em log). Paginação `start`/`limit` (`additional_data.pagination`);
+acaba em log) ou, desde D-087, pelo app OAuth da B2B ON: Bearer no
+`api_domain` da empresa (`https://<empresa>.pipedrive.com`, validado) e
+renovação em `oauth.pipedrive.com`.
+
+Escrita (D-087): organização procurada pelo CNPJ (campo personalizado) ou
+nome exato, pessoa pelo e-mail — encontradas, não são alteradas; negócio,
+atividades (concluídas), notas e tarefas (atividade "task" em aberto)
+criados; sinais do MAP e opt-out em campos PRÓPRIOS (`preparar_campos` cria
+e devolve as chaves). Sem campo de opt-out configurado, usa o
+`marketing_status` (exige o Pipedrive Campaigns). Paginação `start`/`limit` (`additional_data.pagination`);
 incremental por `/recents?since_timestamp=`. BETA (D-041). Mapeamento em
 `docs/b2bon/14_INTEGRATION_HUB.md` §Pipedrive.
 
@@ -14,6 +23,7 @@ Configuração: `campo_cnpj` (chave do campo personalizado da organização,
 o hash de 40 caracteres que a API usa).
 """
 
+import html
 import json
 import re
 from datetime import UTC, datetime
@@ -22,8 +32,23 @@ from decimal import Decimal
 import httpx
 
 from app.contexts.integrations.adapters import interacoes
-from app.contexts.integrations.adapters.http_base import ClienteHttp
-from app.contexts.integrations.contract import AdapterCapabilities, CrmAdapter, Page
+from app.contexts.integrations.adapters.http_base import AcessoBearer, ClienteHttp, host_permitido, persistidor
+from app.contexts.integrations.contract import (
+    ESCRITAS,
+    AdapterCapabilities,
+    AtividadeSaida,
+    CamposProprios,
+    CrmAdapter,
+    EmpresaSaida,
+    NegocioSaida,
+    OperacaoNaoSuportada,
+    Page,
+    PessoaSaida,
+    SinaisContaSaida,
+    TarefaSaida,
+    TipoAtividadeSaida,
+)
+from app.core.config import settings
 from app.contexts.shared.canonical.base import SourceRef, canonical_id
 from app.contexts.shared.canonical.commercial import (
     Account,
@@ -31,6 +56,7 @@ from app.contexts.shared.canonical.commercial import (
     Activity,
     ActivityKind,
     Contact,
+    CSMetric,
     Customer,
     Interaction,
     Money,
@@ -46,6 +72,8 @@ from app.contexts.shared.canonical.commercial import (
 
 SYSTEM = "pipedrive"
 API = "https://api.pipedrive.com"
+OAUTH = "https://oauth.pipedrive.com"
+HOSTS_EMPRESA = (".pipedrive.com",)
 _TOKEN = re.compile(r"^[A-Za-z0-9]{20,100}$")
 _CAMPO = re.compile(r"^[a-z0-9_]{1,64}$")
 _LIMITE = 100
@@ -61,16 +89,38 @@ _STATUS = {"won": OpportunityStatus.WON, "lost": OpportunityStatus.LOST, "open":
 _RECENTES = {"organization": "organizations", "person": "persons", "deal": "deals"}
 
 
+_TIPO_SAIDA = {TipoAtividadeSaida.EMAIL: "email", TipoAtividadeSaida.LIGACAO: "call", TipoAtividadeSaida.REUNIAO: "meeting",
+               TipoAtividadeSaida.WHATSAPP: "task", TipoAtividadeSaida.LINKEDIN: "task"}
+_ID_NUM = re.compile(r"^\d{1,20}$")
+
+
+def _num(valor) -> int:
+    if not _ID_NUM.match(str(valor)):
+        raise ValueError("Id Pipedrive inválido.")
+    return int(valor)
+
+
 def validar(credenciais: dict, configuracao: dict) -> None:
-    token = credenciais.get("api_token")
-    if not isinstance(token, str) or not _TOKEN.match(token):
-        raise ValueError("Informe o api_token do Pipedrive (Configurações pessoais → API).")
-    extras = set(credenciais) - {"api_token"}
+    if credenciais.get("oauth_app") == "b2bon":
+        dominio = credenciais.get("api_domain")
+        if not isinstance(dominio, str) or not host_permitido(dominio, HOSTS_EMPRESA):
+            raise ValueError("api_domain deve ser https://<empresa>.pipedrive.com")
+        if not credenciais.get("access_token"):
+            raise ValueError("Conexão OAuth sem access_token.")
+        extras = set(credenciais) - {"oauth_app", "access_token", "refresh_token", "api_domain"}
+    else:
+        token = credenciais.get("api_token")
+        if not isinstance(token, str) or not _TOKEN.match(token):
+            raise ValueError("Informe o api_token do Pipedrive (Configurações pessoais → API).")
+        extras = set(credenciais) - {"api_token"}
     if extras:
         raise ValueError(f"Credenciais não reconhecidas: {sorted(extras)}")
     campo = configuracao.get("campo_cnpj")
     if campo is not None and not (isinstance(campo, str) and _CAMPO.match(campo)):
         raise ValueError("campo_cnpj deve ser a chave do campo personalizado da organização.")
+    nps = configuracao.get("campo_nps")
+    if nps is not None and not (isinstance(nps, str) and _CAMPO.match(nps)):
+        raise ValueError("campo_nps deve ser o nome/id do campo com a nota NPS (0–10) da empresa.")
 
 
 def cid(entidade: str, id_) -> str:
@@ -102,15 +152,43 @@ def _principal(valores) -> str | None:
     return escolhido.get("value") or None
 
 
-class PipedriveAdapter(CrmAdapter):
+class PipedriveAdapter(AcessoBearer, CrmAdapter):
+    SISTEMA = SYSTEM
+
     def __init__(self, tenant_id: str, credenciais: dict, configuracao: dict | None = None,
-                 transport: httpx.BaseTransport | None = None) -> None:
+                 transport: httpx.BaseTransport | None = None, ao_renovar_token=None) -> None:
         configuracao = configuracao or {}
         validar(credenciais, configuracao)
         self._tenant_id = tenant_id
         self._campo_cnpj = configuracao.get("campo_cnpj")
+        self._campo_nps = configuracao.get("campo_nps")
         self._interacoes: dict[str, list[Interaction]] | None = None
-        self._http = ClienteHttp(SYSTEM, API, {"x-api-token": credenciais["api_token"], "Accept": "application/json"}, transport)
+        self._iniciar_acesso(credenciais, transport, ao_renovar_token)
+
+    # --- HTTP + auth: API token (header) ou OAuth (Bearer no domínio da empresa) ---
+    def _oauth(self) -> bool:
+        return self._credenciais.get("oauth_app") == "b2bon"
+
+    def _base_url(self) -> str:
+        return self._credenciais["api_domain"].rstrip("/") if self._oauth() else API
+
+    def _novo_cliente(self) -> ClienteHttp:
+        if self._oauth():
+            return super()._novo_cliente()
+        return ClienteHttp(SYSTEM, API, {"x-api-token": self._credenciais["api_token"], "Accept": "application/json"}, self._transport)
+
+    def _pode_renovar(self) -> bool:
+        return self._oauth() and bool(self._credenciais.get("refresh_token") and settings.oauth_pipedrive_client_id)
+
+    def _renovar_token(self) -> dict:
+        resposta = self._cliente_auth(OAUTH).post_form(
+            "/oauth/token", {"grant_type": "refresh_token", "refresh_token": self._credenciais["refresh_token"]},
+            auth=(settings.oauth_pipedrive_client_id, settings.oauth_pipedrive_client_secret),
+        )
+        mudancas = {"access_token": resposta.get("access_token"), "refresh_token": resposta.get("refresh_token") or self._credenciais["refresh_token"]}
+        if resposta.get("api_domain") and host_permitido(resposta["api_domain"], HOSTS_EMPRESA):
+            mudancas["api_domain"] = resposta["api_domain"]
+        return mudancas
 
     def _meu(self, tenant_id: str) -> bool:
         return tenant_id == self._tenant_id
@@ -122,7 +200,7 @@ class PipedriveAdapter(CrmAdapter):
         return int(cursor or 0)
 
     def _listar(self, caminho: str, cursor: str | None, **params) -> tuple[list[dict], str | None]:
-        resposta = self._http.get(f"/v1/{caminho}", {"start": self._inicio(cursor), "limit": _LIMITE, **params})
+        resposta = self._get(f"/v1/{caminho}", {"start": self._inicio(cursor), "limit": _LIMITE, **params})
         paginacao = (resposta.get("additional_data") or {}).get("pagination") or {}
         proximo = str(paginacao["next_start"]) if paginacao.get("more_items_in_collection") else None
         return resposta.get("data") or [], proximo
@@ -151,7 +229,7 @@ class PipedriveAdapter(CrmAdapter):
 
     # --- Contrato ----------------------------------------------------------------
     def capabilities(self) -> AdapterCapabilities:
-        return AdapterCapabilities(system=SYSTEM, readable_entities=_LEGIVEIS, incremental_sync=True)
+        return AdapterCapabilities(system=SYSTEM, readable_entities=_LEGIVEIS, writable_entities=ESCRITAS, incremental_sync=True, webhooks=True)
 
     def _organizacao(self, r: dict, agora: datetime) -> Organization:
         cnpj = re.sub(r"\D", "", str(r.get(self._campo_cnpj) or "")) if self._campo_cnpj else ""
@@ -283,7 +361,17 @@ class PipedriveAdapter(CrmAdapter):
         return interacoes.pagina(self._interacoes, account_id)
 
     def list_cs_metrics(self, tenant_id, cursor=None, limit=100):
-        return Page(items=[])  # Pipedrive não tem NPS
+        """Pipedrive não tem NPS nativo: lê o campo personalizado `campo_nps` (D-087)."""
+        if not self._campo_nps:
+            return Page(items=[])
+        return self._pagina(tenant_id, "organization", cursor, None, self._metrica_nps)
+
+    def _metrica_nps(self, r: dict, agora: datetime) -> CSMetric | None:
+        nota = interacoes.nota_nps(r.get(self._campo_nps))
+        if nota is None:
+            return None
+        return CSMetric(id=cid("cs_metric", f"nps-{r['id']}"), tenant_id=self._tenant_id, source=_src("organization", r["id"], agora),
+                        account_id=cid("account", r["id"]), metric="NPS", value=nota, scale_max=10, collected_at=_data(r.get("update_time")))
 
     def list_offers(self, tenant_id):
         if not self._meu(tenant_id):
@@ -296,5 +384,115 @@ class PipedriveAdapter(CrmAdapter):
         ]
 
 
+    # --- Escrita (D-087) ----------------------------------------------------------
+    def _exigir_meu(self, tenant_id: str) -> None:
+        if not self._meu(tenant_id):
+            raise PermissionError("Conexão de outro tenant.")
+
+    def _criar(self, recurso: str, corpo: dict) -> str:
+        resposta = self._escrever("POST", f"/v1/{recurso}", {k: v for k, v in corpo.items() if v not in (None, "")})
+        return str((resposta.get("data") or {})["id"])
+
+    def _buscar(self, recurso: str, termo: str, campo: str) -> str | None:
+        resposta = self._get(f"/v1/{recurso}/search", {"term": termo, "fields": campo, "exact_match": "true", "limit": 1})
+        itens = (resposta.get("data") or {}).get("items") or []
+        return str(itens[0]["item"]["id"]) if itens else None
+
+    def garantir_empresa(self, tenant_id: str, empresa: EmpresaSaida) -> str:
+        self._exigir_meu(tenant_id)
+        if empresa.cnpj and self._campo_cnpj:
+            existente = self._buscar("organizations", empresa.cnpj, "custom_fields")
+            if existente:
+                return existente
+        existente = self._buscar("organizations", empresa.nome, "name")
+        if existente:
+            return existente
+        corpo = {"name": empresa.nome, "owner_id": _num(empresa.dono_externo_id) if empresa.dono_externo_id else None}
+        if self._campo_cnpj and empresa.cnpj:
+            corpo[self._campo_cnpj] = empresa.cnpj
+        return self._criar("organizations", corpo)
+
+    def garantir_pessoa(self, tenant_id: str, pessoa: PessoaSaida) -> str:
+        self._exigir_meu(tenant_id)
+        if pessoa.email:
+            existente = self._buscar("persons", pessoa.email.lower(), "email")
+            if existente:
+                return existente
+        return self._criar("persons", {
+            "name": pessoa.nome, "email": [{"value": pessoa.email, "primary": True}] if pessoa.email else None,
+            "phone": [{"value": pessoa.telefone, "primary": True}] if pessoa.telefone else None, "job_title": pessoa.cargo,
+            "org_id": _num(pessoa.empresa_id) if pessoa.empresa_id else None,
+            "owner_id": _num(pessoa.dono_externo_id) if pessoa.dono_externo_id else None,
+        })
+
+    def _vinculos(self, empresa_id, pessoa_id, negocio_id) -> dict:
+        return {"org_id": _num(empresa_id) if empresa_id else None, "person_id": _num(pessoa_id) if pessoa_id else None,
+                "deal_id": _num(negocio_id) if negocio_id else None}
+
+    def registrar_atividade(self, tenant_id: str, atividade: AtividadeSaida) -> str:
+        self._exigir_meu(tenant_id)
+        vinculos = self._vinculos(atividade.empresa_id, atividade.pessoa_id, atividade.negocio_id)
+        if atividade.tipo == TipoAtividadeSaida.NOTA:
+            conteudo = f"<b>{html.escape(atividade.assunto)}</b><br>{html.escape(atividade.descricao)}".replace("\n", "<br>")
+            return self._criar("notes", {"content": conteudo, **vinculos})
+        quando = atividade.ocorrida_em.astimezone(UTC)
+        canal = {TipoAtividadeSaida.WHATSAPP: "[WhatsApp] ", TipoAtividadeSaida.LINKEDIN: "[LinkedIn] "}.get(atividade.tipo, "")
+        reuniao = atividade.tipo == TipoAtividadeSaida.REUNIAO
+        return self._criar("activities", {
+            "subject": f"{canal}{atividade.assunto}"[:255], "type": _TIPO_SAIDA.get(atividade.tipo, "task"),
+            "done": 0 if reuniao and quando > datetime.now(UTC) else 1,
+            "due_date": quando.strftime("%Y-%m-%d"), "due_time": quando.strftime("%H:%M"),
+            "duration": f"{(atividade.duracao_minutos or 30) // 60:02d}:{(atividade.duracao_minutos or 30) % 60:02d}" if reuniao else None,
+            "note": atividade.descricao, "user_id": _num(atividade.dono_externo_id) if atividade.dono_externo_id else None, **vinculos,
+        })
+
+    def criar_negocio(self, tenant_id: str, negocio: NegocioSaida) -> str:
+        self._exigir_meu(tenant_id)
+        return self._criar("deals", {
+            "title": negocio.nome, "org_id": _num(negocio.empresa_id), "person_id": _num(negocio.pessoa_id) if negocio.pessoa_id else None,
+            "stage_id": _num(negocio.estagio_id), "user_id": _num(negocio.dono_externo_id) if negocio.dono_externo_id else None,
+            "expected_close_date": negocio.previsao_fechamento.isoformat() if negocio.previsao_fechamento else None,
+        })
+
+    def criar_tarefa(self, tenant_id: str, tarefa: TarefaSaida) -> str:
+        self._exigir_meu(tenant_id)
+        return self._criar("activities", {
+            "subject": tarefa.assunto[:255], "type": "task", "done": 0, "due_date": tarefa.vencimento.isoformat(), "note": tarefa.descricao,
+            "org_id": _num(tarefa.empresa_id) if tarefa.empresa_id else None,
+            "user_id": _num(tarefa.dono_externo_id) if tarefa.dono_externo_id else None,
+        })
+
+    def marcar_optout(self, tenant_id: str, pessoa_id: str, campos: CamposProprios) -> None:
+        self._exigir_meu(tenant_id)
+        corpo = {campos.optout: "sim"} if campos.optout else {"marketing_status": "unsubscribed"}
+        self._escrever("PUT", f"/v1/persons/{_num(pessoa_id)}", corpo)
+
+    def gravar_sinais_conta(self, tenant_id: str, sinais: SinaisContaSaida, campos: CamposProprios) -> None:
+        self._exigir_meu(tenant_id)
+        corpo = {}
+        if campos.score_risco:
+            corpo[campos.score_risco] = round(sinais.score_risco, 1)
+        if campos.nivel_risco:
+            corpo[campos.nivel_risco] = sinais.nivel_risco
+        if not corpo:
+            raise OperacaoNaoSuportada("Nenhum campo de risco configurado.")
+        self._escrever("PUT", f"/v1/organizations/{_num(sinais.empresa_id)}", corpo)
+
+    def preparar_campos(self, tenant_id: str) -> CamposProprios:
+        """Cria os campos personalizados da B2B ON (ou reaproveita os já
+        criados, pelo nome) e devolve as chaves (hash) que a API usa."""
+        self._exigir_meu(tenant_id)
+        chaves = {}
+        for nome_campo, recurso, rotulo, tipo in (
+            ("score_risco", "organizationFields", "B2B ON — score de risco", "double"),
+            ("nivel_risco", "organizationFields", "B2B ON — nível de risco", "varchar"),
+            ("optout", "personFields", "B2B ON — opt-out", "varchar"),
+        ):
+            existentes = {c.get("name"): c.get("key") for c in self._todos(recurso)}
+            chaves[nome_campo] = existentes.get(rotulo) or (self._escrever("POST", f"/v1/{recurso}", {"name": rotulo, "field_type": tipo}).get("data") or {})["key"]
+        return CamposProprios(**chaves)
+
+
 def fabrica(db, conexao) -> PipedriveAdapter:
-    return PipedriveAdapter(conexao.tenant_id, json.loads(conexao.credenciais or "{}"), conexao.configuracao or {})
+    return PipedriveAdapter(conexao.tenant_id, json.loads(conexao.credenciais or "{}"), conexao.configuracao or {},
+                            ao_renovar_token=persistidor(db, conexao))

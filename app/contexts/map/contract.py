@@ -21,7 +21,7 @@ calcular_cs_score = economics.calcular_cs_score
 classificar = risk.classificar
 
 
-__all__ = ["CanonicalMapDataSource", "CrmInternoMapDataSource", "MapDataSource", "performance"]
+__all__ = ["CanonicalMapDataSource", "CrmInternoMapDataSource", "MapDataSource", "performance", "obter_sinais_crm"]
 
 
 def _fonte(db: Session, fonte: MapDataSource | None) -> MapDataSource:
@@ -97,3 +97,11 @@ def vendedores_com_contas(db: Session, tenant_id: str, fonte: MapDataSource | No
 
 # Fase 12: registra as ferramentas deste contexto no B2B ON Intelligence Agent.
 from app.contexts.map import ferramentas as _ferramentas  # noqa: E402, F401
+
+
+def obter_sinais_crm():
+    """D-087: MAP → CRM do cliente (score/nível de risco e tarefa de resgate)."""
+    from app.contexts.map import sinais_crm
+
+    return sinais_crm
+

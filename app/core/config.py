@@ -33,6 +33,19 @@ class Settings(BaseSettings):
     # para conexão (lista separada por vírgula, ex.: "salesforce,hubspot").
     # Vazio = aparecem no hub, mas ninguém conecta.
     conectores_crm_habilitados: str = ""
+    # D-087: escrita no CRM do cliente (PREDATOR/MAP → CRM). Interruptor geral
+    # do operador: false para TODA escrita de uma vez (a fila acumula e retoma
+    # quando volta). Por tenant, a escrita continua opt-in na própria conexão.
+    escrita_crm_ativa: bool = True
+    # D-087: apps OAuth da B2B ON em cada CRM (registrados pela CyberFort).
+    # Vazio = botão "Conectar com 1 clique" desligado para aquele CRM; a
+    # conexão por token colado continua funcionando.
+    oauth_salesforce_client_id: str = ""
+    oauth_salesforce_client_secret: str = ""
+    oauth_hubspot_client_id: str = ""
+    oauth_hubspot_client_secret: str = ""
+    oauth_pipedrive_client_id: str = ""
+    oauth_pipedrive_client_secret: str = ""
     # Fase 15 — B2B ON AI Credits. Regras comerciais configuráveis por ambiente;
     # lidas SÓ por `app/contexts/finops/comercial.py` (fonte única).
     # Sourcing S3 (D-055): leitura dupla das tabelas unificadas.

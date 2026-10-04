@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.integrations import contract as integracoes
 from app.core.config import settings
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
@@ -60,7 +61,15 @@ def processar(db: Session, tenant_id: str, decisor_id: int, origem: str) -> dict
     decisor = db.query(Decisor).filter_by(id=decisor_id, tenant_id=tenant_id).one_or_none()
     if decisor is None:
         raise NaoEncontrado(f"Decisor {decisor_id} não encontrado")
+    resultado = aplicar(db, tenant_id, decisor, origem)
+    db.commit()
+    return resultado
 
+
+def aplicar(db: Session, tenant_id: str, decisor: Decisor, origem: str) -> dict:
+    """Mesmo efeito de `processar`, sem commit (quem chama decide). D-087:
+    o opt-out também vai para o CRM do cliente que tiver PREDATOR → CRM
+    ligado — exceto quando veio do próprio CRM (já está lá)."""
     if decisor.suprimido_em is None:
         decisor.suprimido_em = datetime.now(UTC)
 
@@ -76,7 +85,8 @@ def processar(db: Session, tenant_id: str, decisor_id: int, origem: str) -> dict
         {"origem": origem, "mensagens_canceladas": canceladas},
         conta_id=decisor.conta_id,
     )
-    db.commit()
+    if origem != "crm_externo":
+        integracoes.obter_escrita().enfileirar(db, tenant_id, "optout", decisor.id)
     return {"decisor_id": decisor.id, "suprimido": True, "mensagens_canceladas": canceladas}
 
 

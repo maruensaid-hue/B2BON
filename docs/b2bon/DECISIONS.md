@@ -1294,3 +1294,51 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Não muda**: regras de negócio, permissões, isolamento, APIs (só a rota nova de preferência), cálculos, preços,
   comissões, AI Credits, integrações, dados. Demonstração pode trocar o tema (rota liberada: só o próprio usuário).
 - **Status**: ACEITA. Migração `d1f3b5c7e9a2` (reversível).
+
+## D-087 · 2026-10-04 · Integração bidirecional com Salesforce, HubSpot, Pipedrive e RD Station (MAP e PREDATOR)
+- **Pedido do PO**: "Faça para os 4 CRMs indicados" — os quatro em paralelo (OI-030, decisão 1). As demais decisões do §7
+  do doc 19 foram tomadas pelas recomendações do próprio plano (revisáveis pelo PO): RD Station **CRM** (não o
+  Marketing); regra de fonte da verdade do §3.5; PREDATOR escreve empresa + contato + atividades + negócio na reunião;
+  escrita **opt-in por tenant e por capacidade**; entitlement = o mesmo do Hub de integrações (nenhum preço novo).
+- **Contrato**: portas de escrita no `CrmAdapter` com DTOs próprios (`EmpresaSaida`, `PessoaSaida`, `AtividadeSaida`,
+  `NegocioSaida`, `TarefaSaida`, `SinaisContaSaida`, `CamposProprios`): `garantir_empresa/pessoa` (procura antes —
+  CNPJ → domínio → nome; e-mail — e, se achar, **não altera nada**), `registrar_atividade`, `criar_negocio`,
+  `criar_tarefa`, `marcar_optout`, `gravar_sinais_conta`, `preparar_campos`. Os 4 conectores declaram as mesmas
+  `writable_entities`; o que um CRM não faz levanta `OperacaoNaoSuportada` e vira "pulado" com motivo (ex.: RD Station
+  CRM só registra atividade dentro de negociação — não inventamos negociação).
+- **Regra de conflito**: o CRM do cliente é a fonte da verdade dos campos dele. A B2B ON só **atualiza campos próprios**
+  (score/nível de risco, opt-out) e **cria** atividades, notas, negócios e tarefas. Exceção deliberada: no Salesforce o
+  opt-out também marca o padrão `HasOptedOutOfEmail` (só restringe).
+- **Motor** (`integrations/escrita.py`): o domínio enfileira na própria transação (`EnvioCrm`, chave única por
+  conexão); o cron (`/cron/integracoes-crm`, 15 min) monta o DTO com o dado **atual** (opt-out recente vale), chama o
+  adapter, grava `VinculoExterno` passo a passo (falha parcial não duplica) e audita cada escrita (`crm_escrita`).
+  Retry com backoff 1/5/15/60/360 min, desistência auditada, reprocesso manual; 401/403 marca a conexão para
+  reconectar e adia sem gastar tentativa. Interruptor geral `ESCRITA_CRM_ATIVA`; pausa por conexão (kill-switch).
+- **PREDATOR → CRM**: mensagem de cadência enviada → atividade; reunião agendada → negócio no funil/estágio escolhido
+  (um por conta) + reunião; resultado/qualificação → nota no negócio; opt-out → CRM; botão "Enviar ao CRM" na ficha da
+  conta. Dono no CRM por vendedor (mapa configurável). Data de fechamento só se o tenant configurar o prazo (Salesforce
+  exige; nunca inventada).
+- **CRM → PREDATOR (deduplicação)**: índice `RegistroCrmExterno` só com **hash** de CNPJ/domínio/e-mail (nenhum dado
+  pessoal cru do CRM guardado) e as marcas cliente / negócio aberto / opt-out. Antes de cada envio, mensagem para
+  cliente atual, empresa com negócio aberto ou contato com opt-out no CRM é cancelada e auditada; opt-out do CRM vira
+  opt-out aqui (supressão bidirecional). Índice refeito 1x/dia e após webhook de entrada.
+- **MAP ↔ CRM**: NPS lido de um campo configurável nos 4 CRMs (TD-071); sinais de risco (mesmo cálculo do MAP) gravados
+  nas contas-cliente só quando mudam; conta crítica gera tarefa para o dono, no máximo uma por conta por mês.
+- **OAuth pela tela (TD-068)** para Salesforce (com PKCE e sandbox), HubSpot e Pipedrive (RD Station CRM v1 segue por
+  token). `state` = token Fernet (cifrado, autenticado, 10 min); o callback (público) só troca o código e guarda os
+  tokens cifrados numa autorização pendente; a conexão só nasce quando o **mesmo usuário** que iniciou conclui logado
+  (anti-CSRF / anti-sequestro de conexão). Escopo de escrita só quando pedido; client id/secret ficam no servidor
+  (`OAUTH_*`), nunca no tenant; credencial `oauth_app` não pode ser colada à mão.
+- **Webhooks de entrada**: URL secreta por conexão (token de 256 bits, só o SHA-256 no banco, mostrada uma vez); o
+  request só marca a conexão e responde 202 (ACK SOAP para Outbound Message do Salesforce); nada é processado no
+  request.
+- **Segurança mantida**: hosts fixos por conector (o `api_domain` do Pipedrive OAuth precisa ser `*.pipedrive.com`), ids
+  externos validados antes de irem para URL/SOQL, literais SOQL escapados, HTML de nota do Pipedrive escapado, token do
+  RD só na query e mascarado em log, mensagens de erro de escrita curtas e mascaradas, tenant de demonstração nunca
+  enfileira nem escreve, isolamento por tenant em todas as rotas.
+- **Limite honesto**: formato de escrita validado contra servidores falsos no formato documentado de cada API, não contra
+  contas reais (TD-069 continua). Por isso os conectores seguem BETA, só conectam quando o operador libera
+  (`CONECTORES_CRM_HABILITADOS`) e a escrita começa desligada em cada conexão. Antes de liberar a um cliente: validar
+  numa conta sandbox de cada CRM e registrar os apps OAuth da CyberFort (OI-030, decisão 6).
+- **Status**: ACEITA. Migração `e3a5c7f9b1d4` (reversível).
+

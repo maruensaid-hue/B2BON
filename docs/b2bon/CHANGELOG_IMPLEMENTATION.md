@@ -1,5 +1,16 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Integração com Salesforce, HubSpot, Pipedrive e RD Station CRM (2026-10-04, D-087)
+
+- Conectar com 1 clique (Salesforce, HubSpot e Pipedrive): o admin autoriza no próprio CRM e volta para a B2B ON, sem copiar token. RD Station CRM continua pelo token da instância.
+- "Escrita no CRM", por conexão e tudo desligado no começo:
+  - Não abordar quem o CRM já conhece: antes de cada envio do PREDATOR, a mensagem é cancelada se a empresa já é cliente, tem negócio aberto ou se o contato pediu opt-out no CRM — e esse opt-out passa a valer aqui também.
+  - PREDATOR → CRM: cria empresa e contato (o que já existe no CRM não é alterado), registra cada mensagem enviada, cria o negócio no funil e estágio escolhidos quando a reunião é agendada (com a reunião e, depois, o resultado) e leva o opt-out.
+  - MAP → CRM: grava o score e o nível de risco de churn das contas-cliente em campos próprios da B2B ON e cria uma tarefa de resgate para o dono da conta crítica (no máximo uma por mês). O NPS pode ser lido de um campo do CRM.
+- Botão "Enviar ao CRM" e situação no CRM (cliente, negócio aberto, opt-out) na ficha da conta.
+- Painel com os últimos envios, motivo de cada falha e botão Reprocessar; pausar uma conexão segura tudo sem perder o que estava na fila. URL de webhook para o CRM avisar mudanças.
+- Os conectores seguem em BETA: a CyberFort libera cada CRM depois de validar numa conta de teste.
+
 ## Modo claro e modo escuro (2026-10-04, D-086)
 
 - Novo botão no canto superior direito de todas as telas: 🌙 ativa o modo escuro; ☀️ volta ao claro. A troca é instantânea, sem recarregar.

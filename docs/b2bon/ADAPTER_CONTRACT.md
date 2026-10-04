@@ -46,3 +46,19 @@ observabilidade, registro de conectores e framework de sync.
 
 `CanonicalMapDataSource` (MAP) aceita qualquer `CrmAdapter`. Validado
 por paridade contra o CRM interno (`tests/unit/test_map_canonico_paridade.py`).
+
+## Escrita (D-087)
+
+Portas opcionais, todas com DTOs próprios (`EmpresaSaida`, `PessoaSaida`, `AtividadeSaida`, `NegocioSaida`,
+`TarefaSaida`, `SinaisContaSaida`, `CamposProprios` em `integrations/contract.py`):
+
+| Porta | Regra |
+|---|---|
+| `garantir_empresa` / `garantir_pessoa` | procura antes (CNPJ → domínio → nome; e-mail). Achou → devolve o id **sem alterar**. |
+| `registrar_atividade`, `criar_negocio`, `criar_tarefa` | sempre criação; o motor guarda o vínculo para não repetir. |
+| `marcar_optout`, `gravar_sinais_conta` | só campos **próprios** da B2B ON (`CamposProprios`). |
+| `preparar_campos` | cria os campos próprios quando a API permite (HubSpot, Pipedrive). |
+
+O que o CRM não faz → `OperacaoNaoSuportada` (o envio vira "pulado" com o motivo). Toda porta recusa tenant que não é o
+dono da conexão. Quem chama as portas é só o motor `integrations/escrita.py` (fila, vínculos, barreiras, auditoria).
+

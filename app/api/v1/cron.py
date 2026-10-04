@@ -22,6 +22,8 @@ from app.api.deps import (
 )
 from app.contexts.finops import contract as finops
 from app.contexts.governo import contract as governo
+from app.contexts.integrations import contract as integracoes
+from app.contexts.map import contract as map_contract
 from app.contexts.platform.contract import webhooks
 from app.contexts.sourcing import contract as sourcing
 from app.contexts.shared import events
@@ -333,6 +335,23 @@ def creditos_ia(tarefas: BackgroundTasks, db: Session = Depends(get_db), sessao_
     demonstracoes = demo_sessao.purgar_expiradas(db, limite=50)
     tarefas.add_task(demo_sessao.reabastecer, sessao_factory)  # D-085: mantém a reserva de demonstrações cheia
     return {**finops.creditos_ia_rotina(db), "governo": governo_resultado, "ptax": ptax, "demonstracoes_apagadas": demonstracoes}
+
+
+@router.post("/integracoes-crm", dependencies=[Depends(_exigir_segredo_cron)])
+def integracoes_crm(db: Session = Depends(get_db)) -> dict:
+    """D-087, a cada 15 min: relê o CRM das conexões que avisaram mudança
+    (webhook de entrada → índice de deduplicação do PREDATOR) e despacha a
+    fila de escrita no CRM do cliente (PREDATOR/MAP → CRM)."""
+    webhooks_entrada = integracoes.obter_entrada().processar_solicitacoes(db)
+    fila = integracoes.obter_escrita().processar_fila(db)
+    return {"webhooks_entrada": webhooks_entrada, "fila": fila}
+
+
+@router.post("/integracoes-crm-diario", dependencies=[Depends(_exigir_segredo_cron)])
+def integracoes_crm_diario(db: Session = Depends(get_db)) -> dict:
+    """D-087, 1x/dia: refaz o índice de deduplicação de cada conexão e publica
+    os sinais de risco do MAP nas contas-cliente do CRM (só o que mudou)."""
+    return {"indices": integracoes.obter_escrita().rotina_diaria(db), "sinais_map": map_contract.obter_sinais_crm().rotina_diaria(db)}
 
 
 @router.post("/sourcing-sincronizar", dependencies=[Depends(_exigir_segredo_cron)])

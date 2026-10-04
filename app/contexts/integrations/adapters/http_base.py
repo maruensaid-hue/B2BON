@@ -1,6 +1,6 @@
-"""Base HTTP dos conectores externos (Fase 13).
+"""Base HTTP dos conectores externos (Fase 13; escrita desde D-087).
 
-Só leitura. Traduz o status HTTP para a semântica do framework de sync:
+Traduz o status HTTP para a semântica do framework de sync:
 429/5xx → `ErroTransitorio` (o `com_retry` tenta de novo com backoff);
 401/403 → `ErroCredencial` (não tenta de novo). A mensagem de erro nunca
 carrega token nem corpo da resposta (pode ecoar credencial).
@@ -49,6 +49,10 @@ TIMEOUT_SEGUNDOS = 30.0
 class ErroConector(Exception):
     """Resposta inesperada do sistema externo (4xx que não é credencial)."""
 
+    def __init__(self, mensagem: str, status: int | None = None) -> None:
+        super().__init__(mensagem)
+        self.status = status
+
 
 def host_permitido(url: str, sufixos: tuple[str, ...]) -> bool:
     partes = urlsplit(url)
@@ -72,15 +76,32 @@ class ClienteHttp:
     def atualizar_header(self, nome: str, valor: str) -> None:
         self._cliente.headers[nome] = valor
 
-    def _checar(self, resposta: httpx.Response) -> httpx.Response:
+    def _checar(self, resposta: httpx.Response, detalhar: bool = False) -> httpx.Response:
         codigo = resposta.status_code
         if codigo == 429 or codigo >= 500:
             raise ErroTransitorio(f"{self.sistema}: HTTP {codigo}")
         if codigo in (401, 403):
             raise ErroCredencial(f"{self.sistema}: credencial recusada (HTTP {codigo}). Reconecte a integração.")
         if codigo >= 300:
-            raise ErroConector(f"{self.sistema}: HTTP {codigo}")
+            raise ErroConector(f"{self.sistema}: HTTP {codigo}{self._motivo(resposta) if detalhar else ''}", status=codigo)
         return resposta
+
+    @staticmethod
+    def _motivo(resposta: httpx.Response) -> str:
+        """Só na escrita: mensagem de validação do CRM (ex.: campo
+        obrigatório), curta e mascarada — ajuda o admin a corrigir a
+        configuração. A leitura continua sem corpo nenhum na mensagem."""
+        try:
+            corpo = resposta.json()
+        except ValueError:
+            return ""
+        if isinstance(corpo, list) and corpo:
+            corpo = corpo[0]
+        if not isinstance(corpo, dict):
+            return ""
+        texto = corpo.get("message") or corpo.get("error") or corpo.get("errors") or ""
+        texto = ocultar_segredos(str(texto))[:200]
+        return f" — {texto}" if texto else ""
 
     def get(self, caminho: str, params: dict | None = None) -> dict:
         return self._checar(self._cliente.get(caminho, params=params)).json()
@@ -89,8 +110,13 @@ class ClienteHttp:
         """POST de LEITURA (APIs de busca, ex.: HubSpot search)."""
         return self._checar(self._cliente.post(caminho, json=json)).json()
 
-    def post_form(self, url: str, dados: dict) -> dict:
-        return self._checar(self._cliente.post(url, data=dados)).json()
+    def post_form(self, url: str, dados: dict, auth: tuple[str, str] | None = None) -> dict:
+        return self._checar(self._cliente.post(url, data=dados, auth=auth)).json()
+
+    def escrever(self, metodo: str, caminho: str, json: dict | None = None, params: dict | None = None) -> dict:
+        """Escrita (D-087): POST/PATCH/PUT. Resposta vazia (204) vira {}."""
+        resposta = self._checar(self._cliente.request(metodo, caminho, json=json, params=params), detalhar=True)
+        return resposta.json() if resposta.content else {}
 
 
 class AcessoBearer:
@@ -151,6 +177,9 @@ class AcessoBearer:
 
     def _post(self, caminho: str, corpo: dict) -> dict:
         return self._com_renovacao(lambda: self._http.post(caminho, corpo))
+
+    def _escrever(self, metodo: str, caminho: str, corpo: dict | None = None) -> dict:
+        return self._com_renovacao(lambda: self._http.escrever(metodo, caminho, corpo))
 
 
 def persistidor(db, conexao) -> Callable[[dict], None]:

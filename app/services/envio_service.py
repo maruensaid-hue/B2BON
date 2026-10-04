@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.contexts.integrations import contract as integracoes
 from app.core.config import settings
 from app.models.conta import Conta
 from app.models.configuracao_envio import ConfiguracaoEnvio
@@ -87,6 +88,25 @@ def _processar_email(
     )
 
 
+def _bloqueado_pelo_crm(db: Session, tenant_id: str, mensagem: Mensagem, decisor: Decisor, conexoes: list[int]) -> bool:
+    """D-087: o CRM do cliente diz para não abordar (já é cliente, negócio
+    aberto, opt-out lá) → a mensagem é cancelada e auditada. Opt-out no CRM
+    vira opt-out aqui também (supressão bidirecional)."""
+    conta = db.query(Conta).filter_by(id=decisor.conta_id, tenant_id=tenant_id).one_or_none()
+    bloqueio = integracoes.obter_escrita().bloqueio_prospeccao(
+        db, tenant_id, conta.cnpj if conta else None, conta.dominio if conta else None, decisor.email, conexoes)
+    if bloqueio is None:
+        return False
+    motivo, codigo = bloqueio
+    mensagem.status = "cancelado"
+    mensagem.motivo_falha = motivo
+    auditoria_service.registrar(db, tenant_id, "envio_bloqueado_crm", "mensagem", mensagem.id, None, {"motivo": codigo},
+                                conta_id=decisor.conta_id, canal=mensagem.canal)
+    if codigo == "optout":
+        optout_service.aplicar(db, tenant_id, decisor, origem="crm_externo")
+    return True
+
+
 def processar_pendentes(
     db: Session,
     tenant_id: str,
@@ -123,13 +143,21 @@ def processar_pendentes(
         "adiadas": 0,
         "tarefas_linkedin_criadas": 0,
         "descartadas_email_invalido": 0,
+        "bloqueadas_crm": 0,
     }
+    # D-087: conexões de CRM com deduplicação ligada (uma consulta por rodada).
+    escrita_crm = integracoes.obter_escrita()
+    conexoes_dedup = [c.id for c in escrita_crm.conexoes_com(db, tenant_id, "deduplicar")]
 
     for mensagem in candidatas:
         decisor = db.query(Decisor).filter_by(id=mensagem.decisor_id).one()
 
         if optout_service.existe_supressao(db, decisor.id):
             mensagem.status = "cancelado"
+            continue
+
+        if conexoes_dedup and _bloqueado_pelo_crm(db, tenant_id, mensagem, decisor, conexoes_dedup):
+            resultado["bloqueadas_crm"] += 1
             continue
 
         if mensagem.canal == "linkedin":
@@ -198,6 +226,7 @@ def processar_pendentes(
                 db, tenant_id, conta_id=decisor.conta_id, tipo=mensagem.canal,
                 descricao=f"Mensagem de cadência enviada ({mensagem.canal})",
             )
+            escrita_crm.enfileirar(db, tenant_id, "atividade_mensagem", mensagem.id)  # D-087: histórico no CRM do cliente
             resultado["enviadas"] += 1
         else:
             mensagem.motivo_falha = envio.motivo_falha

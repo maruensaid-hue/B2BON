@@ -52,6 +52,7 @@ from app.api.v1.comissoes import router as comissoes_router
 from app.api.v1.governo import admin as governo_admin_router
 from app.api.v1.governo import router as governo_router
 from app.api.v1.planos import router as planos_router
+from app.api.v1.integracoes_crm_publico import router as integracoes_crm_publico_router
 from app.api.v1.plataforma_api import router as plataforma_api_router
 from app.api.v1.produto.map_api import router as map_api_router
 from app.api.v1.produto.predator_api import router as predator_api_router
@@ -208,6 +209,7 @@ router.include_router(template_proposta_router, dependencies=_exige_crm)
 # Fase 3 — plataforma de API. Gestão (JWT, admin) exige licença ativa;
 # a API de produto autentica por chave de API (`autenticar_api` faz
 # licença + módulo + escopo por conta própria, sem JWT).
+router.include_router(integracoes_crm_publico_router)  # D-087: callback OAuth + webhook de entrada (sem JWT, ver módulo)
 router.include_router(plataforma_api_router, dependencies=_exige_licenca)
 router.include_router(map_api_router)
 router.include_router(predator_api_router)

@@ -158,3 +158,12 @@ recusada (401/403) marca a conexão como `erro` até reconectar.
 Adapters de fonte de oportunidade (PNCP hoje, experimental; portais de RFP privados no futuro) passam a
 gravar `SourcingProcess` com `source` e `external_id`, de forma idempotente, pelo repositório do lado
 correspondente (fonte pública de editais → SELL). Nenhuma integração nova nesta correção.
+
+## Escrita, OAuth e webhooks de entrada (D-087)
+
+Os 4 conectores externos passaram a escrever no CRM do cliente (PREDATOR/MAP → CRM), conectar com 1 clique
+(Salesforce, HubSpot, Pipedrive) e receber webhooks de entrada. Desenho, segurança e checklist de liberação em
+`19_INTEGRACOES_CRM_MAP_PREDATOR.md` §8; contrato em `ADAPTER_CONTRACT.md` §Escrita. Tabelas novas: `vinculo_externo`,
+`envio_crm`, `registro_crm_externo`, `autorizacao_oauth_pendente`; colunas novas em `conexao_integracao`: `escrita`,
+`webhook_token_hash`, `sync_solicitado_em`.
+

@@ -6,7 +6,7 @@ canônicos do sistema, paginação até o fim, referências consistentes e
 isolamento (outro tenant não enxerga nada).
 """
 
-from app.contexts.integrations.contract import CrmAdapter, iterar_todos
+from app.contexts.integrations.contract import ESCRITAS, CrmAdapter, iterar_todos
 
 _PAGINADAS = ("list_organizations", "list_accounts", "list_customers", "list_people", "list_contacts",
               "list_opportunities", "list_activities", "list_interactions", "list_cs_metrics")
@@ -23,7 +23,7 @@ def coletar(adapter: CrmAdapter, tenant_id: str) -> dict[str, list]:
 def verificar_contrato(adapter: CrmAdapter, tenant_id: str, sistema: str) -> dict[str, list]:
     capacidades = adapter.capabilities()
     assert capacidades.system == sistema
-    assert not capacidades.writable_entities, "conectores da Fase 13 são somente leitura"
+    assert capacidades.writable_entities == ESCRITAS, "D-087: os 4 conectores declaram as mesmas portas de escrita"
     dados = coletar(adapter, tenant_id)
     for entidade, itens in dados.items():
         for item in itens:

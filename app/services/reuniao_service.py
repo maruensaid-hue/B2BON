@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.contexts.integrations import contract as integracoes
 from app.contexts.shared import events as eventos
 from app.core.config import settings
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
@@ -249,6 +250,8 @@ def _confirmar_interno(
         {"horario": horario_escolhido.isoformat(), "oportunidade_crm_id": oportunidade_id},
         conta_id=conta.id,
     )
+    # D-087: negócio + reunião no CRM do cliente (se o tenant ligou PREDATOR → CRM)
+    integracoes.obter_escrita().enfileirar(db, tenant_id, "reuniao_agendada", reuniao.id, ator_id=ator_id)
     db.commit()
     db.refresh(reuniao)
     return reuniao
@@ -386,6 +389,7 @@ def marcar_resultado(db: Session, tenant_id: str, ator_id: str | None, reuniao_i
     if status == "realizada":  # MeetingCompleted existia no catálogo mas não era publicado (D-080)
         eventos.publicar(db, eventos.TipoEvento.MEETING_COMPLETED, tenant_id, "reuniao", reuniao.id,
                          {"conta_id": reuniao.conta_id, "vendedor_id": reuniao.vendedor_id}, ator_id=ator_id)
+    integracoes.obter_escrita().enfileirar(db, tenant_id, "reuniao_resultado", reuniao.id, chave=f"reuniao_resultado:{reuniao.id}:{status}", ator_id=ator_id)
     db.commit()
     db.refresh(reuniao)
     return reuniao
@@ -414,6 +418,8 @@ def confirmar_qualificacao(
         {"qualificada": qualificada, "motivo": motivo},
         conta_id=reuniao.conta_id,
     )
+    integracoes.obter_escrita().enfileirar(db, tenant_id, "reuniao_resultado", reuniao.id,
+                                           chave=f"reuniao_qualificacao:{reuniao.id}:{qualificada}", ator_id=ator_id)
     db.commit()
     db.refresh(reuniao)
     return reuniao
