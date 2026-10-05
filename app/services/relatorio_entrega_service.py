@@ -220,6 +220,13 @@ def listar_envios_email(db: Session, tenant_id: str, status: str = "todos", limi
     todos = _envios_email_de_mensagens(db, tenant_id) + _envios_email_de_campanhas(db, tenant_id)
     todos.sort(key=lambda item: item["criado_em"], reverse=True)
 
+    # Pendente parado por pausa do canal parecia "fila normal" — o usuário
+    # via 22 aprovados sem sair e nenhum motivo (incidente 2026-10-05).
+    if reputacao_service.canal_pausado(db, tenant_id, "email"):
+        for item in todos:
+            if item["status"] == "pendente":
+                item["detalhe"] = "Aguardando — canal de e-mail pausado"
+
     contagem: dict[str, int] = {}
     for item in todos:
         contagem[item["status"]] = contagem.get(item["status"], 0) + 1

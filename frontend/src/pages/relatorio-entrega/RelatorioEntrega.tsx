@@ -19,6 +19,7 @@ interface SaudeCanalEmail {
   pausado: boolean;
   limiar_bounce: number;
   limiar_spam: number;
+  amostra_minima: number;
 }
 
 interface ContatoComBounce {
@@ -215,7 +216,7 @@ export function RelatorioEntrega() {
           <KpiCard
             label="Taxa de bounce"
             value={saude ? paraPercentual(saude.taxa_bounce) : "—"}
-            sub={saude ? `limite: ${paraPercentual(saude.limiar_bounce)}` : undefined}
+            sub={saude ? `limite: ${paraPercentual(saude.limiar_bounce)} (vale a partir de ${saude.amostra_minima} envios)` : undefined}
             colorClassName={saude?.pausado ? "text-red" : "text-cyan"}
           />
           <KpiCard
@@ -228,8 +229,9 @@ export function RelatorioEntrega() {
         {saude?.pausado && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-red/10 p-3 text-[12px] text-text">
             <span>
-              Canal de e-mail pausado automaticamente — taxa de bounce/spam acima do limite. Corrija ou exclua os
-              contatos problemáticos abaixo antes de reativar.
+              {relatorio && relatorio.contatos_com_bounce.length > 0
+                ? "Canal de e-mail pausado automaticamente — taxa de bounce/spam acima do limite. Corrija ou exclua os contatos problemáticos abaixo antes de reativar."
+                : "Canal de e-mail pausado automaticamente, mas nenhum contato das suas cadências ou campanhas aparece com bounce — o alerta pode ter vindo de e-mails de sistema ou de uma amostra pequena. Não há o que corrigir ou excluir; pode reativar o canal."}
             </span>
             <Button size="sm" variant="danger" disabled={reativando} onClick={reativarCanalEmail}>
               {reativando ? "Reativando..." : "Reativar canal"}
@@ -250,8 +252,9 @@ export function RelatorioEntrega() {
         </div>
         <div className="mt-3 text-[11px] text-muted">
           WhatsApp e LinkedIn não têm confirmação de entrega/leitura rastreada — só a taxa de resposta acima é
-          medida pra esses dois canais. A proteção contra bounce/pausa automática só existe para e-mail, e só
-          para quem usa o e-mail compartilhado da B2B ON (contas com SMTP próprio não passam por esse rastreio).
+          medida pra esses dois canais. A pausa automática por bounce depende do retorno do provedor de envio e só
+          considera e-mails de cadência e campanha. Contas com SMTP próprio não recebem esse retorno — nesse caso,
+          falhas imediatas de envio aparecem como "Erro" no detalhamento abaixo.
         </div>
       </Card>
 

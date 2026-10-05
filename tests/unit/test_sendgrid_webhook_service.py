@@ -69,10 +69,10 @@ def test_lixo_no_lugar_da_assinatura_nao_levanta_excecao() -> None:
 
 def test_processar_eventos_mapeia_tipo_e_agrupa_por_tenant(db_session) -> None:
     eventos = [
-        {"event": "delivered", "tenant_id": "tenant-a"},
-        {"event": "bounce", "tenant_id": "tenant-a"},
-        {"event": "spamreport", "tenant_id": "tenant-a"},
-        {"event": "open", "tenant_id": "tenant-a"},  # sem sinal de reputação, ignorado
+        {"event": "delivered", "tenant_id": "tenant-a", "mensagem_id": "1"},
+        {"event": "bounce", "tenant_id": "tenant-a", "mensagem_id": "2"},
+        {"event": "spamreport", "tenant_id": "tenant-a", "mensagem_id": "3"},
+        {"event": "open", "tenant_id": "tenant-a", "mensagem_id": "1"},  # sem sinal de reputação, ignorado
         {"event": "dropped"},  # sem tenant_id, ignorado (não deveria acontecer, mas não derruba o batch)
     ]
 
@@ -88,7 +88,9 @@ def test_evento_blocked_conta_como_bounce(db_session) -> None:
     """Raio-X 2026-09-16: "blocked" é o mesmo conceito de "entregue com
     erro" que bounce/dropped — antes ficava de fora do mapa e nunca
     pausava nada."""
-    sendgrid_webhook_service.processar_eventos(db_session, [{"event": "blocked", "tenant_id": "tenant-b"}])
+    sendgrid_webhook_service.processar_eventos(
+        db_session, [{"event": "blocked", "tenant_id": "tenant-b", "mensagem_id": "1"}]
+    )
 
     saude = reputacao_service.status_saude(db_session, "tenant-b", "email")
     assert saude["bounces"] == 1
@@ -144,10 +146,27 @@ def test_bounce_grava_no_destinatario_de_campanha_correlacionado(db_session) -> 
     assert destinatario.bounce_em is not None
 
 
-def test_evento_sem_mensagem_id_nao_levanta_excecao(db_session) -> None:
-    """Evento de bounce legítimo (ex.: e-mail de sistema, fora do fluxo de
-    cadência/campanha) sem `mensagem_id`/`campanha_destinatario_id` só
-    não grava nada por contato — continua pausando o canal normalmente."""
-    sendgrid_webhook_service.processar_eventos(db_session, [{"event": "bounce", "tenant_id": "tenant-e"}])
+def test_evento_de_email_de_sistema_nao_conta_na_reputacao(db_session) -> None:
+    """Incidente 2026-10-05: convite/cobrança/boas-vindas saem pelo SendGrid
+    da plataforma com o `tenant_id` do assinante, sem `mensagem_id` nem
+    `campanha_destinatario_id`. Contá-los pausava o outreach do tenant (que
+    sai por SMTP próprio) por causa de um convite digitado errado."""
+    sendgrid_webhook_service.processar_eventos(
+        db_session,
+        [
+            {"event": "delivered", "tenant_id": "tenant-e"},
+            {"event": "bounce", "tenant_id": "tenant-e"},
+            {"event": "spamreport", "tenant_id": "tenant-e"},
+        ],
+    )
 
-    assert reputacao_service.status_saude(db_session, "tenant-e", "email")["bounces"] == 1
+    saude = reputacao_service.status_saude(db_session, "tenant-e", "email")
+    assert (saude["enviados"], saude["bounces"], saude["spam_reports"]) == (0, 0, 0)
+
+
+def test_evento_de_campanha_conta_na_reputacao(db_session) -> None:
+    sendgrid_webhook_service.processar_eventos(
+        db_session, [{"event": "bounce", "tenant_id": "tenant-f", "campanha_destinatario_id": "999"}]
+    )
+
+    assert reputacao_service.status_saude(db_session, "tenant-f", "email")["bounces"] == 1

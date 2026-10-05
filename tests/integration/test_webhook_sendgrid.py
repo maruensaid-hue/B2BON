@@ -28,8 +28,8 @@ def test_eventos_com_assinatura_valida_atualizam_saude_do_canal(client, monkeypa
 
     payload = json.dumps(
         [
-            {"event": "delivered", "tenant_id": TENANT_ID},
-            {"event": "bounce", "tenant_id": TENANT_ID},
+            {"event": "delivered", "tenant_id": TENANT_ID, "mensagem_id": "1"},
+            {"event": "bounce", "tenant_id": TENANT_ID, "mensagem_id": "2"},
         ]
     ).encode()
     timestamp = "1700000000"

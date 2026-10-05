@@ -190,8 +190,8 @@ def test_processar_pendentes_registra_falha(db_session):
 
 
 def _pausar_canal_email(db_session) -> None:
-    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "enviado", 10)
-    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "bounce", 1)
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "enviado", 100)
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "bounce", 6)
     assert reputacao_service.canal_pausado(db_session, TENANT_ID, "email") is True
 
 

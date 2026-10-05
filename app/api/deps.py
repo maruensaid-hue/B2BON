@@ -316,7 +316,10 @@ def resolver_email_provider(tenant_id: str, db: Session) -> EmailProvider:
             usar_tls=config_tenant.usar_tls,
         )
     if settings.e_ambiente_producao:
-        return EmailDesativadoProvider()
+        return EmailDesativadoProvider(
+            "Conta de e-mail (SMTP) não configurada — cadastre a conta do seu e-mail em Configuração → E-mail (SMTP) "
+            "antes de enviar."
+        )
     return StubEmailProvider()
 
 

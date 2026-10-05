@@ -208,6 +208,9 @@ class Settings(BaseSettings):
     # ajustáveis por configuração, não uma curva comercial fechada (E10-H2).
     limiar_bounce_padrao: float = 0.05
     limiar_spam_padrao: float = 0.001
+    # Sem amostra mínima, 1 bounce em 15 envios (6,7%) já pausava o canal —
+    # percentual sobre volume pequeno não é sinal de reputação, é ruído.
+    amostra_minima_reputacao: int = 50
 
     # Padrão recomendado de dias após a reunião realizada para disparar a
     # pesquisa de NPS — ajustável por tenant via ConfiguracaoNps (E11-H1).

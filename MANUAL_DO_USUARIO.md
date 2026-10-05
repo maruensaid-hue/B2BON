@@ -535,9 +535,12 @@ só a taxa de resposta é medida pra eles).
 **Proteção automática contra bounce (só para e-mail):** a B2B ON
 monitora, numa janela de 7 dias, a taxa de e-mails que **quicaram**
 (endereço inválido, caixa cheia, bloqueado pelo provedor do
-destinatário) ou foram marcados como spam. Se essa taxa passar de 5%
-(bounce) ou 0,1% (spam), o canal de e-mail do seu tenant é **pausado
-automaticamente** — nenhuma campanha ou cadência de e-mail nova pode
+destinatário) ou foram marcados como spam. Só contam e-mails de
+**cadência e campanha** — e-mails de sistema (convite, cobrança,
+boas-vindas) nunca entram na conta — e só a partir de **50 envios** na
+janela (percentual sobre volume menor não é sinal confiável). Se essa
+taxa passar de 5% (bounce) ou 0,1% (spam), o canal de e-mail do seu
+tenant é **pausado automaticamente** — nenhuma campanha ou cadência de e-mail nova pode
 ser ativada, e os toques de e-mail já agendados ficam parados, até você
 resolver. Isso existe pra proteger a reputação do domínio e evitar que
 os e-mails de todo mundo passem a cair em SPAM.
@@ -554,12 +557,22 @@ os e-mails de todo mundo passem a cair em SPAM.
    histórico).
 3. Depois de corrigir/excluir os contatos problemáticos, clique em
    **"Reativar canal"** — o bloqueio não expira sozinho, é sempre
-   manual, feito só depois que a causa foi tratada.
+   manual, feito só depois que a causa foi tratada. Ao reativar, a
+   contagem de bounce e spam da janela é zerada (fica registrada na
+   auditoria) — o canal não volta a pausar por causa dos mesmos
+   eventos. Se o canal estiver pausado e nenhum contato aparecer com
+   e-mail rejeitado, não há o que corrigir: pode reativar direto.
 
-Essa proteção só vale pra quem usa o e-mail compartilhado da B2B ON
-(SendGrid) — contas com **SMTP próprio** configurado em Configuração →
-E-mail (SMTP) não passam por esse rastreio de bounce, já que o
-provedor deles não avisa a B2B ON quando um e-mail quica.
+Enquanto o canal está pausado, os e-mails aprovados aparecem como
+**Pendente** no detalhamento, com o aviso "Aguardando — canal de e-mail
+pausado".
+
+Essa proteção depende do retorno do provedor de envio. Contas com
+**SMTP próprio** (Configuração → E-mail (SMTP)) não recebem esse retorno
+quando um e-mail quica depois de aceito — nesse caso, só falhas
+imediatas de envio aparecem, como **Erro** no detalhamento. Sem conta
+SMTP cadastrada, nenhum e-mail de cadência ou campanha sai: o envio falha
+com o aviso para cadastrar a conta.
 
 ### 5.10 Regras Aprendidas
 

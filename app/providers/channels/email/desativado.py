@@ -8,6 +8,9 @@ class EmailDesativadoProvider(EmailProvider):
     de empresa (Rede Social) parecer enviado quando na real nada saía,
     sem nenhum aviso pro usuário (raio-X de produção real)."""
 
+    def __init__(self, motivo: str = "Envio de e-mail não está configurado no servidor.") -> None:
+        self.motivo = motivo
+
     def enviar(
         self,
         destinatario: str,
@@ -21,4 +24,4 @@ class EmailDesativadoProvider(EmailProvider):
         campanha_destinatario_id: int | None = None,
         reply_to: str | None = None,
     ) -> ResultadoEnvio:
-        return ResultadoEnvio(sucesso=False, motivo_falha="Envio de e-mail não está configurado no servidor.")
+        return ResultadoEnvio(sucesso=False, motivo_falha=self.motivo)

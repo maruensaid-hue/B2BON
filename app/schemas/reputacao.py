@@ -18,3 +18,4 @@ class SaudeCanalSchema(BaseModel):
     pausado: bool
     limiar_bounce: float
     limiar_spam: float
+    amostra_minima: int

@@ -112,8 +112,8 @@ def test_ativar_cadencia_com_toque_de_email_bloqueada_por_canal_pausado(
     client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
     _aprovar_tudo(client, cadencia["id"])
 
-    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "enviado", 10)
-    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "bounce", 1)
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "enviado", 100)
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "bounce", 6)
 
     resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
 

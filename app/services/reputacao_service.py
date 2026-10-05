@@ -65,6 +65,11 @@ def _verificar_e_pausar(db: Session, tenant_id: str, canal: str) -> None:
     if enviados == 0:
         return
 
+    # `enviados` só conta "delivered"; bounce/dropped/blocked não entram
+    # nele — a amostra real de tentativas é a soma dos dois.
+    if enviados + bounces < settings.amostra_minima_reputacao:
+        return
+
     taxa_bounce = bounces / enviados
     taxa_spam = spam_reports / enviados
     if taxa_bounce < settings.limiar_bounce_padrao and taxa_spam < settings.limiar_spam_padrao:
@@ -120,17 +125,44 @@ def status_saude(db: Session, tenant_id: str, canal: str) -> dict:
         "pausado": canal_pausado(db, tenant_id, canal),
         "limiar_bounce": settings.limiar_bounce_padrao,
         "limiar_spam": settings.limiar_spam_padrao,
+        "amostra_minima": settings.amostra_minima_reputacao,
     }
 
 
 def reativar(db: Session, tenant_id: str, ator_id: str | None, canal: str) -> dict:
-    """Reativação manual do canal pelo Admin B2B ON, após correção (E10-H2)."""
+    """Reativação manual do canal pelo Admin B2B ON, após correção (E10-H2).
+
+    Zera bounce/spam da janela de 7 dias: sem isso, os mesmos eventos que
+    causaram a pausa continuam contando e o próximo evento qualquer
+    re-pausa o canal na hora, mesmo depois do usuário corrigir os contatos.
+    O que foi zerado fica no log de auditoria."""
     pausa = db.query(PausaCanal).filter_by(tenant_id=tenant_id, canal=canal).one_or_none()
     if pausa is not None:
         pausa.ativa = False
 
+    _, bounces_anteriores, spam_anteriores = _agregado_janela(db, tenant_id, canal)
+    limite = (date.today() - timedelta(days=_JANELA_DIAS)).isoformat()
+    for registro in (
+        db.query(RegistroReputacaoCanal)
+        .filter(
+            RegistroReputacaoCanal.tenant_id == tenant_id,
+            RegistroReputacaoCanal.canal == canal,
+            RegistroReputacaoCanal.data >= limite,
+        )
+        .all()
+    ):
+        registro.bounces = 0
+        registro.spam_reports = 0
+
     auditoria_service.registrar(
-        db, tenant_id, "canal_reativado_manualmente", "canal", 0, ator_id, {"canal": canal}, canal=canal
+        db,
+        tenant_id,
+        "canal_reativado_manualmente",
+        "canal",
+        0,
+        ator_id,
+        {"canal": canal, "bounces_zerados": bounces_anteriores, "spam_reports_zerados": spam_anteriores},
+        canal=canal,
     )
     db.commit()
     return status_saude(db, tenant_id, canal)

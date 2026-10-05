@@ -178,3 +178,29 @@ def test_envios_email_de_campanha_so_conta_quando_canal_email_esta_ativo(
     assert corpo["itens"][0]["nome"] == "Ciclano"
     assert corpo["itens"][0]["origem"] == "campanha"
     assert corpo["itens"][0]["origem_nome"] == "Campanha E-mail"
+
+
+def test_envios_email_pendente_explica_quando_canal_esta_pausado(
+    client, onboarding_completo, criar_conta_com_decisor, db_session
+):
+    """Incidente 2026-10-05: 22 mensagens aprovadas ficavam "Pendente" sem
+    nenhum motivo enquanto o canal estava pausado."""
+    from app.services import reputacao_service
+
+    conta, decisor = criar_conta_com_decisor()
+    mensagem = aprovacao_service.criar_proposta(
+        db_session, TENANT_ID, None, decisor.id, "email", None, "Oi", StubPlanLimitsProvider(),
+    )
+    mensagem.status = "aprovado"
+    db_session.commit()
+
+    sem_pausa = client.get("/api/v1/relatorio-entrega/envios").json()["itens"][0]
+    assert sem_pausa["status"] == "pendente"
+    assert sem_pausa["detalhe"] is None
+
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "enviado", 100)
+    reputacao_service.registrar_evento(db_session, TENANT_ID, "email", "bounce", 6)
+
+    pausado = client.get("/api/v1/relatorio-entrega/envios").json()["itens"][0]
+    assert pausado["status"] == "pendente"
+    assert pausado["detalhe"] == "Aguardando — canal de e-mail pausado"

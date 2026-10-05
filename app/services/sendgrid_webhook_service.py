@@ -87,6 +87,13 @@ def processar_eventos(db: Session, eventos: list[dict]) -> None:
         tipo_mapeado = _MAPA_EVENTOS.get(tipo_evento)
         if not tenant_id or tipo_mapeado is None:
             continue
+        # Só e-mail de cadência/campanha alimenta a reputação do canal. E-mail
+        # de sistema (convite, cobrança, boas-vindas) sai pelo mesmo SendGrid
+        # com o `tenant_id` do assinante, mas não tem `mensagem_id`/
+        # `campanha_destinatario_id` — contá-lo pausava o outreach do tenant
+        # por bounce de um convite digitado errado (incidente 2026-10-05).
+        if evento.get("mensagem_id") is None and evento.get("campanha_destinatario_id") is None:
+            continue
         reputacao_service.registrar_evento(db, tenant_id, "email", tipo_mapeado)
         if tipo_evento in _EVENTOS_COM_CONTATO_PROBLEMATICO:
             _registrar_contato_problematico(db, evento)
