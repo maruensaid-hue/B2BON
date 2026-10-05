@@ -11,6 +11,7 @@ interface ResultadoBuscaDecisor {
   id: number | string;
   titulo: string;
   subtitulo: string | null;
+  email: string | null;
 }
 
 interface EmailEnviado {
@@ -102,6 +103,7 @@ export function Webmail() {
 function AbaEscrever({ aoEnviar }: { aoEnviar: () => void }) {
   const [busca, setBusca] = useState("");
   const [sugestoes, setSugestoes] = useState<ResultadoBuscaDecisor[]>([]);
+  const [buscou, setBuscou] = useState(false);
   const [destinatario, setDestinatario] = useState<ResultadoBuscaDecisor | null>(null);
   const [assunto, setAssunto] = useState("");
   const [corpo, setCorpo] = useState("");
@@ -115,8 +117,10 @@ function AbaEscrever({ aoEnviar }: { aoEnviar: () => void }) {
     const termo = busca.trim();
     if (!termo || destinatario) {
       setSugestoes([]);
+      setBuscou(false);
       return;
     }
+    setBuscou(false);
     const controlador = new AbortController();
     controladorRef.current = controlador;
     const temporizador = setTimeout(async () => {
@@ -125,6 +129,7 @@ function AbaEscrever({ aoEnviar }: { aoEnviar: () => void }) {
           signal: controlador.signal,
         });
         setSugestoes(dados.filter((item) => item.tipo === "decisor"));
+        setBuscou(true);
       } catch {
         // busca é só conveniência — falha silenciosa, usuário pode tentar de novo
       }
@@ -183,7 +188,8 @@ function AbaEscrever({ aoEnviar }: { aoEnviar: () => void }) {
                     <button
                       key={sugestao.id}
                       type="button"
-                      className="block w-full px-3 py-2 text-left text-[12px] hover:bg-surf2"
+                      disabled={!sugestao.email}
+                      className="block w-full px-3 py-2 text-left text-[12px] hover:bg-surf2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                       onClick={() => {
                         setDestinatario(sugestao);
                         setSugestoes([]);
@@ -191,10 +197,22 @@ function AbaEscrever({ aoEnviar }: { aoEnviar: () => void }) {
                     >
                       {sugestao.titulo}
                       {sugestao.subtitulo && <span className="text-muted"> — {sugestao.subtitulo}</span>}
+                      <span className="block text-[11px] text-muted">
+                        {sugestao.email ?? "sem e-mail cadastrado — não dá para enviar"}
+                      </span>
                     </button>
                   ))}
                 </div>
               )}
+            </div>
+          )}
+          {!destinatario && busca.trim() && sugestoes.length > 0 && (
+            <div className="mt-1.5 text-[11px] text-muted">Clique em um contato da lista para escolhê-lo como destinatário.</div>
+          )}
+          {!destinatario && busca.trim() && buscou && sugestoes.length === 0 && (
+            <div className="mt-1.5 text-[11px] text-muted">
+              Nenhum contato encontrado. O Webmail envia só para contatos cadastrados (Leads → Contatos). Para
+              validar a sua conta de e-mail, use "Enviar e-mail de teste" em Configuração → E-mail (SMTP).
             </div>
           )}
         </div>
@@ -209,6 +227,11 @@ function AbaEscrever({ aoEnviar }: { aoEnviar: () => void }) {
         <Button type="submit" disabled={!destinatario || enviando} className="w-full justify-center">
           {enviando ? "Enviando..." : "Enviar"}
         </Button>
+        {!destinatario && (
+          <div className="text-center text-[11px] text-muted">
+            O botão Enviar habilita depois que você escolhe o destinatário na busca acima.
+          </div>
+        )}
       </form>
     </Card>
   );

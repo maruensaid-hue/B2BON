@@ -327,6 +327,8 @@ export function Configuracao() {
   const [emailSmtp, setEmailSmtp] = useState<ConfiguracaoEmailSmtp | null>(null);
   const [erroEmailSmtp, setErroEmailSmtp] = useState<string | null>(null);
   const [salvandoEmailSmtp, setSalvandoEmailSmtp] = useState(false);
+  const [testandoEmailSmtp, setTestandoEmailSmtp] = useState(false);
+  const [resultadoTesteSmtp, setResultadoTesteSmtp] = useState<{ sucesso: boolean; mensagem: string } | null>(null);
   const [statusLinkedin, setStatusLinkedin] = useState<StatusConexoesLinkedin | null>(null);
   const [nomeArquivoLinkedin, setNomeArquivoLinkedin] = useState<string | null>(null);
   const [conteudoCsvLinkedin, setConteudoCsvLinkedin] = useState<string | null>(null);
@@ -578,6 +580,24 @@ export function Configuracao() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível salvar a conta de e-mail.");
     } finally {
       setSalvandoEmailSmtp(false);
+    }
+  }
+
+  async function testarEmailSmtp() {
+    if (testandoEmailSmtp) return;
+    setTestandoEmailSmtp(true);
+    setResultadoTesteSmtp(null);
+    try {
+      setResultadoTesteSmtp(
+        await api.post<{ sucesso: boolean; mensagem: string }>("/configuracao-email-smtp/testar"),
+      );
+    } catch (error) {
+      setResultadoTesteSmtp({
+        sucesso: false,
+        mensagem: error instanceof ApiError ? error.message : "Não foi possível enviar o e-mail de teste.",
+      });
+    } finally {
+      setTestandoEmailSmtp(false);
     }
   }
 
@@ -998,6 +1018,21 @@ export function Configuracao() {
               {salvandoEmailSmtp ? "Salvando..." : "Salvar conta de e-mail"}
             </Button>
           </form>
+          {emailSmtp && (
+            <div className="mt-3 border-t border-border pt-3">
+              <div className="mb-2 text-[11px] text-muted">
+                Envia um e-mail de teste para o seu próprio endereço, usando a conta salva acima.
+              </div>
+              <Button variant="ghost" disabled={testandoEmailSmtp} onClick={testarEmailSmtp} className="w-full justify-center">
+                {testandoEmailSmtp ? "Enviando teste..." : "Enviar e-mail de teste"}
+              </Button>
+              {resultadoTesteSmtp && (
+                <div className={`mt-2 text-[12px] ${resultadoTesteSmtp.sucesso ? "text-green" : "text-red"}`}>
+                  {resultadoTesteSmtp.mensagem}
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       )}
 

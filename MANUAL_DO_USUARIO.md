@@ -574,6 +574,16 @@ imediatas de envio aparecem, como **Erro** no detalhamento. Sem conta
 SMTP cadastrada, nenhum e-mail de cadência ou campanha sai: o envio falha
 com o aviso para cadastrar a conta.
 
+**Testando a conta de e-mail e o Webmail.** Depois de salvar a conta em
+Configuração → E-mail (SMTP), use **"Enviar e-mail de teste"**: a B2B ON
+manda uma mensagem para o seu próprio endereço pela conta salva e mostra
+na hora o motivo real se falhar (por exemplo, o Gmail exige uma *senha
+de app*, não a senha normal). O **Webmail** envia só para **contatos
+cadastrados** (Leads → Contatos) que tenham e-mail: digite o nome na
+busca e **clique no contato da lista** — o botão Enviar só habilita
+depois disso. Contatos sem e-mail aparecem na lista, mas não podem ser
+escolhidos.
+
 ### 5.10 Regras Aprendidas
 
 Fecha o loop entre "a IA errou/o vendedor corrigiu" e "a próxima

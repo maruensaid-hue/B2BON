@@ -2,8 +2,17 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_tenant_id
+from app.api.deps import (
+    exigir_papel,
+    get_ator_id,
+    get_db,
+    get_email_provider_do_tenant,
+    get_tenant_id,
+    get_usuario_atual,
+)
 from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
+from app.models.usuario import Usuario
+from app.providers.channels.email.base import EmailProvider
 from app.schemas.configuracao_email_smtp import ConfiguracaoEmailSmtpSchema, ConfiguracaoEmailSmtpUpsertSchema
 from app.services import auditoria_service
 from app.services.errors import ValidacaoFalhou
@@ -91,3 +100,35 @@ def salvar_configuracao_email_smtp(
     db.commit()
     config = db.get(ConfiguracaoEmailSmtp, config_id)
     return _para_schema(config)
+
+
+@router.post("/testar", dependencies=[Depends(exigir_papel("super_admin", "admin"))])
+def testar_configuracao_email_smtp(
+    usuario: Usuario = Depends(get_usuario_atual),
+    tenant_id: str = Depends(get_tenant_id),
+    email: EmailProvider = Depends(get_email_provider_do_tenant),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Manda um e-mail de teste para o próprio usuário logado, pela conta
+    SMTP salva do tenant — o Webmail só envia para contatos cadastrados,
+    então não dava para validar a conta recém-cadastrada sem antes criar
+    um contato com o próprio e-mail. A falha volta com o motivo real do
+    servidor SMTP (ex.: Gmail exige senha de app), não um erro genérico."""
+    config_existe = db.execute(
+        select(ConfiguracaoEmailSmtp.id).where(ConfiguracaoEmailSmtp.tenant_id == tenant_id)
+    ).one_or_none()
+    if config_existe is None:
+        raise ValidacaoFalhou("Salve a conta de e-mail (SMTP) antes de enviar um teste.")
+
+    resultado = email.enviar(
+        usuario.email,
+        "Teste de envio — B2B ON",
+        "Este é um e-mail de teste da B2B ON. Se você recebeu esta mensagem, a conta de e-mail (SMTP) "
+        "cadastrada em Configuração está funcionando.",
+        usuario.nome,
+        usuario.email,
+        tenant_id,
+    )
+    if not resultado.sucesso:
+        return {"sucesso": False, "mensagem": resultado.motivo_falha or "Falha ao enviar o e-mail de teste."}
+    return {"sucesso": True, "mensagem": f"E-mail de teste enviado para {usuario.email}."}

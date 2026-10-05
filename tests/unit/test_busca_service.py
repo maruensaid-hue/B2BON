@@ -128,6 +128,22 @@ def test_acha_decisor_por_email(db_session):
     assert any(r.tipo == "decisor" and r.titulo == "Outro Contato" for r in resultados)
 
 
+def test_resultado_de_decisor_traz_o_email_e_none_quando_nao_tem(db_session):
+    """O Webmail só envia para contato com e-mail — a busca precisa dizer
+    qual tem, senão o botão Enviar ficava desabilitado sem explicação."""
+    usuario = _criar_tenant_e_usuario(db_session, TENANT_ID)
+    conta = _criar_conta(db_session, TENANT_ID)
+    db_session.add(Decisor(tenant_id=TENANT_ID, conta_id=conta.id, nome="Zelda Comemail", email="zelda@empresa.com.br"))
+    db_session.add(Decisor(tenant_id=TENANT_ID, conta_id=conta.id, nome="Zorro Sememail", email=None))
+    db_session.commit()
+
+    com_email = busca_service.buscar(db_session, usuario, "Zelda")
+    sem_email = busca_service.buscar(db_session, usuario, "Zorro")
+
+    assert [r.email for r in com_email if r.tipo == "decisor"] == ["zelda@empresa.com.br"]
+    assert [r.email for r in sem_email if r.tipo == "decisor"] == [None]
+
+
 def test_acha_decisor_de_conta_com_icp(db_session):
     """Diferente das telas de Leads (avulsos, sem ICP), a busca global
     precisa achar contatos de QUALQUER conta — inclusive as que vieram de

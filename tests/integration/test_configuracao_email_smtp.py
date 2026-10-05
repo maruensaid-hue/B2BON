@@ -118,3 +118,44 @@ def test_configuracao_email_smtp_bloqueada_para_papel_user(client, criar_usuario
 
     assert resposta_get.status_code == 403
     assert resposta_put.status_code == 403
+
+
+def test_testar_sem_conta_salva_pede_para_salvar_antes(client, fake_email):
+    resposta = client.post("/api/v1/configuracao-email-smtp/testar")
+
+    assert resposta.status_code == 422
+    assert fake_email.envios == []
+
+
+def test_testar_envia_para_o_proprio_usuario_pela_conta_do_tenant(client, fake_email):
+    """Webmail só envia para contato cadastrado — sem isto não havia como
+    validar a conta SMTP recém-cadastrada."""
+    client.put("/api/v1/configuracao-email-smtp", json={**_PAYLOAD_PADRAO, "senha": "senha"})
+
+    resposta = client.post("/api/v1/configuracao-email-smtp/testar")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["sucesso"] is True
+    assert len(fake_email.envios) == 1
+    envio = fake_email.envios[0]
+    assert envio["destinatario"] == envio["remetente_email"]
+    assert envio["destinatario"] in corpo["mensagem"]
+
+
+def test_testar_devolve_o_motivo_real_quando_o_envio_falha(client, fake_email):
+    client.put("/api/v1/configuracao-email-smtp", json={**_PAYLOAD_PADRAO, "senha": "senha"})
+    fake_email.falhar_proximos = 1
+
+    resposta = client.post("/api/v1/configuracao-email-smtp/testar")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"sucesso": False, "mensagem": "falha simulada"}
+
+
+def test_testar_bloqueado_para_papel_user(client, criar_usuario_autenticado):
+    headers_user = criar_usuario_autenticado(TENANT_ID, papel="user", email="user-teste-smtp@teste.com.br")
+
+    resposta = client.post("/api/v1/configuracao-email-smtp/testar", headers=headers_user)
+
+    assert resposta.status_code == 403

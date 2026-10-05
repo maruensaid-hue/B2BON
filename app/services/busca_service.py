@@ -137,6 +137,7 @@ def buscar(db: Session, usuario: Usuario, termo: str) -> list[ResultadoBuscaSche
                 id=decisor.id,
                 titulo=decisor.nome,
                 subtitulo=" · ".join(subtitulo_partes) if subtitulo_partes else None,
+                email=decisor.email or None,
                 rota=f"/leads/contas/{decisor.conta_id}",
             )
         )

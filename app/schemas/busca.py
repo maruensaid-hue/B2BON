@@ -6,4 +6,5 @@ class ResultadoBuscaSchema(BaseModel):
     id: int | str
     titulo: str
     subtitulo: str | None = None
+    email: str | None = None  # só preenchido para decisor
     rota: str
