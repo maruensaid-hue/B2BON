@@ -252,7 +252,7 @@ function NavGroup({
     setFlyoutAberto((atual) => !atual);
   }
 
-  // Com muitos sub-itens (ex.: Predator, 11), o flyout aberto perto do
+  // Com muitos sub-itens (ex.: PREDATOR, 11), o flyout aberto perto do
   // fim da sidebar pode nascer com o rodapé fora da viewport, sem
   // como rolar até lá — reposiciona pra cima depois de medir a altura
   // real renderizada (raio-X 2026-09-21).
@@ -763,7 +763,7 @@ export function AppShell() {
           {temModuloPredator && (
             <div data-tour-id="predator">
               <NavGroup
-                label="Predator"
+                label="PREDATOR"
                 icon="🐾"
                 itens={PREDATOR_NAV_ITEMS}
                 tourToggleId="predator"

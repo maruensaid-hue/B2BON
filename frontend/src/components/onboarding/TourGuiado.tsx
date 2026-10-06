@@ -10,10 +10,10 @@ import { GuiaPassoAPasso, type PassoGuia } from "@/components/onboarding/GuiaPas
 // AppShell.tsx (`nav:${path}` nos itens de menu, ou um id fixo nos
 // contêineres de seção); passos cujo elemento não existe no DOM no
 // momento (ex.: "admin" pra quem não gerencia hierarquia, ou os
-// sub-passos de Predator pra quem não tem licença ativa) são pulados
+// sub-passos de PREDATOR pra quem não tem licença ativa) são pulados
 // automaticamente (mecânica em `GuiaPassoAPasso.tsx`, raio-X
 // 2026-09-21 — extraída daqui pra ser reaproveitada pelos tutoriais
-// por módulo). `grupoToggle` é só usado pelos sub-passos de Predator:
+// por módulo). `grupoToggle` é só usado pelos sub-passos de PREDATOR:
 // o grupo do menu nasce recolhido, então o guia clica no
 // `data-tour-toggle` correspondente (ver AppShell.tsx) pra abri-lo
 // sozinho antes de destacar o item de dentro.
@@ -50,73 +50,73 @@ const PASSOS_TOUR: PassoGuia[] = [
   },
   {
     id: "predator",
-    titulo: "Predator — motor de prospecção",
+    titulo: "PREDATOR — motor de prospecção",
     descricao:
       "O motor pago de prospecção B2B da plataforma, com nove módulos — os próximos passos visitam cada um.",
   },
   {
     id: "nav:/prospeccao",
-    titulo: "Predator — Prospecção",
+    titulo: "PREDATOR — Prospecção",
     descricao:
       "Crie um ICP (segmento, porte, região, CNAEs), gere uma lista de contas que batem com ele direto na base da Receita Federal, enriqueça cada conta (site + decisores via IA), ou importe uma Lista de Prospecção via planilha.",
     grupoToggle: "predator",
   },
   {
     id: "nav:/cadencias",
-    titulo: "Predator — Cadências",
+    titulo: "PREDATOR — Cadências",
     descricao:
       "Sequências de toques multicanal (e-mail, WhatsApp, LinkedIn) escritas por IA — crie, gere as mensagens, aprove em Aprovações e só depois ative pra disparar.",
     grupoToggle: "predator",
   },
   {
     id: "nav:/campanhas",
-    titulo: "Predator — Campanhas",
+    titulo: "PREDATOR — Campanhas",
     descricao: "Disparo de e-mail/WhatsApp em massa pra uma lista, fora do fluxo de cadência de toques.",
     grupoToggle: "predator",
   },
   {
     id: "nav:/aprovacoes",
-    titulo: "Predator — Aprovações",
+    titulo: "PREDATOR — Aprovações",
     descricao:
       "Toda mensagem que a IA escreve passa por aqui antes de ser enviada — aprove, edite ou rejeite, com filtro por status.",
     grupoToggle: "predator",
   },
   {
     id: "nav:/reunioes",
-    titulo: "Predator — Reuniões",
+    titulo: "PREDATOR — Reuniões",
     descricao: "Lembretes automáticos e vídeo/transcrição das reuniões marcadas com seus prospects.",
     grupoToggle: "predator",
   },
   {
     id: "nav:/relatorio-entrega",
-    titulo: "Predator — Relatório de Entrega",
+    titulo: "PREDATOR — Relatório de Entrega",
     descricao:
       "Taxa de abertura/clique/resposta de e-mail e WhatsApp, com bloqueio automático de contatos com muito bounce.",
     grupoToggle: "predator",
   },
   {
     id: "nav:/regras-aprendidas",
-    titulo: "Predator — Regras Aprendidas",
+    titulo: "PREDATOR — Regras Aprendidas",
     descricao:
       "Cadastre regras de estilo/conteúdo que entram sozinhas no prompt da próxima cadência — a IA pode sugerir o texto a partir de uma correção recente sua.",
     grupoToggle: "predator",
   },
   {
     id: "nav:/inteligencia-rede",
-    titulo: "Predator — Sinais de Oportunidade",
+    titulo: "PREDATOR — Sinais de Oportunidade",
     descricao: "Fit de ICP contra a rede Shoal, matches de necessidades declaradas e riscos de pipeline — sempre com o motivo explicado.",
     grupoToggle: "predator",
   },
   {
     id: "nav:/agente-corporativo",
-    titulo: "Predator — Agente Corporativo",
+    titulo: "PREDATOR — Agente Corporativo",
     descricao:
       "Um assistente de IA que responde, sob revisão humana, perguntas que outras empresas do Shoal fazem sobre a sua.",
     grupoToggle: "predator",
   },
   {
     id: "nav:/configuracao",
-    titulo: "Predator — Configuração",
+    titulo: "PREDATOR — Configuração",
     descricao:
       "Oferta e tom de comunicação usados pela IA, conexões de WhatsApp/E-mail/LinkedIn (obrigatórias pra disparar), e modelo de proposta.",
     grupoToggle: "predator",
@@ -143,7 +143,7 @@ const PASSOS_TOUR: PassoGuia[] = [
     id: "nav:/rede-social",
     titulo: "Shoal — a rede social B2B",
     descricao:
-      "Camada gratuita da plataforma — funciona mesmo sem licença ativa do Predator. Os próximos passos visitam cada área.",
+      "Camada gratuita da plataforma — funciona mesmo sem licença ativa do PREDATOR. Os próximos passos visitam cada área.",
   },
   {
     id: "nav:/rede-social",

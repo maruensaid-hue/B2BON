@@ -11,7 +11,7 @@ const DIFERENCIAIS: Diferencial[] = [
     icone: "🎯",
     titulo: "Prospecção de verdade, não só um CRM bonito",
     texto:
-      "A maioria dos CRMs espera você trazer o lead. O Predator sai atrás: gera a lista a partir da base real da Receita Federal, enriquece com IA e escreve a cadência sozinho — você só entra quando tem gente pronta pra falar.",
+      "A maioria dos CRMs espera você trazer o lead. O PREDATOR sai atrás: gera a lista a partir da base real da Receita Federal, enriquece com IA e escreve a cadência sozinho — você só entra quando tem gente pronta pra falar.",
   },
   {
     icone: "✅",

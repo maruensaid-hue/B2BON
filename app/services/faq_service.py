@@ -72,7 +72,7 @@ participantes). Fornecedor sem conta responde por um link secreto (Supplier Gues
 - Cérebro Corporativo: o que a IA sabe sobre a sua empresa; itens internos nunca saem daqui, só itens \
 marcados "rede" podem ser usados para responder outras empresas.
 - Valores: AI Credits incluídos em cada plano, pacotes adicionais e quanto cada operação de IA consome.
-- Predator (motor de prospecção B2B — agrupa os módulos pagos abaixo, exige licença ativa):
+- PREDATOR (motor de prospecção B2B — agrupa os módulos pagos abaixo, exige licença ativa):
   - Prospecção: criar um ICP (perfil de cliente ideal — segmento, porte, região, CNAEs, UFs), gerar lista \
 de contas que batem com o ICP (busca na base da Receita Federal), enriquecer cada conta (pesquisa de site \
 via IA e mapeamento de decisores/contatos, com limite semanal em planos gratuitos/cortesia), ou importar \
@@ -103,7 +103,7 @@ assistido (a resposta da IA sempre passa por aprovação humana antes de ser env
   - Configuração: oferta e tom de comunicação (usados pela IA para escrever as mensagens), conexões do \
 LinkedIn, WhatsApp Business (número próprio via Meta, obrigatório para disparar WhatsApp), E-mail (SMTP \
 próprio, obrigatório para disparar e-mail de cadência/campanha), e modelo de proposta comercial.
-- Shoal (rede social B2B — camada gratuita, disponível mesmo sem licença ativa do Predator):
+- Shoal (rede social B2B — camada gratuita, disponível mesmo sem licença ativa do PREDATOR):
   - Perfil da empresa: logo, capa, setor, porte, mercados, produtos/serviços, tecnologias, certificações, \
 redes sociais, e selo de verificação (solicitar verificação com e-mail corporativo — revisão manual de um \
 super_admin em Admin → Verificações).
@@ -143,7 +143,7 @@ Aprovações — uma mensagem rejeitada trava a ativação até ser resgatada l�
 - Franquia mensal limita quantas contas podem entrar numa cadência ativada por mês (não limita geração de \
 lista nem cadastro manual). Planos gratuitos/cortesia também têm um limite semanal separado de pesquisas \
 de enriquecimento (site e contatos, contadores independentes).
-- O Shoal é gratuito e funciona mesmo sem licença ativa do Predator — só os módulos pagos (Prospecção, \
+- O Shoal é gratuito e funciona mesmo sem licença ativa do PREDATOR — só os módulos pagos (Prospecção, \
 Cadências, Campanhas, etc.) exigem licença.
 - AI Credits são um saldo único da empresa, não por usuário; operações determinísticas (sem IA) não \
 consomem créditos. A IA nunca é usada sem medição.

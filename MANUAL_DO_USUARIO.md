@@ -527,7 +527,7 @@ alguém abrir a plataforma para acontecer.
 
 ### 5.9 Relatório de Entrega e proteção contra bounce de e-mail
 
-Em **Predator → Relatório de Entrega**: entregabilidade de e-mail e
+Em **PREDATOR → Relatório de Entrega**: entregabilidade de e-mail e
 taxa de resposta por canal — o que a plataforma consegue de fato medir
 (WhatsApp e LinkedIn não têm confirmação de entrega/leitura rastreada,
 só a taxa de resposta é medida pra eles).
@@ -1063,12 +1063,12 @@ Compras **privadas** da sua empresa. Menu **Strategic Sourcing**.
 
 - **Tour guiado**: no primeiro acesso, destaca cada item do menu que o
   seu plano e o seu papel liberam — CRM (com Revenue Intelligence), MAP,
-  Predator, Licitações, Compras públicas, Strategic Sourcing, Shoal,
+  PREDATOR, Licitações, Compras públicas, Strategic Sourcing, Shoal,
   Convites de compra, Cérebro Corporativo, Valores, Leads e Admin (com
   AI Credits e Assinatura). Itens que você não vê são pulados. Pode ser
   refeito pelo painel de ajuda.
 - **Tutoriais por módulo**: abrem sozinhos na primeira visita a CRM,
-  MAP, telas do Predator, Shoal, Leads, **Licitações**, **Compras
+  MAP, telas do PREDATOR, Shoal, Leads, **Licitações**, **Compras
   públicas**, **Strategic Sourcing** e **Convites de compra**, e voltam
   pelo botão **🔄 Rever tutorial** ao lado do título.
 - **FAQ com IA** (painel lateral): responde dúvidas sobre o uso de
