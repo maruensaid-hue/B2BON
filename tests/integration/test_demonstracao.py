@@ -96,7 +96,6 @@ def test_token_de_demonstracao_adulterado_ou_com_demo_desligada_nao_entra(client
     import jwt as pyjwt
 
     corpo, headers = _abrir(client)
-    token_demo = headers["Cookie"].split("=", 1)[1]
     falso = pyjwt.encode({"sub": str(corpo["usuario"]["id"]), "demo": False, "papel": "super_admin"}, "chave-errada", algorithm="HS256")
     assert client.get("/api/v1/admin/tenants", headers={"Authorization": f"Bearer {falso}"}).status_code == 401
     monkeypatch.setattr(settings, "demo_habilitada", False)  # desligar invalida as sessões abertas na hora
