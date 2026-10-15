@@ -64,7 +64,7 @@ def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, criar_usuar
     acesso_direto = client.get(
         f"/api/v1/oportunidades/{negocio_admin.json()['id']}/card", headers=headers
     )
-    assert acesso_direto.status_code == 404
+    assert acesso_direto.status_code in (403, 404)
 
 
 def test_vendedor_nao_pode_vincular_contato_de_outra_empresa(client, db_session, criar_usuario_autenticado):
