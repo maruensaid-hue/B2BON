@@ -56,8 +56,8 @@ def criar_manual(
     conta = Conta(
         tenant_id=tenant_id,
         icp_id=icp_id,
-        criado_por_usuario_id=int(ator_id) if ator_id else None,
-        vendedor_usuario_id=int(ator_id) if ator_id else icp.criador_usuario_id,
+        criado_por_usuario_id=int(ator_id) if ator_id is not None and str(ator_id).isdigit() else None,
+        vendedor_usuario_id=int(ator_id) if ator_id is not None and str(ator_id).isdigit() else icp.criador_usuario_id,
         nome=nome,
         cnpj=_normalizar_cnpj(cnpj),
         dominio=_normalizar_dominio(dominio),
