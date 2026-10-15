@@ -8,6 +8,7 @@ from app.api.deps import (
     get_llm_provider,
     get_tenant_id,
     get_usuario_atual,
+    exigir_escopo_decisor_usuario,
     limitar_ia_por_tenant,
 )
 from app.contexts.integrations import contract as integracoes
@@ -171,9 +172,26 @@ def listar_decisores_da_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[DecisorSchema]:
     decisores = conta_service.decisores_da_conta(db, conta_service.obter(db, tenant_id, conta_id))
+    if usuario.papel == "user":
+        ids_permitidos = {
+            decisor_id for (decisor_id,) in (
+                db.query(Decisor.id)
+                .join(Conta, Conta.id == Decisor.conta_id)
+                .outerjoin(ICP, ICP.id == Conta.icp_id)
+                .filter(
+                    Decisor.conta_id == conta_id,
+                    Decisor.tenant_id == tenant_id,
+                    ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)
+                     | (Conta.criado_por_usuario_id == usuario.id) | (Conta.vendedor_usuario_id == usuario.id)),
+                )
+                .all()
+            )
+        }
+        decisores = [d for d in decisores if d.id in ids_permitidos]
     return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, decisores)
 
 
