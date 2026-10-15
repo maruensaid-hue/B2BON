@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.models.conta import Conta
 from app.models.decisor import Decisor
+from app.models.icp import ICP
 from app.models.indicacao import Indicacao
 from app.models.reuniao import Reuniao
 from app.providers.calendar.base import CalendarProvider
@@ -61,6 +62,8 @@ def listar(
     conta_id: int | None = None,
     data_inicio: date | None = None,
     data_fim: date | None = None,
+    usuario_id: int | None = None,
+    restrito: bool = False,
 ) -> list[dict]:
     """Não existia rota de listagem — só ações por id (Onda J: faltava tela
     de Reuniões no frontend, esse é o endpoint que a alimenta). Nome de
@@ -75,8 +78,16 @@ def listar(
         db.query(Reuniao, Conta, Decisor)
         .join(Conta, Reuniao.conta_id == Conta.id)
         .join(Decisor, Reuniao.decisor_id == Decisor.id)
-        .filter(Reuniao.tenant_id == tenant_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(Reuniao.tenant_id == tenant_id, Conta.tenant_id == tenant_id)
     )
+    if restrito:
+        query = query.filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+            ((Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+        )
     if status is not None:
         query = query.filter(Reuniao.status == status)
     if conta_id is not None:
