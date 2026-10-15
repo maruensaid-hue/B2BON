@@ -141,7 +141,7 @@ def _montar(db, tenant_id, conta, *, negocio, estagio, agora, usuario_id=None, r
         if decisor_ids:
             consulta_reunioes = consulta_reunioes.filter(Reuniao.decisor_id.in_(decisor_ids))
         else:
-            consulta_reunioes = consulta_reunioes.filter(False)
+            consulta_reunioes = consulta_reunioes.filter(Reuniao.id == -1)
     reunioes = consulta_reunioes.order_by(Reuniao.data_hora.desc()).limit(10).all()
     return DadosOportunidade(
         agora=agora or datetime.now(UTC),
