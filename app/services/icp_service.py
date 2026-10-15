@@ -15,15 +15,20 @@ def existe_icp_ativo(db: Session, tenant_id: str) -> bool:
     return db.query(ICP).filter_by(tenant_id=tenant_id, ativo=True).first() is not None
 
 
-def obter(db: Session, tenant_id: str, icp_id: int) -> ICP:
-    icp = db.query(ICP).filter_by(id=icp_id, tenant_id=tenant_id).one_or_none()
+def obter(db: Session, tenant_id: str, icp_id: int, usuario_id: int | None = None, restrito: bool = False) -> ICP:
+    query = db.query(ICP).filter_by(id=icp_id, tenant_id=tenant_id)
+    if restrito:
+        query = query.filter(ICP.criador_usuario_id == usuario_id)
+    icp = query.one_or_none()
     if icp is None:
         raise NaoEncontrado(f"ICP {icp_id} não encontrado")
     return icp
 
 
-def listar(db: Session, tenant_id: str, apenas_ativos: bool = False) -> list[ICP]:
+def listar(db: Session, tenant_id: str, apenas_ativos: bool = False, usuario_id: int | None = None, restrito: bool = False) -> list[ICP]:
     query = db.query(ICP).filter_by(tenant_id=tenant_id)
+    if restrito:
+        query = query.filter(ICP.criador_usuario_id == usuario_id)
     if apenas_ativos:
         query = query.filter_by(ativo=True)
     return query.order_by(ICP.grupo_id, ICP.versao).all()
@@ -41,8 +46,8 @@ def historico(db: Session, tenant_id: str, grupo_id: str) -> list[ICP]:
 def criar(db: Session, tenant_id: str, ator_id: str | None, dados: ICPCreateSchema) -> ICP:
     icp = ICP(
         tenant_id=tenant_id,
-        grupo_id=str(uuid.uuid4()),
-        nome=dados.nome,
+        criador_usuario_id=int(ator_id) if ator_id else None,
+        grupo_id=str(uuid.uuid4()),        nome=dados.nome,
         versao=1,
         ativo=True,
         segmento=dados.segmento,
@@ -78,8 +83,8 @@ def nova_versao(db: Session, tenant_id: str, ator_id: str | None, icp_id: int, d
 
     nova = ICP(
         tenant_id=tenant_id,
-        grupo_id=atual.grupo_id,
-        nome=dados.nome,
+        criador_usuario_id=atual.criador_usuario_id,
+        grupo_id=atual.grupo_id,        nome=dados.nome,
         versao=versao_maxima + 1,
         ativo=True,
         segmento=dados.segmento,
@@ -110,6 +115,7 @@ def clonar(db: Session, tenant_id: str, ator_id: str | None, icp_id: int) -> ICP
 
     clone = ICP(
         tenant_id=tenant_id,
+        criador_usuario_id=int(ator_id) if ator_id else None,
         grupo_id=str(uuid.uuid4()),
         clonado_de_id=origem.id,
         nome=f"{origem.nome} (cópia)",
