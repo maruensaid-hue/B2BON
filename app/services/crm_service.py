@@ -200,12 +200,13 @@ def listar_negocios(
     # Usuário comum só enxerga oportunidades próprias ou ligadas a contas/ICPs próprios.
     if restringir_usuario:
         query = query.outerjoin(Conta, Conta.id == Negocio.conta_id).outerjoin(ICP, ICP.id == Conta.icp_id)
-        query = query.filter(
-            (Negocio.vendedor_usuario_id == usuario_id)
-            | (Conta.vendedor_usuario_id == usuario_id)
-            | (Conta.criado_por_usuario_id == usuario_id)
-            | (ICP.criador_usuario_id == usuario_id)
+        conta_propria = (
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id))
+            & ((Negocio.vendedor_usuario_id.is_(None)) | (Negocio.vendedor_usuario_id == usuario_id))
+            & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id))
         )
+        query = query.filter((Negocio.vendedor_usuario_id == usuario_id) | conta_propria)
     if estagio_id is not None:
         query = query.filter_by(estagio_id=estagio_id)
     if vendedor_usuario_id is not None:
