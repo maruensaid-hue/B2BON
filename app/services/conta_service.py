@@ -390,7 +390,11 @@ def listar_por_icp(db: Session, tenant_id: str, icp_id: int, usuario_id: int | N
     `gerar_lista` (Onda F2)."""
     query = db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(Conta.tenant_id == tenant_id, Conta.icp_id == icp_id)
     if restrito:
-        query = query.filter((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id))
+        query = query.filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+        )
     return query.order_by(Conta.criado_em.desc()).all()
 
 
