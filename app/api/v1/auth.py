@@ -299,7 +299,7 @@ def registrar_publico(
         dados.representante_id,
         dados.cnpj,
     )
-    return _resposta_token(usuario, db, checkout_url, primeiro_login=True, email_provider=email)
+    return _resposta_token(usuario, db, checkout_url, primeiro_login=True, email_provider=email, response=response)
 
 
 @router.post("/esqueci-senha", response_model=RespostaMensagemSchema, dependencies=[Depends(limitar_por_ip())])
