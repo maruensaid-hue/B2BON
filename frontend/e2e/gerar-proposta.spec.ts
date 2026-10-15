@@ -12,8 +12,9 @@ async function seedNegocio(request: import("@playwright/test").APIRequestContext
   const login = await request.post(`${API_BASE}/auth/login`, {
     data: { email: E2E_EMAIL, senha: E2E_SENHA },
   });
-  const { access_token: token } = await login.json();
-  const headers = { Authorization: `Bearer ${token}` };
+  const cookie = login.headers()["set-cookie"]?.split(";")[0];
+  if (!cookie) throw new Error("Login E2E não retornou cookie de sessão HttpOnly.");
+  const headers = { Cookie: cookie };
 
   const icp = await (
     await request.post(`${API_BASE}/icp`, {
@@ -41,7 +42,7 @@ async function seedNegocio(request: import("@playwright/test").APIRequestContext
     data: { conta_id: conta.id, decisor_id: decisor.id, nome: "Negócio para proposta E2E", valor: 1000 },
   });
 
-  return token;
+  return cookie;
 }
 
 test("gera proposta em PDF para uma oportunidade e confirma sucesso na tela", async ({ page, request }) => {
