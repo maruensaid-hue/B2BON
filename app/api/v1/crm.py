@@ -59,9 +59,12 @@ def exigir_escopo_negocio(
             Negocio.id == negocio_id,
             Negocio.tenant_id == tenant_id,
             (Negocio.vendedor_usuario_id == usuario.id)
-            | (Conta.vendedor_usuario_id == usuario.id)
-            | (Conta.criado_por_usuario_id == usuario.id)
-            | (ICP.criador_usuario_id == usuario.id),
+            | (
+                ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+                 | (ICP.criador_usuario_id == usuario.id))
+                & ((Negocio.vendedor_usuario_id.is_(None)) | (Negocio.vendedor_usuario_id == usuario.id))
+                & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id))
+            ),
         )
         .one_or_none()
     )
@@ -193,6 +196,21 @@ def criar_negocio(
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
     vendedor_id = usuario.id if usuario.papel == "user" else dados.vendedor_usuario_id
+    if usuario.papel == "user":
+        conta_propria = (
+            db.query(Conta)
+            .outerjoin(ICP, ICP.id == Conta.icp_id)
+            .filter(
+                Conta.id == dados.conta_id,
+                Conta.tenant_id == tenant_id,
+                ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+                 | (ICP.criador_usuario_id == usuario.id)),
+                ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            )
+            .one_or_none()
+        )
+        if conta_propria is None:
+            raise NaoEncontrado("Empresa não encontrada.")
     negocio = crm_service.criar_negocio(
         db,
         tenant_id,
