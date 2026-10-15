@@ -46,7 +46,7 @@ def historico(db: Session, tenant_id: str, grupo_id: str) -> list[ICP]:
 def criar(db: Session, tenant_id: str, ator_id: str | None, dados: ICPCreateSchema) -> ICP:
     icp = ICP(
         tenant_id=tenant_id,
-        criador_usuario_id=int(ator_id) if ator_id else None,
+        criador_usuario_id=int(ator_id) if ator_id is not None and str(ator_id).isdigit() else None,
         grupo_id=str(uuid.uuid4()),        nome=dados.nome,
         versao=1,
         ativo=True,
