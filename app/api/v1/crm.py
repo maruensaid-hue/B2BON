@@ -249,7 +249,7 @@ def criar_negocio(
     usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
-    vendedor_id = dados.vendedor_usuario_id if usuario.papel == "user" else dados.vendedor_usuario_id
+    vendedor_id = dados.vendedor_usuario_id
     if usuario.papel == "user":
         # O representante pode optar por atribuir a oportunidade a si mesmo
         # durante a criação, mas não pode atribuí-la a outro usuário.
