@@ -185,8 +185,7 @@ def listar_decisores_da_conta(
                 .filter(
                     Decisor.conta_id == conta_id,
                     Decisor.tenant_id == tenant_id,
-                    ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)
-                     | (Conta.criado_por_usuario_id == usuario.id) | (Conta.vendedor_usuario_id == usuario.id)),
+                    ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
                 )
                 .all()
             )
