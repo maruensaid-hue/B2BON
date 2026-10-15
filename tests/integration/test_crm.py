@@ -764,7 +764,7 @@ def test_oportunidade_sem_atribuicao_so_gestao_ve_e_atribuicao_libera_vendedor(
     assert resposta_atribuida.status_code == 200
     assert negocio.id in {item["id"] for item in resposta_atribuida.json()}
     detalhe_atribuido = client.get(
-        f"/api/v1/oportunidades/{negocio.id}/card", headers=headers_vendedor
+        f"/api/v1/inteligencia/oportunidades/{negocio.id}/card", headers=headers_vendedor
     )
     assert detalhe_atribuido.status_code == 200
     conta_atribuida = client.get(f"/api/v1/contas/{conta.id}", headers=headers_vendedor)
