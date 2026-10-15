@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_escopo_negocio_usuario, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
+from app.api.deps import exigir_escopo_conta_usuario, exigir_escopo_negocio_usuario, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
 from app.contexts.opportunity import contract as oportunidade
 from app.llm.base import LLMProvider
 from app.models.necessidade_oportunidade import CATEGORIAS
@@ -100,6 +100,6 @@ def revisar_necessidade(
     )
 
 
-@router.get("/contas/{conta_id}/white-space")
+@router.get("/contas/{conta_id}/white-space", dependencies=[Depends(exigir_escopo_conta_usuario)])
 def white_space(conta_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
     return oportunidade.white_space_da_conta(db, tenant_id, conta_id)
