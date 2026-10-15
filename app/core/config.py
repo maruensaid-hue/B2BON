@@ -318,6 +318,11 @@ class Settings(BaseSettings):
                 "repositório. Gere um valor forte (ex.: secrets.token_urlsafe(32)) e configure "
                 "a variável de ambiente correspondente antes de subir em produção."
             )
+        if not self.redis_url.strip():
+            raise RuntimeError(
+                "REDIS_URL é obrigatório em produção para rate limiting compartilhado. "
+                "Configure Redis antes de subir a API."
+            )
 
 
 settings = Settings()
