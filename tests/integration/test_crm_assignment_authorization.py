@@ -52,6 +52,10 @@ def test_oportunidade_sem_atribuicao_fica_oculta_ate_para_criador_da_empresa(
     db_session.commit()
     negocio = _criar_oportunidade(db_session, conta, decisor)
 
+    listagem_admin = client.get("/api/v1/crm/negocios")
+    assert listagem_admin.status_code == 200
+    assert negocio.id in {item["id"] for item in listagem_admin.json()}
+
     listagem = client.get("/api/v1/crm/negocios", headers=headers)
     assert listagem.status_code == 200
     assert negocio.id not in {item["id"] for item in listagem.json()}
@@ -115,6 +119,29 @@ def test_representante_nao_pode_atribuir_oportunidade_nem_escolher_outro_vendedo
         json={"vendedor_usuario_id": vendedor.id},
     )
     assert resposta.status_code == 403
+
+    db_session.refresh(negocio)
+    assert negocio.vendedor_usuario_id is None
+
+
+
+def test_admin_nao_pode_atribuir_representante_de_outro_tenant(
+    client, db_session, criar_conta_com_decisor, criar_usuario_autenticado
+):
+    conta, decisor = criar_conta_com_decisor()
+    negocio = _criar_oportunidade(db_session, conta, decisor)
+    criar_usuario_autenticado(
+        "tenant-diferente", papel="user", email="vendedor-de-outro-tenant@teste.com.br"
+    )
+    vendedor_externo = db_session.query(Usuario).filter_by(
+        email="vendedor-de-outro-tenant@teste.com.br"
+    ).one()
+
+    resposta = client.put(
+        f"/api/v1/crm/negocios/{negocio.id}/vendedor",
+        json={"vendedor_usuario_id": vendedor_externo.id},
+    )
+    assert resposta.status_code == 404
 
     db_session.refresh(negocio)
     assert negocio.vendedor_usuario_id is None
