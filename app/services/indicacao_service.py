@@ -117,7 +117,11 @@ def converter(
         .join(Decisor, Decisor.id == Indicacao.promotor_decisor_id)
         .join(Conta, Conta.id == Indicacao.promotor_conta_id)
         .outerjoin(ICP, ICP.id == Conta.icp_id)
-        .filter(Indicacao.tenant_id == tenant_id, Indicacao.codigo_indicacao == codigo_indicacao)
+        .filter(
+            Indicacao.tenant_id == tenant_id,
+            Indicacao.codigo_indicacao == codigo_indicacao,
+            Decisor.conta_id == Indicacao.promotor_conta_id,
+        )
     )
     if restrito:
         consulta_indicacao = consulta_indicacao.filter(
@@ -199,7 +203,11 @@ def listar(
         .outerjoin(ICP, ICP.id == Conta.icp_id)
         .outerjoin(conta_destino, conta_destino.id == Indicacao.conta_gerada_id)
         .outerjoin(icp_destino, icp_destino.id == conta_destino.icp_id)
-        .filter(Indicacao.tenant_id == tenant_id, Conta.tenant_id == tenant_id)
+        .filter(
+            Indicacao.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            Decisor.conta_id == Indicacao.promotor_conta_id,
+        )
     )
     if restrito:
         query = query.filter(
