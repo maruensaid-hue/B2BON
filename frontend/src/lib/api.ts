@@ -4,6 +4,9 @@ const USUARIO_KEY = "b2bon_usuario";
 const TEM_LICENCA_KEY = "b2bon_tem_licenca";
 const DEMO_KEY = "b2bon_demo_expira_em";
 
+// Remove JWTs left by older releases; requests now authenticate with HttpOnly cookies.
+if (typeof window !== "undefined") localStorage.removeItem(TOKEN_KEY);
+
 export class ApiError extends Error {
   status: number;
 
