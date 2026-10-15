@@ -9,6 +9,8 @@ from app.llm.base import LLMProvider
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.negocio import Negocio
+from app.models.icp import ICP
+from app.services.errors import NaoEncontrado
 from app.models.usuario import Usuario
 from app.schemas.conta import ContaSchema
 from app.schemas.crm import (
@@ -39,6 +41,34 @@ from app.schemas.template_proposta import GerarPropostaRequestSchema
 from app.services import crm_service, proposta_service, template_proposta_service
 
 router = APIRouter(prefix="/crm", tags=["crm"])
+
+def exigir_escopo_negocio(
+    negocio_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """404 por padrão para impedir enumeração de negócios de outros vendedores."""
+    if usuario.papel != "user":
+        return
+    negocio = (
+        db.query(Negocio)
+        .outerjoin(Conta, Conta.id == Negocio.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Negocio.id == negocio_id,
+            Negocio.tenant_id == tenant_id,
+            (Negocio.vendedor_usuario_id == usuario.id)
+            | (Conta.vendedor_usuario_id == usuario.id)
+            | (Conta.criado_por_usuario_id == usuario.id)
+            | (ICP.criador_usuario_id == usuario.id),
+        )
+        .one_or_none()
+    )
+    if negocio is None:
+        raise NaoEncontrado("Oportunidade não encontrada.")
+
+
 
 
 def _serializar_negocios(db: Session, tenant_id: str, negocios: list[Negocio]) -> list[NegocioSchema]:
@@ -210,7 +240,7 @@ def exportar_negocios(
     )
 
 
-@router.put("/negocios/{negocio_id}", response_model=NegocioSchema)
+@router.put("/negocios/{negocio_id}", response_model=NegocioSchema, dependencies=[Depends(exigir_escopo_negocio)])
 def atualizar_negocio(
     negocio_id: int,
     dados: AtualizarNegocioRequestSchema,
@@ -227,7 +257,7 @@ def atualizar_negocio(
 @router.post(
     "/negocios/{negocio_id}/meeting-brief",
     response_model=MeetingBriefSchema,
-    dependencies=[Depends(limitar_ia_por_tenant())],
+    dependencies=[Depends(limitar_ia_por_tenant()), Depends(exigir_escopo_negocio)],
 )
 def gerar_meeting_brief(
     negocio_id: int,
@@ -240,7 +270,7 @@ def gerar_meeting_brief(
     return MeetingBriefSchema(**crm_service.gerar_meeting_brief(db, tenant_id, ator_id, negocio_id, llm))
 
 
-@router.delete("/negocios/{negocio_id}", status_code=204)
+@router.delete("/negocios/{negocio_id}", status_code=204, dependencies=[Depends(exigir_escopo_negocio)])
 def excluir_negocio(
     negocio_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -250,7 +280,7 @@ def excluir_negocio(
     crm_service.excluir_negocio(db, tenant_id, ator_id, negocio_id)
 
 
-@router.put("/negocios/{negocio_id}/estagio", response_model=NegocioSchema)
+@router.put("/negocios/{negocio_id}/estagio", response_model=NegocioSchema, dependencies=[Depends(exigir_escopo_negocio)])
 def mover_estagio(
     negocio_id: int,
     dados: MoverEstagioRequestSchema,
@@ -263,7 +293,7 @@ def mover_estagio(
     return _serializar_negocios(db, tenant_id, [negocio])[0]
 
 
-@router.post("/negocios/{negocio_id}/atividades", response_model=AtividadeSchema, status_code=201)
+@router.post("/negocios/{negocio_id}/atividades", response_model=AtividadeSchema, status_code=201, dependencies=[Depends(exigir_escopo_negocio)])
 def registrar_atividade(
     negocio_id: int,
     dados: RegistrarAtividadeRequestSchema,
@@ -274,7 +304,7 @@ def registrar_atividade(
     return crm_service.registrar_atividade(db, tenant_id, ator_id, negocio_id, dados.tipo, dados.descricao)
 
 
-@router.get("/negocios/{negocio_id}/atividades", response_model=list[AtividadeSchema])
+@router.get("/negocios/{negocio_id}/atividades", response_model=list[AtividadeSchema], dependencies=[Depends(exigir_escopo_negocio)])
 def listar_atividades(
     negocio_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -283,7 +313,7 @@ def listar_atividades(
     return crm_service.listar_atividades(db, tenant_id, negocio_id)
 
 
-@router.post("/negocios/{negocio_id}/propostas", response_model=PropostaNegocioSchema, status_code=201)
+@router.post("/negocios/{negocio_id}/propostas", response_model=PropostaNegocioSchema, status_code=201, dependencies=[Depends(exigir_escopo_negocio)])
 async def anexar_proposta(
     negocio_id: int,
     arquivo: UploadFile = File(...),
@@ -305,7 +335,7 @@ async def anexar_proposta(
     )
 
 
-@router.get("/negocios/{negocio_id}/propostas", response_model=list[PropostaNegocioSchema])
+@router.get("/negocios/{negocio_id}/propostas", response_model=list[PropostaNegocioSchema], dependencies=[Depends(exigir_escopo_negocio)])
 def listar_propostas(
     negocio_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -314,7 +344,7 @@ def listar_propostas(
     return proposta_service.listar(db, tenant_id, negocio_id)
 
 
-@router.get("/negocios/{negocio_id}/propostas/{proposta_id}/download")
+@router.get("/negocios/{negocio_id}/propostas/{proposta_id}/download", dependencies=[Depends(exigir_escopo_negocio)])
 def baixar_proposta(
     negocio_id: int,
     proposta_id: int,
@@ -329,7 +359,7 @@ def baixar_proposta(
     )
 
 
-@router.post("/negocios/{negocio_id}/propostas/gerar", response_model=PropostaNegocioSchema, status_code=201)
+@router.post("/negocios/{negocio_id}/propostas/gerar", response_model=PropostaNegocioSchema, status_code=201, dependencies=[Depends(exigir_escopo_negocio)])
 def gerar_proposta(
     negocio_id: int,
     dados: GerarPropostaRequestSchema,
