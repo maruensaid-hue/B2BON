@@ -16,6 +16,7 @@ from app.schemas.conta import ContaSchema
 from app.schemas.crm import (
     AtividadeSchema,
     AtualizarNegocioRequestSchema,
+    AtribuirVendedorNegocioRequestSchema,
     CancelarClienteRequestSchema,
     CriarNegocioRequestSchema,
     CustoAquisicaoSchema,
@@ -53,6 +54,22 @@ def exigir_escopo_conta_crm(conta_id: int, tenant_id: str = Depends(get_tenant_i
     if conta is None:
         raise NaoEncontrado("Empresa não encontrada.")
 
+def _validar_vendedor_do_tenant(db: Session, tenant_id: str, vendedor_id: int) -> None:
+    """Só permite atribuir oportunidades a um representante ativo do tenant."""
+    vendedor = (
+        db.query(Usuario)
+        .filter(
+            Usuario.id == vendedor_id,
+            Usuario.tenant_id == tenant_id,
+            Usuario.papel == "user",
+            Usuario.ativo.is_(True),
+        )
+        .one_or_none()
+    )
+    if vendedor is None:
+        raise NaoEncontrado("Vendedor não encontrado neste tenant.")
+
+
 def _validar_decisor_do_vendedor(
     db: Session, tenant_id: str, usuario_id: int, conta_id: int, decisor_id: int
 ) -> None:
@@ -85,15 +102,9 @@ def exigir_escopo_negocio(
         return
     negocio = (
         db.query(Negocio)
-        .outerjoin(Conta, Conta.id == Negocio.conta_id)
-        .outerjoin(ICP, ICP.id == Conta.icp_id)
         .filter(
             Negocio.id == negocio_id,
             Negocio.tenant_id == tenant_id,
-            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
-             | (ICP.criador_usuario_id == usuario.id)),
-            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
-            # Não tratar oportunidade sem dono como se fosse do vendedor.
             Negocio.vendedor_usuario_id == usuario.id,
         )
         .one_or_none()
@@ -240,6 +251,8 @@ def criar_negocio(
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
     vendedor_id = usuario.id if usuario.papel == "user" else dados.vendedor_usuario_id
+    if usuario.papel != "user" and vendedor_id is not None:
+        _validar_vendedor_do_tenant(db, tenant_id, vendedor_id)
     if usuario.papel == "user":
         conta_propria = (
             db.query(Conta)
@@ -271,6 +284,31 @@ def criar_negocio(
         dados.oferta_id,
     )
     return _serializar_negocios(db, tenant_id, [negocio], usuario.id, usuario.papel == "user")[0]
+
+
+@router.put(
+    "/negocios/{negocio_id}/vendedor",
+    response_model=NegocioSchema,
+    dependencies=[Depends(exigir_papel("super_admin", "admin"))],
+)
+def atribuir_vendedor_negocio(
+    negocio_id: int,
+    dados: AtribuirVendedorNegocioRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> NegocioSchema:
+    """Atribui ou remove o vendedor de uma oportunidade dentro do tenant."""
+    negocio = db.query(Negocio).filter_by(id=negocio_id, tenant_id=tenant_id).one_or_none()
+    if negocio is None:
+        raise NaoEncontrado("Oportunidade não encontrada.")
+    if dados.vendedor_usuario_id is not None:
+        _validar_vendedor_do_tenant(db, tenant_id, dados.vendedor_usuario_id)
+    negocio.vendedor_usuario_id = dados.vendedor_usuario_id
+    db.commit()
+    db.refresh(negocio)
+    return _serializar_negocios(db, tenant_id, [negocio], usuario.id, False)[0]
 
 
 @router.post(
