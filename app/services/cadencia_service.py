@@ -68,10 +68,7 @@ def listar(
                  | (ICP.criador_usuario_id == usuario_id))
                 & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id))
             )),
-            ((Cadencia.criado_por_usuario_id == usuario_id)
-             | (ICP.criador_usuario_id == usuario_id)
-             | (Conta.vendedor_usuario_id == usuario_id)
-             | (Conta.criado_por_usuario_id == usuario_id)),
+            Cadencia.criado_por_usuario_id == usuario_id,
         )
     return query.order_by(Cadencia.id.desc()).all()
 
