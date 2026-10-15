@@ -1,13 +1,13 @@
 """Merge security ownership migration with existing MAP quota migration.
 
 Revision ID: c8d0e2f4a6b8
-Revises: f3b5d7f9a1c4, f7a1c9e3b5d7
+Revises: e3a5c7f9b1d4, f7a1c9e3b5d7
 Create Date: 2026-10-15
 """
 from alembic import op
 
 revision = "c8d0e2f4a6b8"
-down_revision = ("f3b5d7f9a1c4", "f7a1c9e3b5d7")
+down_revision = ("e3a5c7f9b1d4", "f7a1c9e3b5d7")
 branch_labels = None
 depends_on = None
 
