@@ -371,7 +371,8 @@ def test_solicitar_redefinicao_senha_pedido_novo_invalida_token_anterior(db_sess
 def test_redefinir_senha_com_token_valido_troca_a_senha(db_session):
     usuario = _criar_usuario(db_session, email="trocar@teste.com.br")
     senha_hash_antiga = usuario.senha_hash
-    auth_service.solicitar_redefinicao_senha(db_session, "trocar@teste.com.br", FakeEmailProvider())
+    fake_email = FakeEmailProvider()
+    auth_service.solicitar_redefinicao_senha(db_session, "trocar@teste.com.br", fake_email)
     token = fake_email.envios[0]["corpo"].split("/redefinir-senha/")[1].split()[0]
 
     auth_service.redefinir_senha(db_session, token, "senha-nova-123")
@@ -385,7 +386,8 @@ def test_redefinir_senha_com_token_valido_troca_a_senha(db_session):
 
 def test_redefinir_senha_token_ja_usado_falha(db_session):
     _criar_usuario(db_session, email="reuso@teste.com.br")
-    auth_service.solicitar_redefinicao_senha(db_session, "reuso@teste.com.br", FakeEmailProvider())
+    fake_email = FakeEmailProvider()
+    auth_service.solicitar_redefinicao_senha(db_session, "reuso@teste.com.br", fake_email)
     token = fake_email.envios[0]["corpo"].split("/redefinir-senha/")[1].split()[0]
     auth_service.redefinir_senha(db_session, token, "senha-nova-123")
 
