@@ -55,7 +55,7 @@ def test_fila_expoe_assunto_e_dados_do_decisor(client, db_session, cadencia_e_de
 
 
 def test_fila_aprovacoes_nao_expoe_contatos_de_outro_vendedor(
-    client, db_session, criar_usuario_autenticado
+    client, db_session, criar_usuario_autenticado, cadencia_e_decisor
 ):
     headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-aprovacao-escopo@teste.com.br")
     usuario = db_session.query(Usuario).filter_by(email="vendedor-aprovacao-escopo@teste.com.br").one()
