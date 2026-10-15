@@ -215,7 +215,10 @@ def gerar_cadencia_para_lote(
         }
         if permitidos != ids:
             raise NaoEncontrado("Uma ou mais empresas não estão no seu escopo.")
-    resultado = cadencia_service.gerar_para_lote(db, tenant_id, ator_id, cadencia_id, dados.conta_ids, llm, plan_limits)
+    resultado = cadencia_service.gerar_para_lote(
+        db, tenant_id, ator_id, cadencia_id, dados.conta_ids, llm, plan_limits,
+        usuario.id, usuario.papel == "user",
+    )
     return GerarCadenciaResponseSchema(**resultado)
 
 
