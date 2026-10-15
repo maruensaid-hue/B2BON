@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_escopo_conta_usuario, exigir_escopo_negocio_usuario, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
+from app.api.deps import exigir_escopo_conta_usuario, exigir_escopo_negocio_usuario, exigir_escopo_necessidade_usuario, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
 from app.contexts.opportunity import contract as oportunidade
 from app.llm.base import LLMProvider
 from app.models.necessidade_oportunidade import CATEGORIAS
@@ -87,7 +87,7 @@ def extrair_necessidades(
     )
 
 
-@router.patch("/necessidades/{necessidade_id}")
+@router.patch("/necessidades/{necessidade_id}", dependencies=[Depends(exigir_escopo_necessidade_usuario)])
 def revisar_necessidade(
     necessidade_id: int,
     dados: RevisaoNecessidadeSchema,
