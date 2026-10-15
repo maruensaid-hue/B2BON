@@ -1,5 +1,10 @@
 name: CI
 
+# Evita consumir runners com suítes completas para commits obsoletos do mesmo PR.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 # Raio-X de produção: os 358 testes do backend só rodavam quando alguém
 # lembrava de chamar `pytest` manualmente antes do push. Isto bloqueia
 # PR/push com teste quebrado ou erro de TypeScript sem depender de memória.
