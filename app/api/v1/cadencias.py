@@ -1,8 +1,15 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_llm_provider, get_plan_limits_provider, get_tenant_id, limitar_ia_por_tenant
+from app.api.deps import (
+    exigir_escopo_cadencia_usuario, get_ator_id, get_db, get_llm_provider,
+    get_plan_limits_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant,
+)
 from app.llm.base import LLMProvider
+from app.models.conta import Conta
+from app.models.icp import ICP
+from app.models.usuario import Usuario
+from app.services.errors import NaoEncontrado
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.cadencia import (
     AdicionarToqueRequestSchema,
@@ -29,21 +36,28 @@ def criar_cadencia(
     dados: CadenciaCreateSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> CadenciaSchema:
+    if usuario.papel == "user":
+        if dados.icp_id is None or db.query(ICP.id).filter_by(
+            id=dados.icp_id, tenant_id=tenant_id, criador_usuario_id=usuario.id
+        ).one_or_none() is None:
+            raise NaoEncontrado("Selecione um ICP próprio para criar a cadência.")
     return cadencia_service.criar(db, tenant_id, ator_id, dados, plan_limits)
 
 
 @router.get("", response_model=list[CadenciaSchema])
 def listar_cadencias(
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[CadenciaSchema]:
-    return cadencia_service.listar(db, tenant_id)
+    return cadencia_service.listar(db, tenant_id, usuario.id, usuario.papel == "user")
 
 
-@router.delete("/{cadencia_id}", status_code=204)
+@router.delete("/{cadencia_id}", status_code=204, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def excluir_cadencia(
     cadencia_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -53,7 +67,7 @@ def excluir_cadencia(
     cadencia_service.excluir(db, tenant_id, ator_id, cadencia_id)
 
 
-@router.get("/{cadencia_id}/toques", response_model=list[ToqueCadenciaSchema])
+@router.get("/{cadencia_id}/toques", response_model=list[ToqueCadenciaSchema], dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def listar_toques(
     cadencia_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -63,7 +77,7 @@ def listar_toques(
     return cadencia_service.toques_da_cadencia(db, cadencia_id)
 
 
-@router.post("/{cadencia_id}/toques", response_model=ToqueCadenciaSchema, status_code=201)
+@router.post("/{cadencia_id}/toques", response_model=ToqueCadenciaSchema, status_code=201, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def adicionar_toque(
     cadencia_id: int,
     dados: AdicionarToqueRequestSchema,
@@ -79,7 +93,7 @@ def adicionar_toque(
     )
 
 
-@router.put("/{cadencia_id}/toques/{toque_id}", response_model=ToqueCadenciaSchema)
+@router.put("/{cadencia_id}/toques/{toque_id}", response_model=ToqueCadenciaSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def atualizar_toque(
     cadencia_id: int,
     toque_id: int,
@@ -96,7 +110,7 @@ def atualizar_toque(
     )
 
 
-@router.delete("/{cadencia_id}/toques/{toque_id}", status_code=204)
+@router.delete("/{cadencia_id}/toques/{toque_id}", status_code=204, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def remover_toque(
     cadencia_id: int,
     toque_id: int,
@@ -107,7 +121,7 @@ def remover_toque(
     cadencia_service.remover_toque(db, tenant_id, ator_id, cadencia_id, toque_id)
 
 
-@router.put("/{cadencia_id}/toques/{toque_id}/template-whatsapp", response_model=ToqueCadenciaSchema)
+@router.put("/{cadencia_id}/toques/{toque_id}/template-whatsapp", response_model=ToqueCadenciaSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def definir_template_whatsapp(
     cadencia_id: int,
     toque_id: int,
@@ -124,7 +138,7 @@ def definir_template_whatsapp(
     )
 
 
-@router.get("/{cadencia_id}", response_model=CadenciaSchema)
+@router.get("/{cadencia_id}", response_model=CadenciaSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def obter_cadencia(
     cadencia_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -133,7 +147,7 @@ def obter_cadencia(
     return cadencia_service.obter(db, tenant_id, cadencia_id)
 
 
-@router.put("/{cadencia_id}", response_model=CadenciaSchema)
+@router.put("/{cadencia_id}", response_model=CadenciaSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def renomear_cadencia(
     cadencia_id: int,
     dados: RenomearCadenciaRequestSchema,
@@ -144,7 +158,7 @@ def renomear_cadencia(
     return cadencia_service.renomear(db, tenant_id, ator_id, cadencia_id, dados.nome)
 
 
-@router.put("/{cadencia_id}/cancelamento-ao-responder", response_model=CadenciaSchema)
+@router.put("/{cadencia_id}/cancelamento-ao-responder", response_model=CadenciaSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def definir_cancelamento_ao_responder(
     cadencia_id: int,
     dados: DefinirCancelamentoAoResponderRequestSchema,
@@ -159,7 +173,7 @@ def definir_cancelamento_ao_responder(
     )
 
 
-@router.post("/{cadencia_id}/cancelar", response_model=CancelarCadenciaResponseSchema)
+@router.post("/{cadencia_id}/cancelar", response_model=CancelarCadenciaResponseSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def cancelar_cadencia(
     cadencia_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -172,21 +186,40 @@ def cancelar_cadencia(
     return CancelarCadenciaResponseSchema(**cadencia_service.cancelar(db, tenant_id, ator_id, cadencia_id))
 
 
-@router.post("/{cadencia_id}/gerar", response_model=GerarCadenciaResponseSchema, dependencies=[Depends(limitar_ia_por_tenant())])
+@router.post("/{cadencia_id}/gerar", response_model=GerarCadenciaResponseSchema, dependencies=[Depends(limitar_ia_por_tenant()), Depends(exigir_escopo_cadencia_usuario)])
 def gerar_cadencia_para_lote(
     cadencia_id: int,
     dados: GerarCadenciaRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> GerarCadenciaResponseSchema:
+    if usuario.papel == "user":
+        ids = set(dados.conta_ids)
+        permitidos = {
+            conta_id for (conta_id,) in (
+                db.query(Conta.id)
+                .outerjoin(ICP, ICP.id == Conta.icp_id)
+                .filter(
+                    Conta.tenant_id == tenant_id,
+                    Conta.id.in_(ids),
+                    ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+                     | (ICP.criador_usuario_id == usuario.id)),
+                    ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+                )
+                .all()
+            )
+        }
+        if permitidos != ids:
+            raise NaoEncontrado("Uma ou mais empresas não estão no seu escopo.")
     resultado = cadencia_service.gerar_para_lote(db, tenant_id, ator_id, cadencia_id, dados.conta_ids, llm, plan_limits)
     return GerarCadenciaResponseSchema(**resultado)
 
 
-@router.post("/{cadencia_id}/ativar", response_model=AtivarCadenciaResponseSchema)
+@router.post("/{cadencia_id}/ativar", response_model=AtivarCadenciaResponseSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def ativar_cadencia(
     cadencia_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -198,7 +231,7 @@ def ativar_cadencia(
     return AtivarCadenciaResponseSchema(**resultado)
 
 
-@router.get("/{cadencia_id}/teste-ab", response_model=RelatorioAbTesteSchema)
+@router.get("/{cadencia_id}/teste-ab", response_model=RelatorioAbTesteSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def relatorio_teste_ab(
     cadencia_id: int,
     tenant_id: str = Depends(get_tenant_id),
