@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -249,8 +249,13 @@ def criar_negocio(
     usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
-    vendedor_id = usuario.id if usuario.papel == "user" else dados.vendedor_usuario_id
-    if usuario.papel != "user" and vendedor_id is not None:
+    vendedor_id = dados.vendedor_usuario_id if usuario.papel == "user" else dados.vendedor_usuario_id
+    if usuario.papel == "user":
+        # O representante pode optar por atribuir a oportunidade a si mesmo
+        # durante a criação, mas não pode atribuí-la a outro usuário.
+        if vendedor_id not in (None, usuario.id):
+            raise HTTPException(status_code=403, detail="Você só pode atribuir a oportunidade a si mesmo.")
+    elif vendedor_id is not None:
         _validar_vendedor_do_tenant(db, tenant_id, vendedor_id)
     if usuario.papel == "user":
         conta_propria = (
