@@ -223,9 +223,7 @@ def test_registrar_via_convite_gera_token_valido(client, db_session):
     )
 
     assert resposta.status_code == 201
-    token = resposta.json()["access_token"]
-
-    eu = client.get("/api/v1/auth/eu", headers={"Authorization": f"Bearer {token}"})
+    eu = client.get("/api/v1/auth/eu", headers={"Authorization": ""})
     assert eu.status_code == 200
     assert eu.json()["email"] == "novo-via-api@teste.com.br"
 
@@ -485,8 +483,8 @@ def test_tenant_vitrine_acessa_rede_social_mas_nao_modulo_pago(client, criar_pla
             "aceite_termos": True,
             "plano_id": plano.id,
         },
-    ).json()["access_token"]
-    headers_vitrine = {"Authorization": f"Bearer {token}"}
+    ).json()
+    headers_vitrine = {"Authorization": ""}
 
     resposta_rede_social = client.get("/api/v1/rede-social/perfil", headers=headers_vitrine)
     assert resposta_rede_social.status_code == 200
@@ -795,8 +793,7 @@ def test_webhook_mercadopago_com_assinatura_valida_ativa_licenca(
             "plano_id": plano.id,
         },
     )
-    token = resposta_cadastro.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": ""}
     assert client.get("/api/v1/auth/licenca-status", headers=headers).json()["status"] == "pendente_pagamento"
 
     preferencia_id = next(iter(fake_payment._preferencias))
