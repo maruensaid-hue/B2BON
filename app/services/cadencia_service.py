@@ -51,8 +51,29 @@ def obter(db: Session, tenant_id: str, cadencia_id: int) -> Cadencia:
     return cadencia
 
 
-def listar(db: Session, tenant_id: str) -> list[Cadencia]:
-    return db.query(Cadencia).filter_by(tenant_id=tenant_id).order_by(Cadencia.id.desc()).all()
+def listar(
+    db: Session, tenant_id: str, usuario_id: int | None = None, restrito: bool = False
+) -> list[Cadencia]:
+    query = (
+        db.query(Cadencia)
+        .outerjoin(ICP, ICP.id == Cadencia.icp_id)
+        .outerjoin(Conta, Conta.id == Cadencia.conta_id)
+        .filter(Cadencia.tenant_id == tenant_id)
+    )
+    if restrito:
+        query = query.filter(
+            (Cadencia.icp_id.is_(None) | (ICP.criador_usuario_id == usuario_id)),
+            (Cadencia.conta_id.is_(None) | (
+                ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+                 | (ICP.criador_usuario_id == usuario_id))
+                & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id))
+            )),
+            ((Cadencia.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)
+             | (Conta.vendedor_usuario_id == usuario_id)
+             | (Conta.criado_por_usuario_id == usuario_id)),
+        )
+    return query.order_by(Cadencia.id.desc()).all()
 
 
 def excluir(db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int) -> None:
@@ -345,7 +366,9 @@ def criar(
     oferta_id = oferta_ativa.id if oferta_ativa else None
 
     cadencia = Cadencia(
-        tenant_id=tenant_id, nome=dados.nome, canais=sorted(canais), status="rascunho", tipo=dados.tipo,
+        tenant_id=tenant_id,
+        criado_por_usuario_id=int(ator_id) if ator_id is not None and str(ator_id).isdigit() else None,
+        nome=dados.nome, canais=sorted(canais), status="rascunho", tipo=dados.tipo,
         icp_id=icp_id, oferta_id=oferta_id, cancelar_ao_responder=dados.cancelar_ao_responder,
     )
     db.add(cadencia)
