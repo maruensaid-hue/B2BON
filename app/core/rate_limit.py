@@ -16,10 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class LimitadorEmMemoria:
-    """Janela deslizante por processo — suficiente hoje porque a API roda
-    numa única instância Render (Onda raio-X); se algum dia escalar
-    horizontalmente, isto precisa virar um backend compartilhado (Redis)
-    para o limite valer entre instâncias."""
+    """Usa Redis compartilhado quando REDIS_URL está configurado; memória é fallback de desenvolvimento legado."""
 
     def __init__(self) -> None:
         self._tentativas: dict[str, list[float]] = defaultdict(list)
