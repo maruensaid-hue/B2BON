@@ -206,7 +206,7 @@ def login_google(
     email: EmailProvider = Depends(get_email_provider),
 ) -> TokenResponseSchema:
     usuario, primeiro_login = auth_service.autenticar_google(db, dados.id_token)
-    return _resposta_token(usuario, db, primeiro_login=primeiro_login, email_provider=email)
+    return _resposta_token(usuario, db, primeiro_login=primeiro_login, email_provider=email, response=response)
 
 
 @router.post(
