@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_tenant_id
+from app.api.deps import exigir_escopo_conversa_usuario, get_db, get_tenant_id
 from app.schemas.conversa import ConversaComTurnosSchema
 from app.services import qualificacao_service
 
 router = APIRouter(prefix="/conversas", tags=["conversas"])
 
 
-@router.get("/{conversa_id}", response_model=ConversaComTurnosSchema)
+@router.get("/{conversa_id}", response_model=ConversaComTurnosSchema, dependencies=[Depends(exigir_escopo_conversa_usuario)])
 def obter_conversa(
     conversa_id: int,
     tenant_id: str = Depends(get_tenant_id),
