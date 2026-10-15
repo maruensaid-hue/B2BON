@@ -159,7 +159,18 @@ def performance(db: Session, tenant_id: str, usuario_id: int | None = None, rest
     """Comparativo simples entre ICPs ativos (E1-H4)."""
     resultado = []
     for icp in listar(db, tenant_id, apenas_ativos=True, usuario_id=usuario_id, restrito=restrito):
-        contas = db.query(Conta).filter_by(tenant_id=tenant_id, icp_id=icp.id).all()
+        consulta_contas = (
+            db.query(Conta)
+            .outerjoin(ICP, ICP.id == Conta.icp_id)
+            .filter(Conta.tenant_id == tenant_id, Conta.icp_id == icp.id)
+        )
+        if restrito:
+            consulta_contas = consulta_contas.filter(
+                ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+                 | (ICP.criador_usuario_id == usuario_id)),
+                ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+            )
+        contas = consulta_contas.all()
         scores = [conta.score_aderencia for conta in contas if conta.score_aderencia is not None]
 
         por_status: dict[str, int] = {}
