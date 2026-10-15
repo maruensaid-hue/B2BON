@@ -34,6 +34,7 @@ from app.models.reuniao import Reuniao
 from app.models.mensagem import Mensagem
 from app.models.aprovacao import Aprovacao
 from app.models.cadencia import Cadencia
+from app.models.conversa_qualificacao import ConversaQualificacao
 from app.models.tenant import Tenant
 from app.services.demo import contexto as demo_contexto
 from app.models.usuario import Usuario
@@ -314,6 +315,35 @@ def exigir_escopo_negocio_usuario(
     if negocio is None:
         raise NaoAutorizado("Oportunidade não encontrada ou fora do seu escopo.")
 
+
+
+def exigir_escopo_conversa_usuario(
+    conversa_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Transcrições/roteiros de qualificação seguem a propriedade do contato."""
+    if usuario.papel != "user":
+        return
+    permitida = (
+        db.query(ConversaQualificacao.id)
+        .join(Decisor, Decisor.id == ConversaQualificacao.decisor_id)
+        .join(Conta, Conta.id == ConversaQualificacao.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            ConversaQualificacao.id == conversa_id,
+            ConversaQualificacao.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if permitida is None:
+        raise NaoAutorizado("Conversa não encontrada ou fora do seu escopo.")
 
 
 def exigir_escopo_cadencia_usuario(
