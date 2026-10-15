@@ -60,6 +60,7 @@ def carregar(
             consulta.join(Conta, Conta.id == Negocio.conta_id)
             .outerjoin(ICP, ICP.id == Conta.icp_id)
             .filter(
+                Conta.tenant_id == tenant_id,
                 Negocio.vendedor_usuario_id == usuario_id,
                 ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
                  | (ICP.criador_usuario_id == usuario_id)),
