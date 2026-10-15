@@ -2,7 +2,7 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.contexts.intelligence import contract as intel
 from app.llm.base import LLMProvider
@@ -54,18 +54,21 @@ def obter(db: Session, tenant_id: str, cadencia_id: int) -> Cadencia:
 def listar(
     db: Session, tenant_id: str, usuario_id: int | None = None, restrito: bool = False
 ) -> list[Cadencia]:
+    icp_cadencia = aliased(ICP)
+    icp_conta = aliased(ICP)
     query = (
         db.query(Cadencia)
-        .outerjoin(ICP, ICP.id == Cadencia.icp_id)
+        .outerjoin(icp_cadencia, icp_cadencia.id == Cadencia.icp_id)
         .outerjoin(Conta, Conta.id == Cadencia.conta_id)
+        .outerjoin(icp_conta, icp_conta.id == Conta.icp_id)
         .filter(Cadencia.tenant_id == tenant_id)
     )
     if restrito:
         query = query.filter(
-            (Cadencia.icp_id.is_(None) | (ICP.criador_usuario_id == usuario_id)),
+            (Cadencia.icp_id.is_(None) | (icp_cadencia.criador_usuario_id == usuario_id)),
             (Cadencia.conta_id.is_(None) | (
                 ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
-                 | (ICP.criador_usuario_id == usuario_id))
+                 | (icp_conta.criador_usuario_id == usuario_id))
                 & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id))
             )),
             Cadencia.criado_por_usuario_id == usuario_id,
