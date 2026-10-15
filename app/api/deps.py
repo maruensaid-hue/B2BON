@@ -31,6 +31,8 @@ from app.models.negocio import Negocio
 from app.models.decisor import Decisor
 from app.models.necessidade_oportunidade import NecessidadeOportunidade
 from app.models.reuniao import Reuniao
+from app.models.mensagem import Mensagem
+from app.models.aprovacao import Aprovacao
 from app.models.tenant import Tenant
 from app.services.demo import contexto as demo_contexto
 from app.models.usuario import Usuario
@@ -311,6 +313,66 @@ def exigir_escopo_negocio_usuario(
     if negocio is None:
         raise NaoAutorizado("Oportunidade não encontrada ou fora do seu escopo.")
 
+
+
+def exigir_escopo_mensagem_usuario(
+    mensagem_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Mensagens de prospecção só são acessíveis pelo dono do contato/ICP."""
+    if usuario.papel != "user":
+        return
+    permitida = (
+        db.query(Mensagem.id)
+        .join(Decisor, Decisor.id == Mensagem.decisor_id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Mensagem.id == mensagem_id,
+            Mensagem.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if permitida is None:
+        raise NaoAutorizado("Mensagem não encontrada ou fora do seu escopo.")
+
+
+def exigir_escopo_aprovacao_usuario(
+    aprovacao_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Aprovação só pode ser consultada/alterada por quem pode ver o contato destinatário."""
+    if usuario.papel != "user":
+        return
+    permitida = (
+        db.query(Aprovacao.id)
+        .join(Mensagem, Mensagem.id == Aprovacao.mensagem_id)
+        .join(Decisor, Decisor.id == Mensagem.decisor_id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Aprovacao.id == aprovacao_id,
+            Aprovacao.tenant_id == tenant_id,
+            Mensagem.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if permitida is None:
+        raise NaoAutorizado("Aprovação não encontrada ou fora do seu escopo.")
 
 
 def exigir_escopo_reuniao_usuario(
