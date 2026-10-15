@@ -724,9 +724,15 @@ def test_oportunidade_sem_atribuicao_so_gestao_ve_e_atribuicao_libera_vendedor(
     conta = Conta(tenant_id=TENANT_ID, nome="Conta criada pela gestão", status="priorizada")
     db_session.add(conta)
     db_session.flush()
+    decisor = Decisor(
+        tenant_id=TENANT_ID, conta_id=conta.id, nome="Contato criado pela gestão"
+    )
+    db_session.add(decisor)
+    db_session.flush()
     negocio = Negocio(
         tenant_id=TENANT_ID,
         conta_id=conta.id,
+        decisor_id=decisor.id,
         vendedor_usuario_id=None,
         nome="Oportunidade aguardando atribuição",
         valor=1200.0,
@@ -761,6 +767,13 @@ def test_oportunidade_sem_atribuicao_so_gestao_ve_e_atribuicao_libera_vendedor(
         f"/api/v1/oportunidades/{negocio.id}/card", headers=headers_vendedor
     )
     assert detalhe_atribuido.status_code == 200
+    conta_atribuida = client.get(f"/api/v1/contas/{conta.id}", headers=headers_vendedor)
+    assert conta_atribuida.status_code == 200
+    contatos_atribuidos = client.get(
+        f"/api/v1/contas/{conta.id}/decisores", headers=headers_vendedor
+    )
+    assert contatos_atribuidos.status_code == 200
+    assert decisor.id in {item["id"] for item in contatos_atribuidos.json()}
 
     # Remover a atribuição fecha novamente o acesso do representante.
     retirada = client.put(
