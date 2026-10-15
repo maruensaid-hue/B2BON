@@ -246,7 +246,10 @@ def listar_decisores_leads(
     conta_ids = [conta.id for conta in _leads_visiveis(db, tenant_id, usuario, vendedor_usuario_id).all()]
     if not conta_ids:
         return []
-    return db.query(Decisor).filter(Decisor.conta_id.in_(conta_ids)).order_by(Decisor.id.desc()).all()
+    consulta = db.query(Decisor).filter(Decisor.tenant_id == tenant_id, Decisor.conta_id.in_(conta_ids))
+    if usuario.papel == "user":
+        consulta = consulta.filter(Decisor.criado_por_usuario_id == usuario.id)
+    return consulta.order_by(Decisor.id.desc()).all()
 
 
 def _normalizar_nome(nome: str) -> str:
