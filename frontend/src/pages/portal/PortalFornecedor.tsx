@@ -111,17 +111,13 @@ export function PortalFornecedor({ fonte }: { fonte: FonteConvite }) {
   async function anexar(propostaId: number, arquivo: File) {
     const form = new FormData();
     form.append("arquivo", arquivo);
-    const sessao = getToken();
     const resposta = await fetch(
       `${API_BASE_URL}${base}/propostas/${propostaId}/anexos`,
       {
         method: "POST",
+        credentials: "include",
         body: form,
-        headers: token
-          ? { "X-Convite-Token": token }
-          : sessao
-            ? { Authorization: `Bearer ${sessao}` }
-            : {},
+        headers: token ? { "X-Convite-Token": token } : {},
       },
     );
     if (!resposta.ok) {
