@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     limitar_ia_por_tenant,
-    exigir_papel,
     get_ator_id,
     get_calendar_provider,
     get_crm_provider,
@@ -62,7 +61,7 @@ def listar_reunioes(
     ]
 
 
-@router.post("/processar-lembretes", response_model=ProcessarLembretesResponseSchema, dependencies=[Depends(exigir_papel("super_admin", "admin"))])
+@router.post("/processar-lembretes", response_model=ProcessarLembretesResponseSchema)
 def processar_lembretes(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
