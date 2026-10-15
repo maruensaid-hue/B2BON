@@ -2,7 +2,7 @@ import hashlib
 from collections.abc import Generator
 from datetime import UTC, datetime
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -230,6 +230,7 @@ def get_email_validation_provider() -> EmailVerificationProvider:
 
 
 def get_usuario_atual(
+    request: Request,
     authorization: str | None = Header(None, alias="Authorization"),
     db: Session = Depends(get_db),
 ) -> Usuario:
@@ -243,9 +244,14 @@ def get_usuario_atual(
     faltante, misturando "não autenticado" com "corpo/parâmetro
     inválido".
     """
-    if authorization is None or not authorization.startswith("Bearer "):
-        raise NaoAutenticado("Cabeçalho Authorization deve ser 'Bearer <token>'.")
-    token = authorization[len("Bearer ") :]
+    # Integrações e clientes de API continuam usando Bearer; o navegador
+    # usa cookie HttpOnly, que não pode ser lido por JavaScript.
+    if authorization is not None and authorization.startswith("Bearer "):
+        token = authorization[len("Bearer ") :]
+    else:
+        token = request.cookies.get(settings.sessao_cookie_nome)
+    if not token:
+        raise NaoAutenticado("Sessão ausente. Faça login novamente.")
     return auth_service.validar_token(db, token)
 
 
