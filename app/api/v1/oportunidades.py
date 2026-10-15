@@ -101,5 +101,10 @@ def revisar_necessidade(
 
 
 @router.get("/contas/{conta_id}/white-space", dependencies=[Depends(exigir_escopo_conta_usuario)])
-def white_space(conta_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
-    return oportunidade.white_space_da_conta(db, tenant_id, conta_id)
+def white_space(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> dict:
+    return oportunidade.white_space_da_conta(db, tenant_id, conta_id, usuario.id, usuario.papel == "user")
