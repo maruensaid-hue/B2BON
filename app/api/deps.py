@@ -247,6 +247,31 @@ def get_usuario_atual(
     return auth_service.validar_token(db, token)
 
 
+def exigir_escopo_conta_usuario(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Vendedor só consulta contas que criou, possui ou que vieram de seu ICP."""
+    if usuario.papel != "user":
+        return
+    conta = (
+        db.query(Conta)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Conta.id == conta_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+        )
+        .one_or_none()
+    )
+    if conta is None:
+        raise NaoAutorizado("Empresa não encontrada ou fora do seu escopo.")
+
+
 def exigir_escopo_negocio_usuario(
     negocio_id: int,
     tenant_id: str = Depends(get_tenant_id),
