@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/Input";
 import {
   API_BASE_URL,
   ApiError,
-  getToken,
   mensagemErro,
   requisitar,
 } from "@/lib/api";
