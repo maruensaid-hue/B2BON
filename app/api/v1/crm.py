@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
 from app.llm.base import LLMProvider
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.negocio import Negocio
+from app.models.usuario import Usuario
 from app.schemas.conta import ContaSchema
 from app.schemas.crm import (
     AtividadeSchema,
@@ -142,10 +143,14 @@ def listar_negocios(
     vendedor_usuario_id: int | None = None,
     conta_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[NegocioSchema]:
-    """O "kanban de clientes" (Onda B)."""
-    negocios = crm_service.listar_negocios(db, tenant_id, estagio_id, vendedor_usuario_id, conta_id)
+    """Lista oportunidades no escopo do usuário autenticado."""
+    negocios = crm_service.listar_negocios(
+        db, tenant_id, estagio_id, vendedor_usuario_id, conta_id,
+        usuario_id=usuario.id, restringir_usuario=(usuario.papel == "user"),
+    )
     return _serializar_negocios(db, tenant_id, negocios)
 
 
@@ -154,8 +159,10 @@ def criar_negocio(
     dados: CriarNegocioRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
+    vendedor_id = usuario.id if usuario.papel == "user" else dados.vendedor_usuario_id
     negocio = crm_service.criar_negocio(
         db,
         tenant_id,
@@ -165,7 +172,7 @@ def criar_negocio(
         dados.nome,
         dados.valor,
         dados.probabilidade,
-        dados.vendedor_usuario_id,
+        vendedor_id,
         dados.estagio_id,
         dados.oferta_id,
     )
