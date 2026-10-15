@@ -328,8 +328,7 @@ def exigir_escopo_decisor_usuario(
             ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
              | (ICP.criador_usuario_id == usuario.id)),
             ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
-            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)
-             | (Conta.criado_por_usuario_id == usuario.id) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
         )
         .first()
     )
