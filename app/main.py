@@ -115,9 +115,10 @@ async def bloqueio_demonstracao(request: Request, call_next):
     """D-082/D-083: sessão de demonstração (token marcado `demo`): negação por padrão (só as rotas das telas de produto) e
     todo provedor externo simulado. Com a demonstração desligada, tokens de demonstração antigos deixam de valer."""
     autorizacao = request.headers.get("authorization", "")
-    if autorizacao.startswith("Bearer "):
+    token = autorizacao[len("Bearer "):] if autorizacao.startswith("Bearer ") else request.cookies.get(settings.sessao_cookie_nome)
+    if token:
         try:
-            payload = jwt.decode(autorizacao[len("Bearer "):], settings.jwt_secret_key, algorithms=["HS256"])
+            payload = jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"])
         except jwt.PyJWTError:
             payload = {}
         if payload.get("demo"):
