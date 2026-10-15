@@ -47,6 +47,16 @@ restante foi reconfirmado no código.
 - RBAC: 3 papéis + hierarquia + licença/módulo. **Sem ABAC** e sem
   policy engine. Checagens de "dono do recurso" (ex.: vendedor da
   conta) são feitas caso a caso em cada serviço.
+- **Oportunidades CRM [corrigido]:** o campo explícito
+  `negocio.vendedor_usuario_id` define o acesso do representante.
+  `user` vê apenas oportunidades atribuídas ao próprio usuário; sem
+  atribuição, só admin/super_admin as vê. Criador da conta e vendedor
+  responsável pela conta não concedem acesso implícito à oportunidade.
+  Apenas admin/super_admin pode atribuir/remover o representante; o
+  backend valida usuário ativo com papel `user` no tenant da oportunidade
+  e registra a alteração em auditoria. A atribuição também permite ler
+  a conta e o contato diretamente vinculados àquela oportunidade, sem
+  conceder permissão para editar ou excluir a conta.
 - O gap de escalonamento via convite (2026-09-20) foi corrigido em
   `auth_service.gerar_convite`.
 - **[novo]** Entitlement por router não bate com o módulo (C1, C3–C7 em
