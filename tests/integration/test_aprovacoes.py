@@ -4,6 +4,7 @@ from app.models.cadencia import Cadencia
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.icp import ICP
+from app.models.usuario import Usuario
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.services import aprovacao_service
 
@@ -51,6 +52,46 @@ def test_fila_expoe_assunto_e_dados_do_decisor(client, db_session, cadencia_e_de
     assert itens[0]["assunto"] == "Assunto de teste"
     assert itens[0]["decisor_nome"] == decisor.nome
     assert itens[0]["decisor_email"] == "decisor@teste.com"
+
+
+def test_fila_aprovacoes_nao_expoe_contatos_de_outro_vendedor(
+    client, db_session, criar_usuario_autenticado
+):
+    headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-aprovacao-escopo@teste.com.br")
+    usuario = db_session.query(Usuario).filter_by(email="vendedor-aprovacao-escopo@teste.com.br").one()
+    icp = ICP(
+        tenant_id=TENANT_ID, grupo_id="icp-vendedor", nome="ICP do vendedor", segmento="Tecnologia",
+        porte="PEQUENO", regiao="SP", ativo=True, criador_usuario_id=usuario.id,
+    )
+    db_session.add(icp)
+    db_session.flush()
+    conta = Conta(
+        tenant_id=TENANT_ID, icp_id=icp.id, nome="Conta do vendedor", status="prospectada",
+        vendedor_usuario_id=usuario.id, criado_por_usuario_id=usuario.id,
+    )
+    db_session.add(conta)
+    db_session.flush()
+    cadencia = Cadencia(
+        tenant_id=TENANT_ID, icp_id=icp.id, criado_por_usuario_id=usuario.id,
+        nome="Cadência do vendedor", status="rascunho",
+    )
+    contato = Decisor(
+        tenant_id=TENANT_ID, conta_id=conta.id, criado_por_usuario_id=usuario.id, nome="Contato do vendedor",
+        email="contato-vendedor@teste.com",
+    )
+    db_session.add_all([cadencia, contato])
+    db_session.flush()
+    _propor_mensagem(db_session, cadencia, contato)
+
+    cadencia_alheia, contato_alheio, _ = cadencia_e_decisor
+    _propor_mensagem(db_session, cadencia_alheia, contato_alheio)
+    db_session.commit()
+
+    resposta = client.get("/api/v1/aprovacoes", headers=headers)
+
+    assert resposta.status_code == 200
+    assert len(resposta.json()) == 1
+    assert resposta.json()[0]["decisor_nome"] == "Contato do vendedor"
 
 
 def test_fila_mensagem_sem_assunto_nao_quebra(client, db_session, cadencia_e_decisor):
