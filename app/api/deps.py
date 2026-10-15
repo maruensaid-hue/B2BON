@@ -338,10 +338,7 @@ def exigir_escopo_cadencia_usuario(
                  | (ICP.criador_usuario_id == usuario.id))
                 & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id))
             )),
-            ((Cadencia.criado_por_usuario_id == usuario.id)
-             | (ICP.criador_usuario_id == usuario.id)
-             | (Conta.vendedor_usuario_id == usuario.id)
-             | (Conta.criado_por_usuario_id == usuario.id)),
+            Cadencia.criado_por_usuario_id == usuario.id,
         )
         .first()
     )
