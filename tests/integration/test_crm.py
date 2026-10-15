@@ -31,6 +31,37 @@ def test_dashboard_funil_com_filtro_de_vendedor_via_api(client, db_session, cria
     assert sum(e["quantidade"] for e in resposta_com_filtro.json()["estagios"]) == 0
 
 
+def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, criar_usuario_autenticado):
+    conta_admin = client.post("/api/v1/leads/contas", json={"nome": "Empresa privada do admin"}).json()
+    negocio_admin = client.post(
+        "/api/v1/crm/negocios",
+        json={
+            "conta_id": conta_admin["id"],
+            "nome": "Oportunidade privada do admin",
+            "valor": 9000.0,
+            "vendedor_usuario_id": 1,
+        },
+    )
+    assert negocio_admin.status_code == 201
+
+    headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-isolamento-api@teste.com.br")
+    conta_vendedor = client.post(
+        "/api/v1/leads/contas", headers=headers, json={"nome": "Empresa do vendedor"}
+    ).json()
+    negocio_vendedor = client.post(
+        "/api/v1/crm/negocios",
+        headers=headers,
+        json={"conta_id": conta_vendedor["id"], "nome": "Oportunidade do vendedor", "valor": 1500.0},
+    )
+    assert negocio_vendedor.status_code == 201
+
+    resposta = client.get("/api/v1/crm/negocios", headers=headers)
+    assert resposta.status_code == 200
+    nomes = {item["nome"] for item in resposta.json()}
+    assert nomes == {"Oportunidade do vendedor"}
+    assert "Oportunidade privada do admin" not in nomes
+
+
 def test_vendedor_nao_pode_vincular_contato_de_outra_empresa(client, db_session, criar_usuario_autenticado):
     headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-contato-escopo@teste.com.br")
     usuario = db_session.query(Usuario).filter_by(email="vendedor-contato-escopo@teste.com.br").one()
