@@ -14,27 +14,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "cadencia",
-        sa.Column("criado_por_usuario_id", sa.Integer(), nullable=True),
-    )
-    op.create_index(
-        "ix_cadencia_criado_por_usuario_id",
-        "cadencia",
-        ["criado_por_usuario_id"],
-    )
-    op.create_foreign_key(
-        "fk_cadencia_criado_por_usuario_id_usuario",
-        "cadencia",
-        "usuario",
-        ["criado_por_usuario_id"],
-        ["id"],
-    )
+    with op.batch_alter_table("cadencia") as batch_op:
+        batch_op.add_column(sa.Column("criado_por_usuario_id", sa.Integer(), nullable=True))
+        batch_op.create_index("ix_cadencia_criado_por_usuario_id", ["criado_por_usuario_id"])
+        batch_op.create_foreign_key(
+            "fk_cadencia_criado_por_usuario_id_usuario",
+            "usuario",
+            ["criado_por_usuario_id"],
+            ["id"],
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "fk_cadencia_criado_por_usuario_id_usuario", "cadencia", type_="foreignkey"
-    )
-    op.drop_index("ix_cadencia_criado_por_usuario_id", table_name="cadencia")
-    op.drop_column("cadencia", "criado_por_usuario_id")
+    with op.batch_alter_table("cadencia") as batch_op:
+        batch_op.drop_constraint("fk_cadencia_criado_por_usuario_id_usuario", type_="foreignkey")
+        batch_op.drop_index("ix_cadencia_criado_por_usuario_id")
+        batch_op.drop_column("criado_por_usuario_id")
