@@ -42,6 +42,17 @@ from app.services import crm_service, proposta_service, template_proposta_servic
 
 router = APIRouter(prefix="/crm", tags=["crm"])
 
+def exigir_escopo_conta_crm(conta_id: int, tenant_id: str = Depends(get_tenant_id), usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> None:
+    if usuario.papel != "user":
+        return
+    conta = (db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(
+        Conta.id == conta_id, Conta.tenant_id == tenant_id,
+        ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+    ).one_or_none())
+    if conta is None:
+        raise NaoEncontrado("Empresa não encontrada.")
+
 def exigir_escopo_negocio(
     negocio_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -414,7 +425,7 @@ def gerar_proposta(
     )
 
 
-@router.post("/contas/{conta_id}/cancelar-cliente", response_model=ContaSchema)
+@router.post("/contas/{conta_id}/cancelar-cliente", response_model=ContaSchema, dependencies=[Depends(exigir_escopo_conta_crm)])
 def cancelar_cliente(
     conta_id: int,
     dados: CancelarClienteRequestSchema,
