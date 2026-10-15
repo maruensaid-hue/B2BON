@@ -551,6 +551,8 @@ def gerar_para_lote(
     conta_ids: list[int],
     llm: LLMProvider,
     plan_limits: PlanLimitsProvider,
+    usuario_id: int | None = None,
+    restrito: bool = False,
 ) -> dict:
     """Gera os toques personalizados para um lote de contas e os submete à
     fila de aprovações — cadência inteira antes de ativar (E3-H1)."""
@@ -585,9 +587,24 @@ def gerar_para_lote(
         conta.id: conta for conta in db.query(Conta).filter(Conta.id.in_(conta_ids), Conta.tenant_id == tenant_id).all()
     }
     primeiro_decisor_por_conta: dict[int, Decisor] = {}
-    for decisor_candidato in (
-        db.query(Decisor).filter(Decisor.conta_id.in_(conta_ids)).order_by(Decisor.conta_id, Decisor.id).all()
-    ):
+    consulta_decisores = (
+        db.query(Decisor)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Decisor.tenant_id == tenant_id,
+            Decisor.conta_id.in_(conta_ids),
+            Conta.tenant_id == tenant_id,
+        )
+    )
+    if restrito:
+        consulta_decisores = consulta_decisores.filter(
+            ((Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+        )
+    for decisor_candidato in consulta_decisores.order_by(Decisor.conta_id, Decisor.id).all():
         primeiro_decisor_por_conta.setdefault(decisor_candidato.conta_id, decisor_candidato)
 
     for conta_id in conta_ids:
