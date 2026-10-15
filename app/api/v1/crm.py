@@ -72,7 +72,8 @@ def exigir_escopo_negocio(
             ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
              | (ICP.criador_usuario_id == usuario.id)),
             ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
-            ((Negocio.vendedor_usuario_id.is_(None)) | (Negocio.vendedor_usuario_id == usuario.id)),
+            # Não tratar oportunidade sem dono como se fosse do vendedor.
+            Negocio.vendedor_usuario_id == usuario.id,
         )
         .one_or_none()
     )
