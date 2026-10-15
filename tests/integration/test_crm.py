@@ -33,15 +33,17 @@ def test_dashboard_funil_com_filtro_de_vendedor_via_api(client, db_session, cria
 
 
 def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, db_session, criar_usuario_autenticado):
-    conta_admin = client.post("/api/v1/leads/contas", json={"nome": "Empresa privada do admin"}).json()
-    estagio_admin = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)[0]
+    estagio = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)[0]
+    conta_admin = Conta(tenant_id=TENANT_ID, nome="Empresa privada do admin", status="priorizada")
+    db_session.add(conta_admin)
+    db_session.flush()
     negocio_admin = Negocio(
         tenant_id=TENANT_ID,
-        conta_id=conta_admin["id"],
+        conta_id=conta_admin.id,
         nome="Oportunidade privada do admin",
         valor=9000.0,
         probabilidade=50,
-        estagio_id=estagio_admin.id,
+        estagio_id=estagio.id,
         origem="manual",
     )
     db_session.add(negocio_admin)
@@ -49,15 +51,29 @@ def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, db_session,
     db_session.refresh(negocio_admin)
 
     headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-isolamento-api@teste.com.br")
-    conta_vendedor = client.post(
-        "/api/v1/leads/contas", headers=headers, json={"nome": "Empresa do vendedor"}
-    ).json()
-    negocio_vendedor = client.post(
-        "/api/v1/crm/negocios",
-        headers=headers,
-        json={"conta_id": conta_vendedor["id"], "nome": "Oportunidade do vendedor", "valor": 1500.0},
+    usuario = db_session.query(Usuario).filter_by(email="vendedor-isolamento-api@teste.com.br").one()
+    conta_vendedor = Conta(
+        tenant_id=TENANT_ID,
+        nome="Empresa do vendedor",
+        status="priorizada",
+        vendedor_usuario_id=usuario.id,
+        criado_por_usuario_id=usuario.id,
     )
-    assert negocio_vendedor.status_code == 201
+    db_session.add(conta_vendedor)
+    db_session.flush()
+    negocio_vendedor = Negocio(
+        tenant_id=TENANT_ID,
+        conta_id=conta_vendedor.id,
+        vendedor_usuario_id=usuario.id,
+        nome="Oportunidade do vendedor",
+        valor=1500.0,
+        probabilidade=50,
+        estagio_id=estagio.id,
+        origem="manual",
+    )
+    db_session.add(negocio_vendedor)
+    db_session.commit()
+    db_session.refresh(negocio_admin)
 
     resposta = client.get("/api/v1/crm/negocios", headers=headers)
     assert resposta.status_code == 200
@@ -69,7 +85,6 @@ def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, db_session,
         f"/api/v1/oportunidades/{negocio_admin.id}/card", headers=headers
     )
     assert acesso_direto.status_code in (403, 404)
-
 
 def test_vendedor_nao_pode_vincular_contato_de_outra_empresa(client, db_session, criar_usuario_autenticado):
     headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-contato-escopo@teste.com.br")
