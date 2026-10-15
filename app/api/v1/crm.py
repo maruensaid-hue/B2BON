@@ -104,13 +104,27 @@ def exigir_escopo_negocio(
 
 
 
-def _serializar_negocios(db: Session, tenant_id: str, negocios: list[Negocio]) -> list[NegocioSchema]:
-    """Empresa e contato responsável não são colunas de `Negocio` — busca
-    em lote (sem N+1) pra o Kanban não precisar de um fetch por card."""
+def _serializar_negocios(
+    db: Session, tenant_id: str, negocios: list[Negocio],
+    usuario_id: int | None = None, restrito: bool = False,
+) -> list[NegocioSchema]:
+    """Busca empresa e contato em lote, sem revelar contatos fora do escopo do vendedor."""
     conta_ids = {n.conta_id for n in negocios}
     decisor_ids = {n.decisor_id for n in negocios if n.decisor_id is not None}
-    contas = {c.id: c for c in db.query(Conta).filter(Conta.id.in_(conta_ids)).all()} if conta_ids else {}
-    decisores = {d.id: d for d in db.query(Decisor).filter(Decisor.id.in_(decisor_ids)).all()} if decisor_ids else {}
+    contas = {
+        c.id: c for c in db.query(Conta).filter(Conta.tenant_id == tenant_id, Conta.id.in_(conta_ids)).all()
+    } if conta_ids else {}
+    consulta_decisores = (
+        db.query(Decisor)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(Decisor.tenant_id == tenant_id, Decisor.id.in_(decisor_ids))
+    ) if decisor_ids else None
+    if consulta_decisores is not None and restrito:
+        consulta_decisores = consulta_decisores.filter(
+            (Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)
+        )
+    decisores = {d.id: d for d in consulta_decisores.all()} if consulta_decisores is not None else {}
 
     resultado = []
     for negocio in negocios:
@@ -214,7 +228,7 @@ def listar_negocios(
         db, tenant_id, estagio_id, vendedor_usuario_id, conta_id,
         usuario_id=usuario.id, restringir_usuario=(usuario.papel == "user"),
     )
-    return _serializar_negocios(db, tenant_id, negocios)
+    return _serializar_negocios(db, tenant_id, negocios, usuario.id, usuario.papel == "user")
 
 
 @router.post("/negocios", response_model=NegocioSchema, status_code=201)
@@ -256,7 +270,7 @@ def criar_negocio(
         dados.estagio_id,
         dados.oferta_id,
     )
-    return _serializar_negocios(db, tenant_id, [negocio])[0]
+    return _serializar_negocios(db, tenant_id, [negocio], usuario.id, usuario.papel == "user")[0]
 
 
 @router.post(
@@ -307,7 +321,7 @@ def atualizar_negocio(
     negocio = crm_service.atualizar_negocio(
         db, tenant_id, ator_id, negocio_id, dados.nome, dados.valor, dados.probabilidade, dados.decisor_id, dados.oferta_id
     )
-    return _serializar_negocios(db, tenant_id, [negocio])[0]
+    return _serializar_negocios(db, tenant_id, [negocio], usuario.id, usuario.papel == "user")[0]
 
 
 @router.post(
@@ -342,6 +356,7 @@ def mover_estagio(
     dados: MoverEstagioRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
     """Arrastar no kanban — ganho marca a conta como cliente, perdido grava o motivo (Onda B)."""
