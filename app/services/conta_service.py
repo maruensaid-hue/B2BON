@@ -100,8 +100,8 @@ def criar_lead(
     conta = Conta(
         tenant_id=tenant_id,
         icp_id=None,
-        criado_por_usuario_id=int(ator_id) if ator_id else None,
-        vendedor_usuario_id=int(ator_id) if ator_id else None,
+        criado_por_usuario_id=int(ator_id) if ator_id is not None and str(ator_id).isdigit() else None,
+        vendedor_usuario_id=int(ator_id) if ator_id is not None and str(ator_id).isdigit() else None,
         nome=nome,
         cnpj=_normalizar_cnpj(cnpj),
         dominio=_normalizar_dominio(dominio),
@@ -1061,7 +1061,7 @@ def criar_decisor_manual(
 ) -> Decisor:
     conta = obter(db, tenant_id, conta_id)
 
-    decisor = Decisor(tenant_id=tenant_id, conta_id=conta.id, criado_por_usuario_id=int(ator_id) if ator_id else None, **dados.model_dump())
+    decisor = Decisor(tenant_id=tenant_id, conta_id=conta.id, criado_por_usuario_id=int(ator_id) if ator_id is not None and str(ator_id).isdigit() else None, **dados.model_dump())
     db.add(decisor)
     db.flush()
 
