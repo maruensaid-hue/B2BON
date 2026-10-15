@@ -115,7 +115,7 @@ def clonar(db: Session, tenant_id: str, ator_id: str | None, icp_id: int) -> ICP
 
     clone = ICP(
         tenant_id=tenant_id,
-        criador_usuario_id=int(ator_id) if ator_id else None,
+        criador_usuario_id=int(ator_id) if ator_id is not None and str(ator_id).isdigit() else None,
         grupo_id=str(uuid.uuid4()),
         clonado_de_id=origem.id,
         nome=f"{origem.nome} (cópia)",
