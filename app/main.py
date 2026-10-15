@@ -131,8 +131,15 @@ async def bloqueio_demonstracao(request: Request, call_next):
 @app.middleware("http")
 async def proteger_sessao_cookie_contra_csrf(request: Request, call_next):
     """Cookie auth só aceita mutações vindas de origens explicitamente autorizadas."""
+    rotas_publicas_auth = {
+        "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/registrar",
+        "/api/v1/auth/registrar-vitrine", "/api/v1/auth/registrar-publico",
+        "/api/v1/auth/demonstracao", "/api/v1/auth/esqueci-senha",
+        "/api/v1/auth/redefinir-senha",
+    }
     if (
         request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
+        and request.url.path not in rotas_publicas_auth
         and settings.sessao_cookie_nome in request.cookies
         and not request.headers.get("authorization", "").startswith("Bearer ")
     ):
