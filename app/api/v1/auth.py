@@ -1,7 +1,7 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -127,13 +127,25 @@ def _resposta_token(
     checkout_url: str | None = None,
     primeiro_login: bool = False,
     email_provider: EmailProvider | None = None,
+    response: Response | None = None,
 ) -> TokenResponseSchema:
     licenca = db.query(Licenca).filter_by(tenant_id=usuario.tenant_id).one_or_none()
     usuario_schema = _construir_usuario_schema(usuario, db)
     if primeiro_login and email_provider is not None:
         _enviar_email_boas_vindas_primeiro_login(usuario, email_provider)
+    access_token = auth_service.gerar_token(usuario)
+    if response is not None:
+        response.set_cookie(
+            key=settings.sessao_cookie_nome,
+            value=access_token,
+            httponly=True,
+            secure=settings.e_ambiente_producao,
+            samesite="none" if settings.e_ambiente_producao else "lax",
+            max_age=settings.jwt_expiracao_minutos * 60,
+            path="/",
+        )
     return TokenResponseSchema(
-        access_token=auth_service.gerar_token(usuario),
+        access_token=access_token,
         usuario=usuario_schema,
         tem_licenca_ativa=licenca is not None and licenca.status == "ativa",
         checkout_url=checkout_url,
@@ -156,29 +168,40 @@ def demonstracao_disponivel(tarefas: BackgroundTasks, sessao_factory=Depends(get
 
 @router.post("/demonstracao", response_model=DemonstracaoSchema, status_code=201,
              dependencies=[Depends(limitar_demonstracao(settings.demo_sessoes_por_ip_hora, settings.demo_sessoes_por_hora))])
-def demonstracao(tarefas: BackgroundTasks, db: Session = Depends(get_db),
+def demonstracao(response: Response, tarefas: BackgroundTasks, db: Session = Depends(get_db),
                  sessao_factory=Depends(get_sessao_factory)) -> DemonstracaoSchema:
     """D-082: abre um ambiente de demonstração próprio (dados fictícios, expira sozinho) — sem login nem senha.
     D-085: reivindica um ambiente da reserva e repõe a reserva em segundo plano."""
     usuario, expira_em = demo_sessao.criar(db)
     tarefas.add_task(demo_sessao.reabastecer, sessao_factory)
+    access_token = auth_service.gerar_token(usuario, expira_em=expira_em.replace(tzinfo=UTC), demo=True)
+    response.set_cookie(
+        key=settings.sessao_cookie_nome,
+        value=access_token,
+        httponly=True,
+        secure=settings.e_ambiente_producao,
+        samesite="none" if settings.e_ambiente_producao else "lax",
+        max_age=max(1, int((expira_em - datetime.now(UTC).replace(tzinfo=None)).total_seconds())),
+        path="/",
+    )
     return DemonstracaoSchema(
-        access_token=auth_service.gerar_token(usuario, expira_em=expira_em.replace(tzinfo=UTC), demo=True),
+        access_token=access_token,
         usuario=_construir_usuario_schema(usuario, db), tem_licenca_ativa=True, demo_expira_em=expira_em,
     )
 
 
 @router.post("/login", response_model=TokenResponseSchema, dependencies=[Depends(limitar_por_ip())])
 def login(
-    dados: LoginRequestSchema, db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)
+    dados: LoginRequestSchema, response: Response, db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)
 ) -> TokenResponseSchema:
     usuario, primeiro_login = auth_service.autenticar_senha(db, dados.email, dados.senha)
-    return _resposta_token(usuario, db, primeiro_login=primeiro_login, email_provider=email)
+    return _resposta_token(usuario, db, primeiro_login=primeiro_login, email_provider=email, response=response)
 
 
 @router.post("/google", response_model=TokenResponseSchema, dependencies=[Depends(limitar_por_ip())])
 def login_google(
     dados: LoginGoogleRequestSchema,
+    response: Response,
     db: Session = Depends(get_db),
     email: EmailProvider = Depends(get_email_provider),
 ) -> TokenResponseSchema:
@@ -190,12 +213,12 @@ def login_google(
     "/registrar", response_model=TokenResponseSchema, status_code=201, dependencies=[Depends(limitar_por_ip())]
 )
 def registrar(
-    dados: RegistrarRequestSchema, db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)
+    dados: RegistrarRequestSchema, response: Response, db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)
 ) -> TokenResponseSchema:
     usuario = auth_service.registrar_com_convite(
         db, dados.codigo_convite, dados.nome, dados.email, dados.senha, dados.aceite_termos
     )
-    return _resposta_token(usuario, db, primeiro_login=True, email_provider=email)
+    return _resposta_token(usuario, db, primeiro_login=True, email_provider=email, response=response)
 
 
 @router.post(
@@ -206,6 +229,7 @@ def registrar(
 )
 def registrar_vitrine(
     dados: RegistrarVitrineRequestSchema,
+    response: Response,
     db: Session = Depends(get_db),
     payment_provider: PaymentProvider = Depends(get_payment_provider),
     llm: LLMProvider = Depends(get_llm_provider),
@@ -240,7 +264,7 @@ def registrar_vitrine(
         graph,
         dados.cnpj,
     )
-    return _resposta_token(usuario, db, checkout_url, primeiro_login=True, email_provider=email)
+    return _resposta_token(usuario, db, checkout_url, primeiro_login=True, email_provider=email, response=response)
 
 
 @router.post(
@@ -255,6 +279,7 @@ def registrar_vitrine(
 )
 def registrar_publico(
     dados: RegistrarPublicoRequestSchema,
+    response: Response,
     db: Session = Depends(get_db),
     payment_provider: PaymentProvider = Depends(get_payment_provider),
     email: EmailProvider = Depends(get_email_provider),
@@ -295,6 +320,20 @@ def esqueci_senha(
 def redefinir_senha(dados: RedefinirSenhaRequestSchema, db: Session = Depends(get_db)) -> RespostaMensagemSchema:
     auth_service.redefinir_senha(db, dados.token, dados.nova_senha)
     return RespostaMensagemSchema(mensagem="Senha redefinida com sucesso. Você já pode entrar com a senha nova.")
+
+
+@router.post("/logout", status_code=204)
+def logout(response: Response) -> Response:
+    """Encerra a sessão do navegador removendo o cookie HttpOnly."""
+    response.delete_cookie(
+        key=settings.sessao_cookie_nome,
+        path="/",
+        secure=settings.e_ambiente_producao,
+        httponly=True,
+        samesite="none" if settings.e_ambiente_producao else "lax",
+    )
+    response.status_code = 204
+    return response
 
 
 @router.get("/eu", response_model=UsuarioSchema)
