@@ -28,6 +28,7 @@ from app.models.licenca import Licenca
 from app.models.conta import Conta
 from app.models.icp import ICP
 from app.models.negocio import Negocio
+from app.models.decisor import Decisor
 from app.models.necessidade_oportunidade import NecessidadeOportunidade
 from app.models.tenant import Tenant
 from app.services.demo import contexto as demo_contexto
@@ -303,6 +304,37 @@ def exigir_escopo_negocio_usuario(
     if negocio is None:
         raise NaoAutorizado("Oportunidade não encontrada ou fora do seu escopo.")
 
+
+
+def exigir_escopo_decisor_usuario(
+    conta_id: int,
+    decisor_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Contato só é acessível dentro de uma conta autorizada e do escopo do vendedor."""
+    if usuario.papel != "user":
+        return
+    permitido = (
+        db.query(Decisor.id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Decisor.id == decisor_id,
+            Decisor.conta_id == conta_id,
+            Decisor.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)
+             | (Conta.criado_por_usuario_id == usuario.id) | (Conta.vendedor_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if permitido is None:
+        raise NaoAutorizado("Contato não encontrado ou fora do seu escopo.")
 
 
 def exigir_escopo_necessidade_usuario(
