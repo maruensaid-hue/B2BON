@@ -74,6 +74,7 @@ interface Cadencia {
 interface UsuarioResumo {
   id: number;
   nome: string;
+  papel: string;
 }
 
 interface RegistroOportunidadeResumo {
@@ -167,7 +168,7 @@ export function LeadsAcoesConta() {
       // chamador) nunca traria.
       api
         .get<UsuarioResumo[]>(`/saude-contas/contas/${contaId}/vendedores-disponiveis`)
-        .then(setVendedores)
+        .then((usuarios) => setVendedores(usuarios.filter((item) => item.papel === "user")))
         .catch(() => undefined);
     }
   }, [isGestor, contaId]);
