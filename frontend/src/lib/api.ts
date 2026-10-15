@@ -146,16 +146,16 @@ export const api = {
 
 /** Download binário (ex.: PDF) — não passa por `request()` porque a resposta não é JSON. */
 export async function getBlob(path: string): Promise<Blob> {
+  const token = getToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: "include",
   });
-  if (!response.ok) {
-    throw new ApiError(response.status, "Não foi possível baixar o arquivo.");
-  }
+  await exigirSucesso(response, token, "Não foi possível baixar o arquivo.");
   return response.blob();
 }
 
 async function _enviarMultipart<T>(path: string, formData: FormData): Promise<T> {
+  const token = getToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     credentials: "include",
