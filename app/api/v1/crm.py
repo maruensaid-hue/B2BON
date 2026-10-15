@@ -53,6 +53,27 @@ def exigir_escopo_conta_crm(conta_id: int, tenant_id: str = Depends(get_tenant_i
     if conta is None:
         raise NaoEncontrado("Empresa não encontrada.")
 
+def _validar_decisor_do_vendedor(
+    db: Session, tenant_id: str, usuario_id: int, conta_id: int, decisor_id: int
+) -> None:
+    """Impede vincular contato de outra conta/usuário a uma oportunidade própria."""
+    permitido = (
+        db.query(Decisor.id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Decisor.id == decisor_id,
+            Decisor.tenant_id == tenant_id,
+            Decisor.conta_id == conta_id,
+            Conta.tenant_id == tenant_id,
+            ((Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+        )
+        .one_or_none()
+    )
+    if permitido is None:
+        raise NaoEncontrado("Contato não encontrado ou fora do seu escopo.")
+
+
 def exigir_escopo_negocio(
     negocio_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -220,6 +241,8 @@ def criar_negocio(
         )
         if conta_propria is None:
             raise NaoEncontrado("Empresa não encontrada.")
+    if usuario.papel == "user" and dados.decisor_id is not None:
+        _validar_decisor_do_vendedor(db, tenant_id, usuario.id, dados.conta_id, dados.decisor_id)
     negocio = crm_service.criar_negocio(
         db,
         tenant_id,
@@ -273,8 +296,14 @@ def atualizar_negocio(
     dados: AtualizarNegocioRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
+    if usuario.papel == "user" and dados.decisor_id is not None:
+        negocio_existente = db.query(Negocio).filter_by(id=negocio_id, tenant_id=tenant_id).one_or_none()
+        if negocio_existente is None:
+            raise NaoEncontrado("Oportunidade não encontrada.")
+        _validar_decisor_do_vendedor(db, tenant_id, usuario.id, negocio_existente.conta_id, dados.decisor_id)
     negocio = crm_service.atualizar_negocio(
         db, tenant_id, ator_id, negocio_id, dados.nome, dados.valor, dados.probabilidade, dados.decisor_id, dados.oferta_id
     )
