@@ -532,3 +532,35 @@ def test_listar_negocios_isola_oportunidades_por_usuario(db_session):
     )
 
     assert [negocio.nome for negocio in visiveis] == ["Minha oportunidade"]
+
+
+def test_listar_negocios_de_usuario_nao_revela_oportunidades_de_outro_vendedor(db_session):
+    """O vendedor só vê negócios explicitamente atribuídos a ele, mesmo no mesmo tenant."""
+    usuario = _criar_usuario(db_session, email="vendedor-proprio@teste.com.br")
+    outro = _criar_usuario(db_session, email="superadmin-outro@teste.com.br")
+    conta_propria = _criar_conta(
+        db_session, vendedor_usuario_id=usuario.id, criado_por_usuario_id=usuario.id
+    )
+    conta_alheia = _criar_conta(
+        db_session, vendedor_usuario_id=outro.id, criado_por_usuario_id=outro.id, nome="Conta CyberFort"
+    )
+    conta_propria_sem_dono_negocio = _criar_conta(
+        db_session, vendedor_usuario_id=usuario.id, criado_por_usuario_id=usuario.id, nome="Conta sem dono no negócio"
+    )
+    estagio = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)[0]
+    negocios = [
+        Negocio(tenant_id=TENANT_ID, conta_id=conta_propria.id, vendedor_usuario_id=usuario.id,
+                estagio_id=estagio.id, nome="Minha oportunidade", valor=100, probabilidade=50, origem="manual"),
+        Negocio(tenant_id=TENANT_ID, conta_id=conta_alheia.id, vendedor_usuario_id=outro.id,
+                estagio_id=estagio.id, nome="Oportunidade CyberFort", valor=200, probabilidade=50, origem="manual"),
+        Negocio(tenant_id=TENANT_ID, conta_id=conta_propria_sem_dono_negocio.id, vendedor_usuario_id=None,
+                estagio_id=estagio.id, nome="Sem vendedor", valor=300, probabilidade=50, origem="manual"),
+    ]
+    db_session.add_all(negocios)
+    db_session.commit()
+
+    visiveis = crm_service.listar_negocios(
+        db_session, TENANT_ID, usuario_id=usuario.id, restringir_usuario=True
+    )
+
+    assert [n.nome for n in visiveis] == ["Minha oportunidade"]
