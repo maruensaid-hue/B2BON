@@ -14,7 +14,7 @@ async function seedNegocio(request: import("@playwright/test").APIRequestContext
   });
   const cookie = login.headers()["set-cookie"]?.split(";")[0];
   if (!cookie) throw new Error("Login E2E não retornou cookie de sessão HttpOnly.");
-  const headers = { Cookie: cookie };
+  const headers = { Cookie: cookie, Origin: "http://localhost:5173" };
 
   const icp = await (
     await request.post(`${API_BASE}/icp`, {
