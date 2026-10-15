@@ -31,7 +31,7 @@ def test_rate_limit_usa_script_redis_compartilhado(monkeypatch):
     chamada = fake.chamadas[0]
     assert chamada[1] == 1
     assert chamada[2] == "b2bon:ratelimit:login:203.0.113.10"
-    assert "ZREMRANGEBYSCORE" in chamada[3]
+    assert "ZREMRANGEBYSCORE" in chamada[0]
 
 
 def test_rate_limit_nega_tentativa_se_redis_falhar(monkeypatch):
