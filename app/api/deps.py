@@ -30,6 +30,7 @@ from app.models.icp import ICP
 from app.models.negocio import Negocio
 from app.models.decisor import Decisor
 from app.models.necessidade_oportunidade import NecessidadeOportunidade
+from app.models.reuniao import Reuniao
 from app.models.tenant import Tenant
 from app.services.demo import contexto as demo_contexto
 from app.models.usuario import Usuario
@@ -310,6 +311,35 @@ def exigir_escopo_negocio_usuario(
     if negocio is None:
         raise NaoAutorizado("Oportunidade não encontrada ou fora do seu escopo.")
 
+
+
+def exigir_escopo_reuniao_usuario(
+    reuniao_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Reuniões/transcrições só são acessíveis pelo dono do contato ou do ICP de origem."""
+    if usuario.papel != "user":
+        return
+    permitida = (
+        db.query(Reuniao.id)
+        .join(Decisor, Decisor.id == Reuniao.decisor_id)
+        .join(Conta, Conta.id == Reuniao.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Reuniao.id == reuniao_id,
+            Reuniao.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if permitida is None:
+        raise NaoAutorizado("Reunião não encontrada ou fora do seu escopo.")
 
 
 def exigir_escopo_decisor_usuario(
