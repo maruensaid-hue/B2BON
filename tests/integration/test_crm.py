@@ -82,7 +82,7 @@ def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, db_session,
     assert "Oportunidade privada do admin" not in nomes
 
     acesso_direto = client.get(
-        f"/api/v1/oportunidades/{negocio_admin.id}/card", headers=headers
+        f"/api/v1/inteligencia/oportunidades/{negocio_admin.id}/card", headers=headers
     )
     assert acesso_direto.status_code in (403, 404)
 
@@ -748,7 +748,7 @@ def test_oportunidade_sem_atribuicao_so_gestao_ve_e_atribuicao_libera_vendedor(
     resposta = client.get("/api/v1/crm/negocios", headers=headers_vendedor)
     assert resposta.status_code == 200
     assert negocio.id not in {item["id"] for item in resposta.json()}
-    detalhe = client.get(f"/api/v1/oportunidades/{negocio.id}/card", headers=headers_vendedor)
+    detalhe = client.get(f"/api/v1/inteligencia/oportunidades/{negocio.id}/card", headers=headers_vendedor)
     assert detalhe.status_code in (403, 404)
 
     # Admin pode atribuir; a validação confirma usuário ativo do mesmo tenant.
