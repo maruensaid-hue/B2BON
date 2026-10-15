@@ -14,15 +14,10 @@ def _analisar(db, ctx, parametros: dict) -> dict:
     if ctx.papel == "user":
         permitido = (
             db.query(Negocio.id)
-            .join(Conta, Conta.id == Negocio.conta_id)
-            .outerjoin(ICP, ICP.id == Conta.icp_id)
             .filter(
                 Negocio.id == negocio_id,
                 Negocio.tenant_id == ctx.tenant_id,
                 Negocio.vendedor_usuario_id == ctx.usuario_id,
-                ((Conta.vendedor_usuario_id == ctx.usuario_id) | (Conta.criado_por_usuario_id == ctx.usuario_id)
-                 | (ICP.criador_usuario_id == ctx.usuario_id)),
-                ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == ctx.usuario_id)),
             )
             .first()
         )
@@ -45,14 +40,9 @@ def _expansao(db, ctx, parametros: dict) -> dict:
         contas_visiveis = {
             conta_id for (conta_id,) in (
                 db.query(Negocio.conta_id)
-                .join(Conta, Conta.id == Negocio.conta_id)
-                .outerjoin(ICP, ICP.id == Conta.icp_id)
                 .filter(
                     Negocio.tenant_id == ctx.tenant_id,
                     Negocio.vendedor_usuario_id == ctx.usuario_id,
-                    ((Conta.vendedor_usuario_id == ctx.usuario_id) | (Conta.criado_por_usuario_id == ctx.usuario_id)
-                     | (ICP.criador_usuario_id == ctx.usuario_id)),
-                    ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == ctx.usuario_id)),
                 )
                 .distinct()
                 .all()
