@@ -39,7 +39,7 @@ from app.schemas.crm import (
     VendedorComContasSchema,
 )
 from app.schemas.template_proposta import GerarPropostaRequestSchema
-from app.services import crm_service, proposta_service, template_proposta_service
+from app.services import auditoria_service, crm_service, proposta_service, template_proposta_service
 
 router = APIRouter(prefix="/crm", tags=["crm"])
 
@@ -304,7 +304,14 @@ def atribuir_vendedor_negocio(
         raise NaoEncontrado("Oportunidade não encontrada.")
     if dados.vendedor_usuario_id is not None:
         _validar_vendedor_do_tenant(db, tenant_id, dados.vendedor_usuario_id)
+    vendedor_anterior_id = negocio.vendedor_usuario_id
     negocio.vendedor_usuario_id = dados.vendedor_usuario_id
+    auditoria_service.registrar(
+        db, tenant_id, "oportunidade_vendedor_atribuido", "negocio", negocio.id, ator_id,
+        {"vendedor_anterior_usuario_id": vendedor_anterior_id,
+         "vendedor_novo_usuario_id": dados.vendedor_usuario_id},
+        conta_id=negocio.conta_id,
+    )
     db.commit()
     db.refresh(negocio)
     return _serializar_negocios(db, tenant_id, [negocio], usuario.id, False)[0]
