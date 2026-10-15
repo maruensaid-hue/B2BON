@@ -141,8 +141,11 @@ def _serializar(valor):
     return valor
 
 
-def montar(db: Session, tenant_id: str, negocio_id: int) -> dict:
-    d = dados_mod.carregar(db, tenant_id, negocio_id)
+def montar(
+    db: Session, tenant_id: str, negocio_id: int,
+    usuario_id: int | None = None, restrito: bool = False,
+) -> dict:
+    d = dados_mod.carregar(db, tenant_id, negocio_id, usuario_id=usuario_id, restrito=restrito)
     oferta_do_negocio = next((o for o in d.ofertas if o.id == d.negocio.oferta_id), None)
     if oferta_do_negocio is None and d.negocio.oferta_id is not None:
         oferta_do_negocio = db.query(Oferta).filter_by(id=d.negocio.oferta_id, tenant_id=tenant_id).one_or_none()
@@ -191,5 +194,11 @@ def montar(db: Session, tenant_id: str, negocio_id: int) -> dict:
     return _serializar(card)
 
 
-def white_space_da_conta(db: Session, tenant_id: str, conta_id: int) -> dict:
-    return _serializar(white_space.analisar(dados_mod.carregar_conta(db, tenant_id, conta_id)))
+def white_space_da_conta(
+    db: Session, tenant_id: str, conta_id: int, usuario_id: int | None = None, restrito: bool = False,
+) -> dict:
+    return _serializar(
+        white_space.analisar(
+            dados_mod.carregar_conta(db, tenant_id, conta_id, usuario_id=usuario_id, restrito=restrito)
+        )
+    )
