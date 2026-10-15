@@ -205,10 +205,10 @@ def listar_negocios(
              | (ICP.criador_usuario_id == usuario_id))
             & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id))
         )
-        query = query.filter(
-            conta_propria
-            & ((Negocio.vendedor_usuario_id.is_(None)) | (Negocio.vendedor_usuario_id == usuario_id))
-        )
+        # Oportunidade sem vendedor explícito não pertence automaticamente a todo
+        # usuário do tenant. O dono deve ser o próprio usuário; isso impede que
+        # negócios criados pelo super_admin apareçam na carteira do representante.
+        query = query.filter(conta_propria, Negocio.vendedor_usuario_id == usuario_id)
     if estagio_id is not None:
         query = query.filter_by(estagio_id=estagio_id)
     if vendedor_usuario_id is not None:
