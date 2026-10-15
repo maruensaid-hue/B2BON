@@ -42,6 +42,12 @@ interface Negocio {
   nome: string;
   valor: number;
   probabilidade: number;
+  vendedor_usuario_id: number | null;
+}
+
+interface UsuarioResumo {
+  id: number;
+  nome: string;
 }
 
 interface DecisorResumo {
@@ -96,6 +102,7 @@ export function Kanban() {
   const [icpSelecionadoId, setIcpSelecionadoId] = useState<number | null>(null);
   const [todasAsContas, setTodasAsContas] = useState<Conta[]>([]);
   const [ofertas, setOfertas] = useState<OfertaResumo[]>([]);
+  const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
   const [buscaContaExistente, setBuscaContaExistente] = useState("");
   const [contaExistenteSelecionadaId, setContaExistenteSelecionadaId] = useState<number | null>(null);
   const [sugestoesContaAbertas, setSugestoesContaAbertas] = useState(false);
@@ -184,7 +191,13 @@ export function Kanban() {
       .get<OfertaResumo[]>("/ofertas")
       .then(setOfertas)
       .catch(() => undefined);
-  }, []);
+    if (usuario?.papel === "admin" || usuario?.papel === "super_admin") {
+      api
+        .get<UsuarioResumo[]>("/usuarios")
+        .then(setVendedores)
+        .catch(() => setVendedores([]));
+    }
+  }, [usuario?.papel]);
 
   // Abre o negócio direto quando se chega aqui via `?negocio_id=` (ex.: a
   // busca global) — só depende da lista já ter carregado, não do clique
@@ -392,12 +405,16 @@ export function Kanban() {
       }
 
       const ofertaId = Number(form.get("oferta_id") || 0) || null;
+      const vendedorForm = form.get("vendedor_usuario_id");
       await api.post("/crm/negocios", {
         conta_id: contaId,
         decisor_id: decisorId,
         nome: nomeNegocio,
         valor,
         oferta_id: ofertaId,
+        ...(podeEditarFunil
+          ? { vendedor_usuario_id: vendedorForm ? Number(vendedorForm) : null }
+          : {}),
       });
       setModalAberto(false);
       setContaOrigem("existente");
@@ -438,6 +455,12 @@ export function Kanban() {
         decisor_id: decisorId,
         oferta_id: Number(form.get("oferta_id") || 0) || null,
       });
+      if (podeEditarFunil) {
+        const vendedorForm = form.get("vendedor_usuario_id");
+        await api.put(`/crm/negocios/${negocioEmEdicao.id}/vendedor`, {
+          vendedor_usuario_id: vendedorForm ? Number(vendedorForm) : null,
+        });
+      }
       setNegocioEmEdicao(null);
       await carregar();
     } catch (error) {
@@ -798,6 +821,19 @@ export function Kanban() {
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Valor (R$)</div>
             <Input name="valor" type="number" step="0.01" placeholder="0,00" />
           </div>
+          {podeEditarFunil && (
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Vendedor responsável</div>
+              <Select name="vendedor_usuario_id" defaultValue="">
+                <option value="">Sem atribuição — somente gestão poderá visualizar</option>
+                {vendedores.map((vendedor) => (
+                  <option key={vendedor.id} value={vendedor.id}>
+                    {vendedor.nome}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           {ofertas.length > 0 && (
             <div>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Oferta (opcional)</div>
@@ -869,6 +905,19 @@ export function Kanban() {
                 ))}
               </Select>
             </div>
+            {podeEditarFunil && (
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Vendedor responsável</div>
+                <Select name="vendedor_usuario_id" defaultValue={negocioEmEdicao.vendedor_usuario_id ?? ""}>
+                  <option value="">Sem atribuição — somente gestão poderá visualizar</option>
+                  {vendedores.map((vendedor) => (
+                    <option key={vendedor.id} value={vendedor.id}>
+                      {vendedor.nome}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
             {ofertas.length > 0 && (
               <div>
                 <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Oferta (opcional)</div>
