@@ -436,7 +436,7 @@ def definir_custo_aquisicao(
     return crm_service.definir_custo_aquisicao(db, tenant_id, ator_id, dados.periodo, dados.valor)
 
 
-@router.get("/dashboard/funil", response_model=DashboardFunilSchema)
+@router.get("/dashboard/funil", response_model=DashboardFunilSchema, dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def dashboard_funil(
     vendedor_usuario_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
@@ -448,7 +448,7 @@ def dashboard_funil(
     return DashboardFunilSchema(**crm_service.dashboard_funil(db, tenant_id, vendedor_usuario_id))
 
 
-@router.get("/dashboard/atividade", response_model=DashboardAtividadeSchema)
+@router.get("/dashboard/atividade", response_model=DashboardAtividadeSchema, dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def dashboard_atividade(
     data_inicio: date | None = None,
     data_fim: date | None = None,
@@ -458,7 +458,7 @@ def dashboard_atividade(
     return DashboardAtividadeSchema(**crm_service.dashboard_atividade(db, tenant_id, data_inicio, data_fim))
 
 
-@router.get("/dashboard/economia", response_model=DashboardEconomiaSchema)
+@router.get("/dashboard/economia", response_model=DashboardEconomiaSchema, dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def dashboard_economia(
     periodo: str,
     vendedor_usuario_id: int | None = None,
@@ -471,7 +471,7 @@ def dashboard_economia(
     return DashboardEconomiaSchema(**crm_service.dashboard_economia(db, tenant_id, periodo, vendedor_usuario_id))
 
 
-@router.get("/vendedores-com-contas", response_model=list[VendedorComContasSchema])
+@router.get("/vendedores-com-contas", response_model=list[VendedorComContasSchema], dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def listar_vendedores_com_contas(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
@@ -480,7 +480,7 @@ def listar_vendedores_com_contas(
     return [VendedorComContasSchema(**item) for item in crm_service.listar_vendedores_com_contas(db, tenant_id)]
 
 
-@router.get("/dashboard/flywheel", response_model=DashboardFlywheelSchema)
+@router.get("/dashboard/flywheel", response_model=DashboardFlywheelSchema, dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def dashboard_flywheel(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
