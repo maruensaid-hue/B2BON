@@ -272,6 +272,8 @@ def importar_participantes(
     lista_id: int,
     participantes: list[ParticipanteEventoSchema],
     graph: Neo4jClient,
+    usuario_id: int | None = None,
+    restrito: bool = False,
 ) -> dict:
     """Cria contas a partir de uma listagem de participantes (planilha
     colada) de uma Lista de Prospecção — sem CNPJ, então a empresa é
@@ -282,18 +284,36 @@ def importar_participantes(
     ficar sem ICP, mesmo tratamento de lead avulso). Não passa pelo score
     de aderência do ICP nem consome franquia — mesmo raciocínio de
     `gerar_lista`: só consome quando a conta entra numa cadência ativada."""
-    lista = db.query(ListaProspeccao).filter_by(id=lista_id, tenant_id=tenant_id).one_or_none()
+    consulta_lista = (
+        db.query(ListaProspeccao)
+        .outerjoin(ICP, ICP.id == ListaProspeccao.icp_id)
+        .filter(ListaProspeccao.id == lista_id, ListaProspeccao.tenant_id == tenant_id)
+    )
+    if restrito:
+        consulta_lista = consulta_lista.filter(
+            (ListaProspeccao.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)
+        )
+    lista = consulta_lista.one_or_none()
     if lista is None:
         raise NaoEncontrado(f"Lista de prospecção {lista_id} não encontrada")
 
-    contas_por_nome: dict[str, Conta] = {
-        _normalizar_nome(conta.nome): conta
-        for conta in db.query(Conta).filter_by(tenant_id=tenant_id).all()
-    }
+    consulta_contas = (
+        db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(Conta.tenant_id == tenant_id)
+    )
+    if restrito:
+        consulta_contas = consulta_contas.filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+        )
+    contas_visiveis = consulta_contas.all()
+    contas_por_nome: dict[str, Conta] = {_normalizar_nome(conta.nome): conta for conta in contas_visiveis}
 
     decisores_por_conta: dict[int, list[Decisor]] = {}
-    for decisor in db.query(Decisor).filter_by(tenant_id=tenant_id).all():
-        decisores_por_conta.setdefault(decisor.conta_id, []).append(decisor)
+    ids_contas_visiveis = [conta.id for conta in contas_visiveis]
+    if ids_contas_visiveis:
+        for decisor in db.query(Decisor).filter(Decisor.tenant_id == tenant_id, Decisor.conta_id.in_(ids_contas_visiveis)).all():
+            decisores_por_conta.setdefault(decisor.conta_id, []).append(decisor)
 
     contas_criadas = 0
     contas_reaproveitadas: set[int] = set()
@@ -309,6 +329,8 @@ def importar_participantes(
                 tenant_id=tenant_id,
                 icp_id=lista.icp_id,
                 lista_prospeccao_id=lista.id,
+                criado_por_usuario_id=usuario_id if restrito else None,
+                vendedor_usuario_id=usuario_id if restrito else None,
                 nome=participante.empresa.strip(),
                 status="prospectada",
                 origem="lista_prospeccao",
@@ -346,6 +368,7 @@ def importar_participantes(
             cargo=participante.cargo,
             email=participante.email,
             telefone=participante.telefone,
+            criado_por_usuario_id=usuario_id if restrito else None,
         )
         db.add(novo_decisor)
         existentes.append(novo_decisor)
@@ -398,15 +421,23 @@ def listar_por_icp(db: Session, tenant_id: str, icp_id: int, usuario_id: int | N
     return query.order_by(Conta.criado_em.desc()).all()
 
 
-def listar_por_lista(db: Session, tenant_id: str, lista_prospeccao_id: int) -> list[Conta]:
-    """Contas de uma Lista de Prospecção específica — mesmo raciocínio de
-    `listar_por_icp`, mas pro agrupamento por lote de importação."""
-    return (
+def listar_por_lista(
+    db: Session, tenant_id: str, lista_prospeccao_id: int,
+    usuario_id: int | None = None, restrito: bool = False,
+) -> list[Conta]:
+    """Contas da lista, limitadas ao vendedor quando o chamador for usuário comum."""
+    query = (
         db.query(Conta)
-        .filter_by(tenant_id=tenant_id, lista_prospeccao_id=lista_prospeccao_id)
-        .order_by(Conta.criado_em.desc())
-        .all()
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(Conta.tenant_id == tenant_id, Conta.lista_prospeccao_id == lista_prospeccao_id)
     )
+    if restrito:
+        query = query.filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+        )
+    return query.order_by(Conta.criado_em.desc()).all()
 
 
 def listar_todas(db: Session, tenant_id: str, usuario_id: int | None = None, restrito: bool = False) -> list[Conta]:
@@ -713,13 +744,14 @@ def _excluir_contas_em_lote(db: Session, tenant_id: str, ator_id: str | None, co
 
 
 def excluir_lote_por_lista(
-    db: Session, tenant_id: str, ator_id: str | None, lista_prospeccao_id: int, conta_ids: list[int] | None = None
+    db: Session, tenant_id: str, ator_id: str | None, lista_prospeccao_id: int,
+    conta_ids: list[int] | None = None, usuario_id: int | None = None, restrito: bool = False,
 ) -> dict:
     """Apaga em lote as contas de uma Lista de Prospecção. Se `conta_ids` for
     informado (seleção manual feita no frontend a partir da pré-visualização
     de `mapear_elegibilidade_exclusao`), restringe às contas escolhidas —
     senão, tenta todas as contas da lista."""
-    contas = listar_por_lista(db, tenant_id, lista_prospeccao_id)
+    contas = listar_por_lista(db, tenant_id, lista_prospeccao_id, usuario_id, restrito)
     if conta_ids is not None:
         ids_selecionados = set(conta_ids)
         contas = [conta for conta in contas if conta.id in ids_selecionados]
