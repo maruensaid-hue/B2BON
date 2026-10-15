@@ -9,6 +9,7 @@ from app.models.usuario import Usuario
 from app.models.estagio_funil import EstagioFunil
 from app.models.negocio import Negocio
 from app.providers.crm.nucleo import NucleoCrmProvider
+from app.services import crm_service
 
 TENANT_ID = "tenant-teste"
 
@@ -31,17 +32,21 @@ def test_dashboard_funil_com_filtro_de_vendedor_via_api(client, db_session, cria
     assert sum(e["quantidade"] for e in resposta_com_filtro.json()["estagios"]) == 0
 
 
-def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, criar_usuario_autenticado):
+def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, db_session, criar_usuario_autenticado):
     conta_admin = client.post("/api/v1/leads/contas", json={"nome": "Empresa privada do admin"}).json()
-    negocio_admin = client.post(
-        "/api/v1/crm/negocios",
-        json={
-            "conta_id": conta_admin["id"],
-            "nome": "Oportunidade privada do admin",
-            "valor": 9000.0,
-        },
+    estagio_admin = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)[0]
+    negocio_admin = Negocio(
+        tenant_id=TENANT_ID,
+        conta_id=conta_admin["id"],
+        nome="Oportunidade privada do admin",
+        valor=9000.0,
+        probabilidade=50,
+        estagio_id=estagio_admin.id,
+        origem="manual",
     )
-    assert negocio_admin.status_code == 201
+    db_session.add(negocio_admin)
+    db_session.commit()
+    db_session.refresh(negocio_admin)
 
     headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-isolamento-api@teste.com.br")
     conta_vendedor = client.post(
@@ -61,7 +66,7 @@ def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, criar_usuar
     assert "Oportunidade privada do admin" not in nomes
 
     acesso_direto = client.get(
-        f"/api/v1/oportunidades/{negocio_admin.json()['id']}/card", headers=headers
+        f"/api/v1/oportunidades/{negocio_admin.id}/card", headers=headers
     )
     assert acesso_direto.status_code in (403, 404)
 
