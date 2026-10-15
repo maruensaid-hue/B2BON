@@ -342,18 +342,10 @@ def exigir_escopo_conversa_usuario(
             ConversaQualificacao.id == conversa_id,
             ConversaQualificacao.tenant_id == tenant_id,
             Conta.tenant_id == tenant_id,
-            (
-                ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
-                 | (ICP.criador_usuario_id == usuario.id))
-                & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id))
-                & ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id))
-            )
-            | db.query(Negocio.id).filter(
-                Negocio.tenant_id == tenant_id,
-                Negocio.conta_id == conta_id,
-                Negocio.decisor_id == decisor_id,
-                Negocio.vendedor_usuario_id == usuario.id,
-            ).exists(),
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
         )
         .first()
     )
@@ -528,6 +520,19 @@ def exigir_escopo_decisor_usuario(
         )
         .first()
     )
+    if permitido is None:
+        # Um contato vinculado à oportunidade atribuída faz parte do escopo
+        # do vendedor mesmo quando foi cadastrado originalmente pela gestão.
+        permitido = (
+            db.query(Negocio.id)
+            .filter(
+                Negocio.tenant_id == tenant_id,
+                Negocio.conta_id == conta_id,
+                Negocio.decisor_id == decisor_id,
+                Negocio.vendedor_usuario_id == usuario.id,
+            )
+            .first()
+        )
     if permitido is None:
         raise NaoAutorizado("Contato não encontrado ou fora do seu escopo.")
 
