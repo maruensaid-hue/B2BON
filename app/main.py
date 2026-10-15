@@ -128,6 +128,20 @@ async def bloqueio_demonstracao(request: Request, call_next):
 
 
 @app.middleware("http")
+async def proteger_sessao_cookie_contra_csrf(request: Request, call_next):
+    """Cookie auth só aceita mutações vindas de origens explicitamente autorizadas."""
+    if (
+        request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
+        and settings.sessao_cookie_nome in request.cookies
+        and not request.headers.get("authorization", "").startswith("Bearer ")
+    ):
+        origem = request.headers.get("origin", "").rstrip("/")
+        if not origem or origem not in settings.origens_cors:
+            return JSONResponse(status_code=403, content={"detalhe": "Origem não autorizada para esta sessão."})
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def cabecalhos_seguranca(request: Request, call_next):
     """FastAPI não adiciona nenhum destes por padrão — sem eles, o
     navegador do usuário fica sem proteção de browser contra clickjacking,
