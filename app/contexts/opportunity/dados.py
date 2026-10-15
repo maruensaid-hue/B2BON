@@ -77,6 +77,12 @@ def carregar_conta(
     consulta = db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(
         Conta.id == conta_id, Conta.tenant_id == tenant_id
     )
+    if restrito:
+        consulta = consulta.filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+        )
     conta = consulta.one_or_none()
     if restrito and conta is None:
         oportunidade_atribuida = (
@@ -131,9 +137,16 @@ def _montar(db, tenant_id, conta, *, negocio, estagio, agora, usuario_id=None, r
             is not None
         )
         if not icp_proprio:
+            decisores_atribuidos = db.query(Negocio.decisor_id).filter(
+                Negocio.tenant_id == tenant_id,
+                Negocio.conta_id == conta.id,
+                Negocio.vendedor_usuario_id == usuario_id,
+                Negocio.decisor_id.isnot(None),
+            )
             consulta_decisores = consulta_decisores.filter(
                 (Decisor.criado_por_usuario_id == usuario_id)
                 | (Decisor.id == (negocio.decisor_id if negocio is not None else -1))
+                | Decisor.id.in_(decisores_atribuidos)
             )
     decisores = consulta_decisores.all()
     consulta_reunioes = db.query(Reuniao).filter_by(tenant_id=tenant_id, conta_id=conta.id)
