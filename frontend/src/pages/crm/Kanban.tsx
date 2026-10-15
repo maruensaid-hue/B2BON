@@ -413,9 +413,7 @@ export function Kanban() {
         nome: nomeNegocio,
         valor,
         oferta_id: ofertaId,
-        ...(podeEditarFunil
-          ? { vendedor_usuario_id: vendedorForm ? Number(vendedorForm) : null }
-          : {}),
+        vendedor_usuario_id: vendedorForm ? Number(vendedorForm) : null,
       });
       setModalAberto(false);
       setContaOrigem("existente");
@@ -822,19 +820,26 @@ export function Kanban() {
             <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Valor (R$)</div>
             <Input name="valor" type="number" step="0.01" placeholder="0,00" />
           </div>
-          {podeEditarFunil && (
-            <div>
-              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Vendedor responsável</div>
-              <Select name="vendedor_usuario_id" defaultValue="">
-                <option value="">Sem atribuição — somente gestão poderá visualizar</option>
-                {vendedores.map((vendedor) => (
-                  <option key={vendedor.id} value={vendedor.id}>
-                    {vendedor.nome}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Vendedor responsável</div>
+            <Select name="vendedor_usuario_id" defaultValue="">
+              <option value="">Sem atribuição — somente gestão poderá visualizar</option>
+              {podeEditarFunil
+                ? vendedores.map((vendedor) => (
+                    <option key={vendedor.id} value={vendedor.id}>
+                      {vendedor.nome}
+                    </option>
+                  ))
+                : usuario?.papel === "user" && usuario.id != null
+                  ? <option value={usuario.id}>Atribuir a mim</option>
+                  : null}
+            </Select>
+            {usuario?.papel === "user" && (
+              <p className="mt-1 text-[10px] text-muted">
+                Se salvar sem atribuição, somente a gestão poderá visualizar esta oportunidade. Entre em contato com o administrador para solicitar a atribuição posterior.
+              </p>
+            )}
+          </div>
           {ofertas.length > 0 && (
             <div>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Oferta (opcional)</div>
