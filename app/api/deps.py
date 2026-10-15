@@ -247,6 +247,10 @@ def get_usuario_atual(
     return auth_service.validar_token(db, token)
 
 
+def get_tenant_id(usuario: Usuario = Depends(get_usuario_atual)) -> str:
+    """Identidade do assinante — derivada do usuário autenticado (Onda A)."""
+    return usuario.tenant_id
+
 def exigir_escopo_conta_usuario(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -298,10 +302,6 @@ def exigir_escopo_negocio_usuario(
     if negocio is None:
         raise NaoAutorizado("Oportunidade não encontrada ou fora do seu escopo.")
 
-
-def get_tenant_id(usuario: Usuario = Depends(get_usuario_atual)) -> str:
-    """Identidade do assinante — derivada do usuário autenticado (Onda A)."""
-    return usuario.tenant_id
 
 
 def _e_demonstracao(db: Session, tenant_id: str) -> bool:
