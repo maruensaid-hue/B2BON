@@ -62,7 +62,7 @@ def _expansao(db, ctx, parametros: dict) -> dict:
     clientes = [cid for cid, valor in valores.items() if valor > 0][:50]
     itens = []
     for conta_id in clientes:
-        ws = white_space_da_conta(db, ctx.tenant_id, conta_id)
+        ws = white_space_da_conta(db, ctx.tenant_id, conta_id, ctx.usuario_id, ctx.papel == "user")
         if ws["expansao_suprimida_por_churn"]:
             continue
         if ws["produtos_potenciais"] or ws["cross_sell"] or ws["upsell"]:
