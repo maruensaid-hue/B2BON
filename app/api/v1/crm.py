@@ -131,10 +131,9 @@ def _serializar_negocios(
         .outerjoin(ICP, ICP.id == Conta.icp_id)
         .filter(Decisor.tenant_id == tenant_id, Conta.tenant_id == tenant_id, Decisor.id.in_(decisor_ids))
     ) if decisor_ids else None
-    if consulta_decisores is not None and restrito:
-        consulta_decisores = consulta_decisores.filter(
-            (Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)
-        )
+    # A consulta já está limitada aos IDs de contato ligados às oportunidades
+    # visíveis e ao tenant. Se uma oportunidade foi atribuída ao vendedor, o
+    # contato vinculado faz parte dela mesmo quando foi cadastrado pela gestão.
     decisores = {d.id: d for d in consulta_decisores.all()} if consulta_decisores is not None else {}
 
     resultado = []
