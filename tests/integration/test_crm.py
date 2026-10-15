@@ -701,3 +701,105 @@ def test_exportar_e_reimportar_negocios_nao_duplica(client, criar_conta_com_deci
 
     total = db_session.query(Negocio).filter_by(tenant_id=TENANT_ID, nome="Negócio Roundtrip").count()
     assert total == 1
+
+
+
+def test_oportunidade_sem_atribuicao_so_gestao_ve_e_atribuicao_libera_vendedor(
+    client, db_session, criar_usuario_autenticado
+):
+    """A atribuição da oportunidade, não a propriedade da conta, define acesso."""
+    headers_admin = criar_usuario_autenticado(
+        TENANT_ID, papel="admin", email="admin-atribuicao-oportunidade@teste.com.br"
+    )
+    headers_vendedor = criar_usuario_autenticado(
+        TENANT_ID, papel="user", email="vendedor-atribuicao-oportunidade@teste.com.br"
+    )
+    vendedor = db_session.query(Usuario).filter_by(
+        email="vendedor-atribuicao-oportunidade@teste.com.br"
+    ).one()
+
+    estagio = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)[0]
+    # Conta sem proprietário de vendedor: uma atribuição explícita à oportunidade
+    # ainda deve conceder acesso ao vendedor, sem abrir outras oportunidades.
+    conta = Conta(tenant_id=TENANT_ID, nome="Conta criada pela gestão", status="priorizada")
+    db_session.add(conta)
+    db_session.flush()
+    negocio = Negocio(
+        tenant_id=TENANT_ID,
+        conta_id=conta.id,
+        vendedor_usuario_id=None,
+        nome="Oportunidade aguardando atribuição",
+        valor=1200.0,
+        probabilidade=50,
+        estagio_id=estagio.id,
+        origem="manual",
+    )
+    db_session.add(negocio)
+    db_session.commit()
+    db_session.refresh(negocio)
+
+    # Sem vendedor atribuído, a oportunidade não aparece para o representante.
+    resposta = client.get("/api/v1/crm/negocios", headers=headers_vendedor)
+    assert resposta.status_code == 200
+    assert negocio.id not in {item["id"] for item in resposta.json()}
+    detalhe = client.get(f"/api/v1/oportunidades/{negocio.id}/card", headers=headers_vendedor)
+    assert detalhe.status_code in (403, 404)
+
+    # Admin pode atribuir; a validação confirma usuário ativo do mesmo tenant.
+    atribuicao = client.put(
+        f"/api/v1/crm/negocios/{negocio.id}/vendedor",
+        headers=headers_admin,
+        json={"vendedor_usuario_id": vendedor.id},
+    )
+    assert atribuicao.status_code == 200
+    assert atribuicao.json()["vendedor_usuario_id"] == vendedor.id
+
+    resposta_atribuida = client.get("/api/v1/crm/negocios", headers=headers_vendedor)
+    assert resposta_atribuida.status_code == 200
+    assert negocio.id in {item["id"] for item in resposta_atribuida.json()}
+    detalhe_atribuido = client.get(
+        f"/api/v1/oportunidades/{negocio.id}/card", headers=headers_vendedor
+    )
+    assert detalhe_atribuido.status_code == 200
+
+    # Remover a atribuição fecha novamente o acesso do representante.
+    retirada = client.put(
+        f"/api/v1/crm/negocios/{negocio.id}/vendedor",
+        headers=headers_admin,
+        json={"vendedor_usuario_id": None},
+    )
+    assert retirada.status_code == 200
+    resposta_sem_atribuicao = client.get("/api/v1/crm/negocios", headers=headers_vendedor)
+    assert resposta_sem_atribuicao.status_code == 200
+    assert negocio.id not in {item["id"] for item in resposta_sem_atribuicao.json()}
+
+
+def test_representante_nao_pode_atribuir_vendedor_a_oportunidade(
+    client, db_session, criar_usuario_autenticado
+):
+    headers_vendedor = criar_usuario_autenticado(
+        TENANT_ID, papel="user", email="vendedor-sem-permissao-atribuicao@teste.com.br"
+    )
+    vendedor = db_session.query(Usuario).filter_by(
+        email="vendedor-sem-permissao-atribuicao@teste.com.br"
+    ).one()
+    estagio = crm_service.garantir_estagios_padrao(db_session, TENANT_ID)[0]
+    conta = Conta(
+        tenant_id=TENANT_ID, nome="Conta do vendedor sem permissão",
+        status="priorizada", vendedor_usuario_id=vendedor.id,
+    )
+    db_session.add(conta)
+    db_session.flush()
+    negocio = Negocio(
+        tenant_id=TENANT_ID, conta_id=conta.id, nome="Negócio protegido",
+        valor=100.0, probabilidade=50, estagio_id=estagio.id, origem="manual",
+    )
+    db_session.add(negocio)
+    db_session.commit()
+
+    resposta = client.put(
+        f"/api/v1/crm/negocios/{negocio.id}/vendedor",
+        headers=headers_vendedor,
+        json={"vendedor_usuario_id": vendedor.id},
+    )
+    assert resposta.status_code in (401, 403)
