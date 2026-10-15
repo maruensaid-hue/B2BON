@@ -118,7 +118,7 @@ def _serializar_negocios(
         db.query(Decisor)
         .join(Conta, Conta.id == Decisor.conta_id)
         .outerjoin(ICP, ICP.id == Conta.icp_id)
-        .filter(Decisor.tenant_id == tenant_id, Decisor.id.in_(decisor_ids))
+        .filter(Decisor.tenant_id == tenant_id, Conta.tenant_id == tenant_id, Decisor.id.in_(decisor_ids))
     ) if decisor_ids else None
     if consulta_decisores is not None and restrito:
         consulta_decisores = consulta_decisores.filter(
