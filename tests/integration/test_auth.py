@@ -35,7 +35,7 @@ def test_login_com_sucesso(client, db_session):
     assert "b2bon_session=" in cookie
     assert "httponly" in cookie.lower()
     # O cookie autentica sem expor o JWT no cabeçalho Authorization.
-    resposta_eu = client.get("/api/v1/auth/eu")
+    resposta_eu = client.get("/api/v1/auth/eu", headers={"Authorization": ""})
     assert resposta_eu.status_code == 200
     assert resposta_eu.json()["email"] == "login@teste.com.br"
 
@@ -47,13 +47,13 @@ def test_cookie_de_sessao_rejeita_origem_nao_autorizada_em_mutacoes(client, db_s
 
     origem_invalida = client.post(
         "/api/v1/auth/dispensar-banner-boas-vindas",
-        headers={"Origin": "https://origem-maliciosa.example"},
+        headers={"Authorization": "", "Origin": "https://origem-maliciosa.example"},
     )
     assert origem_invalida.status_code == 403
 
     com_origem = client.post(
         "/api/v1/auth/dispensar-banner-boas-vindas",
-        headers={"Origin": settings.origens_cors[0]},
+        headers={"Authorization": "", "Origin": settings.origens_cors[0]},
     )
     assert com_origem.status_code == 200
 
