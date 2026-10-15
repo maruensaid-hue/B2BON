@@ -155,10 +155,10 @@ def excluir(db: Session, tenant_id: str, ator_id: str | None, icp_id: int) -> No
     db.commit()
 
 
-def performance(db: Session, tenant_id: str) -> list[dict]:
+def performance(db: Session, tenant_id: str, usuario_id: int | None = None, restrito: bool = False) -> list[dict]:
     """Comparativo simples entre ICPs ativos (E1-H4)."""
     resultado = []
-    for icp in listar(db, tenant_id, apenas_ativos=True):
+    for icp in listar(db, tenant_id, apenas_ativos=True, usuario_id=usuario_id, restrito=restrito):
         contas = db.query(Conta).filter_by(tenant_id=tenant_id, icp_id=icp.id).all()
         scores = [conta.score_aderencia for conta in contas if conta.score_aderencia is not None]
 
