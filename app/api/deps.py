@@ -25,6 +25,9 @@ from app.models.chave_api_parceiro import ChaveApiParceiro
 from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.licenca import Licenca
+from app.models.conta import Conta
+from app.models.icp import ICP
+from app.models.negocio import Negocio
 from app.models.tenant import Tenant
 from app.services.demo import contexto as demo_contexto
 from app.models.usuario import Usuario
@@ -242,6 +245,33 @@ def get_usuario_atual(
         raise NaoAutenticado("Cabeçalho Authorization deve ser 'Bearer <token>'.")
     token = authorization[len("Bearer ") :]
     return auth_service.validar_token(db, token)
+
+
+def exigir_escopo_negocio_usuario(
+    negocio_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Vendedor só pode consultar inteligência de uma oportunidade que lhe pertence."""
+    if usuario.papel != "user":
+        return
+    negocio = (
+        db.query(Negocio)
+        .join(Conta, Conta.id == Negocio.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Negocio.id == negocio_id,
+            Negocio.tenant_id == tenant_id,
+            Negocio.vendedor_usuario_id == usuario.id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+        )
+        .one_or_none()
+    )
+    if negocio is None:
+        raise NaoAutorizado("Oportunidade não encontrada ou fora do seu escopo.")
 
 
 def get_tenant_id(usuario: Usuario = Depends(get_usuario_atual)) -> str:
