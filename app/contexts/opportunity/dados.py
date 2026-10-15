@@ -17,6 +17,7 @@ from app.models.estagio_funil import EstagioFunil
 from app.models.necessidade_oportunidade import NecessidadeOportunidade
 from app.models.negocio import Negocio
 from app.models.icp import ICP
+from app.models.interacao_conta import InteracaoConta
 from app.models.oferta import Oferta
 from app.models.reuniao import Reuniao
 from app.services.errors import NaoEncontrado
@@ -114,7 +115,15 @@ def _montar(db, tenant_id, conta, *, negocio, estagio, agora, usuario_id=None, r
             .filter(Atividade.tenant_id == tenant_id, Atividade.negocio_id == negocio.id)
             .scalar()
         )
-    interacoes = listar_interacoes(db, tenant_id, conta.id)
+    if restrito:
+        interacoes = (
+            db.query(InteracaoConta)
+            .filter_by(tenant_id=tenant_id, conta_id=conta.id, criado_por_usuario_id=usuario_id)
+            .order_by(InteracaoConta.criado_em.desc())
+            .all()
+        )
+    else:
+        interacoes = listar_interacoes(db, tenant_id, conta.id)
     consulta_decisores = db.query(Decisor).filter_by(tenant_id=tenant_id, conta_id=conta.id)
     if restrito:
         icp_proprio = (
