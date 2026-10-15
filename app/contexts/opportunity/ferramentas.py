@@ -28,7 +28,7 @@ def _analisar(db, ctx, parametros: dict) -> dict:
         )
         if permitido is None:
             raise NaoEncontrado("Oportunidade não encontrada.")
-    card = montar(db, ctx.tenant_id, negocio_id)
+    card = montar(db, ctx.tenant_id, negocio_id, ctx.usuario_id, ctx.papel == "user")
     acoes = [a["titulo"] for a in card["next_best_action"]["recomendacoes"][:3]]
     ofertas = card["next_best_offer"]["recomendacoes"]
     oferta = f"Oferta mais aderente: {ofertas[0]['titulo']} (fit {ofertas[0]['dados']['fit_score']})." if ofertas else "Sem oferta recomendável ainda."
