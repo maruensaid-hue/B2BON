@@ -61,9 +61,9 @@ def exigir_escopo_conta(
         .filter(
             Conta.id == conta_id,
             Conta.tenant_id == tenant_id,
-            (Conta.vendedor_usuario_id == usuario.id)
-            | (Conta.criado_por_usuario_id == usuario.id)
-            | (ICP.criador_usuario_id == usuario.id),
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
         )
         .one_or_none()
     )
