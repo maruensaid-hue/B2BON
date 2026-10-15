@@ -361,7 +361,7 @@ def mover_estagio(
 ) -> NegocioSchema:
     """Arrastar no kanban — ganho marca a conta como cliente, perdido grava o motivo (Onda B)."""
     negocio = crm_service.mover_estagio(db, tenant_id, ator_id, negocio_id, dados.estagio_id, dados.motivo_perda)
-    return _serializar_negocios(db, tenant_id, [negocio])[0]
+    return _serializar_negocios(db, tenant_id, [negocio], usuario.id, usuario.papel == "user")[0]
 
 
 @router.post("/negocios/{negocio_id}/atividades", response_model=AtividadeSchema, status_code=201, dependencies=[Depends(exigir_escopo_negocio)])
