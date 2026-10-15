@@ -2,8 +2,6 @@
 
 from app.contexts.crm.contract import valor_ganho_por_conta
 from app.models.negocio import Negocio
-from app.models.conta import Conta
-from app.models.icp import ICP
 from app.services.errors import NaoEncontrado
 from app.contexts.shared.ferramentas import FerramentaExecutavel, Parametro, registrar
 from app.contexts.opportunity.card import montar, white_space_da_conta
