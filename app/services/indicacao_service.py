@@ -13,6 +13,7 @@ from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.indicacao import Indicacao
 from app.models.mensagem import Mensagem
+from app.models.icp import ICP
 from app.models.pesquisa_nps import PesquisaNps
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.rede_social.base import RedeSocialProvider
@@ -102,6 +103,8 @@ def converter(
     conta_id: int,
     rede_social: RedeSocialProvider,
     graph: Neo4jClient,
+    usuario_id: int | None = None,
+    restrito: bool = False,
 ) -> Indicacao:
     """Liga a indicação a uma conta real gerada por ela (E11-H3).
 
@@ -109,17 +112,50 @@ def converter(
     (Onda 4, `panel_service.origem_oportunidade`) já sabe ler sem nenhuma
     mudança — foi desenhado prevendo esta onda.
     """
-    indicacao = db.query(Indicacao).filter_by(tenant_id=tenant_id, codigo_indicacao=codigo_indicacao).one_or_none()
+    consulta_indicacao = (
+        db.query(Indicacao)
+        .join(Decisor, Decisor.id == Indicacao.promotor_decisor_id)
+        .join(Conta, Conta.id == Indicacao.promotor_conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(Indicacao.tenant_id == tenant_id, Indicacao.codigo_indicacao == codigo_indicacao)
+    )
+    if restrito:
+        consulta_indicacao = consulta_indicacao.filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+            ((Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+        )
+    indicacao = consulta_indicacao.one_or_none()
     if indicacao is None:
         raise NaoEncontrado(f"Indicação {codigo_indicacao} não encontrada")
     if indicacao.status == "convertida":
         raise RegraNegocioViolada("Indicação já convertida.")
 
-    conta = db.query(Conta).filter_by(id=conta_id, tenant_id=tenant_id).one_or_none()
+    consulta_conta = (
+        db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(Conta.id == conta_id, Conta.tenant_id == tenant_id)
+    )
+    if restrito:
+        consulta_conta = consulta_conta.filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+        )
+    conta = consulta_conta.one_or_none()
     if conta is None:
         raise NaoEncontrado(f"Conta {conta_id} não encontrada")
 
-    decisor = db.query(Decisor).filter_by(conta_id=conta.id).order_by(Decisor.id).first()
+    consulta_decisor = db.query(Decisor).filter_by(tenant_id=tenant_id, conta_id=conta.id)
+    if restrito:
+        icp_proprio = (
+            conta.icp_id is not None
+            and db.query(ICP.id).filter_by(id=conta.icp_id, tenant_id=tenant_id, criador_usuario_id=usuario_id).first()
+            is not None
+        )
+        if not icp_proprio:
+            consulta_decisor = consulta_decisor.filter(Decisor.criado_por_usuario_id == usuario_id)
+    decisor = consulta_decisor.order_by(Decisor.id).first()
     identificador = (decisor.email or decisor.telefone) if decisor else None
 
     indicacao.status = "convertida"
@@ -150,8 +186,24 @@ def converter(
     return indicacao
 
 
-def listar(db: Session, tenant_id: str, status: str | None = None) -> list[Indicacao]:
-    query = db.query(Indicacao).filter_by(tenant_id=tenant_id)
+def listar(
+    db: Session, tenant_id: str, status: str | None = None,
+    usuario_id: int | None = None, restrito: bool = False,
+) -> list[Indicacao]:
+    query = (
+        db.query(Indicacao)
+        .join(Decisor, Decisor.id == Indicacao.promotor_decisor_id)
+        .join(Conta, Conta.id == Indicacao.promotor_conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(Indicacao.tenant_id == tenant_id, Conta.tenant_id == tenant_id)
+    )
+    if restrito:
+        query = query.filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+            ((Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+        )
     if status:
-        query = query.filter_by(status=status)
+        query = query.filter(Indicacao.status == status)
     return query.order_by(Indicacao.id).all()
