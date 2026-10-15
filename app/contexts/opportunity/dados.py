@@ -56,17 +56,9 @@ def carregar(
 ) -> DadosOportunidade:
     consulta = db.query(Negocio).filter_by(id=negocio_id, tenant_id=tenant_id)
     if restrito:
-        consulta = (
-            consulta.join(Conta, Conta.id == Negocio.conta_id)
-            .outerjoin(ICP, ICP.id == Conta.icp_id)
-            .filter(
-                Conta.tenant_id == tenant_id,
-                Negocio.vendedor_usuario_id == usuario_id,
-                ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
-                 | (ICP.criador_usuario_id == usuario_id)),
-                ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
-            )
-        )
+        # Atribuição explícita à oportunidade define o acesso; a origem ou
+        # o responsável pela conta não substitui nem invalida essa atribuição.
+        consulta = consulta.filter(Negocio.vendedor_usuario_id == usuario_id)
     negocio = consulta.one_or_none()
     if negocio is None:
         raise NaoEncontrado(f"Negócio {negocio_id} não encontrado")
@@ -85,13 +77,19 @@ def carregar_conta(
     consulta = db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(
         Conta.id == conta_id, Conta.tenant_id == tenant_id
     )
-    if restrito:
-        consulta = consulta.filter(
-            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
-             | (ICP.criador_usuario_id == usuario_id)),
-            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
-        )
     conta = consulta.one_or_none()
+    if restrito and conta is None:
+        oportunidade_atribuida = (
+            db.query(Negocio.id)
+            .filter(
+                Negocio.tenant_id == tenant_id,
+                Negocio.conta_id == conta_id,
+                Negocio.vendedor_usuario_id == usuario_id,
+            )
+            .first()
+        )
+        if oportunidade_atribuida is not None:
+            conta = db.query(Conta).filter_by(id=conta_id, tenant_id=tenant_id).one_or_none()
     if conta is None:
         raise NaoEncontrado(f"Conta {conta_id} não encontrada")
     return _montar(
@@ -133,7 +131,10 @@ def _montar(db, tenant_id, conta, *, negocio, estagio, agora, usuario_id=None, r
             is not None
         )
         if not icp_proprio:
-            consulta_decisores = consulta_decisores.filter(Decisor.criado_por_usuario_id == usuario_id)
+            consulta_decisores = consulta_decisores.filter(
+                (Decisor.criado_por_usuario_id == usuario_id)
+                | (Decisor.id == (negocio.decisor_id if negocio is not None else -1))
+            )
     decisores = consulta_decisores.all()
     consulta_reunioes = db.query(Reuniao).filter_by(tenant_id=tenant_id, conta_id=conta.id)
     if restrito:
