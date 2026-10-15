@@ -194,7 +194,7 @@ def listar_decisores_da_conta(
     return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, decisores)
 
 
-@router.put("/contas/{conta_id}/decisores/{decisor_id}", response_model=DecisorSchema, dependencies=[Depends(exigir_escopo_conta)])
+@router.put("/contas/{conta_id}/decisores/{decisor_id}", response_model=DecisorSchema, dependencies=[Depends(exigir_escopo_conta), Depends(exigir_escopo_decisor_usuario)])
 def atualizar_decisor(
     conta_id: int,
     decisor_id: int,
@@ -209,7 +209,7 @@ def atualizar_decisor(
     )
 
 
-@router.post("/contas/{conta_id}/decisores/{decisor_id}/papel", response_model=DecisorSchema, dependencies=[Depends(exigir_escopo_conta)])
+@router.post("/contas/{conta_id}/decisores/{decisor_id}/papel", response_model=DecisorSchema, dependencies=[Depends(exigir_escopo_conta), Depends(exigir_escopo_decisor_usuario)])
 def confirmar_papel_decisor(
     conta_id: int,
     decisor_id: int,
@@ -224,7 +224,7 @@ def confirmar_papel_decisor(
     return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, [decisor])[0]
 
 
-@router.post("/contas/{conta_id}/decisores/{decisor_id}/suprimir", dependencies=[Depends(exigir_escopo_conta)])
+@router.post("/contas/{conta_id}/decisores/{decisor_id}/suprimir", dependencies=[Depends(exigir_escopo_conta), Depends(exigir_escopo_decisor_usuario)])
 def suprimir_decisor(
     conta_id: int,
     decisor_id: int,
