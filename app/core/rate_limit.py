@@ -38,8 +38,6 @@ class LimitadorEmMemoria:
 
     def _checar_redis(self, chave: str, max_tentativas: int, janela_segundos: int) -> None:
         """Janela deslizante atômica, compartilhada por todas as instâncias da API."""
-        if self._redis is None:
-            self._redis = Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=2, socket_timeout=2)
         script = """
         local key = KEYS[1]
         local now = tonumber(ARGV[1])
@@ -57,11 +55,15 @@ class LimitadorEmMemoria:
         return 1
         """
         try:
+            if self._redis is None:
+                self._redis = Redis.from_url(
+                    settings.redis_url, decode_responses=True, socket_connect_timeout=2, socket_timeout=2
+                )
             permitido = self._redis.eval(
                 script, 1, "b2bon:ratelimit:" + chave, time.time(), janela_segundos,
                 max_tentativas, secrets.token_hex(16),
             )
-        except RedisError as erro:
+        except (RedisError, ValueError) as erro:
             logger.error("Rate limit Redis indisponível; tentativa negada", exc_info=True)
             raise LimiteDeTaxaExcedido("Proteção temporariamente indisponível. Tente novamente.") from erro
         if not permitido:
