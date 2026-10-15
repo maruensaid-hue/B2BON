@@ -286,7 +286,19 @@ def exigir_escopo_conta_usuario(
         .one_or_none()
     )
     if conta is None:
-        raise NaoAutorizado("Empresa não encontrada ou fora do seu escopo.")
+        # Uma oportunidade explicitamente atribuída também concede acesso
+        # à conta vinculada para abrir e trabalhar nessa oportunidade.
+        oportunidade_atribuida = (
+            db.query(Negocio.id)
+            .filter(
+                Negocio.tenant_id == tenant_id,
+                Negocio.conta_id == conta_id,
+                Negocio.vendedor_usuario_id == usuario.id,
+            )
+            .first()
+        )
+        if oportunidade_atribuida is None:
+            raise NaoAutorizado("Empresa não encontrada ou fora do seu escopo.")
 
 
 def exigir_escopo_negocio_usuario(
@@ -330,10 +342,18 @@ def exigir_escopo_conversa_usuario(
             ConversaQualificacao.id == conversa_id,
             ConversaQualificacao.tenant_id == tenant_id,
             Conta.tenant_id == tenant_id,
-            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
-             | (ICP.criador_usuario_id == usuario.id)),
-            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
-            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+            (
+                ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+                 | (ICP.criador_usuario_id == usuario.id))
+                & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id))
+                & ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id))
+            )
+            | db.query(Negocio.id).filter(
+                Negocio.tenant_id == tenant_id,
+                Negocio.conta_id == conta_id,
+                Negocio.decisor_id == decisor_id,
+                Negocio.vendedor_usuario_id == usuario.id,
+            ).exists(),
         )
         .first()
     )
@@ -530,9 +550,6 @@ def exigir_escopo_necessidade_usuario(
             NecessidadeOportunidade.id == necessidade_id,
             NecessidadeOportunidade.tenant_id == tenant_id,
             Negocio.vendedor_usuario_id == usuario.id,
-            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
-             | (ICP.criador_usuario_id == usuario.id)),
-            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
         )
         .first()
     )
