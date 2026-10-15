@@ -197,18 +197,11 @@ def listar_negocios(
     restringir_usuario: bool = False,
 ) -> list[Negocio]:
     query = db.query(Negocio).filter_by(tenant_id=tenant_id)
-    # Usuário comum só enxerga oportunidades próprias ou ligadas a contas/ICPs próprios.
+    # A atribuição explícita da oportunidade é a única regra de propriedade
+    # para representantes. Sem vendedor, o registro permanece visível apenas
+    # a admin/super_admin; a origem/criador da conta não concede acesso.
     if restringir_usuario:
-        query = query.outerjoin(Conta, Conta.id == Negocio.conta_id).outerjoin(ICP, ICP.id == Conta.icp_id)
-        conta_propria = (
-            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
-             | (ICP.criador_usuario_id == usuario_id))
-            & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id))
-        )
-        # Oportunidade sem vendedor explícito não pertence automaticamente a todo
-        # usuário do tenant. O dono deve ser o próprio usuário; isso impede que
-        # negócios criados pelo super_admin apareçam na carteira do representante.
-        query = query.filter(conta_propria, Negocio.vendedor_usuario_id == usuario_id)
+        query = query.filter(Negocio.vendedor_usuario_id == usuario_id)
     if estagio_id is not None:
         query = query.filter_by(estagio_id=estagio_id)
     if vendedor_usuario_id is not None:
