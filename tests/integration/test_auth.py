@@ -31,6 +31,28 @@ def test_login_com_sucesso(client, db_session):
     assert corpo["access_token"]
     assert corpo["token_type"] == "bearer"
     assert corpo["usuario"]["email"] == "login@teste.com.br"
+    cookie = resposta.headers.get("set-cookie", "")
+    assert "b2bon_session=" in cookie
+    assert "httponly" in cookie.lower()
+    # O cookie autentica sem expor o JWT no cabeçalho Authorization.
+    resposta_eu = client.get("/api/v1/auth/eu")
+    assert resposta_eu.status_code == 200
+    assert resposta_eu.json()["email"] == "login@teste.com.br"
+
+
+def test_cookie_de_sessao_exige_origem_autorizada_em_mutacoes(client, db_session):
+    _criar_usuario_senha(db_session, "csrf-cookie@teste.com.br", "senha-forte")
+    login = client.post("/api/v1/auth/login", json={"email": "csrf-cookie@teste.com.br", "senha": "senha-forte"})
+    assert login.status_code == 200
+
+    sem_origem = client.post("/api/v1/auth/dispensar-banner-boas-vindas")
+    assert sem_origem.status_code == 403
+
+    com_origem = client.post(
+        "/api/v1/auth/dispensar-banner-boas-vindas",
+        headers={"Origin": settings.origens_cors[0]},
+    )
+    assert com_origem.status_code == 200
 
 
 def test_login_reflete_aviso_whatsapp_template_confirmado(client, db_session):
