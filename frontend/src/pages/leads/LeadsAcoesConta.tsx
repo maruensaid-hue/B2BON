@@ -52,6 +52,7 @@ interface Negocio {
   nome: string;
   valor: number;
   probabilidade: number;
+  vendedor_usuario_id: number | null;
 }
 
 interface Reuniao {
@@ -271,10 +272,14 @@ export function LeadsAcoesConta() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     await executar("novo-negocio", async () => {
+      const vendedorForm = form.get("vendedor_usuario_id");
       await api.post("/crm/negocios", {
         conta_id: contaId,
         nome: String(form.get("nome")),
         valor: Number(form.get("valor") || 0),
+        ...(isGestor
+          ? { vendedor_usuario_id: vendedorForm ? Number(vendedorForm) : null }
+          : {}),
       });
       setModalNegocio(false);
       await carregar();
@@ -284,6 +289,15 @@ export function LeadsAcoesConta() {
   async function moverEstagio(negocioId: number, estagioId: number) {
     await executar(`mover-${negocioId}`, async () => {
       await api.put(`/crm/negocios/${negocioId}/estagio`, { estagio_id: estagioId });
+      await carregar();
+    });
+  }
+
+  async function atribuirVendedorNegocio(negocioId: number, vendedorUsuarioId: number | null) {
+    await executar(`atribuir-vendedor-negocio-${negocioId}`, async () => {
+      await api.put(`/crm/negocios/${negocioId}/vendedor`, {
+        vendedor_usuario_id: vendedorUsuarioId,
+      });
       await carregar();
     });
   }
@@ -552,6 +566,28 @@ export function LeadsAcoesConta() {
                   <span className="font-semibold">{negocio.nome}</span>
                   <span className="font-head text-cyan">R${Math.round(negocio.valor / 1000)}k</span>
                 </div>
+                {isGestor && (
+                  <div className="mb-2">
+                    <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Vendedor responsável</div>
+                    <Select
+                      value={negocio.vendedor_usuario_id ?? ""}
+                      onChange={(event) =>
+                        atribuirVendedorNegocio(
+                          negocio.id,
+                          event.target.value ? Number(event.target.value) : null,
+                        )
+                      }
+                      disabled={carregando !== null}
+                    >
+                      <option value="">Sem vendedor — somente gestão</option>
+                      {vendedores.map((vendedor) => (
+                        <option key={vendedor.id} value={vendedor.id}>
+                          {vendedor.nome}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
                 <Select
                   value={negocio.estagio_id}
                   onChange={(event) => moverEstagio(negocio.id, Number(event.target.value))}
@@ -649,6 +685,19 @@ export function LeadsAcoesConta() {
         <form onSubmit={criarNegocio} className="flex flex-col gap-3">
           <Input name="nome" required placeholder="Ex.: Licença Professional — 12 meses" />
           <Input name="valor" type="number" step="0.01" placeholder="Valor (R$)" />
+          {isGestor && (
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Atribuir a vendedor</div>
+              <Select name="vendedor_usuario_id" defaultValue="">
+                <option value="">Sem atribuição — somente gestão poderá visualizar</option>
+                {vendedores.map((vendedor) => (
+                  <option key={vendedor.id} value={vendedor.id}>
+                    {vendedor.nome}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <Button type="submit" disabled={carregando !== null} className="w-full justify-center">
             {carregando === "novo-negocio" ? "Criando..." : "Criar oportunidade"}
           </Button>
