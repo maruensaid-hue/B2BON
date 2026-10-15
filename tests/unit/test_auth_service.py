@@ -328,7 +328,8 @@ def test_solicitar_redefinicao_senha_cria_token_e_envia_email(db_session):
     redefinicao = db_session.query(RedefinicaoSenha).one()
     assert redefinicao.status == "disponivel"
     assert len(fake_email.envios) == 1
-    assert redefinicao.token in fake_email.envios[0]["corpo"]
+    assert len(redefinicao.token) == 64  # SHA-256; token bruto só vai no e-mail
+    assert redefinicao.token not in fake_email.envios[0]["corpo"]
     assert fake_email.envios[0]["destinatario"] == "esqueci@teste.com.br"
 
 
@@ -371,21 +372,21 @@ def test_redefinir_senha_com_token_valido_troca_a_senha(db_session):
     usuario = _criar_usuario(db_session, email="trocar@teste.com.br")
     senha_hash_antiga = usuario.senha_hash
     auth_service.solicitar_redefinicao_senha(db_session, "trocar@teste.com.br", FakeEmailProvider())
-    token = db_session.query(RedefinicaoSenha).one().token
+    token = fake_email.envios[0]["corpo"].split("/redefinir-senha/")[1].split()[0]
 
     auth_service.redefinir_senha(db_session, token, "senha-nova-123")
 
     db_session.refresh(usuario)
     assert usuario.senha_hash != senha_hash_antiga
     assert auth_service.verificar_senha("senha-nova-123", usuario.senha_hash)
-    redefinicao = db_session.query(RedefinicaoSenha).filter_by(token=token).one()
+    redefinicao = db_session.query(RedefinicaoSenha).one()
     assert redefinicao.status == "usado"
 
 
 def test_redefinir_senha_token_ja_usado_falha(db_session):
     _criar_usuario(db_session, email="reuso@teste.com.br")
     auth_service.solicitar_redefinicao_senha(db_session, "reuso@teste.com.br", FakeEmailProvider())
-    token = db_session.query(RedefinicaoSenha).one().token
+    token = fake_email.envios[0]["corpo"].split("/redefinir-senha/")[1].split()[0]
     auth_service.redefinir_senha(db_session, token, "senha-nova-123")
 
     with pytest.raises(RegraNegocioViolada):
