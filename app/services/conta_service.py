@@ -56,6 +56,8 @@ def criar_manual(
     conta = Conta(
         tenant_id=tenant_id,
         icp_id=icp_id,
+        criado_por_usuario_id=int(ator_id) if ator_id else None,
+        vendedor_usuario_id=int(ator_id) if ator_id else icp.criador_usuario_id,
         nome=nome,
         cnpj=_normalizar_cnpj(cnpj),
         dominio=_normalizar_dominio(dominio),
@@ -98,6 +100,8 @@ def criar_lead(
     conta = Conta(
         tenant_id=tenant_id,
         icp_id=None,
+        criado_por_usuario_id=int(ator_id) if ator_id else None,
+        vendedor_usuario_id=int(ator_id) if ator_id else None,
         nome=nome,
         cnpj=_normalizar_cnpj(cnpj),
         dominio=_normalizar_dominio(dominio),
@@ -403,7 +407,7 @@ def listar_todas(db: Session, tenant_id: str) -> list[Conta]:
     existente" do Kanban (E2), que antes só listava contas de um ICP e
     deixava um lead (conta sem ICP) impossível de escolher pra criar um
     negócio nele."""
-    return db.query(Conta).filter_by(tenant_id=tenant_id).order_by(Conta.criado_em.desc()).all()
+    return db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(Conta.tenant_id == tenant_id).order_by(Conta.criado_em.desc()).all()
 
 
 def _sinais_de_trabalho_real(db: Session, tenant_id: str, conta: Conta, decisor_ids: list[int]) -> list[str]:
@@ -1051,7 +1055,7 @@ def criar_decisor_manual(
 ) -> Decisor:
     conta = obter(db, tenant_id, conta_id)
 
-    decisor = Decisor(tenant_id=tenant_id, conta_id=conta.id, **dados.model_dump())
+    decisor = Decisor(tenant_id=tenant_id, conta_id=conta.id, criado_por_usuario_id=int(ator_id) if ator_id else None, **dados.model_dump())
     db.add(decisor)
     db.flush()
 
