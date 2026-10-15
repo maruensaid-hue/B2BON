@@ -45,8 +45,11 @@ def test_cookie_de_sessao_exige_origem_autorizada_em_mutacoes(client, db_session
     login = client.post("/api/v1/auth/login", json={"email": "csrf-cookie@teste.com.br", "senha": "senha-forte"})
     assert login.status_code == 200
 
-    sem_origem = client.post("/api/v1/auth/dispensar-banner-boas-vindas")
-    assert sem_origem.status_code == 403
+    origem_invalida = client.post(
+        "/api/v1/auth/dispensar-banner-boas-vindas",
+        headers={"Origin": "https://origem-maliciosa.example"},
+    )
+    assert origem_invalida.status_code == 403
 
     com_origem = client.post(
         "/api/v1/auth/dispensar-banner-boas-vindas",
