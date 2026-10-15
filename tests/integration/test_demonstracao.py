@@ -31,7 +31,9 @@ def _abrir(client) -> tuple[dict, dict]:
     resposta = client.post("/api/v1/auth/demonstracao", headers={"Authorization": ""})
     assert resposta.status_code == 201, resposta.text
     corpo = resposta.json()
-    return corpo, {"Authorization": f"Bearer {corpo['access_token']}"}
+    cookie = resposta.headers.get("set-cookie", "")
+    valor_cookie = cookie.split("b2bon_session=", 1)[1].split(";", 1)[0]
+    return corpo, {"Cookie": f"b2bon_session={valor_cookie}", "Authorization": ""}
 
 
 def test_desligada_por_padrao(client):
@@ -94,6 +96,7 @@ def test_token_de_demonstracao_adulterado_ou_com_demo_desligada_nao_entra(client
     import jwt as pyjwt
 
     corpo, headers = _abrir(client)
+    token_demo = headers["Cookie"].split("=", 1)[1]
     falso = pyjwt.encode({"sub": str(corpo["usuario"]["id"]), "demo": False, "papel": "super_admin"}, "chave-errada", algorithm="HS256")
     assert client.get("/api/v1/admin/tenants", headers={"Authorization": f"Bearer {falso}"}).status_code == 401
     monkeypatch.setattr(settings, "demo_habilitada", False)  # desligar invalida as sessões abertas na hora
