@@ -48,6 +48,7 @@ interface Negocio {
 interface UsuarioResumo {
   id: number;
   nome: string;
+  papel: string;
 }
 
 interface DecisorResumo {
@@ -194,7 +195,7 @@ export function Kanban() {
     if (usuario?.papel === "admin" || usuario?.papel === "super_admin") {
       api
         .get<UsuarioResumo[]>("/usuarios")
-        .then(setVendedores)
+        .then((usuarios) => setVendedores(usuarios.filter((item) => item.papel === "user")))
         .catch(() => setVendedores([]));
     }
   }, [usuario?.papel]);
