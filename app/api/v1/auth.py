@@ -145,7 +145,7 @@ def _resposta_token(
             path="/",
         )
     return TokenResponseSchema(
-        access_token=access_token,
+        access_token="cookie-session",
         usuario=usuario_schema,
         tem_licenca_ativa=licenca is not None and licenca.status == "ativa",
         checkout_url=checkout_url,
@@ -185,7 +185,7 @@ def demonstracao(response: Response, tarefas: BackgroundTasks, db: Session = Dep
         path="/",
     )
     return DemonstracaoSchema(
-        access_token=access_token,
+        access_token="cookie-session",
         usuario=_construir_usuario_schema(usuario, db), tem_licenca_ativa=True, demo_expira_em=expira_em,
     )
 
