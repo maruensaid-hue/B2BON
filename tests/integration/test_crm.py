@@ -39,7 +39,6 @@ def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, criar_usuar
             "conta_id": conta_admin["id"],
             "nome": "Oportunidade privada do admin",
             "valor": 9000.0,
-            "vendedor_usuario_id": 1,
         },
     )
     assert negocio_admin.status_code == 201
