@@ -70,6 +70,32 @@ def exigir_escopo_conta(
         .one_or_none()
     )
     if conta is None:
+        raise NaoEncontrado("Empresa não encontrada.")
+
+
+
+def exigir_escopo_conta_leitura(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Permite ler a conta ligada a uma oportunidade atribuída, sem conceder escrita."""
+    if usuario.papel != "user":
+        return
+    conta_propria = (
+        db.query(Conta.id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Conta.id == conta_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if conta_propria is None:
         oportunidade_atribuida = (
             db.query(Negocio.id)
             .filter(
@@ -81,8 +107,6 @@ def exigir_escopo_conta(
         )
         if oportunidade_atribuida is None:
             raise NaoEncontrado("Empresa não encontrada.")
-
-
 
 
 def _serializar_decisores_com_linkedin(
@@ -142,7 +166,7 @@ def listar_todas_as_contas(
     return conta_service.listar_todas(db, tenant_id, usuario.id, usuario.papel == "user")
 
 
-@router.get("/contas/{conta_id}", response_model=ContaSchema, dependencies=[Depends(exigir_escopo_conta)])
+@router.get("/contas/{conta_id}", response_model=ContaSchema, dependencies=[Depends(exigir_escopo_conta_leitura)])
 def obter_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -178,7 +202,7 @@ def definir_proximo_passo(
     )
 
 
-@router.get("/contas/{conta_id}/decisores", response_model=list[DecisorSchema], dependencies=[Depends(exigir_escopo_conta)])
+@router.get("/contas/{conta_id}/decisores", response_model=list[DecisorSchema], dependencies=[Depends(exigir_escopo_conta_leitura)])
 def listar_decisores_da_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
