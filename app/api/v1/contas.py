@@ -99,10 +99,13 @@ def criar_conta_manual(
     dados: CriarContaManualRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> ContaSchema:
     """Cadastro avulso de conta pelo CRM — cliente que chegou por indicação
     ou inbound, sem passar pela geração de lista do PREDATOR."""
+    if usuario.papel == "user" and db.query(ICP).filter_by(id=icp_id, tenant_id=tenant_id, criador_usuario_id=usuario.id).one_or_none() is None:
+        raise NaoEncontrado("ICP não encontrado.")
     return conta_service.criar_manual(db, tenant_id, ator_id, icp_id, dados.nome, dados.cnpj, dados.dominio)
 
 
