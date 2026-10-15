@@ -347,6 +347,25 @@ def exigir_escopo_cadencia_usuario(
     )
     if permitida is None:
         raise NaoAutorizado("Cadência não encontrada ou fora do seu escopo.")
+    total_mensagens = db.query(Mensagem.id).filter_by(tenant_id=tenant_id, cadencia_id=cadencia_id).count()
+    mensagens_visiveis = (
+        db.query(Mensagem.id)
+        .join(Decisor, Decisor.id == Mensagem.decisor_id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Mensagem.tenant_id == tenant_id,
+            Mensagem.cadencia_id == cadencia_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .count()
+    )
+    if mensagens_visiveis != total_mensagens:
+        raise NaoAutorizado("Cadência contém mensagens fora do seu escopo.")
 
 
 def exigir_escopo_mensagem_usuario(
