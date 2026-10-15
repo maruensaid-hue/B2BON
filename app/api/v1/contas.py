@@ -17,6 +17,7 @@ from app.llm.base import LLMProvider
 from app.models.decisor import Decisor
 from app.models.conta import Conta
 from app.models.icp import ICP
+from app.models.negocio import Negocio
 from app.services.errors import NaoEncontrado
 from app.models.usuario import Usuario
 from app.schemas.conta import (
@@ -69,7 +70,17 @@ def exigir_escopo_conta(
         .one_or_none()
     )
     if conta is None:
-        raise NaoEncontrado("Empresa não encontrada.")
+        oportunidade_atribuida = (
+            db.query(Negocio.id)
+            .filter(
+                Negocio.tenant_id == tenant_id,
+                Negocio.conta_id == conta_id,
+                Negocio.vendedor_usuario_id == usuario.id,
+            )
+            .first()
+        )
+        if oportunidade_atribuida is None:
+            raise NaoEncontrado("Empresa não encontrada.")
 
 
 
@@ -190,6 +201,20 @@ def listar_decisores_da_conta(
                 .all()
             )
         }
+        # Contatos ligados diretamente a oportunidades atribuídas também
+        # pertencem ao escopo de trabalho do vendedor.
+        ids_permitidos.update(
+            decisor_id for (decisor_id,) in (
+                db.query(Negocio.decisor_id)
+                .filter(
+                    Negocio.tenant_id == tenant_id,
+                    Negocio.conta_id == conta_id,
+                    Negocio.vendedor_usuario_id == usuario.id,
+                    Negocio.decisor_id.is_not(None),
+                )
+                .all()
+            )
+        )
         decisores = [d for d in decisores if d.id in ids_permitidos]
     return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, decisores)
 
