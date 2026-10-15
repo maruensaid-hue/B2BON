@@ -261,7 +261,7 @@ def enviar_ao_crm_externo(conta_id: int, tenant_id: str = Depends(get_tenant_id)
 @router.post(
     "/contas/{conta_id}/estrategia-venda",
     response_model=EstrategiaVendaSchema,
-    dependencies=[Depends(limitar_ia_por_tenant())],
+    dependencies=[Depends(limitar_ia_por_tenant()), Depends(exigir_escopo_conta)],
 )
 def sugerir_estrategia_venda(
     conta_id: int,
