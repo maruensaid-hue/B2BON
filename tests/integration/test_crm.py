@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from app.api.deps import get_crm_provider
 from app.main import app
 from app.models.conta import Conta
+from app.models.decisor import Decisor
+from app.models.usuario import Usuario
 from app.models.estagio_funil import EstagioFunil
 from app.models.negocio import Negocio
 from app.providers.crm.nucleo import NucleoCrmProvider
@@ -27,6 +29,40 @@ def test_dashboard_funil_com_filtro_de_vendedor_via_api(client, db_session, cria
     resposta_com_filtro = client.get("/api/v1/crm/dashboard/funil", params={"vendedor_usuario_id": 999})
     assert resposta_com_filtro.status_code == 200
     assert sum(e["quantidade"] for e in resposta_com_filtro.json()["estagios"]) == 0
+
+
+def test_vendedor_nao_pode_vincular_contato_de_outra_empresa(client, db_session, criar_usuario_autenticado):
+    headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-contato-escopo@teste.com.br")
+    usuario = db_session.query(Usuario).filter_by(email="vendedor-contato-escopo@teste.com.br").one()
+
+    conta_propria = Conta(
+        tenant_id=TENANT_ID, nome="Empresa própria", status="priorizada",
+        vendedor_usuario_id=usuario.id, criado_por_usuario_id=usuario.id,
+    )
+    conta_alheia = Conta(
+        tenant_id=TENANT_ID, nome="Empresa alheia", status="priorizada",
+    )
+    db_session.add_all([conta_propria, conta_alheia])
+    db_session.flush()
+    contato_alheio = Decisor(
+        tenant_id=TENANT_ID, conta_id=conta_alheia.id, nome="Contato alheio",
+    )
+    db_session.add(contato_alheio)
+    db_session.commit()
+
+    resposta = client.post(
+        "/api/v1/crm/negocios",
+        headers=headers,
+        json={
+            "conta_id": conta_propria.id,
+            "decisor_id": contato_alheio.id,
+            "nome": "Tentativa de vinculação cruzada",
+            "valor": 100.0,
+        },
+    )
+
+    assert resposta.status_code == 404
+    assert "Contato não encontrado" in resposta.json()["detalhe"]
 
 
 def test_listar_vendedores_com_contas_via_api(client, db_session, criar_conta_com_decisor):
