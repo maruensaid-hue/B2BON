@@ -61,6 +61,11 @@ def test_vendedor_nao_visualiza_oportunidades_do_super_admin(client, criar_usuar
     assert nomes == {"Oportunidade do vendedor"}
     assert "Oportunidade privada do admin" not in nomes
 
+    acesso_direto = client.get(
+        f"/api/v1/oportunidades/{negocio_admin.json()['id']}/card", headers=headers
+    )
+    assert acesso_direto.status_code == 404
+
 
 def test_vendedor_nao_pode_vincular_contato_de_outra_empresa(client, db_session, criar_usuario_autenticado):
     headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-contato-escopo@teste.com.br")
