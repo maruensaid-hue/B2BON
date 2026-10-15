@@ -3,7 +3,7 @@ from collections.abc import Generator
 from datetime import UTC, datetime
 
 from fastapi import Depends, Header, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.db.session import SessionLocal
 from app.graph.client import Neo4jClient
@@ -325,17 +325,20 @@ def exigir_escopo_cadencia_usuario(
     """Cadência e seus toques/relatórios só podem ser usados no escopo do vendedor."""
     if usuario.papel != "user":
         return
+    icp_cadencia = aliased(ICP)
+    icp_conta = aliased(ICP)
     permitida = (
         db.query(Cadencia.id)
-        .outerjoin(ICP, ICP.id == Cadencia.icp_id)
+        .outerjoin(icp_cadencia, icp_cadencia.id == Cadencia.icp_id)
         .outerjoin(Conta, Conta.id == Cadencia.conta_id)
+        .outerjoin(icp_conta, icp_conta.id == Conta.icp_id)
         .filter(
             Cadencia.id == cadencia_id,
             Cadencia.tenant_id == tenant_id,
-            (Cadencia.icp_id.is_(None) | (ICP.criador_usuario_id == usuario.id)),
+            (Cadencia.icp_id.is_(None) | (icp_cadencia.criador_usuario_id == usuario.id)),
             (Cadencia.conta_id.is_(None) | (
                 ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
-                 | (ICP.criador_usuario_id == usuario.id))
+                 | (icp_conta.criador_usuario_id == usuario.id))
                 & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id))
             )),
             Cadencia.criado_por_usuario_id == usuario.id,
