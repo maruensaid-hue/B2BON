@@ -28,12 +28,13 @@ def test_login_com_sucesso(client, db_session):
 
     assert resposta.status_code == 200
     corpo = resposta.json()
-    assert corpo["access_token"]
+    assert corpo["access_token"] == "cookie-session"
     assert corpo["token_type"] == "bearer"
     assert corpo["usuario"]["email"] == "login@teste.com.br"
     cookie = resposta.headers.get("set-cookie", "")
     assert "b2bon_session=" in cookie
     assert "httponly" in cookie.lower()
+    assert cookie.split("b2bon_session=", 1)[1].split(";", 1)[0] != corpo["access_token"]
     # O cookie autentica sem expor o JWT no cabeçalho Authorization.
     resposta_eu = client.get("/api/v1/auth/eu", headers={"Authorization": ""})
     assert resposta_eu.status_code == 200
