@@ -384,11 +384,14 @@ def importar_participantes(
     }
 
 
-def listar_por_icp(db: Session, tenant_id: str, icp_id: int) -> list[Conta]:
+def listar_por_icp(db: Session, tenant_id: str, icp_id: int, usuario_id: int | None = None, restrito: bool = False) -> list[Conta]:
     """Contas já geradas para um ICP — para a tela de Prospecção
     sobreviver a um refresh sem depender só da resposta pontual de
     `gerar_lista` (Onda F2)."""
-    return db.query(Conta).filter_by(tenant_id=tenant_id, icp_id=icp_id).order_by(Conta.criado_em.desc()).all()
+    query = db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(Conta.tenant_id == tenant_id, Conta.icp_id == icp_id)
+    if restrito:
+        query = query.filter((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id))
+    return query.order_by(Conta.criado_em.desc()).all()
 
 
 def listar_por_lista(db: Session, tenant_id: str, lista_prospeccao_id: int) -> list[Conta]:
@@ -402,12 +405,15 @@ def listar_por_lista(db: Session, tenant_id: str, lista_prospeccao_id: int) -> l
     )
 
 
-def listar_todas(db: Session, tenant_id: str) -> list[Conta]:
+def listar_todas(db: Session, tenant_id: str, usuario_id: int | None = None, restrito: bool = False) -> list[Conta]:
     """Toda conta do tenant, com ou sem ICP — usado pelo seletor "conta
     existente" do Kanban (E2), que antes só listava contas de um ICP e
     deixava um lead (conta sem ICP) impossível de escolher pra criar um
     negócio nele."""
-    return db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(Conta.tenant_id == tenant_id).order_by(Conta.criado_em.desc()).all()
+    query = db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(Conta.tenant_id == tenant_id)
+    if restrito:
+        query = query.filter((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id))
+    return query.order_by(Conta.criado_em.desc()).all()
 
 
 def _sinais_de_trabalho_real(db: Session, tenant_id: str, conta: Conta, decisor_ids: list[int]) -> list[str]:
