@@ -690,6 +690,7 @@ def test_registrar_publico_com_plano_pago_retorna_checkout(client, criar_plano, 
     )
 
     assert resposta.status_code == 201
+    assert "b2bon_session=" in resposta.headers.get("set-cookie", "")
     corpo = resposta.json()
     assert corpo["checkout_url"]
     assert corpo["usuario"]["papel"] == "admin"
