@@ -300,15 +300,10 @@ def exigir_escopo_negocio_usuario(
         return
     negocio = (
         db.query(Negocio)
-        .join(Conta, Conta.id == Negocio.conta_id)
-        .outerjoin(ICP, ICP.id == Conta.icp_id)
         .filter(
             Negocio.id == negocio_id,
             Negocio.tenant_id == tenant_id,
             Negocio.vendedor_usuario_id == usuario.id,
-            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
-             | (ICP.criador_usuario_id == usuario.id)),
-            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
         )
         .one_or_none()
     )
