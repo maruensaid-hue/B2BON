@@ -2,7 +2,7 @@ import hashlib
 import hmac
 from datetime import UTC, datetime
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.contexts.intelligence import contract as intel
 from app.core.config import settings
@@ -190,11 +190,15 @@ def listar(
     db: Session, tenant_id: str, status: str | None = None,
     usuario_id: int | None = None, restrito: bool = False,
 ) -> list[Indicacao]:
+    conta_destino = aliased(Conta)
+    icp_destino = aliased(ICP)
     query = (
         db.query(Indicacao)
         .join(Decisor, Decisor.id == Indicacao.promotor_decisor_id)
         .join(Conta, Conta.id == Indicacao.promotor_conta_id)
         .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .outerjoin(conta_destino, conta_destino.id == Indicacao.conta_gerada_id)
+        .outerjoin(icp_destino, icp_destino.id == conta_destino.icp_id)
         .filter(Indicacao.tenant_id == tenant_id, Conta.tenant_id == tenant_id)
     )
     if restrito:
@@ -203,6 +207,11 @@ def listar(
              | (ICP.criador_usuario_id == usuario_id)),
             ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
             ((Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+            (Indicacao.conta_gerada_id.is_(None) | (
+                ((conta_destino.vendedor_usuario_id == usuario_id) | (conta_destino.criado_por_usuario_id == usuario_id)
+                 | (icp_destino.criador_usuario_id == usuario_id))
+                & ((conta_destino.vendedor_usuario_id.is_(None)) | (conta_destino.vendedor_usuario_id == usuario_id))
+            )),
         )
     if status:
         query = query.filter(Indicacao.status == status)
