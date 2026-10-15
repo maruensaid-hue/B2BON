@@ -384,6 +384,19 @@ def test_redefinir_senha_com_token_valido_troca_a_senha(db_session):
     assert redefinicao.status == "usado"
 
 
+def test_redefinir_senha_invalida_jwts_anteriores(db_session):
+    usuario = _criar_usuario(db_session, email="invalidar-sessoes@teste.com.br")
+    token_antigo = auth_service.gerar_token(usuario)
+    fake_email = FakeEmailProvider()
+    auth_service.solicitar_redefinicao_senha(db_session, usuario.email, fake_email)
+    token_reset = fake_email.envios[0]["corpo"].split("/redefinir-senha/")[1].split()[0]
+
+    auth_service.redefinir_senha(db_session, token_reset, "senha-nova-456")
+
+    with pytest.raises(NaoAutenticado):
+        auth_service.validar_token(db_session, token_antigo)
+
+
 def test_redefinir_senha_token_ja_usado_falha(db_session):
     _criar_usuario(db_session, email="reuso@teste.com.br")
     fake_email = FakeEmailProvider()
