@@ -145,7 +145,6 @@ async def proteger_sessao_cookie_contra_csrf(request: Request, call_next):
     ):
         origem_header = request.headers.get("origin")
         origem = origem_header.rstrip("/") if origem_header else ""
-        site = request.headers.get("sec-fetch-site", "").lower()
         if not origem or origem not in settings.origens_cors:
             return JSONResponse(status_code=403, content={"detalhe": "Origem não autorizada para esta sessão."})
     return await call_next(request)
