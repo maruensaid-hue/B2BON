@@ -52,6 +52,12 @@ def _criar_licenca(db_session, tenant_id: str, max_usuarios: int | None, status:
     return licenca
 
 
+def _token_enviado(fake_email: FakeEmailProvider, indice: int = -1) -> str:
+    """Extrai o token bruto do link enviado; o banco guarda apenas seu hash."""
+    corpo = fake_email.envios[indice]["corpo"]
+    return corpo.split("/redefinir-senha/")[-1].split()[0]
+
+
 def test_hash_e_verificacao_de_senha():
     hash_senha = auth_service.hash_senha("minha-senha")
 
@@ -359,11 +365,11 @@ def test_solicitar_redefinicao_senha_pedido_novo_invalida_token_anterior(db_sess
     fake_email = FakeEmailProvider()
 
     auth_service.solicitar_redefinicao_senha(db_session, "dois-pedidos@teste.com.br", fake_email)
-    primeiro_token = db_session.query(RedefinicaoSenha).filter_by(status="disponivel").one().token
+    primeiro_token = _token_enviado(fake_email, 0)
 
     auth_service.solicitar_redefinicao_senha(db_session, "dois-pedidos@teste.com.br", fake_email)
 
-    primeiro = db_session.query(RedefinicaoSenha).filter_by(token=primeiro_token).one()
+    primeiro = db_session.query(RedefinicaoSenha).filter_by(token=auth_service._hash_token_redefinicao_senha(primeiro_token)).one()
     assert primeiro.status == "expirado"
     assert db_session.query(RedefinicaoSenha).filter_by(status="disponivel").count() == 1
 
