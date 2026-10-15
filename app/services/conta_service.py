@@ -416,7 +416,11 @@ def listar_todas(db: Session, tenant_id: str, usuario_id: int | None = None, res
     negócio nele."""
     query = db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(Conta.tenant_id == tenant_id)
     if restrito:
-        query = query.filter((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id))
+        query = query.filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+        )
     return query.order_by(Conta.criado_em.desc()).all()
 
 
