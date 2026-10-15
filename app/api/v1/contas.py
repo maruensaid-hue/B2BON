@@ -7,12 +7,14 @@ from app.api.deps import (
     get_graph_client,
     get_llm_provider,
     get_tenant_id,
+    get_usuario_atual,
     limitar_ia_por_tenant,
 )
 from app.contexts.integrations import contract as integracoes
 from app.graph.client import Neo4jClient
 from app.llm.base import LLMProvider
 from app.models.decisor import Decisor
+from app.models.usuario import Usuario
 from app.schemas.conta import (
     AtualizarContaRequestSchema,
     ContaSchema,
@@ -79,19 +81,21 @@ def criar_conta_manual(
 def listar_contas_do_icp(
     icp_id: int,
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[ContaSchema]:
-    return conta_service.listar_por_icp(db, tenant_id, icp_id)
+    restrito = usuario.papel == "user"
+    return conta_service.listar_por_icp(db, tenant_id, icp_id, usuario.id, restrito)
 
 
 @router.get("/contas", response_model=list[ContaSchema])
 def listar_todas_as_contas(
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[ContaSchema]:
-    """Toda conta do tenant, com ou sem ICP — usado pelo seletor "conta
-    existente" ao criar um negócio no Kanban."""
-    return conta_service.listar_todas(db, tenant_id)
+    """Contas disponíveis no escopo do usuário autenticado."""
+    return conta_service.listar_todas(db, tenant_id, usuario.id, usuario.papel == "user")
 
 
 @router.get("/contas/{conta_id}", response_model=ContaSchema)
