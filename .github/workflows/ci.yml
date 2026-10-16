@@ -58,6 +58,8 @@ jobs:
       - name: Validar cadeia Alembic em PostgreSQL limpo
         env:
           DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
+          # Chave Fernet exclusiva e descartável para CI; nunca reutilizar em ambientes reais.
+          CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: alembic upgrade head
 
   frontend:
