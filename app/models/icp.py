@@ -11,6 +11,7 @@ class ICP(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, index=True)
+    criador_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True, index=True)
     grupo_id: Mapped[str] = mapped_column(String, index=True)
     clonado_de_id: Mapped[int | None] = mapped_column(ForeignKey("icp.id"), nullable=True)
     nome: Mapped[str] = mapped_column(String)

@@ -341,6 +341,19 @@ vazio e nada é agendado.
    transcrição chegar, confira que uma nova atividade "reunião" aparece
    tanto no cadastro da conta quanto no da oportunidade relacionada.
 
+## Segurança de sessão e rate limiting distribuído
+
+Antes de implantar a versão com sessão por cookie:
+
+1. Provisione uma instância Redis gerenciada, privada e acessível pelo serviço `b2bon-api`.
+2. No Render → `b2bon-api` → **Environment**, configure `REDIS_URL` com a URL TLS/credencial fornecida pelo provedor. Não grave credenciais no repositório. Com a variável presente, o rate limiter usa operações Lua atômicas compartilhadas entre instâncias e falha de forma fechada se o Redis ficar indisponível.
+3. Confirme `CORS_ORIGINS` com as origens exatas do frontend, sem curingas. O frontend deve chamar a API com credenciais; em produção o cookie usa `HttpOnly; Secure; SameSite=None` e as mutações por cookie exigem cabeçalho `Origin` permitido.
+4. Confirme que frontend e API estão publicados em HTTPS e que o navegador aceita cookies entre os domínios usados. Se o navegador bloquear cookies de terceiros, publique frontend/API sob domínios do mesmo site ou configure um proxy same-site antes de liberar a mudança.
+5. Antes de executar a migração, tire backup do banco e confirme a cadeia com `alembic heads` e `alembic upgrade head`. A revisão de merge de heads une a cadeia de propriedade/sessão à cadeia existente; a migração seguinte registra o criador das cadências. Cadências antigas sem criador ficam ocultas para vendedores até que um administrador as revise/reatribua.
+6. Após o deploy, valide: login por senha e Google, cadastro/convite, demonstração, refresh da página, logout, redefinição de senha (JWT anterior deve falhar), mutação com origem permitida e bloqueio com origem não permitida. Teste também o rate limit em duas instâncias para confirmar que a cota é compartilhada.
+
+Não conclua o rollout apenas com testes locais: a variável `REDIS_URL`, os domínios reais e o estado do banco são específicos do ambiente de produção.
+
 ## Verificação final
 
 Acesse a URL do Worker, faça login com o admin criado no passo 4,

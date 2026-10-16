@@ -18,9 +18,21 @@ def test_producao_com_segredos_fortes_sobe_normalmente():
         database_url="postgresql://user:pass@host/db",
         secret_key="um-segredo-forte-gerado-de-verdade",
         jwt_secret_key="outro-segredo-forte-gerado-de-verdade",
+        redis_url="redis://localhost:6379/0",
     )
 
     settings.validar_segredos_de_producao()  # não deve lançar
+
+
+def test_producao_sem_redis_compartilhado_falha_ao_subir():
+    settings = Settings(
+        database_url="postgresql://user:pass@host/db",
+        secret_key="um-segredo-forte-gerado-de-verdade",
+        jwt_secret_key="outro-segredo-forte-gerado-de-verdade",
+    )
+
+    with pytest.raises(RuntimeError, match="REDIS_URL"):
+        settings.validar_segredos_de_producao()
 
 
 def test_dev_sqlite_nao_bloqueia_mesmo_com_segredo_padrao():

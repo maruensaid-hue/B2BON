@@ -2,8 +2,8 @@ import hashlib
 from collections.abc import Generator
 from datetime import UTC, datetime
 
-from fastapi import Depends, Header
-from sqlalchemy.orm import Session
+from fastapi import Depends, Header, Request
+from sqlalchemy.orm import Session, aliased
 
 from app.db.session import SessionLocal
 from app.graph.client import Neo4jClient
@@ -25,6 +25,16 @@ from app.models.chave_api_parceiro import ChaveApiParceiro
 from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.licenca import Licenca
+from app.models.conta import Conta
+from app.models.icp import ICP
+from app.models.negocio import Negocio
+from app.models.decisor import Decisor
+from app.models.necessidade_oportunidade import NecessidadeOportunidade
+from app.models.reuniao import Reuniao
+from app.models.mensagem import Mensagem
+from app.models.aprovacao import Aprovacao
+from app.models.cadencia import Cadencia
+from app.models.conversa_qualificacao import ConversaQualificacao
 from app.models.tenant import Tenant
 from app.services.demo import contexto as demo_contexto
 from app.models.usuario import Usuario
@@ -225,6 +235,7 @@ def get_email_validation_provider() -> EmailVerificationProvider:
 
 
 def get_usuario_atual(
+    request: Request,
     authorization: str | None = Header(None, alias="Authorization"),
     db: Session = Depends(get_db),
 ) -> Usuario:
@@ -238,15 +249,317 @@ def get_usuario_atual(
     faltante, misturando "não autenticado" com "corpo/parâmetro
     inválido".
     """
-    if authorization is None or not authorization.startswith("Bearer "):
-        raise NaoAutenticado("Cabeçalho Authorization deve ser 'Bearer <token>'.")
-    token = authorization[len("Bearer ") :]
+    # Integrações e clientes de API continuam usando Bearer; o navegador
+    # usa cookie HttpOnly, que não pode ser lido por JavaScript.
+    if authorization is not None and authorization.startswith("Bearer "):
+        token = authorization[len("Bearer ") :]
+    else:
+        token = request.cookies.get(settings.sessao_cookie_nome)
+    if not token:
+        raise NaoAutenticado("Sessão ausente. Faça login novamente.")
     return auth_service.validar_token(db, token)
 
 
 def get_tenant_id(usuario: Usuario = Depends(get_usuario_atual)) -> str:
     """Identidade do assinante — derivada do usuário autenticado (Onda A)."""
     return usuario.tenant_id
+
+def exigir_escopo_conta_usuario(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Vendedor só consulta contas que criou, possui ou que vieram de seu ICP."""
+    if usuario.papel != "user":
+        return
+    conta = (
+        db.query(Conta)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Conta.id == conta_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+        )
+        .one_or_none()
+    )
+    if conta is None:
+        # Uma oportunidade explicitamente atribuída também concede acesso
+        # à conta vinculada para abrir e trabalhar nessa oportunidade.
+        oportunidade_atribuida = (
+            db.query(Negocio.id)
+            .filter(
+                Negocio.tenant_id == tenant_id,
+                Negocio.conta_id == conta_id,
+                Negocio.vendedor_usuario_id == usuario.id,
+            )
+            .first()
+        )
+        if oportunidade_atribuida is None:
+            raise NaoAutorizado("Empresa não encontrada ou fora do seu escopo.")
+
+
+def exigir_escopo_negocio_usuario(
+    negocio_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Vendedor só pode consultar inteligência de uma oportunidade que lhe pertence."""
+    if usuario.papel != "user":
+        return
+    negocio = (
+        db.query(Negocio)
+        .filter(
+            Negocio.id == negocio_id,
+            Negocio.tenant_id == tenant_id,
+            Negocio.vendedor_usuario_id == usuario.id,
+        )
+        .one_or_none()
+    )
+    if negocio is None:
+        raise NaoAutorizado("Oportunidade não encontrada ou fora do seu escopo.")
+
+
+
+def exigir_escopo_conversa_usuario(
+    conversa_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Transcrições/roteiros de qualificação seguem a propriedade do contato."""
+    if usuario.papel != "user":
+        return
+    permitida = (
+        db.query(ConversaQualificacao.id)
+        .join(Decisor, Decisor.id == ConversaQualificacao.decisor_id)
+        .join(Conta, Conta.id == ConversaQualificacao.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            ConversaQualificacao.id == conversa_id,
+            ConversaQualificacao.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if permitida is None:
+        raise NaoAutorizado("Conversa não encontrada ou fora do seu escopo.")
+
+
+def exigir_escopo_cadencia_usuario(
+    cadencia_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Cadência e seus toques/relatórios só podem ser usados no escopo do vendedor."""
+    if usuario.papel != "user":
+        return
+    icp_cadencia = aliased(ICP)
+    icp_conta = aliased(ICP)
+    permitida = (
+        db.query(Cadencia.id)
+        .outerjoin(icp_cadencia, icp_cadencia.id == Cadencia.icp_id)
+        .outerjoin(Conta, Conta.id == Cadencia.conta_id)
+        .outerjoin(icp_conta, icp_conta.id == Conta.icp_id)
+        .filter(
+            Cadencia.id == cadencia_id,
+            Cadencia.tenant_id == tenant_id,
+            (Cadencia.icp_id.is_(None) | (icp_cadencia.criador_usuario_id == usuario.id)),
+            (Cadencia.conta_id.is_(None) | (
+                ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+                 | (icp_conta.criador_usuario_id == usuario.id))
+                & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id))
+            )),
+            Cadencia.criado_por_usuario_id == usuario.id,
+        )
+        .first()
+    )
+    if permitida is None:
+        raise NaoAutorizado("Cadência não encontrada ou fora do seu escopo.")
+    total_mensagens = db.query(Mensagem.id).filter_by(tenant_id=tenant_id, cadencia_id=cadencia_id).count()
+    mensagens_visiveis = (
+        db.query(Mensagem.id)
+        .join(Decisor, Decisor.id == Mensagem.decisor_id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Mensagem.tenant_id == tenant_id,
+            Mensagem.cadencia_id == cadencia_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .count()
+    )
+    if mensagens_visiveis != total_mensagens:
+        raise NaoAutorizado("Cadência contém mensagens fora do seu escopo.")
+
+
+def exigir_escopo_mensagem_usuario(
+    mensagem_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Mensagens de prospecção só são acessíveis pelo dono do contato/ICP."""
+    if usuario.papel != "user":
+        return
+    permitida = (
+        db.query(Mensagem.id)
+        .join(Decisor, Decisor.id == Mensagem.decisor_id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Mensagem.id == mensagem_id,
+            Mensagem.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if permitida is None:
+        raise NaoAutorizado("Mensagem não encontrada ou fora do seu escopo.")
+
+
+def exigir_escopo_aprovacao_usuario(
+    aprovacao_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Aprovação só pode ser consultada/alterada por quem pode ver o contato destinatário."""
+    if usuario.papel != "user":
+        return
+    permitida = (
+        db.query(Aprovacao.id)
+        .join(Mensagem, Mensagem.id == Aprovacao.mensagem_id)
+        .join(Decisor, Decisor.id == Mensagem.decisor_id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Aprovacao.id == aprovacao_id,
+            Aprovacao.tenant_id == tenant_id,
+            Mensagem.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if permitida is None:
+        raise NaoAutorizado("Aprovação não encontrada ou fora do seu escopo.")
+
+
+def exigir_escopo_reuniao_usuario(
+    reuniao_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Reuniões/transcrições só são acessíveis pelo dono do contato ou do ICP de origem."""
+    if usuario.papel != "user":
+        return
+    permitida = (
+        db.query(Reuniao.id)
+        .join(Decisor, Decisor.id == Reuniao.decisor_id)
+        .join(Conta, Conta.id == Reuniao.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Reuniao.id == reuniao_id,
+            Reuniao.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if permitida is None:
+        raise NaoAutorizado("Reunião não encontrada ou fora do seu escopo.")
+
+
+def exigir_escopo_decisor_usuario(
+    conta_id: int,
+    decisor_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Contato só é acessível dentro de uma conta autorizada e do escopo do vendedor."""
+    if usuario.papel != "user":
+        return
+    permitido = (
+        db.query(Decisor.id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Decisor.id == decisor_id,
+            Decisor.conta_id == conta_id,
+            Decisor.tenant_id == tenant_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if permitido is None:
+        # Um contato vinculado à oportunidade atribuída faz parte do escopo
+        # do vendedor mesmo quando foi cadastrado originalmente pela gestão.
+        permitido = (
+            db.query(Negocio.id)
+            .filter(
+                Negocio.tenant_id == tenant_id,
+                Negocio.conta_id == conta_id,
+                Negocio.decisor_id == decisor_id,
+                Negocio.vendedor_usuario_id == usuario.id,
+            )
+            .first()
+        )
+    if permitido is None:
+        raise NaoAutorizado("Contato não encontrado ou fora do seu escopo.")
+
+
+def exigir_escopo_necessidade_usuario(
+    necessidade_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Impede ler/alterar necessidades vinculadas à oportunidade de outro vendedor."""
+    if usuario.papel != "user":
+        return
+    permitida = (
+        db.query(NecessidadeOportunidade.id)
+        .join(Negocio, Negocio.id == NecessidadeOportunidade.negocio_id)
+        .join(Conta, Conta.id == Negocio.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            NecessidadeOportunidade.id == necessidade_id,
+            NecessidadeOportunidade.tenant_id == tenant_id,
+            Negocio.vendedor_usuario_id == usuario.id,
+        )
+        .first()
+    )
+    if permitida is None:
+        raise NaoAutorizado("Necessidade não encontrada ou fora do seu escopo.")
 
 
 def _e_demonstracao(db: Session, tenant_id: str) -> bool:

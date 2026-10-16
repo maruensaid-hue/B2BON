@@ -1,23 +1,32 @@
+import logging
+import secrets
 import time
 from collections import defaultdict
 from threading import Lock
 
+from redis import Redis
+from redis.exceptions import RedisError
+
 from fastapi import Request
 
+from app.core.config import settings
 from app.services.errors import LimiteDeTaxaExcedido
+
+logger = logging.getLogger(__name__)
 
 
 class LimitadorEmMemoria:
-    """Janela deslizante por processo — suficiente hoje porque a API roda
-    numa única instância Render (Onda raio-X); se algum dia escalar
-    horizontalmente, isto precisa virar um backend compartilhado (Redis)
-    para o limite valer entre instâncias."""
+    """Usa Redis compartilhado quando REDIS_URL está configurado; memória é fallback de desenvolvimento legado."""
 
     def __init__(self) -> None:
         self._tentativas: dict[str, list[float]] = defaultdict(list)
         self._lock = Lock()
+        self._redis: Redis | None = None
 
     def checar(self, chave: str, max_tentativas: int, janela_segundos: int) -> None:
+        if settings.redis_url:
+            self._checar_redis(chave, max_tentativas, janela_segundos)
+            return
         agora = time.monotonic()
         with self._lock:
             tentativas = self._tentativas[chave]
@@ -26,6 +35,39 @@ class LimitadorEmMemoria:
             if len(tentativas) >= max_tentativas:
                 raise LimiteDeTaxaExcedido("Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.")
             tentativas.append(agora)
+
+    def _checar_redis(self, chave: str, max_tentativas: int, janela_segundos: int) -> None:
+        """Janela deslizante atômica, compartilhada por todas as instâncias da API."""
+        script = """
+        local key = KEYS[1]
+        local now = tonumber(ARGV[1])
+        local cutoff = now - tonumber(ARGV[2])
+        local limit = tonumber(ARGV[3])
+        local member = ARGV[4]
+        redis.call('ZREMRANGEBYSCORE', key, '-inf', cutoff)
+        local count = redis.call('ZCARD', key)
+        if count >= limit then
+          redis.call('EXPIRE', key, tonumber(ARGV[2]) + 5)
+          return 0
+        end
+        redis.call('ZADD', key, now, member)
+        redis.call('EXPIRE', key, tonumber(ARGV[2]) + 5)
+        return 1
+        """
+        try:
+            if self._redis is None:
+                self._redis = Redis.from_url(
+                    settings.redis_url, decode_responses=True, socket_connect_timeout=2, socket_timeout=2
+                )
+            permitido = self._redis.eval(
+                script, 1, "b2bon:ratelimit:" + chave, time.time(), janela_segundos,
+                max_tentativas, secrets.token_hex(16),
+            )
+        except (RedisError, ValueError) as erro:
+            logger.error("Rate limit Redis indisponível; tentativa negada", exc_info=True)
+            raise LimiteDeTaxaExcedido("Proteção temporariamente indisponível. Tente novamente.") from erro
+        if not permitido:
+            raise LimiteDeTaxaExcedido("Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.")
 
     def resetar(self) -> None:
         """Só para teste — evita que o estado de um teste vaze pro próximo

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   api,
@@ -160,6 +160,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [temLicencaAtiva, setTemLicencaAtiva] = useState<boolean>(getTemLicencaAtiva);
   const [primeiroLoginPendente, setPrimeiroLoginPendente] = useState(false);
 
+  // O perfil local é apenas cache de interface; a sessão real é validada pelo cookie HttpOnly.
+  useEffect(() => {
+    if (!usuario) return;
+    let ativo = true;
+    api.get<Usuario>("/auth/eu")
+      .then((usuarioServidor) => {
+        if (!ativo) return;
+        atualizarUsuarioSalvo(usuarioServidor);
+        setUsuario(usuarioServidor);
+      })
+      .catch(() => {
+        if (!ativo) return;
+        limparSessao();
+        setUsuario(null);
+        setTemLicencaAtiva(true);
+      });
+    return () => { ativo = false; };
+  }, []);
+
   const entrar = useCallback(async (email: string, senha: string) => {
     const resposta = await api.post<TokenResponse>("/auth/login", { email, senha });
     setSessao(resposta.access_token, resposta.usuario, resposta.tem_licenca_ativa);
@@ -212,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const sair = useCallback(() => {
+    void api.post("/auth/logout").catch(() => undefined);
     limparSessao();
     setUsuario(null);
     setTemLicencaAtiva(true);

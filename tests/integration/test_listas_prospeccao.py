@@ -41,6 +41,23 @@ def test_listar_listas(client):
     assert nomes == {"Lista A", "Lista B"}
 
 
+def test_usuario_so_lista_e_acessa_suas_listas_de_prospeccao(client, criar_usuario_autenticado):
+    lista_alheia = client.post("/api/v1/listas-prospeccao", json={"nome": "Lista do administrador"}).json()
+    headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-listas@teste.com.br")
+    lista_propria = client.post(
+        "/api/v1/listas-prospeccao", headers=headers, json={"nome": "Lista do vendedor"}
+    ).json()
+
+    resposta = client.get("/api/v1/listas-prospeccao", headers=headers)
+    assert resposta.status_code == 200
+    assert [item["id"] for item in resposta.json()] == [lista_propria["id"]]
+
+    acesso_alheio = client.get(
+        f"/api/v1/listas-prospeccao/{lista_alheia['id']}/contas", headers=headers
+    )
+    assert acesso_alheio.status_code == 404
+
+
 def test_importar_participantes_cria_contas_e_decisores(client):
     lista = client.post("/api/v1/listas-prospeccao", json={"nome": "Evento Febraban 2026"}).json()
 

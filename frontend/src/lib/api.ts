@@ -4,6 +4,9 @@ const USUARIO_KEY = "b2bon_usuario";
 const TEM_LICENCA_KEY = "b2bon_tem_licenca";
 const DEMO_KEY = "b2bon_demo_expira_em";
 
+// Remove JWTs left by older releases; requests now authenticate with HttpOnly cookies.
+if (typeof window !== "undefined") localStorage.removeItem(TOKEN_KEY);
+
 export class ApiError extends Error {
   status: number;
 
@@ -18,12 +21,14 @@ export function mensagemErro(error: unknown, padrao: string): string {
   return error instanceof ApiError ? error.message : padrao;
 }
 
+/** Marca local para UX; o segredo de sessão fica no cookie HttpOnly do servidor. */
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(USUARIO_KEY) ? "cookie-session" : null;
 }
 
-export function setSessao(token: string, usuario: unknown, temLicencaAtiva: boolean = true): void {
-  localStorage.setItem(TOKEN_KEY, token);
+export function setSessao(_token: string, usuario: unknown, temLicencaAtiva: boolean = true): void {
+  // Migra instalações antigas: nunca persiste o JWT acessível por JavaScript.
+  localStorage.removeItem(TOKEN_KEY);
   localStorage.setItem(USUARIO_KEY, JSON.stringify(usuario));
   localStorage.setItem(TEM_LICENCA_KEY, JSON.stringify(temLicencaAtiva));
 }
@@ -104,11 +109,10 @@ async function requestComHeaders<T>(path: string, options: RequestInit = {}): Pr
   const token = getToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, credentials: "include" });
 
   await exigirSucesso(response, token, "Erro inesperado ao chamar a API.");
 
@@ -147,11 +151,9 @@ export const api = {
 export async function getBlob(path: string): Promise<Blob> {
   const token = getToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
   });
-  if (!response.ok) {
-    throw new ApiError(response.status, "Não foi possível baixar o arquivo.");
-  }
+  await exigirSucesso(response, token, "Não foi possível baixar o arquivo.");
   return response.blob();
 }
 
@@ -159,7 +161,7 @@ async function _enviarMultipart<T>(path: string, formData: FormData): Promise<T>
   const token = getToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
     body: formData,
   });
 

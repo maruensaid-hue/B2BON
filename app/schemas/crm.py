@@ -105,6 +105,11 @@ class CriarNegocioRequestSchema(BaseModel):
     oferta_id: int | None = None
 
 
+class AtribuirVendedorNegocioRequestSchema(BaseModel):
+    # null remove a atribuição e torna a oportunidade visível apenas à gestão.
+    vendedor_usuario_id: int | None = None
+
+
 class AtualizarNegocioRequestSchema(BaseModel):
     nome: str
     valor: float = 0.0
