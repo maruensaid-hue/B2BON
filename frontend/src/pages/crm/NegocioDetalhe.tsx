@@ -10,6 +10,7 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 const ROTULOS_PAPEL_COMITE_COMPRA: Record<string, string> = {
   DECISION_MAKER: "Decisor final",
@@ -34,6 +35,13 @@ interface Negocio {
   nome: string;
   valor: number;
   probabilidade: number;
+  vendedor_usuario_id: number | null;
+}
+
+interface UsuarioResumo {
+  id: number;
+  nome: string;
+  papel: string;
 }
 
 interface Conta {
@@ -67,8 +75,11 @@ interface OfertaResumo {
 export function NegocioDetalhe() {
   const { id } = useParams<{ id: string }>();
   const negocioId = Number(id);
+  const { usuario } = useAuth();
+  const podeAtribuirVendedor = usuario?.papel === "admin" || usuario?.papel === "super_admin";
 
   const [negocio, setNegocio] = useState<Negocio | null>(null);
+  const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
   const [conta, setConta] = useState<Conta | null>(null);
   const [decisoresDaConta, setDecisoresDaConta] = useState<Decisor[]>([]);
   const [ofertas, setOfertas] = useState<OfertaResumo[]>([]);
@@ -112,6 +123,14 @@ export function NegocioDetalhe() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [negocioId]);
 
+  useEffect(() => {
+    if (!podeAtribuirVendedor) return;
+    api
+      .get<UsuarioResumo[]>("/usuarios")
+      .then((usuarios) => setVendedores(usuarios.filter((item) => item.papel === "user")))
+      .catch(() => setVendedores([]));
+  }, [podeAtribuirVendedor]);
+
   async function salvarEdicao(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!negocio || salvando) return;
@@ -131,6 +150,12 @@ export function NegocioDetalhe() {
         decisor_id: decisorId,
         oferta_id: Number(form.get("oferta_id") || 0) || null,
       });
+      if (podeAtribuirVendedor) {
+        const vendedorForm = form.get("vendedor_usuario_id");
+        await api.put(`/crm/negocios/${negocio.id}/vendedor`, {
+          vendedor_usuario_id: vendedorForm ? Number(vendedorForm) : null,
+        });
+      }
       await carregar();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível salvar as alterações do negócio.");
@@ -226,6 +251,19 @@ export function NegocioDetalhe() {
                 ))}
               </Select>
             </div>
+            {podeAtribuirVendedor && (
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Vendedor responsável</div>
+                <Select name="vendedor_usuario_id" defaultValue={negocio.vendedor_usuario_id ?? ""}>
+                  <option value="">Sem atribuição — somente gestão poderá visualizar</option>
+                  {vendedores.map((vendedor) => (
+                    <option key={vendedor.id} value={vendedor.id}>
+                      {vendedor.nome}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
             {ofertas.length > 0 && (
               <div>
                 <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Oferta (opcional)</div>

@@ -11,6 +11,7 @@ class Cadencia(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, index=True)
+    criado_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True, index=True)
     # Nullable: a cadência é um blueprint multicanal aplicado a um lote de
     # contas (E3-H1), não presa a uma única conta — o vínculo real com cada
     # conta se dá via Mensagem -> Decisor -> Conta.

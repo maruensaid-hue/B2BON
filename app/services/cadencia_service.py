@@ -2,7 +2,7 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.contexts.intelligence import contract as intel
 from app.llm.base import LLMProvider
@@ -51,8 +51,29 @@ def obter(db: Session, tenant_id: str, cadencia_id: int) -> Cadencia:
     return cadencia
 
 
-def listar(db: Session, tenant_id: str) -> list[Cadencia]:
-    return db.query(Cadencia).filter_by(tenant_id=tenant_id).order_by(Cadencia.id.desc()).all()
+def listar(
+    db: Session, tenant_id: str, usuario_id: int | None = None, restrito: bool = False
+) -> list[Cadencia]:
+    icp_cadencia = aliased(ICP)
+    icp_conta = aliased(ICP)
+    query = (
+        db.query(Cadencia)
+        .outerjoin(icp_cadencia, icp_cadencia.id == Cadencia.icp_id)
+        .outerjoin(Conta, Conta.id == Cadencia.conta_id)
+        .outerjoin(icp_conta, icp_conta.id == Conta.icp_id)
+        .filter(Cadencia.tenant_id == tenant_id)
+    )
+    if restrito:
+        query = query.filter(
+            (Cadencia.icp_id.is_(None) | (icp_cadencia.criador_usuario_id == usuario_id)),
+            (Cadencia.conta_id.is_(None) | (
+                ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+                 | (icp_conta.criador_usuario_id == usuario_id))
+                & ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id))
+            )),
+            Cadencia.criado_por_usuario_id == usuario_id,
+        )
+    return query.order_by(Cadencia.id.desc()).all()
 
 
 def excluir(db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int) -> None:
@@ -345,7 +366,9 @@ def criar(
     oferta_id = oferta_ativa.id if oferta_ativa else None
 
     cadencia = Cadencia(
-        tenant_id=tenant_id, nome=dados.nome, canais=sorted(canais), status="rascunho", tipo=dados.tipo,
+        tenant_id=tenant_id,
+        criado_por_usuario_id=int(ator_id) if ator_id is not None and str(ator_id).isdigit() else None,
+        nome=dados.nome, canais=sorted(canais), status="rascunho", tipo=dados.tipo,
         icp_id=icp_id, oferta_id=oferta_id, cancelar_ao_responder=dados.cancelar_ao_responder,
     )
     db.add(cadencia)
@@ -528,6 +551,8 @@ def gerar_para_lote(
     conta_ids: list[int],
     llm: LLMProvider,
     plan_limits: PlanLimitsProvider,
+    usuario_id: int | None = None,
+    restrito: bool = False,
 ) -> dict:
     """Gera os toques personalizados para um lote de contas e os submete à
     fila de aprovações — cadência inteira antes de ativar (E3-H1)."""
@@ -562,9 +587,24 @@ def gerar_para_lote(
         conta.id: conta for conta in db.query(Conta).filter(Conta.id.in_(conta_ids), Conta.tenant_id == tenant_id).all()
     }
     primeiro_decisor_por_conta: dict[int, Decisor] = {}
-    for decisor_candidato in (
-        db.query(Decisor).filter(Decisor.conta_id.in_(conta_ids)).order_by(Decisor.conta_id, Decisor.id).all()
-    ):
+    consulta_decisores = (
+        db.query(Decisor)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Decisor.tenant_id == tenant_id,
+            Decisor.conta_id.in_(conta_ids),
+            Conta.tenant_id == tenant_id,
+        )
+    )
+    if restrito:
+        consulta_decisores = consulta_decisores.filter(
+            ((Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+        )
+    for decisor_candidato in consulta_decisores.order_by(Decisor.conta_id, Decisor.id).all():
         primeiro_decisor_por_conta.setdefault(decisor_candidato.conta_id, decisor_candidato)
 
     for conta_id in conta_ids:

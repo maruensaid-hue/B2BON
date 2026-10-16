@@ -115,15 +115,39 @@ async def bloqueio_demonstracao(request: Request, call_next):
     """D-082/D-083: sessão de demonstração (token marcado `demo`): negação por padrão (só as rotas das telas de produto) e
     todo provedor externo simulado. Com a demonstração desligada, tokens de demonstração antigos deixam de valer."""
     autorizacao = request.headers.get("authorization", "")
-    if autorizacao.startswith("Bearer "):
+    token = autorizacao[len("Bearer "):] if autorizacao.startswith("Bearer ") else request.cookies.get(settings.sessao_cookie_nome)
+    if token:
         try:
-            payload = jwt.decode(autorizacao[len("Bearer "):], settings.jwt_secret_key, algorithms=["HS256"])
+            payload = jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"])
         except jwt.PyJWTError:
             payload = {}
         if payload.get("demo"):
             if not settings.demo_habilitada or demo_bloqueio.bloqueado(request.method, request.url.path):
                 return JSONResponse(status_code=403, content={"detalhe": demo_bloqueio.MENSAGEM})
             demo_contexto.ligar()  # provedores externos viram simulações nesta requisição
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def proteger_sessao_cookie_contra_csrf(request: Request, call_next):
+    """Cookie auth só aceita mutações vindas de origens explicitamente autorizadas."""
+    rotas_publicas_auth = {
+        "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/registrar",
+        "/api/v1/auth/registrar-vitrine", "/api/v1/auth/registrar-publico",
+        "/api/v1/auth/demonstracao", "/api/v1/auth/esqueci-senha",
+        "/api/v1/auth/redefinir-senha",
+    }
+    if (
+        request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
+        and request.url.path not in rotas_publicas_auth
+        and not request.url.path.startswith("/api/v1/webhooks/")
+        and settings.sessao_cookie_nome in request.cookies
+        and not request.headers.get("authorization", "").startswith("Bearer ")
+    ):
+        origem_header = request.headers.get("origin")
+        origem = origem_header.rstrip("/") if origem_header else ""
+        if not origem or origem not in settings.origens_cors:
+            return JSONResponse(status_code=403, content={"detalhe": "Origem não autorizada para esta sessão."})
     return await call_next(request)
 
 

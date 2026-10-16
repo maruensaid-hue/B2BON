@@ -247,17 +247,24 @@ def listar(db: Session, tenant_id: str, negocio_id: int, incluir_descartadas: bo
     return consulta.order_by(NecessidadeOportunidade.id).all()
 
 
-def listar_da_conta(db: Session, tenant_id: str, conta_id: int) -> list[NecessidadeOportunidade]:
-    return (
+def listar_da_conta(
+    db: Session, tenant_id: str, conta_id: int,
+    usuario_id: int | None = None, restrito: bool = False,
+) -> list[NecessidadeOportunidade]:
+    consulta = (
         db.query(NecessidadeOportunidade)
         .filter(
             NecessidadeOportunidade.tenant_id == tenant_id,
             NecessidadeOportunidade.conta_id == conta_id,
             NecessidadeOportunidade.status != "descartada",
         )
-        .order_by(NecessidadeOportunidade.id)
-        .all()
     )
+    if restrito:
+        consulta = consulta.join(Negocio, Negocio.id == NecessidadeOportunidade.negocio_id).filter(
+            Negocio.tenant_id == tenant_id,
+            Negocio.vendedor_usuario_id == usuario_id,
+        )
+    return consulta.order_by(NecessidadeOportunidade.id).all()
 
 
 def como_dict(n: NecessidadeOportunidade) -> dict:

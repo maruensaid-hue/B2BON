@@ -20,6 +20,8 @@ class Usuario(Base):
     google_sub: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
     papel: Mapped[str] = mapped_column(String)  # super_admin | admin | user
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Incrementado após redefinição de senha para invalidar JWTs emitidos antes dela.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     ultimo_login_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Registro do aceite de Política de Privacidade/Termos de Uso no

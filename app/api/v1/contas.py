@@ -7,12 +7,19 @@ from app.api.deps import (
     get_graph_client,
     get_llm_provider,
     get_tenant_id,
+    get_usuario_atual,
+    exigir_escopo_decisor_usuario,
     limitar_ia_por_tenant,
 )
 from app.contexts.integrations import contract as integracoes
 from app.graph.client import Neo4jClient
 from app.llm.base import LLMProvider
 from app.models.decisor import Decisor
+from app.models.conta import Conta
+from app.models.icp import ICP
+from app.models.negocio import Negocio
+from app.services.errors import NaoEncontrado
+from app.models.usuario import Usuario
 from app.schemas.conta import (
     AtualizarContaRequestSchema,
     ContaSchema,
@@ -41,6 +48,66 @@ from app.services.errors import ValidacaoFalhou
 
 router = APIRouter(tags=["contas"])
 
+def exigir_escopo_conta(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Vendedor só acessa empresas próprias, criadas por ele ou pelo ICP dele."""
+    if usuario.papel != "user":
+        return
+    conta = (
+        db.query(Conta)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Conta.id == conta_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+        )
+        .one_or_none()
+    )
+    if conta is None:
+        raise NaoEncontrado("Empresa não encontrada.")
+
+
+
+def exigir_escopo_conta_leitura(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """Permite ler a conta ligada a uma oportunidade atribuída, sem conceder escrita."""
+    if usuario.papel != "user":
+        return
+    conta_propria = (
+        db.query(Conta.id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Conta.id == conta_id,
+            Conta.tenant_id == tenant_id,
+            ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+             | (ICP.criador_usuario_id == usuario.id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+        )
+        .first()
+    )
+    if conta_propria is None:
+        oportunidade_atribuida = (
+            db.query(Negocio.id)
+            .filter(
+                Negocio.tenant_id == tenant_id,
+                Negocio.conta_id == conta_id,
+                Negocio.vendedor_usuario_id == usuario.id,
+            )
+            .first()
+        )
+        if oportunidade_atribuida is None:
+            raise NaoEncontrado("Empresa não encontrada.")
+
 
 def _serializar_decisores_com_linkedin(
     db: Session, tenant_id: str, conta_id: int, ator_id: str | None, decisores: list[Decisor]
@@ -68,10 +135,13 @@ def criar_conta_manual(
     dados: CriarContaManualRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> ContaSchema:
     """Cadastro avulso de conta pelo CRM — cliente que chegou por indicação
     ou inbound, sem passar pela geração de lista do PREDATOR."""
+    if usuario.papel == "user" and db.query(ICP).filter_by(id=icp_id, tenant_id=tenant_id, criador_usuario_id=usuario.id).one_or_none() is None:
+        raise NaoEncontrado("ICP não encontrado.")
     return conta_service.criar_manual(db, tenant_id, ator_id, icp_id, dados.nome, dados.cnpj, dados.dominio)
 
 
@@ -79,22 +149,24 @@ def criar_conta_manual(
 def listar_contas_do_icp(
     icp_id: int,
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[ContaSchema]:
-    return conta_service.listar_por_icp(db, tenant_id, icp_id)
+    restrito = usuario.papel == "user"
+    return conta_service.listar_por_icp(db, tenant_id, icp_id, usuario.id, restrito)
 
 
 @router.get("/contas", response_model=list[ContaSchema])
 def listar_todas_as_contas(
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[ContaSchema]:
-    """Toda conta do tenant, com ou sem ICP — usado pelo seletor "conta
-    existente" ao criar um negócio no Kanban."""
-    return conta_service.listar_todas(db, tenant_id)
+    """Contas disponíveis no escopo do usuário autenticado."""
+    return conta_service.listar_todas(db, tenant_id, usuario.id, usuario.papel == "user")
 
 
-@router.get("/contas/{conta_id}", response_model=ContaSchema)
+@router.get("/contas/{conta_id}", response_model=ContaSchema, dependencies=[Depends(exigir_escopo_conta_leitura)])
 def obter_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -103,7 +175,7 @@ def obter_conta(
     return conta_service.obter(db, tenant_id, conta_id)
 
 
-@router.put("/contas/{conta_id}", response_model=ContaSchema)
+@router.put("/contas/{conta_id}", response_model=ContaSchema, dependencies=[Depends(exigir_escopo_conta)])
 def atualizar_conta(
     conta_id: int,
     dados: AtualizarContaRequestSchema,
@@ -117,7 +189,7 @@ def atualizar_conta(
     )
 
 
-@router.put("/contas/{conta_id}/proximo-passo", response_model=ContaSchema)
+@router.put("/contas/{conta_id}/proximo-passo", response_model=ContaSchema, dependencies=[Depends(exigir_escopo_conta)])
 def definir_proximo_passo(
     conta_id: int,
     dados: DefinirProximoPassoRequestSchema,
@@ -130,18 +202,48 @@ def definir_proximo_passo(
     )
 
 
-@router.get("/contas/{conta_id}/decisores", response_model=list[DecisorSchema])
+@router.get("/contas/{conta_id}/decisores", response_model=list[DecisorSchema], dependencies=[Depends(exigir_escopo_conta_leitura)])
 def listar_decisores_da_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[DecisorSchema]:
     decisores = conta_service.decisores_da_conta(db, conta_service.obter(db, tenant_id, conta_id))
+    if usuario.papel == "user":
+        ids_permitidos = {
+            decisor_id for (decisor_id,) in (
+                db.query(Decisor.id)
+                .join(Conta, Conta.id == Decisor.conta_id)
+                .outerjoin(ICP, ICP.id == Conta.icp_id)
+                .filter(
+                    Decisor.conta_id == conta_id,
+                    Decisor.tenant_id == tenant_id,
+                    ((Decisor.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+                )
+                .all()
+            )
+        }
+        # Contatos ligados diretamente a oportunidades atribuídas também
+        # pertencem ao escopo de trabalho do vendedor.
+        ids_permitidos.update(
+            decisor_id for (decisor_id,) in (
+                db.query(Negocio.decisor_id)
+                .filter(
+                    Negocio.tenant_id == tenant_id,
+                    Negocio.conta_id == conta_id,
+                    Negocio.vendedor_usuario_id == usuario.id,
+                    Negocio.decisor_id.is_not(None),
+                )
+                .all()
+            )
+        )
+        decisores = [d for d in decisores if d.id in ids_permitidos]
     return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, decisores)
 
 
-@router.put("/contas/{conta_id}/decisores/{decisor_id}", response_model=DecisorSchema)
+@router.put("/contas/{conta_id}/decisores/{decisor_id}", response_model=DecisorSchema, dependencies=[Depends(exigir_escopo_conta), Depends(exigir_escopo_decisor_usuario)])
 def atualizar_decisor(
     conta_id: int,
     decisor_id: int,
@@ -156,7 +258,7 @@ def atualizar_decisor(
     )
 
 
-@router.post("/contas/{conta_id}/decisores/{decisor_id}/papel", response_model=DecisorSchema)
+@router.post("/contas/{conta_id}/decisores/{decisor_id}/papel", response_model=DecisorSchema, dependencies=[Depends(exigir_escopo_conta), Depends(exigir_escopo_decisor_usuario)])
 def confirmar_papel_decisor(
     conta_id: int,
     decisor_id: int,
@@ -171,7 +273,7 @@ def confirmar_papel_decisor(
     return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, [decisor])[0]
 
 
-@router.post("/contas/{conta_id}/decisores/{decisor_id}/suprimir")
+@router.post("/contas/{conta_id}/decisores/{decisor_id}/suprimir", dependencies=[Depends(exigir_escopo_conta), Depends(exigir_escopo_decisor_usuario)])
 def suprimir_decisor(
     conta_id: int,
     decisor_id: int,
@@ -186,7 +288,7 @@ def suprimir_decisor(
     return optout_service.processar(db, tenant_id, decisor_id, origem="manual")
 
 
-@router.get("/contas/{conta_id}/crm-externo")
+@router.get("/contas/{conta_id}/crm-externo", dependencies=[Depends(exigir_escopo_conta)])
 def situacao_no_crm_externo(conta_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
     """D-087: o que o CRM do cliente diz sobre esta conta e seus contatos
     (já é cliente, negócio aberto, opt-out) — o mesmo bloqueio que o envio
@@ -205,7 +307,7 @@ def situacao_no_crm_externo(conta_id: int, tenant_id: str = Depends(get_tenant_i
             "enviada_para": enviada, "escrita_disponivel": bool(escrita.conexoes_com(db, tenant_id, "predator"))}
 
 
-@router.post("/contas/{conta_id}/enviar-crm")
+@router.post("/contas/{conta_id}/enviar-crm", dependencies=[Depends(exigir_escopo_conta)])
 def enviar_ao_crm_externo(conta_id: int, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
                           db: Session = Depends(get_db)) -> dict:
     """D-087: enfileira empresa + contatos (sem opt-out) para o CRM do
@@ -225,7 +327,7 @@ def enviar_ao_crm_externo(conta_id: int, tenant_id: str = Depends(get_tenant_id)
 @router.post(
     "/contas/{conta_id}/estrategia-venda",
     response_model=EstrategiaVendaSchema,
-    dependencies=[Depends(limitar_ia_por_tenant())],
+    dependencies=[Depends(limitar_ia_por_tenant()), Depends(exigir_escopo_conta)],
 )
 def sugerir_estrategia_venda(
     conta_id: int,
@@ -237,7 +339,7 @@ def sugerir_estrategia_venda(
     return EstrategiaVendaSchema(**conta_service.sugerir_estrategia_venda(db, tenant_id, conta_id, llm))
 
 
-@router.post("/contas/{conta_id}/decisores", response_model=DecisorSchema, status_code=201)
+@router.post("/contas/{conta_id}/decisores", response_model=DecisorSchema, status_code=201, dependencies=[Depends(exigir_escopo_conta)])
 def criar_decisor(
     conta_id: int,
     dados: DecisorCreateSchema,
@@ -249,7 +351,7 @@ def criar_decisor(
     return conta_service.criar_decisor_manual(db, tenant_id, ator_id, conta_id, dados, graph)
 
 
-@router.get("/contas/{conta_id}/grafo", response_model=GrafoContaResponseSchema)
+@router.get("/contas/{conta_id}/grafo", response_model=GrafoContaResponseSchema, dependencies=[Depends(exigir_escopo_conta)])
 def grafo_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -259,7 +361,7 @@ def grafo_conta(
     return GrafoContaResponseSchema(**conta_service.grafo(db, tenant_id, conta_id, graph))
 
 
-@router.get("/contas/{conta_id}/atividades", response_model=list[AtividadeSchema])
+@router.get("/contas/{conta_id}/atividades", response_model=list[AtividadeSchema], dependencies=[Depends(exigir_escopo_conta)])
 def listar_atividades_da_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -269,7 +371,7 @@ def listar_atividades_da_conta(
     return atividade_service.listar_por_conta(db, tenant_id, conta_id)
 
 
-@router.post("/contas/{conta_id}/priorizar", response_model=ContaSchema)
+@router.post("/contas/{conta_id}/priorizar", response_model=ContaSchema, dependencies=[Depends(exigir_escopo_conta)])
 def priorizar_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -280,7 +382,7 @@ def priorizar_conta(
     return descarte_service.priorizar(db, tenant_id, ator_id, conta_id)
 
 
-@router.post("/contas/{conta_id}/descartar", response_model=ContaSchema)
+@router.post("/contas/{conta_id}/descartar", response_model=ContaSchema, dependencies=[Depends(exigir_escopo_conta)])
 def descartar_conta(
     conta_id: int,
     dados: DescartarContaRequestSchema,
@@ -292,7 +394,7 @@ def descartar_conta(
     return descarte_service.descartar(db, tenant_id, ator_id, conta_id, dados.motivo)
 
 
-@router.delete("/contas/{conta_id}", status_code=204)
+@router.delete("/contas/{conta_id}", status_code=204, dependencies=[Depends(exigir_escopo_conta)])
 def excluir_conta(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -307,7 +409,7 @@ def excluir_conta(
     return Response(status_code=204)
 
 
-@router.get("/contas/{conta_id}/export/pdf")
+@router.get("/contas/{conta_id}/export/pdf", dependencies=[Depends(exigir_escopo_conta)])
 def exportar_conta_pdf(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),

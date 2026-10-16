@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Body, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_graph_client, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_graph_client, get_tenant_id, get_usuario_atual
 from app.graph.client import Neo4jClient
+from app.models.usuario import Usuario
 from app.schemas.conta import ContaSchema, ImportarParticipantesRequestSchema, ImportarParticipantesResponseSchema
 from app.schemas.lista_prospeccao import (
     ElegibilidadeContaSchema,
@@ -11,7 +12,7 @@ from app.schemas.lista_prospeccao import (
     ListaProspeccaoCreateSchema,
     ListaProspeccaoSchema,
 )
-from app.services import conta_service, lista_prospeccao_service
+from app.services import conta_service, icp_service, lista_prospeccao_service
 
 router = APIRouter(prefix="/listas-prospeccao", tags=["listas-prospeccao"])
 
@@ -21,22 +22,33 @@ def criar_lista(
     dados: ListaProspeccaoCreateSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> ListaProspeccaoSchema:
+    if usuario.papel == "user" and dados.icp_id is not None:
+        icp_service.obter(db, tenant_id, dados.icp_id, usuario.id, True)
     return lista_prospeccao_service.criar(db, tenant_id, ator_id, dados.nome, dados.icp_id, dados.cargos_alvo)
 
 
 @router.get("", response_model=list[ListaProspeccaoSchema])
-def listar_listas(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[ListaProspeccaoSchema]:
-    return lista_prospeccao_service.listar(db, tenant_id)
+def listar_listas(
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> list[ListaProspeccaoSchema]:
+    return lista_prospeccao_service.listar(db, tenant_id, usuario.id, usuario.papel == "user")
 
 
 @router.get("/{lista_id}/contas", response_model=list[ContaSchema])
 def listar_contas_da_lista(
-    lista_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)
+    lista_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
 ) -> list[ContaSchema]:
-    lista_prospeccao_service.obter(db, tenant_id, lista_id)  # 404 se não existir/não for do tenant
-    return conta_service.listar_por_lista(db, tenant_id, lista_id)
+    restrito = usuario.papel == "user"
+    lista_prospeccao_service.obter(db, tenant_id, lista_id, usuario.id, restrito)
+    return conta_service.listar_por_lista(db, tenant_id, lista_id, usuario.id, restrito)
 
 
 @router.post(
@@ -47,21 +59,30 @@ def importar_participantes(
     dados: ImportarParticipantesRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
     graph: Neo4jClient = Depends(get_graph_client),
 ) -> ImportarParticipantesResponseSchema:
-    resultado = conta_service.importar_participantes(db, tenant_id, ator_id, lista_id, dados.participantes, graph)
+    restrito = usuario.papel == "user"
+    lista_prospeccao_service.obter(db, tenant_id, lista_id, usuario.id, restrito)
+    resultado = conta_service.importar_participantes(
+        db, tenant_id, ator_id, lista_id, dados.participantes, graph, usuario.id, restrito
+    )
     return ImportarParticipantesResponseSchema(**resultado)
 
 
 @router.get("/{lista_id}/contas/elegibilidade-exclusao", response_model=list[ElegibilidadeContaSchema])
 def elegibilidade_exclusao_lista(
-    lista_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)
+    lista_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
 ) -> list[ElegibilidadeContaSchema]:
     """Pré-visualização antes de excluir em lote: pra cada conta da lista,
     diz se ela pode ser apagada ou não (e por quê), sem apagar nada."""
-    lista_prospeccao_service.obter(db, tenant_id, lista_id)  # 404 se não existir/não for do tenant
-    contas = conta_service.listar_por_lista(db, tenant_id, lista_id)
+    restrito = usuario.papel == "user"
+    lista_prospeccao_service.obter(db, tenant_id, lista_id, usuario.id, restrito)
+    contas = conta_service.listar_por_lista(db, tenant_id, lista_id, usuario.id, restrito)
     return conta_service.mapear_elegibilidade_exclusao(db, contas)
 
 
@@ -71,6 +92,7 @@ def excluir_contas_da_lista(
     dados: ExcluirContasRequestSchema | None = Body(default=None),
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> ExcluirContasResponseSchema:
     """Apaga em lote as contas desta lista que ainda não têm nenhum sinal
@@ -81,7 +103,10 @@ def excluir_contas_da_lista(
     causa de uma conta bloqueada. `conta_ids` (opcional) restringe à
     seleção feita no frontend a partir da pré-visualização de
     elegibilidade."""
-    lista_prospeccao_service.obter(db, tenant_id, lista_id)  # 404 se não existir/não for do tenant
+    restrito = usuario.papel == "user"
+    lista_prospeccao_service.obter(db, tenant_id, lista_id, usuario.id, restrito)
     conta_ids = dados.conta_ids if dados is not None else None
-    resultado = conta_service.excluir_lote_por_lista(db, tenant_id, ator_id, lista_id, conta_ids)
+    resultado = conta_service.excluir_lote_por_lista(
+        db, tenant_id, ator_id, lista_id, conta_ids, usuario.id, restrito
+    )
     return ExcluirContasResponseSchema(**resultado)

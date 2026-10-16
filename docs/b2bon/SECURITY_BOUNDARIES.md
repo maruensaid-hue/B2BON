@@ -41,11 +41,22 @@ restante foi reconfirmado no código.
 
 ## 3. Autenticação / autorização
 
-- JWT HS256. `validar_segredos_de_producao` recusa subir com
-  `secret_key`/`jwt_secret_key` no valor default em produção.
+- JWT HS256 com versão de sessão; redefinir senha invalida tokens anteriores.
+- Navegadores usam cookie `HttpOnly` (`Secure; SameSite=None` em produção), não JWT persistido em `localStorage`. Mutação autenticada por cookie exige `Origin` autorizado; integrações podem usar Bearer.
+- `validar_segredos_de_producao` recusa subir com `secret_key`/`jwt_secret_key` padrão ou sem `REDIS_URL` em produção.
 - RBAC: 3 papéis + hierarquia + licença/módulo. **Sem ABAC** e sem
   policy engine. Checagens de "dono do recurso" (ex.: vendedor da
   conta) são feitas caso a caso em cada serviço.
+- **Oportunidades CRM [corrigido]:** o campo explícito
+  `negocio.vendedor_usuario_id` define o acesso do representante.
+  `user` vê apenas oportunidades atribuídas ao próprio usuário; sem
+  atribuição, só admin/super_admin as vê. Criador da conta e vendedor
+  responsável pela conta não concedem acesso implícito à oportunidade.
+  Apenas admin/super_admin pode atribuir/remover o representante; o
+  backend valida usuário ativo com papel `user` no tenant da oportunidade
+  e registra a alteração em auditoria. A atribuição também permite ler
+  a conta e o contato diretamente vinculados àquela oportunidade, sem
+  conceder permissão para editar ou excluir a conta.
 - O gap de escalonamento via convite (2026-09-20) foi corrigido em
   `auth_service.gerar_convite`.
 - **[novo]** Entitlement por router não bate com o módulo (C1, C3–C7 em
@@ -87,7 +98,7 @@ pontos de atenção para quando existir:
 
 ## 7. Disponibilidade / abuso
 
-- Rate limit em memória por processo. Válido só com 1 instância.
+- Rate limit usa Redis com janela deslizante atômica compartilhada quando `REDIS_URL` está configurado. Produção recusa iniciar sem Redis; o fallback em memória é só para dev/testes.
 - Não há fila. Cron lento bloqueia a requisição.
 - **[novo]** O CI (`.github/workflows/ci.yml`) só roda em `push`/`pull_request`
   para `master`. O desenvolvimento acontece em `staging`, e ali os

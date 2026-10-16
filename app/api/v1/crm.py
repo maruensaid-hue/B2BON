@@ -1,18 +1,22 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
 from app.llm.base import LLMProvider
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.negocio import Negocio
+from app.models.icp import ICP
+from app.services.errors import NaoEncontrado
+from app.models.usuario import Usuario
 from app.schemas.conta import ContaSchema
 from app.schemas.crm import (
     AtividadeSchema,
     AtualizarNegocioRequestSchema,
+    AtribuirVendedorNegocioRequestSchema,
     CancelarClienteRequestSchema,
     CriarNegocioRequestSchema,
     CustoAquisicaoSchema,
@@ -35,18 +39,102 @@ from app.schemas.crm import (
     VendedorComContasSchema,
 )
 from app.schemas.template_proposta import GerarPropostaRequestSchema
-from app.services import crm_service, proposta_service, template_proposta_service
+from app.services import auditoria_service, crm_service, proposta_service, template_proposta_service
 
 router = APIRouter(prefix="/crm", tags=["crm"])
 
+def exigir_escopo_conta_crm(conta_id: int, tenant_id: str = Depends(get_tenant_id), usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> None:
+    if usuario.papel != "user":
+        return
+    conta = (db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(
+        Conta.id == conta_id, Conta.tenant_id == tenant_id,
+        ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id) | (ICP.criador_usuario_id == usuario.id)),
+        ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+    ).one_or_none())
+    if conta is None:
+        raise NaoEncontrado("Empresa não encontrada.")
 
-def _serializar_negocios(db: Session, tenant_id: str, negocios: list[Negocio]) -> list[NegocioSchema]:
-    """Empresa e contato responsável não são colunas de `Negocio` — busca
-    em lote (sem N+1) pra o Kanban não precisar de um fetch por card."""
+def _validar_vendedor_do_tenant(db: Session, tenant_id: str, vendedor_id: int) -> None:
+    """Só permite atribuir oportunidades a um representante ativo do tenant."""
+    vendedor = (
+        db.query(Usuario)
+        .filter(
+            Usuario.id == vendedor_id,
+            Usuario.tenant_id == tenant_id,
+            Usuario.papel == "user",
+            Usuario.ativo.is_(True),
+        )
+        .one_or_none()
+    )
+    if vendedor is None:
+        raise NaoEncontrado("Vendedor não encontrado neste tenant.")
+
+
+def _validar_decisor_do_vendedor(
+    db: Session, tenant_id: str, usuario_id: int, conta_id: int, decisor_id: int
+) -> None:
+    """Impede vincular contato de outra conta/usuário a uma oportunidade própria."""
+    permitido = (
+        db.query(Decisor.id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(
+            Decisor.id == decisor_id,
+            Decisor.tenant_id == tenant_id,
+            Decisor.conta_id == conta_id,
+            Conta.tenant_id == tenant_id,
+            ((Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+        )
+        .one_or_none()
+    )
+    if permitido is None:
+        raise NaoEncontrado("Contato não encontrado ou fora do seu escopo.")
+
+
+def exigir_escopo_negocio(
+    negocio_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> None:
+    """404 por padrão para impedir enumeração de negócios de outros vendedores."""
+    if usuario.papel != "user":
+        return
+    negocio = (
+        db.query(Negocio)
+        .filter(
+            Negocio.id == negocio_id,
+            Negocio.tenant_id == tenant_id,
+            Negocio.vendedor_usuario_id == usuario.id,
+        )
+        .one_or_none()
+    )
+    if negocio is None:
+        raise NaoEncontrado("Oportunidade não encontrada.")
+
+
+
+
+def _serializar_negocios(
+    db: Session, tenant_id: str, negocios: list[Negocio],
+    usuario_id: int | None = None, restrito: bool = False,
+) -> list[NegocioSchema]:
+    """Busca empresa e contato em lote, sem revelar contatos fora do escopo do vendedor."""
     conta_ids = {n.conta_id for n in negocios}
     decisor_ids = {n.decisor_id for n in negocios if n.decisor_id is not None}
-    contas = {c.id: c for c in db.query(Conta).filter(Conta.id.in_(conta_ids)).all()} if conta_ids else {}
-    decisores = {d.id: d for d in db.query(Decisor).filter(Decisor.id.in_(decisor_ids)).all()} if decisor_ids else {}
+    contas = {
+        c.id: c for c in db.query(Conta).filter(Conta.tenant_id == tenant_id, Conta.id.in_(conta_ids)).all()
+    } if conta_ids else {}
+    consulta_decisores = (
+        db.query(Decisor)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(Decisor.tenant_id == tenant_id, Conta.tenant_id == tenant_id, Decisor.id.in_(decisor_ids))
+    ) if decisor_ids else None
+    # A consulta já está limitada aos IDs de contato ligados às oportunidades
+    # visíveis e ao tenant. Se uma oportunidade foi atribuída ao vendedor, o
+    # contato vinculado faz parte dela mesmo quando foi cadastrado pela gestão.
+    decisores = {d.id: d for d in consulta_decisores.all()} if consulta_decisores is not None else {}
 
     resultado = []
     for negocio in negocios:
@@ -142,11 +230,15 @@ def listar_negocios(
     vendedor_usuario_id: int | None = None,
     conta_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[NegocioSchema]:
-    """O "kanban de clientes" (Onda B)."""
-    negocios = crm_service.listar_negocios(db, tenant_id, estagio_id, vendedor_usuario_id, conta_id)
-    return _serializar_negocios(db, tenant_id, negocios)
+    """Lista oportunidades no escopo do usuário autenticado."""
+    negocios = crm_service.listar_negocios(
+        db, tenant_id, estagio_id, vendedor_usuario_id, conta_id,
+        usuario_id=usuario.id, restringir_usuario=(usuario.papel == "user"),
+    )
+    return _serializar_negocios(db, tenant_id, negocios, usuario.id, usuario.papel == "user")
 
 
 @router.post("/negocios", response_model=NegocioSchema, status_code=201)
@@ -154,8 +246,34 @@ def criar_negocio(
     dados: CriarNegocioRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
+    vendedor_id = dados.vendedor_usuario_id
+    if usuario.papel == "user":
+        # O representante pode optar por atribuir a oportunidade a si mesmo
+        # durante a criação, mas não pode atribuí-la a outro usuário.
+        if vendedor_id not in (None, usuario.id):
+            raise HTTPException(status_code=403, detail="Você só pode atribuir a oportunidade a si mesmo.")
+    elif vendedor_id is not None:
+        _validar_vendedor_do_tenant(db, tenant_id, vendedor_id)
+    if usuario.papel == "user":
+        conta_propria = (
+            db.query(Conta)
+            .outerjoin(ICP, ICP.id == Conta.icp_id)
+            .filter(
+                Conta.id == dados.conta_id,
+                Conta.tenant_id == tenant_id,
+                ((Conta.vendedor_usuario_id == usuario.id) | (Conta.criado_por_usuario_id == usuario.id)
+                 | (ICP.criador_usuario_id == usuario.id)),
+                ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario.id)),
+            )
+            .one_or_none()
+        )
+        if conta_propria is None:
+            raise NaoEncontrado("Empresa não encontrada.")
+    if usuario.papel == "user" and dados.decisor_id is not None:
+        _validar_decisor_do_vendedor(db, tenant_id, usuario.id, dados.conta_id, dados.decisor_id)
     negocio = crm_service.criar_negocio(
         db,
         tenant_id,
@@ -165,11 +283,43 @@ def criar_negocio(
         dados.nome,
         dados.valor,
         dados.probabilidade,
-        dados.vendedor_usuario_id,
+        vendedor_id,
         dados.estagio_id,
         dados.oferta_id,
     )
-    return _serializar_negocios(db, tenant_id, [negocio])[0]
+    return _serializar_negocios(db, tenant_id, [negocio], usuario.id, usuario.papel == "user")[0]
+
+
+@router.put(
+    "/negocios/{negocio_id}/vendedor",
+    response_model=NegocioSchema,
+    dependencies=[Depends(exigir_papel("super_admin", "admin"))],
+)
+def atribuir_vendedor_negocio(
+    negocio_id: int,
+    dados: AtribuirVendedorNegocioRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> NegocioSchema:
+    """Atribui ou remove o vendedor de uma oportunidade dentro do tenant."""
+    negocio = db.query(Negocio).filter_by(id=negocio_id, tenant_id=tenant_id).one_or_none()
+    if negocio is None:
+        raise NaoEncontrado("Oportunidade não encontrada.")
+    if dados.vendedor_usuario_id is not None:
+        _validar_vendedor_do_tenant(db, tenant_id, dados.vendedor_usuario_id)
+    vendedor_anterior_id = negocio.vendedor_usuario_id
+    negocio.vendedor_usuario_id = dados.vendedor_usuario_id
+    auditoria_service.registrar(
+        db, tenant_id, "oportunidade_vendedor_atribuido", "negocio", negocio.id, ator_id,
+        {"vendedor_anterior_usuario_id": vendedor_anterior_id,
+         "vendedor_novo_usuario_id": dados.vendedor_usuario_id},
+        conta_id=negocio.conta_id,
+    )
+    db.commit()
+    db.refresh(negocio)
+    return _serializar_negocios(db, tenant_id, [negocio], usuario.id, False)[0]
 
 
 @router.post(
@@ -203,24 +353,30 @@ def exportar_negocios(
     )
 
 
-@router.put("/negocios/{negocio_id}", response_model=NegocioSchema)
+@router.put("/negocios/{negocio_id}", response_model=NegocioSchema, dependencies=[Depends(exigir_escopo_negocio)])
 def atualizar_negocio(
     negocio_id: int,
     dados: AtualizarNegocioRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
+    if usuario.papel == "user" and dados.decisor_id is not None:
+        negocio_existente = db.query(Negocio).filter_by(id=negocio_id, tenant_id=tenant_id).one_or_none()
+        if negocio_existente is None:
+            raise NaoEncontrado("Oportunidade não encontrada.")
+        _validar_decisor_do_vendedor(db, tenant_id, usuario.id, negocio_existente.conta_id, dados.decisor_id)
     negocio = crm_service.atualizar_negocio(
         db, tenant_id, ator_id, negocio_id, dados.nome, dados.valor, dados.probabilidade, dados.decisor_id, dados.oferta_id
     )
-    return _serializar_negocios(db, tenant_id, [negocio])[0]
+    return _serializar_negocios(db, tenant_id, [negocio], usuario.id, usuario.papel == "user")[0]
 
 
 @router.post(
     "/negocios/{negocio_id}/meeting-brief",
     response_model=MeetingBriefSchema,
-    dependencies=[Depends(limitar_ia_por_tenant())],
+    dependencies=[Depends(limitar_ia_por_tenant()), Depends(exigir_escopo_negocio)],
 )
 def gerar_meeting_brief(
     negocio_id: int,
@@ -233,7 +389,7 @@ def gerar_meeting_brief(
     return MeetingBriefSchema(**crm_service.gerar_meeting_brief(db, tenant_id, ator_id, negocio_id, llm))
 
 
-@router.delete("/negocios/{negocio_id}", status_code=204)
+@router.delete("/negocios/{negocio_id}", status_code=204, dependencies=[Depends(exigir_escopo_negocio)])
 def excluir_negocio(
     negocio_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -243,20 +399,21 @@ def excluir_negocio(
     crm_service.excluir_negocio(db, tenant_id, ator_id, negocio_id)
 
 
-@router.put("/negocios/{negocio_id}/estagio", response_model=NegocioSchema)
+@router.put("/negocios/{negocio_id}/estagio", response_model=NegocioSchema, dependencies=[Depends(exigir_escopo_negocio)])
 def mover_estagio(
     negocio_id: int,
     dados: MoverEstagioRequestSchema,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> NegocioSchema:
     """Arrastar no kanban — ganho marca a conta como cliente, perdido grava o motivo (Onda B)."""
     negocio = crm_service.mover_estagio(db, tenant_id, ator_id, negocio_id, dados.estagio_id, dados.motivo_perda)
-    return _serializar_negocios(db, tenant_id, [negocio])[0]
+    return _serializar_negocios(db, tenant_id, [negocio], usuario.id, usuario.papel == "user")[0]
 
 
-@router.post("/negocios/{negocio_id}/atividades", response_model=AtividadeSchema, status_code=201)
+@router.post("/negocios/{negocio_id}/atividades", response_model=AtividadeSchema, status_code=201, dependencies=[Depends(exigir_escopo_negocio)])
 def registrar_atividade(
     negocio_id: int,
     dados: RegistrarAtividadeRequestSchema,
@@ -267,7 +424,7 @@ def registrar_atividade(
     return crm_service.registrar_atividade(db, tenant_id, ator_id, negocio_id, dados.tipo, dados.descricao)
 
 
-@router.get("/negocios/{negocio_id}/atividades", response_model=list[AtividadeSchema])
+@router.get("/negocios/{negocio_id}/atividades", response_model=list[AtividadeSchema], dependencies=[Depends(exigir_escopo_negocio)])
 def listar_atividades(
     negocio_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -276,7 +433,7 @@ def listar_atividades(
     return crm_service.listar_atividades(db, tenant_id, negocio_id)
 
 
-@router.post("/negocios/{negocio_id}/propostas", response_model=PropostaNegocioSchema, status_code=201)
+@router.post("/negocios/{negocio_id}/propostas", response_model=PropostaNegocioSchema, status_code=201, dependencies=[Depends(exigir_escopo_negocio)])
 async def anexar_proposta(
     negocio_id: int,
     arquivo: UploadFile = File(...),
@@ -298,7 +455,7 @@ async def anexar_proposta(
     )
 
 
-@router.get("/negocios/{negocio_id}/propostas", response_model=list[PropostaNegocioSchema])
+@router.get("/negocios/{negocio_id}/propostas", response_model=list[PropostaNegocioSchema], dependencies=[Depends(exigir_escopo_negocio)])
 def listar_propostas(
     negocio_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -307,7 +464,7 @@ def listar_propostas(
     return proposta_service.listar(db, tenant_id, negocio_id)
 
 
-@router.get("/negocios/{negocio_id}/propostas/{proposta_id}/download")
+@router.get("/negocios/{negocio_id}/propostas/{proposta_id}/download", dependencies=[Depends(exigir_escopo_negocio)])
 def baixar_proposta(
     negocio_id: int,
     proposta_id: int,
@@ -322,7 +479,7 @@ def baixar_proposta(
     )
 
 
-@router.post("/negocios/{negocio_id}/propostas/gerar", response_model=PropostaNegocioSchema, status_code=201)
+@router.post("/negocios/{negocio_id}/propostas/gerar", response_model=PropostaNegocioSchema, status_code=201, dependencies=[Depends(exigir_escopo_negocio)])
 def gerar_proposta(
     negocio_id: int,
     dados: GerarPropostaRequestSchema,
@@ -362,7 +519,7 @@ def gerar_proposta(
     )
 
 
-@router.post("/contas/{conta_id}/cancelar-cliente", response_model=ContaSchema)
+@router.post("/contas/{conta_id}/cancelar-cliente", response_model=ContaSchema, dependencies=[Depends(exigir_escopo_conta_crm)])
 def cancelar_cliente(
     conta_id: int,
     dados: CancelarClienteRequestSchema,
@@ -384,7 +541,7 @@ def definir_custo_aquisicao(
     return crm_service.definir_custo_aquisicao(db, tenant_id, ator_id, dados.periodo, dados.valor)
 
 
-@router.get("/dashboard/funil", response_model=DashboardFunilSchema)
+@router.get("/dashboard/funil", response_model=DashboardFunilSchema, dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def dashboard_funil(
     vendedor_usuario_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
@@ -396,7 +553,7 @@ def dashboard_funil(
     return DashboardFunilSchema(**crm_service.dashboard_funil(db, tenant_id, vendedor_usuario_id))
 
 
-@router.get("/dashboard/atividade", response_model=DashboardAtividadeSchema)
+@router.get("/dashboard/atividade", response_model=DashboardAtividadeSchema, dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def dashboard_atividade(
     data_inicio: date | None = None,
     data_fim: date | None = None,
@@ -406,7 +563,7 @@ def dashboard_atividade(
     return DashboardAtividadeSchema(**crm_service.dashboard_atividade(db, tenant_id, data_inicio, data_fim))
 
 
-@router.get("/dashboard/economia", response_model=DashboardEconomiaSchema)
+@router.get("/dashboard/economia", response_model=DashboardEconomiaSchema, dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def dashboard_economia(
     periodo: str,
     vendedor_usuario_id: int | None = None,
@@ -419,7 +576,7 @@ def dashboard_economia(
     return DashboardEconomiaSchema(**crm_service.dashboard_economia(db, tenant_id, periodo, vendedor_usuario_id))
 
 
-@router.get("/vendedores-com-contas", response_model=list[VendedorComContasSchema])
+@router.get("/vendedores-com-contas", response_model=list[VendedorComContasSchema], dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def listar_vendedores_com_contas(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
@@ -428,7 +585,7 @@ def listar_vendedores_com_contas(
     return [VendedorComContasSchema(**item) for item in crm_service.listar_vendedores_com_contas(db, tenant_id)]
 
 
-@router.get("/dashboard/flywheel", response_model=DashboardFlywheelSchema)
+@router.get("/dashboard/flywheel", response_model=DashboardFlywheelSchema, dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def dashboard_flywheel(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),

@@ -31,7 +31,9 @@ def _abrir(client) -> tuple[dict, dict]:
     resposta = client.post("/api/v1/auth/demonstracao", headers={"Authorization": ""})
     assert resposta.status_code == 201, resposta.text
     corpo = resposta.json()
-    return corpo, {"Authorization": f"Bearer {corpo['access_token']}"}
+    cookie = resposta.headers.get("set-cookie", "")
+    valor_cookie = cookie.split("b2bon_session=", 1)[1].split(";", 1)[0]
+    return corpo, {"Cookie": f"b2bon_session={valor_cookie}", "Authorization": ""}
 
 
 def test_desligada_por_padrao(client):
@@ -67,6 +69,9 @@ def test_cada_sessao_tem_seu_proprio_ambiente(client, db_session, demo):
 
 def test_bloqueia_dados_reais_e_acoes_externas(client, demo):
     _, headers = _abrir(client)
+    # A origem confiável faz a requisição passar pelo CSRF e permite que o
+    # teste verifique o bloqueio específico do ambiente de demonstração.
+    headers_demo = {**headers, "Origin": settings.origens_cors[0]}
     for metodo, rota in (("get", "/api/v1/rede-social/feed"), ("get", "/api/v1/inteligencia/oportunidades"),
                          ("get", "/api/v1/admin/tenants"), ("get", "/api/v1/comissoes/parametros"), ("get", "/api/v1/usuarios"),
                          ("get", "/api/v1/representantes"), ("get", "/api/v1/chaves-api"), ("get", "/api/v1/auditoria"),
@@ -74,7 +79,7 @@ def test_bloqueia_dados_reais_e_acoes_externas(client, demo):
                          ("post", "/api/v1/usuarios"), ("post", "/api/v1/ai-credits/compras"), ("post", "/api/v1/configuracao-whatsapp"),
                          ("post", "/api/v1/convites"), ("post", "/api/v1/sourcing/processos/1/descoberta"),
                          ("post", "/api/v1/auth/declarar-pagamento"), ("get", "/api/v1/rota-que-ainda-nao-existe")):
-        resposta = getattr(client, metodo)(rota, headers=headers, **({"json": {}} if metodo == "post" else {}))
+        resposta = getattr(client, metodo)(rota, headers=headers_demo, **({"json": {}} if metodo == "post" else {}))
         assert resposta.status_code == 403 and "demonstração" in resposta.json()["detalhe"], (metodo, rota)
     # o bloqueio só vale para a sessão de demonstração
     assert client.get("/api/v1/admin/tenants").status_code == 200
