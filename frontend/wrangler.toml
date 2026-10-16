@@ -1,10 +1,11 @@
-# VITE_API_BASE_URL e configurada como variavel de build direto no
-# painel da Cloudflare (Configuracoes > Build > Variaveis e segredos) —
-# o Vite grava esse valor no bundle no momento do "npm run build", nao
-# em tempo de execucao, entao nao pode ir aqui no wrangler.toml.
-name = "b2bon"
+# Staging frontend: API requests are proxied through this Worker so the
+# HttpOnly session cookie is first-party to b2bon-staging.maruen-said.workers.dev.
+name = "b2bon-staging"
+main = "./worker.js"
 compatibility_date = "2026-08-03"
 
 [assets]
 directory = "./dist"
+binding = "ASSETS"
 not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
