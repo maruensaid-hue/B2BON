@@ -76,21 +76,40 @@ _REGEX_LINKS_INTERNOS = re.compile(
 )
 
 
+def _validar_url_destino(url: str) -> httpx.URL:
+    """Aceita somente destinos HTTP(S) sem credenciais e em portas web padrão."""
+    try:
+        destino = httpx.URL(url)
+    except (httpx.InvalidURL, ValueError) as erro:
+        raise HostNaoPublico("URL de destino inválida") from erro
+
+    if destino.scheme not in {"http", "https"}:
+        raise HostNaoPublico(f"Esquema de URL não permitido: {destino.scheme or '(vazio)'}")
+    if not destino.host or destino.username or destino.password:
+        raise HostNaoPublico("URL sem host válido ou com credenciais embutidas")
+    porta_esperada = 443 if destino.scheme == "https" else 80
+    if destino.port not in {None, porta_esperada}:
+        raise HostNaoPublico(f"Porta de destino não permitida: {destino.port}")
+    return destino
+
+
 def _get_seguro(url: str) -> httpx.Response:
-    """`httpx.get` com validação de SSRF antes de cada requisição — inclusive
-    a cada salto de redirect, já que um domínio público pode redirecionar
-    para um IP interno depois do primeiro DNS lookup. `follow_redirects`
-    fica sempre desligado de propósito; os saltos são seguidos manualmente
-    aqui, cada um validado."""
+    """Valida esquema, porta e DNS antes de cada requisição e redirect.
+    
+    O redirect automático fica desligado para que cada salto passe pelas
+    mesmas verificações. A validação DNS prévia reduz SSRF, mas não substitui
+    pinagem do IP efetivamente conectado; essa limitação permanece registrada
+    até uma implementação de transporte com DNS pinning ser validada.
+    """
     for _ in range(_MAX_REDIRECTS + 1):
-        host = httpx.URL(url).host
-        _validar_host_publico(host)
-        resposta = httpx.get(url, timeout=_TIMEOUT_POR_REQUISICAO_SEGUNDOS, follow_redirects=False)
+        destino = _validar_url_destino(url)
+        _validar_host_publico(destino.host)
+        resposta = httpx.get(str(destino), timeout=_TIMEOUT_POR_REQUISICAO_SEGUNDOS, follow_redirects=False)
         if resposta.is_redirect:
             proxima = resposta.headers.get("location")
             if not proxima:
                 return resposta
-            url = str(httpx.URL(url).join(proxima))
+            url = str(destino.join(proxima))
             continue
         return resposta
     raise HostNaoPublico(f"Excedeu o limite de {_MAX_REDIRECTS} redirecionamentos: {url}")
