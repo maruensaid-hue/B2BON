@@ -1,6 +1,6 @@
-# Staging frontend: API requests are proxied through this Worker so the
-# HttpOnly session cookie is first-party to b2bon-staging.maruen-said.workers.dev.
-name = "b2bon-staging"
+# Production frontend: proxy API requests through the same-origin Worker so the
+# HttpOnly session cookie is first-party to b2bon.maruen-said.workers.dev.
+name = "b2bon"
 main = "./worker.js"
 compatibility_date = "2026-08-03"
 
