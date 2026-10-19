@@ -1,0 +1,85 @@
+name: Security Scans
+
+on:
+  push:
+    branches: [staging, master]
+  pull_request:
+    branches: [staging, master]
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: Secret detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan repository history and working tree
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  semgrep:
+    name: Static security analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: semgrep/semgrep-action@v1
+        with:
+          config: p/security-audit
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  python-dependencies:
+    name: Python dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip pip-audit
+      - name: Audit resolved Python dependencies
+        run: |
+          python -m pip install -e .
+          pip-audit
+
+  frontend-dependencies:
+    name: Frontend dependency audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Audit npm dependencies (high and critical)
+        run: npm audit --audit-level=high
+
+  osv:
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.7.0
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    with:
+      scan-args: |-
+        --recursive
+        ./

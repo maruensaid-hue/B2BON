@@ -73,15 +73,24 @@ a assinatura antes de ler o corpo.
 
 ## 5. IA
 
-- **Human-in-the-loop** para comunicação externa: robusto e testado
-  (ver `AI_CURRENT_STATE.md` §4).
-- **[novo]** **Custo disparado por terceiros**: o call site #7
-  (qualificação, via webhook inbound de WhatsApp/e-mail) e o #8 (Recall)
-  chamam o LLM sem rate limit por tenant e sem medição. Um remetente
-  externo consegue gerar custo de IA para um tenant.
-- **[novo]** Só 3 de 14 call sites são medidos, e a medição é best-effort.
-- Prompt injection: sem defesa estrutural. Exposição alta nos call
-  sites #4 (HTML de site), #7 (mensagem de lead) e #8 (transcrição).
+- **Human-in-the-loop** para comunicação externa: rascunhos de mensagens
+  permanecem sujeitos à aprovação antes do envio (ver `AI_CURRENT_STATE.md` §4).
+- **[atualizado 2026-10-19]** As features registradas passam pelo
+  `app/contexts/intelligence/gateway.py`; o gateway aplica orçamento,
+  reserva de créditos e teto para gatilhos automáticos por tenant/hora.
+  O rate limit usa Redis compartilhado quando `REDIS_URL` está presente
+  e falha fechado quando Redis está indisponível. O fallback em memória
+  é legado para desenvolvimento/testes.
+- **Risco residual de contabilização**: o registro do uso ocorre depois
+  da resposta do provedor e `_registrar` captura falhas de persistência
+  sem interromper a resposta. Assim, testes de caminho feliz não provam
+  que uma falha de banco/ledger jamais deixe uma chamada paga sem registro.
+  A Fase 5 documenta o gate e os testes existentes; este cenário de falha
+  precisa de teste explícito e de uma estratégia de reconciliação/outbox.
+- Prompt injection: existe instrução de sistema para conteúdo externo,
+  mas ela não é uma fronteira de segurança. HTML de site, mensagem de lead
+  e transcrição continuam sendo entradas não confiáveis e exigem validação
+  de saída, limites e revisão humana.
 - RAG / vetores: não existem. O isolamento de RAG terá de nascer testado (§79).
 
 ## 6. Buy/Sell information barrier (§50, §80)
@@ -100,9 +109,12 @@ pontos de atenção para quando existir:
 
 - Rate limit usa Redis com janela deslizante atômica compartilhada quando `REDIS_URL` está configurado. Produção recusa iniciar sem Redis; o fallback em memória é só para dev/testes.
 - Não há fila. Cron lento bloqueia a requisição.
-- **[novo]** O CI (`.github/workflows/ci.yml`) só roda em `push`/`pull_request`
-  para `master`. O desenvolvimento acontece em `staging`, e ali os
-  testes **não rodam automaticamente**.
+- **[atualizado 2026-10-19]** O CI principal roda em `push` e
+  `pull_request` para `master` e `staging`. O workflow separado
+  `.github/workflows/security.yml` adiciona detecção de segredos,
+  análise estática e auditoria de dependências. A primeira execução ainda
+  precisa ser observada para classificar achados reais e calibrar falsos
+  positivos; a existência do workflow não equivale a uma varredura aprovada.
 
 ## 8. Auditoria / LGPD
 
@@ -115,9 +127,9 @@ expiração por cron, opt-out cancela mensagens pendentes.
 | # | Risco | Severidade | Fase que endereça |
 |---|---|---|---|
 | S1 | Isolamento só por disciplina, sem teste genérico cross-tenant | Alta | 1 (suite de regressão), 17 |
-| S2 | IA não medida e disparada por terceiros (#7, #8) | Média | 4/5 |
-| S3 | Prompt injection indireto (#4, #7, #8) | Média | 4 |
+| S2 | Falha de persistência do ledger pode deixar chamada paga sem evento de uso; entradas externas podem disparar IA dentro do limite automático | Alta | 5/15 — testar falha de ledger e reconciliação |
+| S3 | Prompt injection indireto em HTML, mensagens e transcrições não confiáveis | Média–Alta | 4 — defesa em camadas e testes de saída |
 | S4 | Concessão de rotas PREDATOR a plano só-CRM (C3) | Baixa–Média | 1 |
-| S5 | CI não roda em `staging` | Média (processo) | decisão do PO (OI-005) |
+| S5 | Scanners de segurança ainda não tinham workflow dedicado | Média (processo) | 1 — workflow adicionado; aguarda primeira execução e triagem |
 | S6 | Sem modelo de classificação de dado / propósito (pré-requisito da barreira Buy/Sell) | Alta (futuro) | **2, 10 (endereçado: D-034, fitness + teste §80)** |
 | S7 | Aresta `privada` da rede visível para a empresa citada; qualquer usuário editava a identidade pública da empresa | Média | **7 (corrigido: D-026, D-027, `test_privacidade_rede.py`)** |
