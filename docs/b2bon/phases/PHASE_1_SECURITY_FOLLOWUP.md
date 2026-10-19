@@ -17,6 +17,10 @@ The existing `PHASE_1_COMPLETION.md` already records the original Domain Separat
 4. `.github/workflows/security.yml` adds secret scanning, Semgrep security analysis, Python dependency auditing, npm high/critical auditing and OSV scanning.
 5. `SECURITY_BOUNDARIES.md` was reconciled with the current CI and AI Gateway behavior and records residual risks instead of presenting happy-path tests as complete proof.
 
+## Commercial scope freeze — PO instruction, 2026-10-19
+
+The currently published prices at https://b2bon.cyberfort.com.br/planos are the reference values. This work must not change prices, plan values, credit grants, or commercial rules. Continue the already-authorized technical phases without treating a pricing change as a prerequisite. Any commercial value not actually present in the live catalog must not be guessed or invented; this does not block unrelated technical work.
+
 ## Validation status
 
 - The latest existing CI run on the staging baseline reported backend, frontend, PostgreSQL migration and E2E jobs successful.
