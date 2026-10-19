@@ -14,6 +14,29 @@
       }
     </script>
     <script>
+      /* Os domínios próprios (b2bon.cyberfort.com.br, b2bon.ovendedortubarao.com.br) também apontam para o site do
+         Render, sem proxy de /api. Em vez de listar domínios, testa onde a página está: se /api/v1/planos não devolve
+         JSON, não há proxy ali e a pessoa segue para o site de produção que tem. Se um dia o proxy for configurado
+         no Render (regra de rewrite /api/*), o teste passa e ninguém é redirecionado. Em localhost e *.workers.dev
+         não testa. Uma falha de rede não redireciona. */
+      (function () {
+        try {
+          var h = location.hostname;
+          if (h === "localhost" || h === "127.0.0.1" || /\.workers\.dev$/.test(h)) return;
+          if (sessionStorage.getItem("b2bon.proxy_ok")) return;
+          fetch("/api/v1/planos", { credentials: "omit", cache: "no-store" })
+            .then(function (r) {
+              if ((r.headers.get("content-type") || "").indexOf("application/json") !== -1) {
+                sessionStorage.setItem("b2bon.proxy_ok", "1");
+                return;
+              }
+              location.replace("https://b2bon.maruen-said.workers.dev" + location.pathname + location.search + location.hash);
+            })
+            .catch(function () {});
+        } catch (e) {}
+      })();
+    </script>
+    <script>
       /* D-086: aplica o tema escolhido ANTES da primeira pintura (sem flash claro → escuro). A preferência do servidor
          (Usuario.tema_preferido) é sincronizada para esta chave pelo ThemeProvider a cada login. */
       (function () {

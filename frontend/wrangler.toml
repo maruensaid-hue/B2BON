@@ -9,3 +9,8 @@ directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
+
+# Mantém a API do Render acordada em horário comercial: a cada 10 min, das 11h às 22h59 UTC (8h às 19h59 em Brasília),
+# de segunda a sexta. O Cloudflare usa UTC.
+[triggers]
+crons = ["*/10 11-22 * * 1-5"]

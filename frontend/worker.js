@@ -42,4 +42,11 @@ export default {
 
     return env.ASSETS.fetch(request);
   },
+
+  // Agendador do Cloudflare (UTC, ver wrangler.toml): a API gratuita do Render dorme após 15 min sem uso. Este toque a
+  // cada 10 min em horário comercial evita a espera de ~2 min para acordar. Fora do horário ela dorme e economiza as
+  // 750 h gratuitas do mês.
+  async scheduled(_controller, _env, ctx) {
+    ctx.waitUntil(fetch(`${API_ORIGIN}/health`).catch(() => undefined));
+  },
 };
