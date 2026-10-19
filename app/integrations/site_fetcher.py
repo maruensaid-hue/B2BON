@@ -41,8 +41,11 @@ def _validar_host_publico(host: str) -> None:
 
     for *_, sockaddr in enderecos:
         ip = ipaddress.ip_address(sockaddr[0])
+        # `is_global` também rejeita faixas especiais não cobertas por
+        # `is_private` (por exemplo, CGNAT 100.64.0.0/10 e blocos de documentação).
         if (
-            ip.is_private
+            not ip.is_global
+            or ip.is_private
             or ip.is_loopback
             or ip.is_link_local
             or ip.is_multicast
