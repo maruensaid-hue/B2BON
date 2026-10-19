@@ -100,3 +100,42 @@ def test_buscar_conteudo_site_bloqueia_redirect_para_ip_privado():
     ):
         with pytest.raises(HostNaoPublico):
             buscar_conteudo_site("publico.com.br")
+
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "ftp://publico.com.br/arquivo",
+        "https://usuario:senha@publico.com.br/",
+        "https://publico.com.br:8443/",
+        "http://publico.com.br:8080/",
+    ],
+)
+def test_get_seguro_rejeita_esquema_credenciais_e_portas_nao_padrao(url):
+    from app.integrations.site_fetcher import _get_seguro
+
+    with patch("app.integrations.site_fetcher.httpx.get") as chamada_http:
+        with pytest.raises(HostNaoPublico):
+            _get_seguro(url)
+        chamada_http.assert_not_called()
+
+
+def test_redirect_para_esquema_nao_http_e_rejeitado():
+    from app.integrations.site_fetcher import _get_seguro
+
+    def _getaddrinfo(*_args, **_kwargs):
+        return _addrinfo_para("93.184.216.34")
+
+    resposta_redirect = MagicMock(spec=httpx.Response)
+    resposta_redirect.is_redirect = True
+    resposta_redirect.headers = {"location": "file:///etc/passwd"}
+
+    with (
+        patch("app.integrations.site_fetcher.socket.getaddrinfo", side_effect=_getaddrinfo),
+        patch("app.integrations.site_fetcher.httpx.get", return_value=resposta_redirect) as chamada_http,
+    ):
+        with pytest.raises(HostNaoPublico):
+            _get_seguro("https://publico.com.br/")
+        assert chamada_http.call_count == 1
