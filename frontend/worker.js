@@ -1,11 +1,12 @@
-const API_ORIGIN = "https://b2bon-api-staging.onrender.com";
+const API_ORIGIN = "https://b2bon-api.onrender.com";
 
 export default {
   async fetch(request, env) {
     const incoming = new URL(request.url);
 
-    // Keep the API path/query intact; the browser talks to this same-origin
-    // Worker, which forwards the request to the isolated staging API.
+    // Browser requests stay on the production Worker origin. Forward the
+    // original Cookie and Origin headers to the API so HttpOnly session
+    // cookies work as first-party cookies without weakening CSRF checks.
     if (incoming.pathname === "/api" || incoming.pathname.startsWith("/api/")) {
       const target = new URL(incoming.pathname + incoming.search, API_ORIGIN);
       const headers = new Headers(request.headers);
