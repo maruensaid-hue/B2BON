@@ -6,6 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <meta name="theme-color" content="#050D1A" />
     <script>
+      /* O site estático do Render (b2bon.onrender.com) não tem o proxy de /api que a sessão por cookie exige; o login
+         ali recebia a página em vez da API. Quem chegar por esse endereço (links antigos, e-mails, demonstração) segue
+         para o site de produção com proxy, mantendo caminho, busca e âncora. */
+      if (location.hostname === "b2bon.onrender.com") {
+        location.replace("https://b2bon.maruen-said.workers.dev" + location.pathname + location.search + location.hash);
+      }
+    </script>
+    <script>
       /* D-086: aplica o tema escolhido ANTES da primeira pintura (sem flash claro → escuro). A preferência do servidor
          (Usuario.tema_preferido) é sincronizada para esta chave pelo ThemeProvider a cada login. */
       (function () {

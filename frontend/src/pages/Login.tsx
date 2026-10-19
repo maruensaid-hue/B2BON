@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { ApiError } from "@/lib/api";
+import { ApiError, aquecerApi, servidorIniciando } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 // Google Identity Services (GSI) — SDK carregado sob demanda (só quando
@@ -36,6 +36,21 @@ export function Login() {
   const [mostrarCadastro, setMostrarCadastro] = useState(false);
   const [codigoConvite, setCodigoConvite] = useState("");
   const botaoGoogleRef = useRef<HTMLDivElement>(null);
+  const [demorando, setDemorando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  useEffect(() => {
+    aquecerApi();
+  }, []);
+
+  useEffect(() => {
+    if (!carregando) {
+      setDemorando(false);
+      return;
+    }
+    const temporizador = setTimeout(() => setDemorando(true), 6000);
+    return () => clearTimeout(temporizador);
+  }, [carregando]);
 
   // Sem Client ID configurado, mantém o botão desabilitado de sempre
   // (mesmo aviso, sem apontar mais pra "Onda F2" — interno demais pra
@@ -89,14 +104,27 @@ export function Login() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setErro(null);
+    setAviso(null);
     setCarregando(true);
     try {
-      await entrar(email, senha);
-      navigate("/", { replace: true });
-    } catch (error) {
-      setErro(error instanceof ApiError ? error.message : "Não foi possível entrar.");
+      for (let tentativa = 1; tentativa <= 3; tentativa++) {
+        try {
+          await entrar(email, senha);
+          navigate("/", { replace: true });
+          return;
+        } catch (error) {
+          if (servidorIniciando(error) && tentativa < 3) {
+            setAviso(`O servidor estava ocioso e está iniciando. Tentando de novo (${tentativa + 1} de 3)…`);
+            await new Promise((resolver) => setTimeout(resolver, 4000));
+            continue;
+          }
+          setErro(error instanceof ApiError ? error.message : "Não foi possível entrar.");
+          return;
+        }
+      }
     } finally {
       setCarregando(false);
+      setAviso(null);
     }
   }
 
@@ -159,6 +187,11 @@ export function Login() {
           </div>
 
           {erro && <div className="text-[12px] text-red">{erro}</div>}
+          {carregando && (aviso || demorando) && (
+            <div className="text-[12px] text-muted">
+              {aviso ?? "Conectando ao servidor… se ele estava ocioso, isso pode levar até 2 minutos. Não feche esta página."}
+            </div>
+          )}
 
           <Button type="submit" disabled={carregando} className="mt-1 w-full justify-center">
             {carregando ? "Entrando..." : "Entrar"}

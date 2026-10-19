@@ -7,7 +7,9 @@ name: Disparar envios pendentes
 # tier acontece so depois de ficar sem trafego).
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Minutos 4/19/34/49, não 0/15/30/45: o GitHub atrasa ou descarta os agendamentos dos minutos mais disputados
+    # (em 17-19/10 o disparo de "a cada 15 min" rodou só a cada 1-3 h e a API dormia entre um e outro).
+    - cron: "4,19,34,49 * * * *"
     # Retenção de titulares (raio-X/LGPD) não é tempo-sensível como
     # envio/lembrete — 1x/dia basta. Schedule separado, mesmo workflow.
     - cron: "0 6 * * *"

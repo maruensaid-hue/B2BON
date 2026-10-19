@@ -10,6 +10,10 @@ const DEMO_KEY = "b2bon_demo_expira_em";
 // Remove JWTs left by older releases; requests now authenticate with HttpOnly cookies.
 if (typeof window !== "undefined") localStorage.removeItem(TOKEN_KEY);
 
+const MSG_SERVIDOR_INICIANDO =
+  "Não foi possível conectar ao servidor agora. Se ele estava ocioso, pode levar até 2 minutos para iniciar — tente novamente em instantes.";
+const MSG_RESPOSTA_INVALIDA = "Resposta inesperada do servidor. Atualize a página e tente novamente.";
+
 export class ApiError extends Error {
   status: number;
 
@@ -17,6 +21,29 @@ export class ApiError extends Error {
     super(detalhe);
     this.status = status;
   }
+}
+
+/** Erros em que o servidor não respondeu (ocioso/iniciando): vale tentar de novo sozinho. */
+export function servidorIniciando(error: unknown): boolean {
+  return error instanceof ApiError && [0, 502, 503, 504].includes(error.status);
+}
+
+async function buscar(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (erro) {
+    if (erro instanceof DOMException && erro.name === "AbortError") throw erro;
+    throw new ApiError(0, MSG_SERVIDOR_INICIANDO);
+  }
+}
+
+let apiAquecida = false;
+/** A API gratuita dorme quando fica ociosa e leva até 2 minutos para acordar. Uma chamada leve ao abrir o login
+ * começa a acordá-la enquanto a pessoa digita as credenciais. */
+export function aquecerApi(): void {
+  if (apiAquecida) return;
+  apiAquecida = true;
+  void fetch(`${API_BASE_URL}/planos`, { credentials: "omit" }).catch(() => undefined);
 }
 
 /** Mensagem para a tela: a do servidor quando é um erro da API, senão o texto padrão. */
@@ -115,12 +142,17 @@ async function requestComHeaders<T>(path: string, options: RequestInit = {}): Pr
     ...options.headers,
   };
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, credentials: "include" });
+  const response = await buscar(`${API_BASE_URL}${path}`, { ...options, headers, credentials: "include" });
 
   await exigirSucesso(response, token, "Erro inesperado ao chamar a API.");
 
   if (response.status === 204) return { dados: undefined as T, headers: response.headers };
-  return { dados: (await response.json()) as T, headers: response.headers };
+  const texto = await response.text();
+  try {
+    return { dados: JSON.parse(texto) as T, headers: response.headers };
+  } catch {
+    throw new ApiError(response.status, MSG_RESPOSTA_INVALIDA);
+  }
 }
 
 /** Página de uma lista paginada por cursor (Fase S0): o próximo cursor vem
@@ -153,7 +185,7 @@ export const api = {
 /** Download binário (ex.: PDF) — não passa por `request()` porque a resposta não é JSON. */
 export async function getBlob(path: string): Promise<Blob> {
   const token = getToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await buscar(`${API_BASE_URL}${path}`, {
     credentials: "include",
   });
   await exigirSucesso(response, token, "Não foi possível baixar o arquivo.");
@@ -162,7 +194,7 @@ export async function getBlob(path: string): Promise<Blob> {
 
 async function _enviarMultipart<T>(path: string, formData: FormData): Promise<T> {
   const token = getToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await buscar(`${API_BASE_URL}${path}`, {
     method: "POST",
     credentials: "include",
     body: formData,

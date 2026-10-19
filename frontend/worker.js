@@ -19,7 +19,25 @@ export default {
         body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body,
         redirect: "manual",
       });
-      return fetch(upstreamRequest);
+      // A API gratuita do Render dorme e pode levar mais de 100 s para acordar, tempo em que o Cloudflare derruba a
+      // conexão sem explicação. Antes disso devolvemos um 503 claro: a API continua acordando e a próxima tentativa
+      // (a tela repete sozinha) já a encontra pronta.
+      const limiteMs = Number(env.API_TIMEOUT_MS) || 85000;
+      const controle = new AbortController();
+      const temporizador = setTimeout(() => controle.abort(), limiteMs);
+      try {
+        return await fetch(upstreamRequest, { signal: controle.signal });
+      } catch (erro) {
+        if (controle.signal.aborted) {
+          return new Response(
+            JSON.stringify({ detalhe: "O servidor estava ocioso e está iniciando. Tente novamente em instantes." }),
+            { status: 503, headers: { "content-type": "application/json", "retry-after": "10" } },
+          );
+        }
+        throw erro;
+      } finally {
+        clearTimeout(temporizador);
+      }
     }
 
     return env.ASSETS.fetch(request);
