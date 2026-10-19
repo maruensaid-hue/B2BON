@@ -100,6 +100,14 @@ o módulo de mesmo nome. **Convites de compra** (seção
 [12](#12-convites-de-compra-e-portal-do-fornecedor)) e **Valores**
 aparecem para todos.
 
+O **super admin** (operador da plataforma) é a exceção: vê e usa **todos**
+os módulos, mesmo que o plano do tenant dele não os inclua. Quem é admin
+ou usuário comum segue sempre o plano: um cliente só enxerga, no menu e na
+API, o que contratou. A exceção vale só para módulos e capacidades;
+franquias, limites de uso e os demais recursos do plano continuam os do
+plano do tenant. Ela pode ser desligada pelo operador com
+`SUPER_ADMIN_ACESSO_TOTAL_MODULOS=false`.
+
 ---
 
 ## 2. CRM

@@ -9,9 +9,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_db, get_llm_provider, get_plan_limits_provider, get_usuario_atual, limitar_ia_por_tenant
+from app.api.deps import (
+    entitlements_do_usuario,
+    exigir_papel,
+    get_db,
+    get_llm_provider,
+    get_plan_limits_provider,
+    get_usuario_atual,
+    limitar_ia_por_tenant,
+)
 from app.contexts.intelligence import contract as intel
-from app.contexts.shared.entitlements import Entitlements
 from app.llm.base import LLMProvider
 from app.models.registro_uso_ia import RegistroUsoIa
 from app.models.usuario import Usuario
@@ -132,7 +139,7 @@ class PerguntaAgente(BaseModel):
 
 
 def _contexto_agente(usuario: Usuario, plan_limits: PlanLimitsProvider):
-    entitlements = Entitlements(plan_limits, usuario.tenant_id)
+    entitlements = entitlements_do_usuario(usuario, plan_limits)
     ctx = intel.ContextoFerramenta(tenant_id=usuario.tenant_id, usuario_id=usuario.id, papel=usuario.papel)
     return ctx, entitlements.has_module
 

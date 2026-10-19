@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # do operador: false para TODA escrita de uma vez (a fila acumula e retoma
     # quando volta). Por tenant, a escrita continua opt-in na própria conexão.
     escrita_crm_ativa: bool = True
+    # O super_admin (operador da plataforma) acessa todos os módulos (Licitações, Compras públicas, Strategic
+    # Sourcing, CRM, MAP, PREDATOR) mesmo que o plano do tenant dele não os inclua; clientes (admin/user) seguem
+    # só o que o plano libera. Desligar volta o super_admin a seguir o plano como qualquer um.
+    super_admin_acesso_total_modulos: bool = True
     # D-087: apps OAuth da B2B ON em cada CRM (registrados pela CyberFort).
     # Vazio = botão "Conectar com 1 clique" desligado para aquele CRM; a
     # conexão por token colado continua funcionando.

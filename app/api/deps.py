@@ -751,6 +751,15 @@ def exigir_plano_permite_api_parceiros(
     return usuario
 
 
+def acesso_total_aos_modulos(usuario: Usuario) -> bool:
+    """super_admin (operador da plataforma) vê e usa todos os módulos; cliente só o que o plano libera."""
+    return settings.super_admin_acesso_total_modulos and usuario.papel == "super_admin"
+
+
+def entitlements_do_usuario(usuario: Usuario, plan_limits: PlanLimitsProvider) -> Entitlements:
+    return Entitlements(plan_limits, usuario.tenant_id, acesso_total=acesso_total_aos_modulos(usuario))
+
+
 def exigir_modulo(modulo: str):
     """Dependency factory pra contratação avulsa por módulo (raio-X
     2026-09-24) — mesmo padrão de `exigir_plano_permite_api_parceiros`,
@@ -760,10 +769,10 @@ def exigir_modulo(modulo: str):
     de outro módulo, barra aqui."""
 
     def _dependencia(
-        tenant_id: str = Depends(get_tenant_id),
+        usuario: Usuario = Depends(get_usuario_atual),
         plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
     ) -> None:
-        if not Entitlements(plan_limits, tenant_id).has_module(modulo):
+        if not entitlements_do_usuario(usuario, plan_limits).has_module(modulo):
             nome = NOMES_MODULO.get(modulo, modulo)
             raise NaoAutorizado(f"Este recurso é exclusivo de quem contratou o módulo {nome}.")
 
@@ -774,10 +783,10 @@ def exigir_capacidade(capacidade: str):
     """D-076: capability do Public Procurement pelo nível do plano (BASIC | FULL) — mesmo motor, sem rota duplicada."""
 
     def _dependencia(
-        tenant_id: str = Depends(get_tenant_id),
+        usuario: Usuario = Depends(get_usuario_atual),
         plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
     ) -> None:
-        if not Entitlements(plan_limits, tenant_id).has_capability(capacidade):
+        if not entitlements_do_usuario(usuario, plan_limits).has_capability(capacidade):
             raise NaoAutorizado("Recurso do Public Procurement FULL — o plano contratado inclui o nível BASIC.")
 
     return _dependencia
@@ -790,10 +799,10 @@ def exigir_algum_modulo(*modulos: str):
     tiver QUALQUER um dos módulos listados."""
 
     def _dependencia(
-        tenant_id: str = Depends(get_tenant_id),
+        usuario: Usuario = Depends(get_usuario_atual),
         plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
     ) -> None:
-        if not Entitlements(plan_limits, tenant_id).has_any_module(*modulos):
+        if not entitlements_do_usuario(usuario, plan_limits).has_any_module(*modulos):
             nomes = " ou ".join(NOMES_MODULO.get(modulo, modulo) for modulo in modulos)
             raise NaoAutorizado(f"Este recurso exige o módulo {nomes}.")
 

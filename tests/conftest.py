@@ -102,6 +102,17 @@ def _modo_creditos_medicao(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _super_admin_segue_o_plano(monkeypatch):
+    """O usuário padrão da fixture `client` é super_admin, e os testes de plano/módulo simulam um tenant SEM certos
+    módulos por esse usuário. Em produção o super_admin ignora o plano (`super_admin_acesso_total_modulos`); aqui a
+    chave começa desligada para esses testes continuarem validando o bloqueio por plano. Quem testa o acesso total
+    liga a chave explicitamente (tests/integration/test_super_admin_acesso_total.py)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "super_admin_acesso_total_modulos", False)
+
+
+@pytest.fixture(autouse=True)
 def _ptax_sem_rede(monkeypatch):
     """D-076: a suíte nunca chama a API do Banco Central; sem cotação, a PTAX fica ausente (testes de câmbio injetam a
     busca ou cadastram a cotação)."""

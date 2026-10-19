@@ -59,13 +59,18 @@ PAPEIS_EXTERNOS = frozenset({"supplier_guest"})
 
 
 class Entitlements:
-    def __init__(self, plan_limits: PlanLimitsProvider, tenant_id: str) -> None:
+    def __init__(self, plan_limits: PlanLimitsProvider, tenant_id: str, acesso_total: bool = False) -> None:
         self._plan_limits = plan_limits
         self._tenant_id = tenant_id
+        # `acesso_total` (super_admin): libera todos os módulos e capacidades, sem tocar em limites de uso, franquias
+        # nem nos demais recursos do plano (A/B, auto-aprovação...), que continuam os do plano do tenant.
+        self._acesso_total = acesso_total
 
     def has_module(self, modulo: str) -> bool:
         if modulo not in MODULOS:
             raise ValueError(f"Módulo desconhecido: {modulo}")
+        if self._acesso_total:
+            return True
         return self._plan_limits.permite_modulo(self._tenant_id, modulo)
 
     def has_any_module(self, *modulos: str) -> bool:
@@ -79,6 +84,8 @@ class Entitlements:
         verificar = _FEATURES.get(feature)
         if verificar is None:
             raise ValueError(f"Feature desconhecida: {feature}")
+        if self._acesso_total and feature == "SOURCING_ENTERPRISE":
+            return True
         return verificar(self._plan_limits, self._tenant_id)
 
     def nivel_public_procurement(self) -> str:
@@ -88,5 +95,7 @@ class Entitlements:
         """Capability do Public Procurement (D-076): exige o módulo e o nível do plano que a inclui."""
         if capacidade not in CAPACIDADES_PUBLIC_PROCUREMENT["FULL"]:
             raise ValueError(f"Capability desconhecida: {capacidade}")
+        if self._acesso_total:
+            return True
         nivel = self.nivel_public_procurement()
         return self.has_module("procurement") and capacidade in CAPACIDADES_PUBLIC_PROCUREMENT.get(nivel, ())

@@ -1342,3 +1342,23 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   numa conta sandbox de cada CRM e registrar os apps OAuth da CyberFort (OI-030, decisão 6).
 - **Status**: ACEITA. Migração `e3a5c7f9b1d4` (reversível).
 
+## D-088 · 2026-10-19 · Super admin acessa todos os módulos; cliente só o que o plano libera
+
+- **Contexto**: a demonstração mostra Licitações, Compras públicas e Strategic Sourcing porque o tenant dela usa o plano
+  "B2B ON Demonstração" (todos os módulos). Em produção nenhum tenant real tem `bids`, `procurement` ou `sourcing`; o
+  tenant `cyberfort` está no plano Enterprise (`map`, `predator`, `crm`), então o operador não via esses menus. O código
+  de staging, de produção e da demonstração é o mesmo (mesmo `master`, mesma migração `d2e4f6a8b0c2`, mesmo catálogo): a
+  diferença é só de licença.
+- **Decisão (PO)**: o `super_admin` precisa de acesso total aos módulos; os clientes só ao que pagarem, e o que não
+  contrataram nem precisa aparecer.
+- **Implementação**: `Entitlements(..., acesso_total=True)` libera todos os módulos, as capacidades do Public Procurement
+  e o `SOURCING_ENTERPRISE`; só é ligado quando `usuario.papel == "super_admin"` e
+  `SUPER_ADMIN_ACESSO_TOTAL_MODULOS` (padrão `true`) está ativa (`entitlements_do_usuario` em `app/api/deps.py`). Vale nas
+  três dependências de rota (`exigir_modulo`, `exigir_algum_modulo`, `exigir_capacidade`), no `recursos_plano` devolvido ao
+  login (menu) e nos dois pontos que decidem por módulo com o usuário à mão (agente de inteligência e métricas de receita).
+- **Não muda**: limites de usuários, franquias, AI Credits, A/B, auto-aprovação e demais recursos do plano; nenhum plano
+  nem licença foi alterado; admin e usuário de qualquer tenant (inclusive do `cyberfort`) seguem o plano.
+- **Testes**: a suíte passa a rodar com a chave desligada por padrão (o usuário padrão dos testes é super_admin e os
+  testes de plano simulam módulos bloqueados); `test_super_admin_acesso_total.py` e
+  `test_entitlements_acesso_total.py` ligam a chave e cobrem super admin, admin, usuário e a chave desligada.
+- **Status**: ACEITA.

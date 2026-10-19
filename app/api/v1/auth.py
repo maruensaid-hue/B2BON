@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
+    acesso_total_aos_modulos,
     get_account_data_provider,
     get_contact_enrichment_provider,
     get_db,
@@ -93,6 +94,7 @@ def _construir_usuario_schema(usuario: Usuario, db: Session) -> UsuarioSchema:
     `return usuario`."""
     tenant = db.query(Tenant).filter_by(id=usuario.tenant_id).one_or_none()
     plan_limits = NucleoPlanLimitsProvider(db)
+    acesso_total = acesso_total_aos_modulos(usuario)  # super_admin vê todos os módulos no menu, independente do plano
     recursos_plano = RecursosPlanoSchema(
         ab_teste_cadencia=plan_limits.permite_ab_teste_cadencia(usuario.tenant_id),
         auto_aprovacao=plan_limits.permite_auto_aprovacao(usuario.tenant_id),
@@ -101,12 +103,12 @@ def _construir_usuario_schema(usuario: Usuario, db: Session) -> UsuarioSchema:
         subtenants=plan_limits.permite_subtenants(usuario.tenant_id),
         registro_oportunidade=plan_limits.permite_registro_oportunidade(usuario.tenant_id),
         retencao_dias_relatorio=plan_limits.obter_retencao_dias_relatorio(usuario.tenant_id),
-        modulo_map=plan_limits.permite_modulo(usuario.tenant_id, "map"),
-        modulo_predator=plan_limits.permite_modulo(usuario.tenant_id, "predator"),
-        modulo_crm=plan_limits.permite_modulo(usuario.tenant_id, "crm"),
-        modulo_bids=plan_limits.permite_modulo(usuario.tenant_id, "bids"),
-        modulo_procurement=plan_limits.permite_modulo(usuario.tenant_id, "procurement"),
-        modulo_sourcing=plan_limits.permite_modulo(usuario.tenant_id, "sourcing"),
+        modulo_map=acesso_total or plan_limits.permite_modulo(usuario.tenant_id, "map"),
+        modulo_predator=acesso_total or plan_limits.permite_modulo(usuario.tenant_id, "predator"),
+        modulo_crm=acesso_total or plan_limits.permite_modulo(usuario.tenant_id, "crm"),
+        modulo_bids=acesso_total or plan_limits.permite_modulo(usuario.tenant_id, "bids"),
+        modulo_procurement=acesso_total or plan_limits.permite_modulo(usuario.tenant_id, "procurement"),
+        modulo_sourcing=acesso_total or plan_limits.permite_modulo(usuario.tenant_id, "sourcing"),
     )
     tem_conta_atribuida = (
         db.query(Conta).filter_by(tenant_id=usuario.tenant_id, vendedor_usuario_id=usuario.id).first() is not None
