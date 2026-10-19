@@ -15,7 +15,8 @@ The existing `PHASE_1_COMPLETION.md` already records the original Domain Separat
 2. DNS results must be globally routable; special-purpose ranges such as CGNAT and documentation ranges are rejected.
 3. Negative tests cover unsafe URL schemes, embedded credentials, non-standard ports, redirects to non-HTTP schemes, and special-purpose IP ranges.
 4. `.github/workflows/security.yml` adds secret scanning, Semgrep security analysis, Python dependency auditing, npm high/critical auditing and OSV scanning.
-5. `SECURITY_BOUNDARIES.md` was reconciled with the current CI and AI Gateway behavior and records residual risks instead of presenting happy-path tests as complete proof.
+5. The OSV job was corrected to call Google's documented reusable workflow at `google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.7.0`. The first corrected run successfully executed the scanner and uploaded SARIF, but the reporter step returned failure; this is not a green gate.
+6. `SECURITY_BOUNDARIES.md` was reconciled with the current CI and AI Gateway behavior and records residual risks instead of presenting happy-path tests as complete proof.
 
 ## Commercial scope freeze — PO instruction, 2026-10-19
 
@@ -23,8 +24,10 @@ The currently published prices at https://b2bon.cyberfort.com.br/planos are the 
 
 ## Validation status
 
-- The latest existing CI run on the staging baseline reported backend, frontend, PostgreSQL migration and E2E jobs successful.
-- The new PR head has not produced check runs visible through the repository checks endpoint at the time of this report. The new code therefore has **not** been represented as tested or certified.
+- The first corrected Security Scans run (#8) reported Gitleaks and Semgrep successful.
+- The frontend dependency audit still fails: `npm audit --audit-level=high` found high-severity advisories in transitive `brace-expansion` and `source-map-js` dependencies. The lockfile has not yet been safely regenerated and committed, so this remains an open remediation item.
+- The corrected OSV scanner ran and uploaded SARIF; its reporter step failed, so the overall OSV gate is not green.
+- Python dependency audit and the general CI run were still in progress at the last inspection; no success is claimed for them.
 - Tests were not executed locally in this environment.
 
 ## Remaining security gates
@@ -33,7 +36,7 @@ The currently published prices at https://b2bon.cyberfort.com.br/planos are the 
 - **Response memory limits:** the response text is sliced after the HTTP client has buffered it. A hard streaming byte cap still needs implementation and tests.
 - **Cross-tenant isolation:** the repository's existing route sweep and context fitness tests are documented, but this follow-up did not rerun the full sweep against a live or disposable PostgreSQL instance.
 - **AI usage ledger failure:** gateway code logs persistence failure but does not make a provider call reversible. Explicit failure-mode tests and a reliable reconciliation/outbox strategy remain required.
-- **Security scanners:** the workflow has been added; results must be triaged after a run before declaring the scan gate green.
+- **Security scanners:** workflow execution is now verified, but dependency findings and the OSV reporter failure must be resolved before declaring the scan gate green.
 - **Dependency reproducibility:** Python dependency locking remains open (TD-031).
 
 ## Deployment rule
