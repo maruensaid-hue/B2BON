@@ -11,10 +11,11 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id, limitar_ia_por_tenant
+from app.api.deps import exigir_escopo_conta_usuario, exigir_escopo_negocio_usuario, exigir_escopo_necessidade_usuario, get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
 from app.contexts.opportunity import contract as oportunidade
 from app.llm.base import LLMProvider
 from app.models.necessidade_oportunidade import CATEGORIAS
+from app.models.usuario import Usuario
 
 router = APIRouter(prefix="/inteligencia/oportunidades", tags=["opportunity-intelligence"])
 
@@ -42,12 +43,12 @@ def _usuario(ator_id: str | None) -> int | None:
     return int(ator_id) if ator_id and ator_id.isdigit() else None
 
 
-@router.get("/{negocio_id}/card")
+@router.get("/{negocio_id}/card", dependencies=[Depends(exigir_escopo_negocio_usuario)])
 def card(negocio_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
     return oportunidade.card_oportunidade(db, tenant_id, negocio_id)
 
 
-@router.get("/{negocio_id}/necessidades")
+@router.get("/{negocio_id}/necessidades", dependencies=[Depends(exigir_escopo_negocio_usuario)])
 def listar_necessidades(
     negocio_id: int,
     incluir_descartadas: bool = False,
@@ -60,7 +61,7 @@ def listar_necessidades(
     ]
 
 
-@router.post("/{negocio_id}/necessidades", status_code=201)
+@router.post("/{negocio_id}/necessidades", status_code=201, dependencies=[Depends(exigir_escopo_negocio_usuario)])
 def registrar_necessidade(
     negocio_id: int,
     dados: NovaNecessidadeSchema,
@@ -73,7 +74,7 @@ def registrar_necessidade(
     )
 
 
-@router.post("/{negocio_id}/necessidades/extrair", dependencies=[Depends(limitar_ia_por_tenant())])
+@router.post("/{negocio_id}/necessidades/extrair", dependencies=[Depends(limitar_ia_por_tenant()), Depends(exigir_escopo_negocio_usuario)])
 def extrair_necessidades(
     negocio_id: int,
     dados: ExtrairNecessidadesSchema,
@@ -87,7 +88,7 @@ def extrair_necessidades(
     )
 
 
-@router.patch("/necessidades/{necessidade_id}")
+@router.patch("/necessidades/{necessidade_id}", dependencies=[Depends(exigir_escopo_necessidade_usuario)])
 def revisar_necessidade(
     necessidade_id: int,
     dados: RevisaoNecessidadeSchema,
@@ -100,6 +101,11 @@ def revisar_necessidade(
     )
 
 
-@router.get("/contas/{conta_id}/white-space")
-def white_space(conta_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
-    return oportunidade.white_space_da_conta(db, tenant_id, conta_id)
+@router.get("/contas/{conta_id}/white-space", dependencies=[Depends(exigir_escopo_conta_usuario)])
+def white_space(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> dict:
+    return oportunidade.white_space_da_conta(db, tenant_id, conta_id, usuario.id, usuario.papel == "user")

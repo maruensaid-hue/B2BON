@@ -28,12 +28,30 @@ def criar(
     return lista
 
 
-def listar(db: Session, tenant_id: str) -> list[ListaProspeccao]:
-    return db.query(ListaProspeccao).filter_by(tenant_id=tenant_id).order_by(ListaProspeccao.criado_em.desc()).all()
+def listar(
+    db: Session, tenant_id: str, usuario_id: int | None = None, restrito: bool = False
+) -> list[ListaProspeccao]:
+    query = db.query(ListaProspeccao).outerjoin(ICP, ICP.id == ListaProspeccao.icp_id).filter(
+        ListaProspeccao.tenant_id == tenant_id
+    )
+    if restrito:
+        query = query.filter(
+            (ListaProspeccao.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)
+        )
+    return query.order_by(ListaProspeccao.criado_em.desc()).all()
 
 
-def obter(db: Session, tenant_id: str, lista_id: int) -> ListaProspeccao:
-    lista = db.query(ListaProspeccao).filter_by(id=lista_id, tenant_id=tenant_id).one_or_none()
+def obter(
+    db: Session, tenant_id: str, lista_id: int, usuario_id: int | None = None, restrito: bool = False
+) -> ListaProspeccao:
+    query = db.query(ListaProspeccao).outerjoin(ICP, ICP.id == ListaProspeccao.icp_id).filter(
+        ListaProspeccao.id == lista_id, ListaProspeccao.tenant_id == tenant_id
+    )
+    if restrito:
+        query = query.filter(
+            (ListaProspeccao.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)
+        )
+    lista = query.one_or_none()
     if lista is None:
         raise NaoEncontrado(f"Lista de prospecção {lista_id} não encontrada")
     return lista

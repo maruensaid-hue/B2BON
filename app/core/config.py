@@ -224,6 +224,9 @@ class Settings(BaseSettings):
     # secret_key (usada para HMAC de links públicos) para segregar o risco.
     jwt_secret_key: str = "changeme-dev-jwt-secret-key-min-32-bytes-long"
     jwt_expiracao_minutos: int = 1440
+    # Browser session cookie and optional shared Redis backend for rate limiting.
+    redis_url: str = ""
+    sessao_cookie_nome: str = "b2bon_session"
     # Ambiente de demonstração (D-082): cada acesso ao link público cria um tenant próprio, já preenchido com dados
     # fictícios, que expira sozinho. Desligado por padrão — ligar com DEMO_HABILITADA=true no serviço da API.
     demo_habilitada: bool = False
@@ -314,6 +317,11 @@ class Settings(BaseSettings):
                 f"Configuração insegura: {', '.join(fracos)} ainda está no valor padrão do "
                 "repositório. Gere um valor forte (ex.: secrets.token_urlsafe(32)) e configure "
                 "a variável de ambiente correspondente antes de subir em produção."
+            )
+        if not self.redis_url.strip():
+            raise RuntimeError(
+                "REDIS_URL é obrigatório em produção para rate limiting compartilhado. "
+                "Configure Redis antes de subir a API."
             )
 
 

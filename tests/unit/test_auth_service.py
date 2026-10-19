@@ -52,6 +52,12 @@ def _criar_licenca(db_session, tenant_id: str, max_usuarios: int | None, status:
     return licenca
 
 
+def _token_enviado(fake_email: FakeEmailProvider, indice: int = -1) -> str:
+    """Extrai o token bruto do link enviado; o banco guarda apenas seu hash."""
+    corpo = fake_email.envios[indice]["corpo"]
+    return corpo.split("/redefinir-senha/")[-1].split()[0]
+
+
 def test_hash_e_verificacao_de_senha():
     hash_senha = auth_service.hash_senha("minha-senha")
 
@@ -328,7 +334,8 @@ def test_solicitar_redefinicao_senha_cria_token_e_envia_email(db_session):
     redefinicao = db_session.query(RedefinicaoSenha).one()
     assert redefinicao.status == "disponivel"
     assert len(fake_email.envios) == 1
-    assert redefinicao.token in fake_email.envios[0]["corpo"]
+    assert len(redefinicao.token) == 64  # SHA-256; token bruto só vai no e-mail
+    assert redefinicao.token not in fake_email.envios[0]["corpo"]
     assert fake_email.envios[0]["destinatario"] == "esqueci@teste.com.br"
 
 
@@ -358,11 +365,11 @@ def test_solicitar_redefinicao_senha_pedido_novo_invalida_token_anterior(db_sess
     fake_email = FakeEmailProvider()
 
     auth_service.solicitar_redefinicao_senha(db_session, "dois-pedidos@teste.com.br", fake_email)
-    primeiro_token = db_session.query(RedefinicaoSenha).filter_by(status="disponivel").one().token
+    primeiro_token = _token_enviado(fake_email, 0)
 
     auth_service.solicitar_redefinicao_senha(db_session, "dois-pedidos@teste.com.br", fake_email)
 
-    primeiro = db_session.query(RedefinicaoSenha).filter_by(token=primeiro_token).one()
+    primeiro = db_session.query(RedefinicaoSenha).filter_by(token=auth_service._hash_token_redefinicao_senha(primeiro_token)).one()
     assert primeiro.status == "expirado"
     assert db_session.query(RedefinicaoSenha).filter_by(status="disponivel").count() == 1
 
@@ -370,22 +377,37 @@ def test_solicitar_redefinicao_senha_pedido_novo_invalida_token_anterior(db_sess
 def test_redefinir_senha_com_token_valido_troca_a_senha(db_session):
     usuario = _criar_usuario(db_session, email="trocar@teste.com.br")
     senha_hash_antiga = usuario.senha_hash
-    auth_service.solicitar_redefinicao_senha(db_session, "trocar@teste.com.br", FakeEmailProvider())
-    token = db_session.query(RedefinicaoSenha).one().token
+    fake_email = FakeEmailProvider()
+    auth_service.solicitar_redefinicao_senha(db_session, "trocar@teste.com.br", fake_email)
+    token = fake_email.envios[0]["corpo"].split("/redefinir-senha/")[1].split()[0]
 
     auth_service.redefinir_senha(db_session, token, "senha-nova-123")
 
     db_session.refresh(usuario)
     assert usuario.senha_hash != senha_hash_antiga
     assert auth_service.verificar_senha("senha-nova-123", usuario.senha_hash)
-    redefinicao = db_session.query(RedefinicaoSenha).filter_by(token=token).one()
+    redefinicao = db_session.query(RedefinicaoSenha).one()
     assert redefinicao.status == "usado"
+
+
+def test_redefinir_senha_invalida_jwts_anteriores(db_session):
+    usuario = _criar_usuario(db_session, email="invalidar-sessoes@teste.com.br")
+    token_antigo = auth_service.gerar_token(usuario)
+    fake_email = FakeEmailProvider()
+    auth_service.solicitar_redefinicao_senha(db_session, usuario.email, fake_email)
+    token_reset = fake_email.envios[0]["corpo"].split("/redefinir-senha/")[1].split()[0]
+
+    auth_service.redefinir_senha(db_session, token_reset, "senha-nova-456")
+
+    with pytest.raises(NaoAutenticado):
+        auth_service.validar_token(db_session, token_antigo)
 
 
 def test_redefinir_senha_token_ja_usado_falha(db_session):
     _criar_usuario(db_session, email="reuso@teste.com.br")
-    auth_service.solicitar_redefinicao_senha(db_session, "reuso@teste.com.br", FakeEmailProvider())
-    token = db_session.query(RedefinicaoSenha).one().token
+    fake_email = FakeEmailProvider()
+    auth_service.solicitar_redefinicao_senha(db_session, "reuso@teste.com.br", fake_email)
+    token = fake_email.envios[0]["corpo"].split("/redefinir-senha/")[1].split()[0]
     auth_service.redefinir_senha(db_session, token, "senha-nova-123")
 
     with pytest.raises(RegraNegocioViolada):

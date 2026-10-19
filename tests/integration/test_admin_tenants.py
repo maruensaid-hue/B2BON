@@ -224,7 +224,9 @@ def test_distribuidor_cria_revendedor_que_cria_cliente(client, db_session):
     login_revendedor = client.post(
         "/api/v1/auth/login", json={"email": "admin@revendax1.com.br", "senha": "senha123"}
     )
-    headers_revendedor = {"Authorization": f"Bearer {login_revendedor.json()['access_token']}"}
+    usuario_revendedor = db_session.query(Usuario).filter_by(email="admin@revendax1.com.br").one()
+    token_revendedor = auth_service.gerar_token(usuario_revendedor)
+    headers_revendedor = {"Authorization": f"Bearer {token_revendedor}"}
     assert login_revendedor.json()["usuario"]["papel"] == "admin"
     assert login_revendedor.json()["usuario"]["tenant_tipo"] == "revendedor"
 

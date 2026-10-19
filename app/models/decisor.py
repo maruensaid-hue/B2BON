@@ -12,6 +12,7 @@ class Decisor(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, index=True)
     conta_id: Mapped[int] = mapped_column(ForeignKey("conta.id"))
+    criado_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True, index=True)
     nome: Mapped[str] = mapped_column(String)
     cargo: Mapped[str | None] = mapped_column(String, nullable=True)
     canal_provavel: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -27,8 +27,7 @@ def _criar_usuario_logado(db_session, client, tenant_id: str = TENANT_ID) -> dic
     db_session.add(usuario)
     db_session.commit()
     resposta = client.post("/api/v1/auth/login", json={"email": usuario.email, "senha": "senha123"})
-    token = resposta.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    return {"Authorization": ""}
 
 
 def test_obter_config_gera_link_na_primeira_vez(client, db_session):

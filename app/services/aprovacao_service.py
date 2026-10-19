@@ -7,6 +7,8 @@ from app.contexts.intelligence import contract as intel
 from app.contexts.shared import events as eventos
 from app.models.aprovacao import Aprovacao
 from app.models.decisor import Decisor
+from app.models.conta import Conta
+from app.models.icp import ICP
 from app.models.mensagem import Mensagem
 from app.models.regra_auto_aprovacao import RegraAutoAprovacao
 from app.models.tarefa_linkedin import TarefaLinkedin
@@ -165,6 +167,8 @@ def listar_fila(
     cadencia_id: int | None = None,
     status: str | None = None,
     decisor_id: int | None = None,
+    usuario_id: int | None = None,
+    restrito: bool = False,
 ) -> list[dict]:
     """Fila com filtros por canal, conta, cadência e decisor (E4-H1).
     `decisor_id` (raio-X 2026-09-15) é o que alimenta a tela de
@@ -174,8 +178,17 @@ def listar_fila(
         db.query(Aprovacao, Mensagem, Decisor)
         .join(Mensagem, Aprovacao.mensagem_id == Mensagem.id)
         .join(Decisor, Mensagem.decisor_id == Decisor.id)
-        .filter(Aprovacao.tenant_id == tenant_id)
+        .join(Conta, Conta.id == Decisor.conta_id)
+        .outerjoin(ICP, ICP.id == Conta.icp_id)
+        .filter(Aprovacao.tenant_id == tenant_id, Mensagem.tenant_id == tenant_id, Conta.tenant_id == tenant_id)
     )
+    if restrito:
+        query = query.filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id)
+             | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+            ((Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+        )
     if canal:
         query = query.filter(Mensagem.canal == canal)
     if conta_id:

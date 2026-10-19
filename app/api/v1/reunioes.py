@@ -14,11 +14,14 @@ from app.api.deps import (
     get_llm_provider,
     get_meeting_bot_provider,
     get_tenant_id,
+    get_usuario_atual,
+    exigir_escopo_reuniao_usuario,
     get_whatsapp_provider,
 )
 from app.graph.client import Neo4jClient
 from app.llm.base import LLMProvider
 from app.models.reuniao import Reuniao
+from app.models.usuario import Usuario
 from app.providers.calendar.base import CalendarProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
@@ -47,11 +50,14 @@ def listar_reunioes(
     data_inicio: date | None = None,
     data_fim: date | None = None,
     tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[ReuniaoListaItemSchema]:
     return [
         ReuniaoListaItemSchema(**item)
-        for item in reuniao_service.listar(db, tenant_id, status, conta_id, data_inicio, data_fim)
+        for item in reuniao_service.listar(
+            db, tenant_id, status, conta_id, data_inicio, data_fim, usuario.id, usuario.papel == "user"
+        )
     ]
 
 
@@ -85,7 +91,7 @@ def reagendar(
     return reuniao_service.reagendar_por_token(db, token, dados.novo_horario, calendar, crm, graph)
 
 
-@router.post("/{reuniao_id}/confirmar", response_model=ReuniaoSchema)
+@router.post("/{reuniao_id}/confirmar", response_model=ReuniaoSchema, dependencies=[Depends(exigir_escopo_reuniao_usuario)])
 def confirmar(
     reuniao_id: int,
     dados: ConfirmarReuniaoRequestSchema,
@@ -108,7 +114,7 @@ def confirmar(
     return reuniao
 
 
-@router.post("/{reuniao_id}/marcar-resultado", response_model=ReuniaoSchema)
+@router.post("/{reuniao_id}/marcar-resultado", response_model=ReuniaoSchema, dependencies=[Depends(exigir_escopo_reuniao_usuario)])
 def marcar_resultado(
     reuniao_id: int,
     dados: MarcarResultadoReuniaoRequestSchema,
@@ -119,7 +125,7 @@ def marcar_resultado(
     return reuniao_service.marcar_resultado(db, tenant_id, ator_id, reuniao_id, dados.status)
 
 
-@router.post("/{reuniao_id}/confirmar-qualificacao", response_model=ReuniaoSchema)
+@router.post("/{reuniao_id}/confirmar-qualificacao", response_model=ReuniaoSchema, dependencies=[Depends(exigir_escopo_reuniao_usuario)])
 def confirmar_qualificacao(
     reuniao_id: int,
     dados: ConfirmarQualificacaoRequestSchema,
@@ -133,7 +139,7 @@ def confirmar_qualificacao(
     )
 
 
-@router.post("/{reuniao_id}/reprocessar-transcricao", response_model=ReuniaoSchema, dependencies=[Depends(limitar_ia_por_tenant())])
+@router.post("/{reuniao_id}/reprocessar-transcricao", response_model=ReuniaoSchema, dependencies=[Depends(limitar_ia_por_tenant()), Depends(exigir_escopo_reuniao_usuario)])
 def reprocessar_transcricao(
     reuniao_id: int,
     tenant_id: str = Depends(get_tenant_id),
@@ -152,7 +158,7 @@ def reprocessar_transcricao(
     return reuniao
 
 
-@router.get("/{reuniao_id}/dossie", response_model=DossieSchema)
+@router.get("/{reuniao_id}/dossie", response_model=DossieSchema, dependencies=[Depends(exigir_escopo_reuniao_usuario)])
 def obter_dossie(
     reuniao_id: int,
     tenant_id: str = Depends(get_tenant_id),

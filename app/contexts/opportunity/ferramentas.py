@@ -1,12 +1,27 @@
 """Ferramentas do Opportunity Intelligence para o B2B ON Intelligence Agent (Fase 12)."""
 
 from app.contexts.crm.contract import valor_ganho_por_conta
+from app.models.negocio import Negocio
+from app.services.errors import NaoEncontrado
 from app.contexts.shared.ferramentas import FerramentaExecutavel, Parametro, registrar
 from app.contexts.opportunity.card import montar, white_space_da_conta
 
 
 def _analisar(db, ctx, parametros: dict) -> dict:
-    card = montar(db, ctx.tenant_id, parametros["negocio_id"])
+    negocio_id = parametros["negocio_id"]
+    if ctx.papel == "user":
+        permitido = (
+            db.query(Negocio.id)
+            .filter(
+                Negocio.id == negocio_id,
+                Negocio.tenant_id == ctx.tenant_id,
+                Negocio.vendedor_usuario_id == ctx.usuario_id,
+            )
+            .first()
+        )
+        if permitido is None:
+            raise NaoEncontrado("Oportunidade não encontrada.")
+    card = montar(db, ctx.tenant_id, negocio_id, ctx.usuario_id, ctx.papel == "user")
     acoes = [a["titulo"] for a in card["next_best_action"]["recomendacoes"][:3]]
     ofertas = card["next_best_offer"]["recomendacoes"]
     oferta = f"Oferta mais aderente: {ofertas[0]['titulo']} (fit {ofertas[0]['dados']['fit_score']})." if ofertas else "Sem oferta recomendável ainda."
@@ -18,10 +33,24 @@ def _analisar(db, ctx, parametros: dict) -> dict:
 
 
 def _expansao(db, ctx, parametros: dict) -> dict:
-    clientes = [cid for cid, valor in valor_ganho_por_conta(db, ctx.tenant_id).items() if valor > 0][:50]
+    valores = valor_ganho_por_conta(db, ctx.tenant_id)
+    if ctx.papel == "user":
+        contas_visiveis = {
+            conta_id for (conta_id,) in (
+                db.query(Negocio.conta_id)
+                .filter(
+                    Negocio.tenant_id == ctx.tenant_id,
+                    Negocio.vendedor_usuario_id == ctx.usuario_id,
+                )
+                .distinct()
+                .all()
+            )
+        }
+        valores = {conta_id: valor for conta_id, valor in valores.items() if conta_id in contas_visiveis}
+    clientes = [cid for cid, valor in valores.items() if valor > 0][:50]
     itens = []
     for conta_id in clientes:
-        ws = white_space_da_conta(db, ctx.tenant_id, conta_id)
+        ws = white_space_da_conta(db, ctx.tenant_id, conta_id, ctx.usuario_id, ctx.papel == "user")
         if ws["expansao_suprimida_por_churn"]:
             continue
         if ws["produtos_potenciais"] or ws["cross_sell"] or ws["upsell"]:

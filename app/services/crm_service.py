@@ -11,6 +11,7 @@ from app.contexts.shared import events as eventos
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.atividade import Atividade
+from app.models.icp import ICP
 from app.models.conta import Conta
 from app.models.custo_aquisicao import CustoAquisicao
 from app.models.decisor import Decisor
@@ -192,8 +193,15 @@ def listar_negocios(
     estagio_id: int | None = None,
     vendedor_usuario_id: int | None = None,
     conta_id: int | None = None,
+    usuario_id: int | None = None,
+    restringir_usuario: bool = False,
 ) -> list[Negocio]:
     query = db.query(Negocio).filter_by(tenant_id=tenant_id)
+    # A atribuição explícita da oportunidade é a única regra de propriedade
+    # para representantes. Sem vendedor, o registro permanece visível apenas
+    # a admin/super_admin; a origem/criador da conta não concede acesso.
+    if restringir_usuario:
+        query = query.filter(Negocio.vendedor_usuario_id == usuario_id)
     if estagio_id is not None:
         query = query.filter_by(estagio_id=estagio_id)
     if vendedor_usuario_id is not None:

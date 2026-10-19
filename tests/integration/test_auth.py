@@ -28,9 +28,41 @@ def test_login_com_sucesso(client, db_session):
 
     assert resposta.status_code == 200
     corpo = resposta.json()
-    assert corpo["access_token"]
+    assert corpo["access_token"] == "cookie-session"
     assert corpo["token_type"] == "bearer"
     assert corpo["usuario"]["email"] == "login@teste.com.br"
+    cookie = resposta.headers.get("set-cookie", "")
+    assert "b2bon_session=" in cookie
+    assert "httponly" in cookie.lower()
+    assert cookie.split("b2bon_session=", 1)[1].split(";", 1)[0] != corpo["access_token"]
+    # O cookie autentica sem expor o JWT no cabeçalho Authorization.
+    resposta_eu = client.get("/api/v1/auth/eu", headers={"Authorization": ""})
+    assert resposta_eu.status_code == 200
+    assert resposta_eu.json()["email"] == "login@teste.com.br"
+
+
+def test_cookie_de_sessao_rejeita_origem_nao_autorizada_em_mutacoes(client, db_session):
+    _criar_usuario_senha(db_session, "csrf-cookie@teste.com.br", "senha-forte")
+    login = client.post("/api/v1/auth/login", json={"email": "csrf-cookie@teste.com.br", "senha": "senha-forte"})
+    assert login.status_code == 200
+
+    sem_origem = client.post(
+        "/api/v1/auth/dispensar-banner-boas-vindas",
+        headers={"Authorization": ""},
+    )
+    assert sem_origem.status_code == 403
+
+    origem_invalida = client.post(
+        "/api/v1/auth/dispensar-banner-boas-vindas",
+        headers={"Authorization": "", "Origin": "https://origem-maliciosa.example"},
+    )
+    assert origem_invalida.status_code == 403
+
+    com_origem = client.post(
+        "/api/v1/auth/dispensar-banner-boas-vindas",
+        headers={"Authorization": "", "Origin": settings.origens_cors[0]},
+    )
+    assert com_origem.status_code == 200
 
 
 def test_login_reflete_aviso_whatsapp_template_confirmado(client, db_session):
@@ -191,9 +223,7 @@ def test_registrar_via_convite_gera_token_valido(client, db_session):
     )
 
     assert resposta.status_code == 201
-    token = resposta.json()["access_token"]
-
-    eu = client.get("/api/v1/auth/eu", headers={"Authorization": f"Bearer {token}"})
+    eu = client.get("/api/v1/auth/eu", headers={"Authorization": ""})
     assert eu.status_code == 200
     assert eu.json()["email"] == "novo-via-api@teste.com.br"
 
@@ -453,8 +483,8 @@ def test_tenant_vitrine_acessa_rede_social_mas_nao_modulo_pago(client, criar_pla
             "aceite_termos": True,
             "plano_id": plano.id,
         },
-    ).json()["access_token"]
-    headers_vitrine = {"Authorization": f"Bearer {token}"}
+    ).json()
+    headers_vitrine = {"Authorization": ""}
 
     resposta_rede_social = client.get("/api/v1/rede-social/perfil", headers=headers_vitrine)
     assert resposta_rede_social.status_code == 200
@@ -660,6 +690,7 @@ def test_registrar_publico_com_plano_pago_retorna_checkout(client, criar_plano, 
     )
 
     assert resposta.status_code == 201
+    assert "b2bon_session=" in resposta.headers.get("set-cookie", "")
     corpo = resposta.json()
     assert corpo["checkout_url"]
     assert corpo["usuario"]["papel"] == "admin"
@@ -763,8 +794,7 @@ def test_webhook_mercadopago_com_assinatura_valida_ativa_licenca(
             "plano_id": plano.id,
         },
     )
-    token = resposta_cadastro.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": ""}
     assert client.get("/api/v1/auth/licenca-status", headers=headers).json()["status"] == "pendente_pagamento"
 
     preferencia_id = next(iter(fake_payment._preferencias))

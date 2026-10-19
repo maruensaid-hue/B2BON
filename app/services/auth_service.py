@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -41,6 +42,7 @@ def gerar_token(usuario: Usuario, *, expira_em: datetime | None = None, demo: bo
         "sub": str(usuario.id),
         "tenant_id": usuario.tenant_id,
         "papel": usuario.papel,
+        "ver": int(getattr(usuario, "token_version", 0) or 0),
         "iat": agora,
         "exp": expira_em or agora + timedelta(minutes=settings.jwt_expiracao_minutos),
     }
@@ -55,9 +57,18 @@ def validar_token(db: Session, token: str) -> Usuario:
     except jwt.PyJWTError as erro:
         raise NaoAutenticado("Token inválido ou expirado.") from erro
 
-    usuario = db.query(Usuario).filter_by(id=int(payload["sub"])).one_or_none()
+    try:
+        usuario_id = int(payload["sub"])
+    except (KeyError, TypeError, ValueError) as erro:
+        raise NaoAutenticado("Token inválido ou expirado.") from erro
+
+    usuario = db.query(Usuario).filter_by(id=usuario_id).one_or_none()
     if usuario is None or not usuario.ativo:
         raise NaoAutenticado("Usuário não encontrado ou inativo.")
+    # Tokens legados sem ver continuam válidos até expirar; após redefinir a senha,
+    # a versão sobe e invalida todos os tokens anteriores.
+    if int(payload.get("ver", 0)) != int(usuario.token_version or 0):
+        raise NaoAutenticado("Sessão invalidada. Faça login novamente.")
     return usuario
 
 
@@ -116,6 +127,11 @@ def autenticar_google(db: Session, id_token_str: str) -> tuple[Usuario, bool]:
     return usuario, primeiro_login
 
 
+def _hash_token_redefinicao_senha(token: str) -> str:
+    """O token é aleatório e de alta entropia; SHA-256 basta para armazenamento."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def _gerar_token_redefinicao_senha() -> str:
     # Bem mais entropia que `_gerar_codigo_convite` (token_hex(8), 16
     # chars) — um código de convite um humano específico recebe e
@@ -140,9 +156,10 @@ def solicitar_redefinicao_senha(db: Session, email: str, email_provider: EmailPr
     # novo (múltiplos links vivos pra mesma conta ao mesmo tempo).
     db.query(RedefinicaoSenha).filter_by(usuario_id=usuario.id, status="disponivel").update({"status": "expirado"})
 
+    token_bruto = _gerar_token_redefinicao_senha()
     redefinicao = RedefinicaoSenha(
         usuario_id=usuario.id,
-        token=_gerar_token_redefinicao_senha(),
+        token=_hash_token_redefinicao_senha(token_bruto),
         validade_em=datetime.now(UTC) + timedelta(hours=_VALIDADE_REDEFINICAO_SENHA_HORAS),
     )
     db.add(redefinicao)
@@ -155,7 +172,7 @@ def solicitar_redefinicao_senha(db: Session, email: str, email_provider: EmailPr
 
     if email_provider is None:
         return
-    link = f"{settings.url_base_frontend}/redefinir-senha/{redefinicao.token}"
+    link = f"{settings.url_base_frontend}/redefinir-senha/{token_bruto}"
     corpo = (
         f"Olá, {usuario.nome}!\n\n"
         f"Recebemos um pedido para redefinir a senha da sua conta na B2B ON. Para criar uma senha "
@@ -174,7 +191,14 @@ def solicitar_redefinicao_senha(db: Session, email: str, email_provider: EmailPr
 
 
 def redefinir_senha(db: Session, token: str, nova_senha: str) -> None:
-    redefinicao = db.query(RedefinicaoSenha).filter_by(token=token).one_or_none()
+    token_hash = _hash_token_redefinicao_senha(token)
+    redefinicao = db.query(RedefinicaoSenha).filter_by(token=token_hash).one_or_none()
+    if redefinicao is None:
+        # Migração suave: aceita um token legado em texto puro uma única vez e o converte para hash.
+        redefinicao = db.query(RedefinicaoSenha).filter_by(token=token).one_or_none()
+        if redefinicao is not None:
+            redefinicao.token = token_hash
+            db.flush()
     if redefinicao is None:
         raise NaoEncontrado("Link de redefinição de senha não encontrado.")
     if redefinicao.status == "usado":
@@ -195,6 +219,7 @@ def redefinir_senha(db: Session, token: str, nova_senha: str) -> None:
         raise NaoEncontrado("Usuário não encontrado ou inativo.")
 
     usuario.senha_hash = hash_senha(nova_senha)
+    usuario.token_version = int(usuario.token_version or 0) + 1
     redefinicao.status = "usado"
     auditoria_service.registrar(db, usuario.tenant_id, "senha_redefinida", "usuario", usuario.id, None, {})
     db.commit()
