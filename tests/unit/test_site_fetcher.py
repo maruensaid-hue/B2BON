@@ -18,7 +18,7 @@ def _addrinfo_para(ip: str):
 
 @pytest.mark.parametrize(
     "ip_privado",
-    ["127.0.0.1", "169.254.169.254", "10.0.0.5", "192.168.1.1", "172.16.0.1", "0.0.0.0"],
+    ["127.0.0.1", "169.254.169.254", "10.0.0.5", "192.168.1.1", "172.16.0.1", "0.0.0.0", "100.64.0.1", "192.0.2.1", "fc00::1"],
 )
 def test_rejeita_ip_nao_publico(ip_privado):
     """SSRF real de produção: `Conta.dominio` é editável por qualquer
