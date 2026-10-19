@@ -100,9 +100,12 @@ pontos de atenção para quando existir:
 
 - Rate limit usa Redis com janela deslizante atômica compartilhada quando `REDIS_URL` está configurado. Produção recusa iniciar sem Redis; o fallback em memória é só para dev/testes.
 - Não há fila. Cron lento bloqueia a requisição.
-- **[novo]** O CI (`.github/workflows/ci.yml`) só roda em `push`/`pull_request`
-  para `master`. O desenvolvimento acontece em `staging`, e ali os
-  testes **não rodam automaticamente**.
+- **[atualizado 2026-10-19]** O CI principal roda em `push` e
+  `pull_request` para `master` e `staging`. O workflow separado
+  `.github/workflows/security.yml` adiciona detecção de segredos,
+  análise estática e auditoria de dependências. A primeira execução ainda
+  precisa ser observada para classificar achados reais e calibrar falsos
+  positivos; a existência do workflow não equivale a uma varredura aprovada.
 
 ## 8. Auditoria / LGPD
 
@@ -118,6 +121,6 @@ expiração por cron, opt-out cancela mensagens pendentes.
 | S2 | IA não medida e disparada por terceiros (#7, #8) | Média | 4/5 |
 | S3 | Prompt injection indireto (#4, #7, #8) | Média | 4 |
 | S4 | Concessão de rotas PREDATOR a plano só-CRM (C3) | Baixa–Média | 1 |
-| S5 | CI não roda em `staging` | Média (processo) | decisão do PO (OI-005) |
+| S5 | Scanners de segurança ainda não tinham workflow dedicado | Média (processo) | 1 — workflow adicionado; aguarda primeira execução e triagem |
 | S6 | Sem modelo de classificação de dado / propósito (pré-requisito da barreira Buy/Sell) | Alta (futuro) | **2, 10 (endereçado: D-034, fitness + teste §80)** |
 | S7 | Aresta `privada` da rede visível para a empresa citada; qualquer usuário editava a identidade pública da empresa | Média | **7 (corrigido: D-026, D-027, `test_privacidade_rede.py`)** |
