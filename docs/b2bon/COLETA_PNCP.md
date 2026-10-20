@@ -52,7 +52,7 @@ a retentativa por chamada já espera 1 s, 2 s (respeita `Retry-After` até 30 s)
 
 ## Limitações conhecidas
 
-- A coleta é **por tenant** (cada tenant ingere as licitações do seu filtro); não há corpus público comum (§14.4 do prompt exige decisão de arquitetura própria).
+- A coleta continua configurada **por tenant** (cada tenant define o próprio filtro), mas o fato público do edital vai para o **corpus comum** (`licitacao_publica`, uma linha por edital para toda a plataforma): ver `CORPUS_PUBLICO_LICITACOES.md`.
 - Retificações: o registro é atualizado pelo id; não há histórico de versões do edital.
 - Não coleta documentos/anexos do PNCP, só os metadados da contratação.
 - **Ativação real pendente de validação externa**: o job agendado só existe depois do merge no `master`; é preciso `PNCP_HABILITADO=true`,

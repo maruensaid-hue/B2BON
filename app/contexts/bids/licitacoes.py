@@ -2,9 +2,10 @@
 
 from datetime import UTC, datetime
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.contexts.bids import conformidade, fluxo, go_no_go, repositorio
+from app.contexts.bids import conformidade, corpus, fluxo, go_no_go, repositorio
 from app.contexts.bids.fontes.base import LicitacaoExterna
 from app.contexts.bids.tipos import CATEGORIAS_REQUISITO, MODALIDADES, STATUS_CONFORMIDADE
 from app.contexts.shared import paginacao
@@ -101,7 +102,10 @@ def ingerir_detalhado(db: Session, tenant_id: str, usuario_id: int | None, exter
     Nada disso mexe no `status` interno do vendedor nem apaga dado; só atualiza e deixa o histórico. Sem mudança, nenhum evento (re-coletar não gera ruído).
     Devolve criadas, atualizadas e `alteradas` ([{id, situacao_alterada, retificada}])."""
     criadas, atualizadas, alteradas = [], [], []
+    # O fato público vai (uma vez, para todos os tenants) ao corpus; a cópia privada abaixo aponta para ele por `corpus_id`.
+    publicos = corpus.registrar(db, externas).mapa
     for ext in externas:
+        publico = publicos.get(corpus.chave(ext.fonte, ext.id_externo))
         existente = db.query(Licitacao).filter_by(tenant_id=tenant_id, fonte=ext.fonte, fonte_id_externo=ext.id_externo).one_or_none()
         campos = {
             "titulo": ext.titulo, "objeto": ext.objeto, "orgao_nome": ext.orgao_nome, "orgao_cnpj": ext.orgao_cnpj,
@@ -110,13 +114,15 @@ def ingerir_detalhado(db: Session, tenant_id: str, usuario_id: int | None, exter
         }
         externos = {"situacao_externa": ext.situacao_externa, "atualizado_externo_em": ext.atualizado_externo_em}
         if existente is None:
-            licitacao = Licitacao(tenant_id=tenant_id, fonte=ext.fonte, fonte_id_externo=ext.id_externo,
+            licitacao = Licitacao(tenant_id=tenant_id, fonte=ext.fonte, fonte_id_externo=ext.id_externo, corpus_id=publico.id if publico else None,
                                   status=fluxo.de(ext.modalidade).inicial, **campos, **externos)
             db.add(licitacao)
             db.flush()
             criadas.append(licitacao.id)
             continue
         mudou = {campo: (getattr(existente, campo), valor) for campo, valor in campos.items() if getattr(existente, campo) != valor}
+        if publico is not None and existente.corpus_id != publico.id:
+            existente.corpus_id = publico.id
         situacao_anterior = existente.situacao_externa
         situacao_mudou = ext.situacao_externa is not None and situacao_anterior is not None and situacao_anterior != ext.situacao_externa
         for campo, valor in {**campos, **externos}.items():
@@ -142,6 +148,37 @@ def ingerir_detalhado(db: Session, tenant_id: str, usuario_id: int | None, exter
                                 {"criadas": len(criadas), "atualizadas": len(atualizadas), "alteradas_na_fonte": len(alteradas)})
     db.commit()
     return {"criadas": criadas, "atualizadas": atualizadas, "alteradas": alteradas}
+
+
+def acompanhar(db: Session, tenant_id: str, usuario_id: int | None, corpus_id: int) -> tuple[Licitacao, bool]:
+    """Passa a acompanhar um edital do corpus público: cria a cópia PRIVADA do tenant (ou devolve a que já existe). Idempotente.
+    Devolve (licitacao, criada). A cópia nasce com os fatos públicos e o status inicial do fluxo; nada privado vem do corpus."""
+    publica = corpus.obter(db, corpus_id)
+    if publica is None:
+        raise NaoEncontrado(f"Edital {corpus_id} não encontrado no corpus público")
+    existente = db.query(Licitacao).filter_by(tenant_id=tenant_id, fonte=publica.fonte, fonte_id_externo=publica.fonte_id_externo).one_or_none()
+    if existente is not None:
+        if existente.corpus_id != publica.id:
+            existente.corpus_id = publica.id
+            db.commit()
+        return existente, False
+    licitacao = Licitacao(
+        tenant_id=tenant_id, fonte=publica.fonte, fonte_id_externo=publica.fonte_id_externo, corpus_id=publica.id, titulo=publica.titulo,
+        objeto=publica.objeto, orgao_nome=publica.orgao_nome, orgao_cnpj=publica.orgao_cnpj, modalidade=publica.modalidade,
+        data_publicacao=publica.data_publicacao, prazo_proposta=publica.prazo_proposta, valor_estimado=publica.valor_estimado, fonte_url=publica.url,
+        situacao_externa=publica.situacao_externa, atualizado_externo_em=publica.atualizado_externo_em, status=fluxo.de(publica.modalidade).inicial,
+    )
+    try:
+        with db.begin_nested():
+            db.add(licitacao)
+            db.flush()
+    except IntegrityError:  # duas requisições simultâneas do mesmo tenant: a outra venceu
+        db.rollback()
+        return db.query(Licitacao).filter_by(tenant_id=tenant_id, fonte=publica.fonte, fonte_id_externo=publica.fonte_id_externo).one(), False
+    auditoria_service.registrar(db, tenant_id, "licitacao_acompanhada_do_corpus", "licitacao", licitacao.id, _ator(usuario_id), {"corpus_id": publica.id})
+    db.commit()
+    db.refresh(licitacao)
+    return licitacao, True
 
 
 def ingerir(db: Session, tenant_id: str, usuario_id: int | None, externas: list[LicitacaoExterna]) -> dict:

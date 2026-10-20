@@ -54,6 +54,11 @@ def _data(valor: str | None) -> datetime | None:
         return None
 
 
+def _uf(valor) -> str | None:
+    texto = str(valor or "").strip().upper()
+    return texto if len(texto) == 2 and texto.isalpha() else None
+
+
 def normalizar(registro: dict) -> LicitacaoExterna | None:
     controle = registro.get("numeroControlePNCP")
     if not controle:
@@ -82,6 +87,9 @@ def normalizar(registro: dict) -> LicitacaoExterna | None:
         bruto=registro,
         situacao_externa=(registro.get("situacaoCompraNome") or None),
         atualizado_externo_em=_data(registro.get("dataAtualizacaoGlobal") or registro.get("dataAtualizacao")),
+        uf=_uf((registro.get("unidadeOrgao") or {}).get("ufSigla")),
+        municipio=((registro.get("unidadeOrgao") or {}).get("municipioNome") or None),
+        modalidade_codigo=codigo if isinstance(codigo, int) else None,
     )
 
 

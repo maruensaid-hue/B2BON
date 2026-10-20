@@ -65,6 +65,7 @@ from app.models.evento_contrato_compra import EventoContratoCompra
 from app.models.documento_compras import DocumentoCompras
 from app.models.pesquisa_preco import PesquisaPreco
 from app.models.licitacao import Licitacao
+from app.models.licitacao_publica import EventoLicitacaoPublica, LicitacaoPublica
 from app.models.documento_licitacao import DocumentoLicitacao
 from app.models.requisito_licitacao import RequisitoLicitacao
 from app.models.documento_cofre import DocumentoCofre
@@ -193,6 +194,8 @@ __all__ = [
     "DocumentoCompras",
     "PesquisaPreco",
     "Licitacao",
+    "LicitacaoPublica",
+    "EventoLicitacaoPublica",
     "DocumentoLicitacao",
     "RequisitoLicitacao",
     "DocumentoCofre",

@@ -11,6 +11,8 @@ Roda no cron diário (`POST /cron/podar-historicos`) e é idempotente. Regras (t
 
 * outbox de eventos de domínio já processados (`processado_em` preenchido) há mais de `RETENCAO_EVENTOS_PROCESSADOS_DIAS` (60): só o processador os lê,
   uma vez; evento pendente ou com falha (`processado_em` nulo) nunca é apagado;
+* corpus público de licitações: edital sem NENHUMA cópia privada (`licitacao.corpus_id`) e não coletado há mais de `RETENCAO_CORPUS_SEM_VINCULO_DIAS` (365),
+  com o histórico dele; edital que algum tenant acompanha nunca sai;
 * entregas de webhook `entregue`/`desistida` há mais de `RETENCAO_ENTREGAS_WEBHOOK_DIAS` (90); `pendente` nunca é apagada.
 
 Fora da poda por idade, de propósito: `execucao_sync` (a última com sucesso é o cursor da sincronização), `envio_crm` (o último enviado evita reenvio de
@@ -30,6 +32,8 @@ from app.models.coleta_site import ColetaSiteConta, IndicadorFinanceiroConta
 from app.models.creditos_ia import CacheRespostaIa
 from app.models.entrega_webhook import EntregaWebhook
 from app.models.evento_dominio import EventoDominio
+from app.models.licitacao import Licitacao
+from app.models.licitacao_publica import EventoLicitacaoPublica, LicitacaoPublica
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +118,17 @@ def _podar_entregas_webhook(db: Session, agora: datetime) -> int:
     return apagadas
 
 
+def _podar_corpus_sem_vinculo(db: Session, agora: datetime) -> int:
+    corte = agora - timedelta(days=settings.retencao_corpus_sem_vinculo_dias)
+    referenciados = db.query(Licitacao.corpus_id).filter(Licitacao.corpus_id.isnot(None))
+    ids = [i for (i,) in db.query(LicitacaoPublica.id).filter(LicitacaoPublica.ultima_coleta_em < corte, LicitacaoPublica.id.notin_(referenciados)).all()]
+    if ids:
+        db.query(EventoLicitacaoPublica).filter(EventoLicitacaoPublica.licitacao_publica_id.in_(ids)).delete(synchronize_session=False)
+        db.query(LicitacaoPublica).filter(LicitacaoPublica.id.in_(ids)).delete(synchronize_session=False)
+    db.commit()
+    return len(ids)
+
+
 def podar(db: Session, agora: datetime | None = None) -> dict:
     agora = agora or _agora()
     resultado = {
@@ -122,6 +137,7 @@ def podar(db: Session, agora: datetime | None = None) -> dict:
         "coletas_de_site": _podar_coletas_site(db, agora),
         "eventos_processados": _podar_eventos_processados(db, agora),
         "entregas_webhook": _podar_entregas_webhook(db, agora),
+        "corpus_licitacoes_sem_vinculo": _podar_corpus_sem_vinculo(db, agora),
     }
     logger.info("RETENCAO_PODA %s", resultado)
     return resultado

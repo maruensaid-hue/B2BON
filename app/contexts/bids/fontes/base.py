@@ -28,6 +28,10 @@ class LicitacaoExterna:
     # é assim que cancelamento, suspensão e retificação de um edital já ingerido chegam ao produto.
     situacao_externa: str | None = field(default=None, compare=False)
     atualizado_externo_em: datetime | None = field(default=None, compare=False)
+    # Localização do órgão e código da modalidade na fonte: base do filtro por região dos alertas e do corpus público.
+    uf: str | None = field(default=None, compare=False)
+    municipio: str | None = field(default=None, compare=False)
+    modalidade_codigo: int | None = field(default=None, compare=False)
 
 
 class FonteLicitacoes(ABC):

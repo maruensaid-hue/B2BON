@@ -266,6 +266,8 @@ class Settings(BaseSettings):
     # Outbox de eventos já processados e entregas de webhook já concluídas: ninguém lê o registro antigo (só o processador, uma vez).
     retencao_eventos_processados_dias: int = 60
     retencao_entregas_webhook_dias: int = 90
+    # Corpus público de licitações: só sai edital que NENHUM tenant acompanha e que não é coletado há tanto tempo.
+    retencao_corpus_sem_vinculo_dias: int = 365
 
     # Autenticação real do núcleo (Onda A). Chave dedicada — não reaproveita
     # secret_key (usada para HMAC de links públicos) para segregar o risco.

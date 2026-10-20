@@ -26,6 +26,8 @@ class Licitacao(Base):
     fonte: Mapped[str] = mapped_column(String)  # MANUAL | PNCP
     fonte_id_externo: Mapped[str | None] = mapped_column(String, nullable=True)
     fonte_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Fato público compartilhado (V5.2.1): a linha do corpus a que esta cópia PRIVADA se refere. Nulo em licitação manual.
+    corpus_id: Mapped[int | None] = mapped_column(ForeignKey("licitacao_publica.id"), nullable=True, index=True)
     data_publicacao: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     prazo_proposta: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     prazo_esclarecimento: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

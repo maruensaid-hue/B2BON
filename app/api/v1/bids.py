@@ -148,6 +148,34 @@ def listar_fontes() -> list[dict]:
     return bids.fontes.fontes()
 
 
+@router.get("/corpus")
+def listar_corpus(response: Response, q: str | None = None, uf: str | None = None, modalidade: str | None = None,
+                  situacao: str | None = None, desde: datetime | None = None, cursor: str | None = None, limite: int | None = None,
+                  tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
+    """Corpus público comum (V5.2.1): editais coletados das fontes públicas, compartilhados entre os tenants. Só fatos públicos; `ja_acompanho`
+    informa apenas se o PRÓPRIO tenant acompanha. Próximo cursor no header `X-Proximo-Cursor`."""
+    pagina = bids.corpus.listar(db, tenant_id, q=q, uf=uf, modalidade=modalidade, situacao=situacao, desde=desde, cursor=cursor, limite=limite)
+    return paginacao.expor(response, pagina)
+
+
+@router.get("/corpus/{corpus_id}")
+def obter_corpus(corpus_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    publica = bids.corpus.obter(db, corpus_id)
+    if publica is None:
+        raise NaoEncontrado(f"Edital {corpus_id} não encontrado no corpus público")
+    acompanhada = bids.corpus.ids_acompanhados(db, tenant_id, [publica.id])
+    return {**bids.corpus.como_dict(publica, publica.id in acompanhada), "historico": bids.corpus.historico(db, publica.id)}
+
+
+@router.post("/corpus/{corpus_id}/acompanhar")
+def acompanhar_do_corpus(corpus_id: int, response: Response, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
+                         db: Session = Depends(get_db)) -> dict:
+    """Cria a cópia PRIVADA do tenant a partir do edital público (idempotente: 201 quando criou, 200 quando já acompanhava)."""
+    licitacao, criada = bids.licitacoes.acompanhar(db, tenant_id, _usuario_id(ator_id), corpus_id)
+    response.status_code = 201 if criada else 200
+    return bids.licitacoes.como_dict(licitacao)
+
+
 @router.get("/licitacoes")
 def listar(response: Response, status: str | None = None, cursor: str | None = None, limite: int | None = None,
            tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:

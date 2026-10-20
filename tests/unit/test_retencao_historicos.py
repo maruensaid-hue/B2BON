@@ -166,7 +166,7 @@ def test_rota_de_cron_exige_segredo_e_executa(client, monkeypatch):
     monkeypatch.setattr(settings, "cron_secret", "segredo-retencao")
     assert client.post("/api/v1/cron/podar-historicos").status_code == 403
     resposta = client.post("/api/v1/cron/podar-historicos", headers={"X-Cron-Secret": "segredo-retencao"})
-    assert resposta.status_code == 200 and set(resposta.json()) == {"cache_ia_expirado", "execucoes_coleta_fonte", "coletas_de_site", "eventos_processados", "entregas_webhook"}
+    assert resposta.status_code == 200 and set(resposta.json()) == {"cache_ia_expirado", "execucoes_coleta_fonte", "coletas_de_site", "eventos_processados", "entregas_webhook", "corpus_licitacoes_sem_vinculo"}
 
 
 # --- Outbox de eventos e entregas de webhook ---------------------------------------------------------------------------------------------
@@ -228,3 +228,35 @@ def test_retencao_de_eventos_respeita_a_configuracao_e_e_idempotente(db_session,
     segunda = retencao.podar(db_session, AGORA)
 
     assert primeira["eventos_processados"] == 1 and segunda["eventos_processados"] == 0
+
+
+# --- Corpus público de licitações ----------------------------------------------------------------------------------------------------------
+
+
+def _publica(db, n, dias, acompanhada=False):
+    from app.models.licitacao import Licitacao
+    from app.models.licitacao_publica import EventoLicitacaoPublica, LicitacaoPublica
+
+    p = LicitacaoPublica(fonte="PNCP", fonte_id_externo=f"R-{n}", titulo="t", modalidade="PUBLIC_TENDER", hash_conteudo="h", versao=1,
+                         primeira_coleta_em=_dias(dias), ultima_coleta_em=_dias(dias))
+    db.add(p)
+    db.flush()
+    db.add(EventoLicitacaoPublica(licitacao_publica_id=p.id, tipo="criada", mudancas={}, versao=1))
+    if acompanhada:
+        db.add(Licitacao(tenant_id=TENANT, titulo="t", modalidade="PUBLIC_TENDER", fonte="PNCP", fonte_id_externo=f"R-{n}", status="nova", corpus_id=p.id))
+    db.commit()
+    return p.id
+
+
+def test_corpus_sem_vinculo_e_antigo_sai_com_o_historico_mas_o_acompanhado_e_o_recente_ficam(db_session, base):
+    from app.models.licitacao_publica import EventoLicitacaoPublica, LicitacaoPublica
+
+    velho_sem_vinculo = _publica(db_session, 1, 500)
+    velho_acompanhado = _publica(db_session, 2, 500, acompanhada=True)  # alguém acompanha: nunca sai
+    recente_sem_vinculo = _publica(db_session, 3, 30)
+
+    resultado = retencao.podar(db_session, AGORA)
+
+    assert resultado["corpus_licitacoes_sem_vinculo"] == 1
+    assert _ids(db_session, LicitacaoPublica) == sorted([velho_acompanhado, recente_sem_vinculo])
+    assert velho_sem_vinculo not in {e.licitacao_publica_id for e in db_session.query(EventoLicitacaoPublica)}  # o histórico dele saiu junto
