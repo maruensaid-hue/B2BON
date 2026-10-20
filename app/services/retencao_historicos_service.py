@@ -9,6 +9,13 @@ Roda no cron diário (`POST /cron/podar-historicos`) e é idempotente. Regras (t
   recente, a última bem-sucedida e a última com domínio confirmado manualmente (a confirmação vale para as coletas seguintes). Coletas que
   sobrevivem e apontavam para uma apagada (reprocesso) passam a ter `reprocesso_de_id` nulo.
 
+* outbox de eventos de domínio já processados (`processado_em` preenchido) há mais de `RETENCAO_EVENTOS_PROCESSADOS_DIAS` (60): só o processador os lê,
+  uma vez; evento pendente ou com falha (`processado_em` nulo) nunca é apagado;
+* entregas de webhook `entregue`/`desistida` há mais de `RETENCAO_ENTREGAS_WEBHOOK_DIAS` (90); `pendente` nunca é apagada.
+
+Fora da poda por idade, de propósito: `execucao_sync` (a última com sucesso é o cursor da sincronização), `envio_crm` (o último enviado evita reenvio de
+sinais), `audit_log` e o ledger de IA (registro de conformidade/financeiro).
+
 O conteúdo atual das páginas (`conteudo_pagina_site`) não entra aqui: já é limitado a 8 linhas por conta e substituído a cada coleta."""
 
 import logging
@@ -21,6 +28,8 @@ from app.core.config import settings
 from app.models.coleta_fonte import ExecucaoColetaFonte
 from app.models.coleta_site import ColetaSiteConta, IndicadorFinanceiroConta
 from app.models.creditos_ia import CacheRespostaIa
+from app.models.entrega_webhook import EntregaWebhook
+from app.models.evento_dominio import EventoDominio
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +92,36 @@ def _podar_coletas_site(db: Session, agora: datetime) -> dict:
     return {"coletas": len(candidatas), "indicadores": indicadores}
 
 
+def _podar_eventos_processados(db: Session, agora: datetime) -> int:
+    corte = agora - timedelta(days=settings.retencao_eventos_processados_dias)
+    apagados = (
+        db.query(EventoDominio)
+        .filter(EventoDominio.processado_em.isnot(None), EventoDominio.processado_em < corte)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return apagados
+
+
+def _podar_entregas_webhook(db: Session, agora: datetime) -> int:
+    corte = agora - timedelta(days=settings.retencao_entregas_webhook_dias)
+    apagadas = (
+        db.query(EntregaWebhook)
+        .filter(EntregaWebhook.status.in_(("entregue", "desistida")), EntregaWebhook.criado_em < corte)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return apagadas
+
+
 def podar(db: Session, agora: datetime | None = None) -> dict:
     agora = agora or _agora()
     resultado = {
         "cache_ia_expirado": _podar_cache_ia(db, agora),
         "execucoes_coleta_fonte": _podar_execucoes(db, agora),
         "coletas_de_site": _podar_coletas_site(db, agora),
+        "eventos_processados": _podar_eventos_processados(db, agora),
+        "entregas_webhook": _podar_entregas_webhook(db, agora),
     }
     logger.info("RETENCAO_PODA %s", resultado)
     return resultado

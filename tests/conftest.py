@@ -30,6 +30,7 @@ from app.api.deps import (
     get_whatsapp_provider,
 )
 from app.api.v1.webhooks import _whatsapp_provider_do_webhook_email, _whatsapp_provider_do_webhook_whatsapp
+from app.core.config import settings as _settings_webhooks
 from app.core.rate_limit import limitador_api, limitador_auth, limitador_demo, limitador_ia, limitador_portal
 from app.db.base import Base
 from app.main import app
@@ -89,6 +90,17 @@ def _garantir_licenca_ativa(db_session: Session, tenant_id: str) -> None:
 # registro numa base em memória nova, então seu id (convertido para string
 # por get_ator_id) é sempre "1", de forma determinística por teste.
 ATOR_ID = "1"
+
+
+SEGREDO_WEBHOOK_INTERNO_TESTE = "segredo-webhook-interno-teste"
+APP_SECRET_META_TESTE = "app-secret-meta-teste"
+
+
+@pytest.fixture(autouse=True)
+def _segredos_de_webhook(monkeypatch):
+    """Webhooks internos e o da Meta falham fechados sem segredo (V5.2.1): os testes configuram valores conhecidos."""
+    monkeypatch.setattr(_settings_webhooks, "webhook_interno_secret", SEGREDO_WEBHOOK_INTERNO_TESTE)
+    monkeypatch.setattr(_settings_webhooks, "whatsapp_app_secret", APP_SECRET_META_TESTE)
 
 
 @pytest.fixture(autouse=True)
@@ -327,7 +339,7 @@ def client(
     token = auth_service.gerar_token(usuario_teste)
 
     with TestClient(app) as test_client:
-        test_client.headers.update({"Authorization": f"Bearer {token}"})
+        test_client.headers.update({"Authorization": f"Bearer {token}", "X-Webhook-Secret": SEGREDO_WEBHOOK_INTERNO_TESTE})
         yield test_client
     app.dependency_overrides.clear()
 

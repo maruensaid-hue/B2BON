@@ -1,7 +1,18 @@
+import hashlib
+import hmac
+import json
+
 from app.core.config import settings
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 
 TENANT_ID = "tenant-teste"
+
+
+def _assinado(payload: dict, segredo: str | None = None) -> dict:
+    """Corpo bruto + `X-Hub-Signature-256` como a Meta envia."""
+    corpo = json.dumps(payload).encode()
+    chave = (segredo if segredo is not None else settings.whatsapp_app_secret).encode()
+    return {"content": corpo, "headers": {"X-Hub-Signature-256": "sha256=" + hmac.new(chave, corpo, hashlib.sha256).hexdigest(), "Content-Type": "application/json"}}
 
 
 def test_handshake_com_verify_token_correto_eco_o_challenge(client, monkeypatch):
@@ -61,7 +72,7 @@ def test_payload_real_da_meta_resolve_tenant_via_phone_number_id_e_processa_opto
         ],
     }
 
-    resposta = client.post("/api/v1/webhooks/whatsapp/meta", json=payload)
+    resposta = client.post("/api/v1/webhooks/whatsapp/meta", **_assinado(payload))
 
     assert resposta.status_code == 200
     assert resposta.json() == {"recebido": True}
@@ -83,7 +94,7 @@ def test_payload_com_phone_number_id_desconhecido_e_ignorado_sem_erro(client):
         ]
     }
 
-    resposta = client.post("/api/v1/webhooks/whatsapp/meta", json=payload)
+    resposta = client.post("/api/v1/webhooks/whatsapp/meta", **_assinado(payload))
 
     assert resposta.status_code == 200
 
@@ -106,6 +117,6 @@ def test_payload_de_status_sem_messages_e_ignorado_sem_erro(client):
         ]
     }
 
-    resposta = client.post("/api/v1/webhooks/whatsapp/meta", json=payload)
+    resposta = client.post("/api/v1/webhooks/whatsapp/meta", **_assinado(payload))
 
     assert resposta.status_code == 200

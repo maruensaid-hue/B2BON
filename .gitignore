@@ -7,3 +7,6 @@ __pycache__/
 .ruff_cache/
 storage/
 .claude/settings.local.json
+
+# Backup local de configuracao do assistente (nunca versionar; repositorio publico)
+.claude/settings.backup.json

@@ -26,6 +26,10 @@ services:
         sync: false # lista JSON, ex.: ["https://b2bon.pages.dev"]
       - key: CRON_SECRET
         sync: false # mesmo valor do repo secret CRON_SECRET no GitHub Actions (Onda I)
+      - key: WHATSAPP_APP_SECRET
+        sync: false # App Secret da Meta; valida X-Hub-Signature-256 em /webhooks/whatsapp/meta (vazio = webhook recusado)
+      - key: WEBHOOK_INTERNO_SECRET
+        sync: false # segredo X-Webhook-Secret dos webhooks internos; vazio = recusados
 
   # Nome igual ao do Static Site ja existente (criado direto pelo dashboard,
   # nunca antes declarado aqui) -- Render aplica esta config nele em vez de

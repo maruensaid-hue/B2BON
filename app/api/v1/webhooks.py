@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import re
 
@@ -36,6 +38,23 @@ from app.services import (
 from app.services.errors import NaoAutorizado, NaoEncontrado, ValidacaoFalhou
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+
+def _exigir_segredo_interno(x_webhook_secret: str | None = Header(None)) -> None:
+    """Endpoints internos (o `tenant_id` vem do corpo e nenhum provedor os chama): sem segredo configurado ou com segredo
+    errado ficam inacessíveis. Antes estavam abertos — qualquer pessoa com um `tenant_id` podia forjar resposta/opt-out de um
+    decisor, disparar IA e mensagens de WhatsApp do tenant ou empurrar a pausa automática de um canal."""
+    esperado = settings.webhook_interno_secret
+    if not esperado or not x_webhook_secret or not hmac.compare_digest(x_webhook_secret, esperado):
+        raise NaoAutorizado("Segredo de webhook interno ausente ou inválido.")
+
+
+def assinatura_meta_valida(corpo: bytes, cabecalho: str | None, app_secret: str) -> bool:
+    """`X-Hub-Signature-256: sha256=<hmac-sha256 hex do corpo bruto com o App Secret>`. Sem segredo ou sem cabeçalho: inválida."""
+    if not app_secret or not cabecalho or not cabecalho.startswith("sha256="):
+        return False
+    esperado = hmac.new(app_secret.encode(), corpo, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(cabecalho[len("sha256="):], esperado)
 
 _PALAVRAS_OPTOUT = {"sair", "parar", "stop", "cancelar"}
 
@@ -82,7 +101,7 @@ def _processar_mensagem_whatsapp(
     return {**resultado_resposta, **resultado_qualificacao}
 
 
-@router.post("/whatsapp")
+@router.post("/whatsapp", dependencies=[Depends(_exigir_segredo_interno)])
 def webhook_whatsapp(
     dados: WebhookWhatsAppRequestSchema,
     db: Session = Depends(get_db),
@@ -126,7 +145,10 @@ async def receber_webhook_whatsapp_meta(
     saber de qual tenant é sem ambiguidade. Remetente desconhecido
     (não é um `Decisor` rastreado) também é ignorado, não é erro: gente
     de fora do CRM pode mandar mensagem pro número a qualquer momento."""
-    corpo = await request.json()
+    corpo_bruto = await request.body()
+    if not assinatura_meta_valida(corpo_bruto, request.headers.get("x-hub-signature-256"), settings.whatsapp_app_secret):
+        raise NaoAutorizado("Assinatura do webhook inválida.")
+    corpo = json.loads(corpo_bruto or b"{}")
     for entrada in corpo.get("entry", []):
         for mudanca in entrada.get("changes", []):
             valor = mudanca.get("value", {})
@@ -149,7 +171,7 @@ async def receber_webhook_whatsapp_meta(
     return {"recebido": True}
 
 
-@router.post("/email")
+@router.post("/email", dependencies=[Depends(_exigir_segredo_interno)])
 def webhook_email(
     dados: WebhookEmailRequestSchema,
     db: Session = Depends(get_db),
@@ -224,7 +246,7 @@ def registrar_abertura_email(token: str, db: Session = Depends(get_db)) -> Respo
     return Response(content=rastreamento_service.PIXEL_PNG_1X1, media_type="image/png")
 
 
-@router.post("/reputacao", response_model=SaudeCanalSchema)
+@router.post("/reputacao", response_model=SaudeCanalSchema, dependencies=[Depends(_exigir_segredo_interno)])
 def webhook_reputacao(dados: RegistrarEventoReputacaoRequestSchema, db: Session = Depends(get_db)) -> SaudeCanalSchema:
     """Callback do ESP/Meta com eventos de entregabilidade — dispara pausa
     automática de canal ao cruzar o limiar crítico (E10-H2)."""

@@ -63,7 +63,7 @@ def recomendar(db: Session, tenant_id: str, licitacao: Licitacao, matriz: dict, 
         fatores.append(_fator("Qualification", U, "Nenhum requisito de habilitação confirmado."))
         fatores.append(_fator("Documentation", U, "Sem requisitos documentais para conferir."))
 
-    oferta = db.get(Oferta, licitacao.oferta_id) if licitacao.oferta_id else None
+    oferta = db.query(Oferta).filter_by(id=licitacao.oferta_id, tenant_id=licitacao.tenant_id).one_or_none() if licitacao.oferta_id else None
     if licitacao.valor_estimado is not None and oferta is not None and oferta.ticket_medio:
         razao = licitacao.valor_estimado / oferta.ticket_medio
         fatores.append(_fator("Commercial Fit", F if razao >= 0.5 else A,

@@ -138,6 +138,12 @@ class Settings(BaseSettings):
     # valor colado na Callback URL em Meta for Developers > WhatsApp >
     # Step 2 (Production setup) > Configure Webhooks > Verify token.
     whatsapp_webhook_verify_token: str = ""
+    # App Secret do app da Meta: a Meta assina cada POST com HMAC-SHA256 (`X-Hub-Signature-256`). Vazio = webhook recusado
+    # (falha fechada, como o SendGrid e o Mercado Pago): sem assinatura, qualquer um forja resposta/opt-out de um decisor.
+    whatsapp_app_secret: str = ""
+    # Segredo dos endpoints internos de webhook (`/webhooks/whatsapp`, `/webhooks/email`, `/webhooks/reputacao`), que NÃO são
+    # chamados por nenhum provedor real. Vazio nunca autoriza (mesma regra do `cron_secret`).
+    webhook_interno_secret: str = ""
 
     # SMTP — vazio usa StubEmailProvider em dev/teste.
     smtp_host: str = ""
@@ -257,6 +263,9 @@ class Settings(BaseSettings):
     # Retenção dos históricos que crescem sem parar (poda diária, ver retencao_historicos_service): coletas de site e execuções da coleta de fonte pública.
     retencao_coleta_site_dias: int = 180
     retencao_execucao_coleta_dias: int = 90
+    # Outbox de eventos já processados e entregas de webhook já concluídas: ninguém lê o registro antigo (só o processador, uma vez).
+    retencao_eventos_processados_dias: int = 60
+    retencao_entregas_webhook_dias: int = 90
 
     # Autenticação real do núcleo (Onda A). Chave dedicada — não reaproveita
     # secret_key (usada para HMAC de links públicos) para segregar o risco.

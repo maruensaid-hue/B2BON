@@ -1,0 +1,955 @@
+{
+ "estatistica": {
+  "rotas": 587,
+  "requisicoes": 1761,
+  "sem_requisicao": [],
+  "so_422": [
+   "/api/v1/contas/{conta_id}/decisores/{decisor_id}/papel",
+   "/api/v1/campanhas",
+   "/api/v1/configuracao-envio",
+   "/api/v1/configuracao-whatsapp",
+   "/api/v1/configuracao-email-smtp",
+   "/api/v1/configuracao-email-smtp/testar",
+   "/api/v1/linkedin/conexoes/importar",
+   "/api/v1/reunioes/reagendar/{token}",
+   "/api/v1/reunioes/reagendar/{token}",
+   "/api/v1/reunioes/{reuniao_id}/marcar-resultado",
+   "/api/v1/painel/preferencias-dashboard",
+   "/api/v1/nps/responder/{token}",
+   "/api/v1/nps/responder/{token}",
+   "/api/v1/crm/estagios/reordenar",
+   "/api/v1/bids/licitacoes",
+   "/api/v1/bids/cofre",
+   "/api/v1/bids/ingestao/pncp",
+   "/api/v1/procurement/documentos",
+   "/api/v1/rede/convites-sourcing/{participante_id}",
+   "/api/v1/rede/convites-sourcing/{participante_id}/perguntas",
+   "/api/v1/rede/convites-sourcing/{participante_id}/propostas",
+   "/api/v1/rede/convites-sourcing/{participante_id}/propostas/{proposta_id}/anexos",
+   "/api/v1/rede/convites-sourcing/{participante_id}/declinar",
+   "/api/v1/rede-social/relacionamentos",
+   "/api/v1/rede-social/relacionamentos/por-cnpj",
+   "/api/v1/rede-social/posts",
+   "/api/v1/agente-corporativo/modo",
+   "/api/v1/saude-contas/interacoes",
+   "/api/v1/registro-oportunidade",
+   "/api/v1/registro-oportunidade/{registro_id}/status",
+   "/api/v1/template-proposta/logo",
+   "/api/v1/template-proposta/itens",
+   "/api/v1/chaves-api",
+   "/api/v1/webhooks-saida",
+   "/api/v1/hub-integracoes/conexoes",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/status",
+   "/api/v1/hub-integracoes/oauth/{sistema}/iniciar",
+   "/api/v1/hub-integracoes/oauth/concluir",
+   "/api/v1/inteligencia/conhecimento",
+   "/api/v1/finops/orcamentos"
+  ],
+  "so_bloqueadas": [
+   "/api/v1/icp/{icp_id}",
+   "/api/v1/icp/{icp_id}",
+   "/api/v1/icp/{icp_id}",
+   "/api/v1/icp/{icp_id}/clonar",
+   "/api/v1/ofertas/{oferta_id}",
+   "/api/v1/ofertas/{oferta_id}/ativar",
+   "/api/v1/ofertas/{oferta_id}/desativar",
+   "/api/v1/ofertas/{oferta_id}",
+   "/api/v1/ofertas/{oferta_id}/materiais",
+   "/api/v1/ofertas/{oferta_id}/materiais/{material_id}",
+   "/api/v1/icp/{icp_id}/contas/gerar",
+   "/api/v1/contas/{conta_id}/enriquecer",
+   "/api/v1/contas/{conta_id}/enriquecer-brasilapi",
+   "/api/v1/contas/{conta_id}/decisores/mapear",
+   "/api/v1/coletas-site/{coleta_id}",
+   "/api/v1/coletas-site/{coleta_id}/confirmar-dominio",
+   "/api/v1/coletas-site/{coleta_id}/reprocessar",
+   "/api/v1/icp/{icp_id}/contas",
+   "/api/v1/contas/{conta_id}",
+   "/api/v1/contas/{conta_id}",
+   "/api/v1/contas/{conta_id}/proximo-passo",
+   "/api/v1/contas/{conta_id}/decisores",
+   "/api/v1/contas/{conta_id}/decisores/{decisor_id}",
+   "/api/v1/contas/{conta_id}/decisores/{decisor_id}/suprimir",
+   "/api/v1/contas/{conta_id}/crm-externo",
+   "/api/v1/contas/{conta_id}/enviar-crm",
+   "/api/v1/contas/{conta_id}/estrategia-venda",
+   "/api/v1/contas/{conta_id}/decisores",
+   "/api/v1/contas/{conta_id}/grafo",
+   "/api/v1/contas/{conta_id}/atividades",
+   "/api/v1/contas/{conta_id}/priorizar",
+   "/api/v1/contas/{conta_id}/descartar",
+   "/api/v1/contas/{conta_id}",
+   "/api/v1/contas/{conta_id}/export/pdf",
+   "/api/v1/listas-prospeccao",
+   "/api/v1/listas-prospeccao/{lista_id}/contas",
+   "/api/v1/listas-prospeccao/{lista_id}/contas/importar-participantes",
+   "/api/v1/listas-prospeccao/{lista_id}/contas/elegibilidade-exclusao",
+   "/api/v1/listas-prospeccao/{lista_id}/contas",
+   "/api/v1/aprovacoes/mensagens/{mensagem_id}/cancelar",
+   "/api/v1/aprovacoes/{aprovacao_id}/aprovar",
+   "/api/v1/aprovacoes/{aprovacao_id}/rejeitar",
+   "/api/v1/aprovacoes/{aprovacao_id}",
+   "/api/v1/aprovacoes/{aprovacao_id}/mensagem",
+   "/api/v1/cadencias/{cadencia_id}",
+   "/api/v1/cadencias/{cadencia_id}/toques",
+   "/api/v1/cadencias/{cadencia_id}/toques",
+   "/api/v1/cadencias/{cadencia_id}/toques/{toque_id}",
+   "/api/v1/cadencias/{cadencia_id}/toques/{toque_id}",
+   "/api/v1/cadencias/{cadencia_id}/toques/{toque_id}/template-whatsapp",
+   "/api/v1/cadencias/{cadencia_id}",
+   "/api/v1/cadencias/{cadencia_id}",
+   "/api/v1/cadencias/{cadencia_id}/cancelamento-ao-responder",
+   "/api/v1/cadencias/{cadencia_id}/cancelar",
+   "/api/v1/cadencias/{cadencia_id}/gerar",
+   "/api/v1/cadencias/{cadencia_id}/ativar",
+   "/api/v1/regras-aprendidas/correcoes-recentes/{log_id}/sugerir-regra",
+   "/api/v1/email-direto",
+   "/api/v1/email-direto/arquivar",
+   "/api/v1/campanhas/{campanha_id}",
+   "/api/v1/campanhas/{campanha_id}",
+   "/api/v1/campanhas/{campanha_id}",
+   "/api/v1/campanhas/{campanha_id}/destinatarios/decisores",
+   "/api/v1/campanhas/{campanha_id}/destinatarios/avulsos",
+   "/api/v1/campanhas/{campanha_id}/destinatarios/{destinatario_id}",
+   "/api/v1/campanhas/{campanha_id}/marcar-pronta",
+   "/api/v1/ai-credits/estimativas",
+   "/api/v1/ai-credits/compras",
+   "/api/v1/ai-credits/compras/{compra_id}/checkout",
+   "/api/v1/ai-credits/lotes/{lote_id}",
+   "/api/v1/linkedin/tarefas/{tarefa_id}/marcar",
+   "/api/v1/conversas/{conversa_id}",
+   "/api/v1/notificacoes/{notificacao_id}/confirmar-contato",
+   "/api/v1/decisores/{decisor_id}/reunioes/propor",
+   "/api/v1/decisores/{decisor_id}/devolver",
+   "/api/v1/decisores/{decisor_id}/marco-entrega",
+   "/api/v1/reunioes/{reuniao_id}/confirmar",
+   "/api/v1/reunioes/{reuniao_id}/confirmar-qualificacao",
+   "/api/v1/reunioes/{reuniao_id}/reprocessar-transcricao",
+   "/api/v1/reunioes/{reuniao_id}/dossie",
+   "/api/v1/titulares/exportar",
+   "/api/v1/titulares",
+   "/api/v1/painel/admin/ranking",
+   "/api/v1/indicacoes/{codigo}/converter",
+   "/api/v1/leads/contas",
+   "/api/v1/leads/contas/elegibilidade-exclusao",
+   "/api/v1/leads/contas",
+   "/api/v1/leads/contas/preview-limpeza-nao-trabalhados",
+   "/api/v1/leads/contas/limpeza-nao-trabalhados",
+   "/api/v1/convites/{codigo}/revogar",
+   "/api/v1/convites/{codigo}/reativar",
+   "/api/v1/convites/{codigo}",
+   "/api/v1/convites/vitrine/{codigo}/revogar",
+   "/api/v1/convites/vitrine/{codigo}/reativar",
+   "/api/v1/convites/vitrine/{codigo}",
+   "/api/v1/planos",
+   "/api/v1/planos/{plano_id}",
+   "/api/v1/governo/planos",
+   "/api/v1/governo/planos/{plano_id}/proposta",
+   "/api/v1/governo/politica-comissao",
+   "/api/v1/governo/politica-comissao",
+   "/api/v1/governo/template-proposta",
+   "/api/v1/governo/template-proposta",
+   "/api/v1/governo/oportunidades",
+   "/api/v1/governo/oportunidades",
+   "/api/v1/governo/oportunidades/{oportunidade_id}",
+   "/api/v1/governo/contratos",
+   "/api/v1/governo/contratos",
+   "/api/v1/governo/contratos/{contrato_id}",
+   "/api/v1/governo/contratos/{contrato_id}/renovacoes",
+   "/api/v1/governo/contratos/{contrato_id}/componentes",
+   "/api/v1/governo/contratos/{contrato_id}/cancelamento",
+   "/api/v1/governo/contratos/{contrato_id}/recebimentos",
+   "/api/v1/governo/contratos/{contrato_id}/recebimentos",
+   "/api/v1/governo/recebimentos/{recebimento_id}/estorno",
+   "/api/v1/governo/comissoes",
+   "/api/v1/governo/componentes/{componente_id}/comissao",
+   "/api/v1/governo/contratos/{contrato_id}/transferencia-comissao",
+   "/api/v1/governo/metricas",
+   "/api/v1/governo/tenants/{tenant_id}/margem-contribuicao",
+   "/api/v1/comissoes/parametros",
+   "/api/v1/comissoes/perfis-tributarios",
+   "/api/v1/comissoes/infraestrutura",
+   "/api/v1/comissoes/infraestrutura/componentes",
+   "/api/v1/comissoes/infraestrutura/componentes/{componente_id}",
+   "/api/v1/comissoes/infraestrutura/componentes/{componente_id}/envelopes",
+   "/api/v1/comissoes/infraestrutura/componentes/{componente_id}/uso",
+   "/api/v1/comissoes/infraestrutura/custos-diretos",
+   "/api/v1/comissoes/infraestrutura/alertas/{alerta_id}/decisao",
+   "/api/v1/comissoes/politica-infraestrutura",
+   "/api/v1/comissoes/cotacoes-cambio/sincronizar",
+   "/api/v1/comissoes/status-tributario",
+   "/api/v1/comissoes/recalculo",
+   "/api/v1/comissoes/cotacoes-cambio",
+   "/api/v1/comissoes/politica-margem",
+   "/api/v1/comissoes/apuracoes",
+   "/api/v1/comissoes/waterfall",
+   "/api/v1/map/performance/painel",
+   "/api/v1/map/performance/equipe",
+   "/api/v1/map/performance/daily",
+   "/api/v1/map/performance/configuracao",
+   "/api/v1/map/performance/politicas",
+   "/api/v1/map/performance/quotas",
+   "/api/v1/map/performance/representantes/{representante_id}/usuario",
+   "/api/v1/map/performance/usuarios-crm",
+   "/api/v1/map/performance/ofertas-familias",
+   "/api/v1/map/performance/contato-efetivo",
+   "/api/v1/representantes",
+   "/api/v1/representantes",
+   "/api/v1/representantes/{representante_id}",
+   "/api/v1/rotulos-hierarquia",
+   "/api/v1/admin/tenants",
+   "/api/v1/admin/tenants",
+   "/api/v1/admin/tenants/{tenant_id}/licenca",
+   "/api/v1/admin/tenants/{tenant_id}/licenca",
+   "/api/v1/admin/tenants/{tenant_id}/desativar",
+   "/api/v1/admin/tenants/{tenant_id}/reativar",
+   "/api/v1/admin/tenants/{tenant_id}",
+   "/api/v1/admin/provedores-ia",
+   "/api/v1/integracoes/chaves-api",
+   "/api/v1/integracoes/chaves-api",
+   "/api/v1/integracoes/chaves-api/{chave_id}",
+   "/api/v1/integracoes/webhook",
+   "/api/v1/integracoes/webhook",
+   "/api/v1/integracoes/webhook",
+   "/api/v1/relatorios/dashboard",
+   "/api/v1/relatorios/configuracao",
+   "/api/v1/relatorios/configuracao",
+   "/api/v1/crm/estagios/{estagio_id}",
+   "/api/v1/crm/estagios/{estagio_id}",
+   "/api/v1/crm/negocios",
+   "/api/v1/crm/negocios/{negocio_id}/vendedor",
+   "/api/v1/crm/negocios/{negocio_id}",
+   "/api/v1/crm/negocios/{negocio_id}/meeting-brief",
+   "/api/v1/crm/negocios/{negocio_id}",
+   "/api/v1/crm/negocios/{negocio_id}/estagio",
+   "/api/v1/crm/negocios/{negocio_id}/atividades",
+   "/api/v1/crm/negocios/{negocio_id}/atividades",
+   "/api/v1/crm/negocios/{negocio_id}/propostas",
+   "/api/v1/crm/negocios/{negocio_id}/propostas/{proposta_id}/download",
+   "/api/v1/crm/negocios/{negocio_id}/propostas/gerar",
+   "/api/v1/crm/contas/{conta_id}/cancelar-cliente",
+   "/api/v1/inteligencia/oportunidades/{negocio_id}/card",
+   "/api/v1/inteligencia/oportunidades/{negocio_id}/necessidades",
+   "/api/v1/inteligencia/oportunidades/{negocio_id}/necessidades/extrair",
+   "/api/v1/inteligencia/oportunidades/necessidades/{necessidade_id}",
+   "/api/v1/inteligencia/oportunidades/contas/{conta_id}/white-space",
+   "/api/v1/bids/licitacoes/{licitacao_id}",
+   "/api/v1/bids/licitacoes/{licitacao_id}/status",
+   "/api/v1/bids/licitacoes/{licitacao_id}/resultado",
+   "/api/v1/bids/licitacoes/{licitacao_id}/workspace",
+   "/api/v1/bids/licitacoes/{licitacao_id}/documentos",
+   "/api/v1/bids/documentos/{documento_id}/arquivo",
+   "/api/v1/bids/documentos/{documento_id}/estimativa",
+   "/api/v1/bids/documentos/{documento_id}/analisar",
+   "/api/v1/bids/licitacoes/{licitacao_id}/requisitos",
+   "/api/v1/bids/licitacoes/{licitacao_id}/requisitos",
+   "/api/v1/bids/requisitos/{requisito_id}",
+   "/api/v1/bids/requisitos/{requisito_id}/conformidade",
+   "/api/v1/bids/requisitos/{requisito_id}/resposta",
+   "/api/v1/bids/licitacoes/{licitacao_id}/proposta",
+   "/api/v1/bids/licitacoes/{licitacao_id}/matriz",
+   "/api/v1/bids/licitacoes/{licitacao_id}/go-no-go",
+   "/api/v1/bids/licitacoes/{licitacao_id}/go-no-go",
+   "/api/v1/bids/cofre/{documento_id}",
+   "/api/v1/bids/contratos",
+   "/api/v1/procurement/fornecedores/{fornecedor_id}/360",
+   "/api/v1/procurement/contratos/{contrato_id}/inteligencia",
+   "/api/v1/procurement/demandas/{demanda_id}/analise",
+   "/api/v1/procurement/planos/{plano_id}/painel",
+   "/api/v1/procurement/processos/{processo_id}/workspace",
+   "/api/v1/procurement/{recurso}/{registro_id}/aprovar",
+   "/api/v1/procurement/documentos/{documento_id}/arquivo",
+   "/api/v1/procurement/documentos/{documento_id}/estimativa",
+   "/api/v1/procurement/documentos/{documento_id}/analisar",
+   "/api/v1/procurement/{recurso}",
+   "/api/v1/procurement/{recurso}",
+   "/api/v1/procurement/{recurso}/{registro_id}",
+   "/api/v1/procurement/{recurso}/{registro_id}",
+   "/api/v1/sourcing/processos/{processo_id}/workspace",
+   "/api/v1/sourcing/processos/{processo_id}/status",
+   "/api/v1/sourcing/processos/{processo_id}/requisitos",
+   "/api/v1/sourcing/processos/{processo_id}/itens",
+   "/api/v1/sourcing/processos/{processo_id}/descoberta",
+   "/api/v1/sourcing/processos/{processo_id}/participantes",
+   "/api/v1/sourcing/processos/{processo_id}/participantes/{participante_id}",
+   "/api/v1/sourcing/processos/{processo_id}/propostas",
+   "/api/v1/sourcing/propostas/{proposta_id}/avaliacoes",
+   "/api/v1/sourcing/processos/{processo_id}/comparacao",
+   "/api/v1/sourcing/processos/{processo_id}/aprovacao",
+   "/api/v1/sourcing/processos/{processo_id}/aprovacao",
+   "/api/v1/sourcing/processos/{processo_id}/contrato",
+   "/api/v1/sourcing/processos/{processo_id}/participantes/{participante_id}/acesso",
+   "/api/v1/sourcing/esclarecimentos/{esclarecimento_id}",
+   "/api/v1/sourcing/anexos/{anexo_id}",
+   "/api/v1/sourcing/processos/{processo_id}/documentos",
+   "/api/v1/sourcing/documentos/{documento_id}/arquivo",
+   "/api/v1/sourcing/documentos/{documento_id}/estimativa",
+   "/api/v1/sourcing/documentos/{documento_id}/analisar",
+   "/api/v1/sourcing/requisitos/{requisito_id}/revisao",
+   "/api/v1/sourcing/processos/{processo_id}/avaliacao-ia/estimativa",
+   "/api/v1/sourcing/processos/{processo_id}/avaliacao-ia",
+   "/api/v1/rede-social/conexoes/{conexao_id}",
+   "/api/v1/rede-social/mensagens/{mensagem_id}/marcar-lida",
+   "/api/v1/rede-social/relacionamentos/{relacionamento_id}/confirmar",
+   "/api/v1/rede-social/relacionamentos/{relacionamento_id}",
+   "/api/v1/rede-social/identidades/{empresa_id}/reivindicar",
+   "/api/v1/rede-social/posts/{post_id}/midia/{midia_id}",
+   "/api/v1/rede-social/posts/{post_id}",
+   "/api/v1/rede-social/intents/{intent_id}",
+   "/api/v1/rede-social/intents/{intent_id}/encerrar",
+   "/api/v1/rede-social/intents/{intent_id}/atender",
+   "/api/v1/rede-social/salas/{sala_id}/canais",
+   "/api/v1/rede-social/salas/{sala_id}/canais",
+   "/api/v1/rede-social/salas/canais/{canal_id}/mensagens",
+   "/api/v1/rede-social/salas/canais/{canal_id}/mensagens",
+   "/api/v1/rede-social/salas/{sala_id}/negocio",
+   "/api/v1/rede-social/salas/{sala_id}/negocio",
+   "/api/v1/rede-social/salas/{sala_id}/workspace",
+   "/api/v1/rede-social/salas/{sala_id}/participantes",
+   "/api/v1/rede-social/salas/{sala_id}/participantes",
+   "/api/v1/rede-social/salas/{sala_id}/documentos",
+   "/api/v1/rede-social/salas/documentos/{documento_id}/arquivo",
+   "/api/v1/rede-social/salas/{sala_id}/tarefas",
+   "/api/v1/rede-social/salas/tarefas/{tarefa_id}",
+   "/api/v1/rede-social/salas/{sala_id}/reunioes",
+   "/api/v1/rede-social/salas/{sala_id}/stakeholders",
+   "/api/v1/rede-social/salas/{sala_id}/negocio/compartilhado",
+   "/api/v1/inteligencia-rede/fit-icp",
+   "/api/v1/inteligencia-rede/intents/{intent_id}/matches",
+   "/api/v1/inteligencia-rede/intents/{intent_id}/matches/{tenant_id_candidato}/explicar-com-ia",
+   "/api/v1/inteligencia-rede/sinais/{sinal_id}/visto",
+   "/api/v1/inteligencia-rede/sinais/{sinal_id}/descartar",
+   "/api/v1/inteligencia-rede/sinais/{sinal_id}/converter",
+   "/api/v1/agente-corporativo/pendentes/{pergunta_id}/aprovar",
+   "/api/v1/agente-corporativo/pendentes/{pergunta_id}/recusar",
+   "/api/v1/verificacao-empresa/pendentes",
+   "/api/v1/verificacao-empresa/{verificacao_id}/revisar",
+   "/api/v1/motor/interacoes",
+   "/api/v1/motor/tenants/{tenant_id}/interacoes",
+   "/api/v1/motor/saude-tenants",
+   "/api/v1/motor/tenants/{tenant_id}/score-risco",
+   "/api/v1/motor/dashboard",
+   "/api/v1/motor/tenants/{tenant_id}/script-resgate",
+   "/api/v1/motor/tenants/{tenant_id}/margem-contribuicao",
+   "/api/v1/motor/comissoes/waterfall",
+   "/api/v1/saude-contas/dashboard",
+   "/api/v1/saude-contas/ranking",
+   "/api/v1/saude-contas/contas/{conta_id}/score-risco",
+   "/api/v1/saude-contas/contas/{conta_id}/interacoes",
+   "/api/v1/saude-contas/contas/{conta_id}/script-resgate",
+   "/api/v1/saude-contas/contas/{conta_id}/vendedores-disponiveis",
+   "/api/v1/saude-contas/contas/{conta_id}/vendedor",
+   "/api/v1/registro-oportunidade",
+   "/api/v1/registro-oportunidade/{registro_id}/solicitar-desconto",
+   "/api/v1/registro-oportunidade/solicitacoes-desconto/{solicitacao_id}",
+   "/api/v1/template-proposta/logo",
+   "/api/v1/template-proposta/itens/{item_id}",
+   "/api/v1/template-proposta/itens/{item_id}",
+   "/api/v1/chaves-api/{chave_id}",
+   "/api/v1/webhooks-saida/{assinatura_id}",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/sincronizar/{entidade}",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/credenciais",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/escrita",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/escrita",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/funis",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/preparar-campos",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/indice",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/sinais-map",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/webhook-entrada",
+   "/api/v1/hub-integracoes/conexoes/{conexao_id}/webhook-entrada",
+   "/api/v1/hub-integracoes/envios/{envio_id}/reprocessar",
+   "/api/v1/inteligencia/conhecimento/{item_id}",
+   "/api/v1/finops/resumo",
+   "/api/v1/finops/precos",
+   "/api/v1/finops/politica-creditos",
+   "/api/v1/finops/tenants/{tenant_id}/creditos",
+   "/api/v1/finops/tenants/{tenant_id}/excedente",
+   "/api/v1/finops/execucoes/{execucao_id}/estorno",
+   "/api/v1/finops/reconciliacao",
+   "/api/v1/finops/economia",
+   "/api/v1/finops/margens",
+   "/api/v1/finops/matriz-rentabilidade",
+   "/api/v1/finops/alertas-margem",
+   "/api/v1/finops/recomendacoes-peso",
+   "/api/v1/finops/economia-unitaria",
+   "/api/v1/finops/relatorio-calibracao",
+   "/api/v1/finops/catalogo",
+   "/api/v1/finops/catalogo/rascunhos",
+   "/api/v1/finops/catalogo/{versao}/ativar",
+   "/api/v1/finops/pacotes",
+   "/api/v1/finops/pacotes/{codigo}/versoes"
+  ],
+  "executadas": 215,
+  "5xx": []
+ },
+ "vazamentos": [
+  {
+   "rota": "GET /api/v1/onboarding/status",
+   "url": "/api/v1/onboarding/status",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/onboarding/status",
+   "url": "/api/v1/onboarding/status",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/onboarding/status",
+   "url": "/api/v1/onboarding/status",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/ropa/tenant",
+   "url": "/api/v1/ropa/tenant",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/ropa/tenant",
+   "url": "/api/v1/ropa/tenant",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/ropa/tenant",
+   "url": "/api/v1/ropa/tenant",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/envios/processar",
+   "url": "/api/v1/envios/processar",
+   "marcador": "linkedin",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/envios/processar",
+   "url": "/api/v1/envios/processar",
+   "marcador": "linkedin",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/envios/processar",
+   "url": "/api/v1/envios/processar",
+   "marcador": "linkedin",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/whatsapp/templates",
+   "url": "/api/v1/whatsapp/templates",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/whatsapp/templates",
+   "url": "/api/v1/whatsapp/templates",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/whatsapp/templates",
+   "url": "/api/v1/whatsapp/templates",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/ai-credits/orcamento",
+   "url": "/api/v1/ai-credits/orcamento",
+   "marcador": "orcamento",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/ai-credits/orcamento",
+   "url": "/api/v1/ai-credits/orcamento",
+   "marcador": "orcamento",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/ai-credits/orcamento",
+   "url": "/api/v1/ai-credits/orcamento",
+   "marcador": "orcamento",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/ai-credits/orcamento",
+   "url": "/api/v1/ai-credits/orcamento",
+   "marcador": "orcamento",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/ai-credits/orcamento",
+   "url": "/api/v1/ai-credits/orcamento",
+   "marcador": "orcamento",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/ai-credits/orcamento",
+   "url": "/api/v1/ai-credits/orcamento",
+   "marcador": "orcamento",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/ai-credits/valor-de-negocio",
+   "url": "/api/v1/ai-credits/valor-de-negocio",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/ai-credits/valor-de-negocio",
+   "url": "/api/v1/ai-credits/valor-de-negocio",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/ai-credits/valor-de-negocio",
+   "url": "/api/v1/ai-credits/valor-de-negocio",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/painel/indicadores",
+   "url": "/api/v1/painel/indicadores",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/painel/indicadores",
+   "url": "/api/v1/painel/indicadores",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/painel/indicadores",
+   "url": "/api/v1/painel/indicadores",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/painel/indicadores/export.csv",
+   "url": "/api/v1/painel/indicadores/export.csv",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/painel/indicadores/export.csv",
+   "url": "/api/v1/painel/indicadores/export.csv",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/painel/indicadores/export.csv",
+   "url": "/api/v1/painel/indicadores/export.csv",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/painel/nps",
+   "url": "/api/v1/painel/nps",
+   "marcador": "promotor",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/painel/nps",
+   "url": "/api/v1/painel/nps",
+   "marcador": "promotor",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/painel/nps",
+   "url": "/api/v1/painel/nps",
+   "marcador": "promotor",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/nps/configuracao",
+   "url": "/api/v1/nps/configuracao",
+   "marcador": "realizada",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/nps/configuracao",
+   "url": "/api/v1/nps/configuracao",
+   "marcador": "realizada",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/nps/configuracao",
+   "url": "/api/v1/nps/configuracao",
+   "marcador": "realizada",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/nps/configuracao",
+   "url": "/api/v1/nps/configuracao",
+   "marcador": "realizada",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/nps/configuracao",
+   "url": "/api/v1/nps/configuracao",
+   "marcador": "realizada",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/nps/configuracao",
+   "url": "/api/v1/nps/configuracao",
+   "marcador": "realizada",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/leads/contas",
+   "url": "/api/v1/leads/contas",
+   "marcador": "prospectada",
+   "status": 201
+  },
+  {
+   "rota": "POST /api/v1/leads/contas",
+   "url": "/api/v1/leads/contas",
+   "marcador": "prospectada",
+   "status": 201
+  },
+  {
+   "rota": "POST /api/v1/leads/contas",
+   "url": "/api/v1/leads/contas",
+   "marcador": "prospectada",
+   "status": 201
+  },
+  {
+   "rota": "GET /api/v1/auth/eu",
+   "url": "/api/v1/auth/eu",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/auth/eu",
+   "url": "/api/v1/auth/eu",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/auth/eu",
+   "url": "/api/v1/auth/eu",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/auth/whatsapp-pessoal",
+   "url": "/api/v1/auth/whatsapp-pessoal",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/auth/whatsapp-pessoal",
+   "url": "/api/v1/auth/whatsapp-pessoal",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/auth/whatsapp-pessoal",
+   "url": "/api/v1/auth/whatsapp-pessoal",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/auth/dispensar-banner-boas-vindas",
+   "url": "/api/v1/auth/dispensar-banner-boas-vindas",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/auth/dispensar-banner-boas-vindas",
+   "url": "/api/v1/auth/dispensar-banner-boas-vindas",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/auth/dispensar-banner-boas-vindas",
+   "url": "/api/v1/auth/dispensar-banner-boas-vindas",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/auth/preferencia-tema",
+   "url": "/api/v1/auth/preferencia-tema",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/auth/preferencia-tema",
+   "url": "/api/v1/auth/preferencia-tema",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "PUT /api/v1/auth/preferencia-tema",
+   "url": "/api/v1/auth/preferencia-tema",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/auth/marcar-tutorial-modulo-visto",
+   "url": "/api/v1/auth/marcar-tutorial-modulo-visto",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/auth/marcar-tutorial-modulo-visto",
+   "url": "/api/v1/auth/marcar-tutorial-modulo-visto",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/auth/marcar-tutorial-modulo-visto",
+   "url": "/api/v1/auth/marcar-tutorial-modulo-visto",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/crm/estagios",
+   "url": "/api/v1/crm/estagios",
+   "marcador": "Descoberta",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/crm/estagios",
+   "url": "/api/v1/crm/estagios",
+   "marcador": "Descoberta",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/crm/estagios",
+   "url": "/api/v1/crm/estagios",
+   "marcador": "Descoberta",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/crm/dashboard/funil",
+   "url": "/api/v1/crm/dashboard/funil",
+   "marcador": "Descoberta",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/crm/dashboard/funil",
+   "url": "/api/v1/crm/dashboard/funil",
+   "marcador": "Descoberta",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/crm/dashboard/funil",
+   "url": "/api/v1/crm/dashboard/funil",
+   "marcador": "Descoberta",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/crm/dashboard/flywheel",
+   "url": "/api/v1/crm/dashboard/flywheel",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/crm/dashboard/flywheel",
+   "url": "/api/v1/crm/dashboard/flywheel",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/crm/dashboard/flywheel",
+   "url": "/api/v1/crm/dashboard/flywheel",
+   "marcador": "prospeccao",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/inteligencia/receita/metricas",
+   "url": "/api/v1/inteligencia/receita/metricas",
+   "marcador": "detrator",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/inteligencia/receita/metricas",
+   "url": "/api/v1/inteligencia/receita/metricas",
+   "marcador": "detrator",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/inteligencia/receita/metricas",
+   "url": "/api/v1/inteligencia/receita/metricas",
+   "marcador": "detrator",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/sourcing/processos",
+   "url": "/api/v1/sourcing/processos",
+   "marcador": "RASCUNHO",
+   "status": 201
+  },
+  {
+   "rota": "POST /api/v1/sourcing/processos",
+   "url": "/api/v1/sourcing/processos",
+   "marcador": "RASCUNHO",
+   "status": 201
+  },
+  {
+   "rota": "POST /api/v1/sourcing/processos",
+   "url": "/api/v1/sourcing/processos",
+   "marcador": "RASCUNHO",
+   "status": 201
+  },
+  {
+   "rota": "POST /api/v1/rede-social/conexoes",
+   "url": "/api/v1/rede-social/conexoes",
+   "marcador": "tenant-b-vitima",
+   "status": 201
+  },
+  {
+   "rota": "GET /api/v1/rede-social/conexoes",
+   "url": "/api/v1/rede-social/conexoes",
+   "marcador": "tenant-b-vitima",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/rede-social/conexoes",
+   "url": "/api/v1/rede-social/conexoes",
+   "marcador": "tenant-b-vitima",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/rede-social/conexoes",
+   "url": "/api/v1/rede-social/conexoes",
+   "marcador": "tenant-b-vitima",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/rede-social/bloquear/{tenant_id_outro}",
+   "url": "/api/v1/rede-social/bloquear/tenant-b-vitima",
+   "marcador": "tenant-b-vitima",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/rede-social/bloquear/{tenant_id_outro}",
+   "url": "/api/v1/rede-social/bloquear/tenant-b-vitima",
+   "marcador": "tenant-b-vitima",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/rede-social/bloquear/{tenant_id_outro}",
+   "url": "/api/v1/rede-social/bloquear/tenant-b-vitima",
+   "marcador": "tenant-b-vitima",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/rede-social/conexoes/{conexao_id}/desbloquear",
+   "url": "/api/v1/rede-social/conexoes/1/desbloquear",
+   "marcador": "tenant-b-vitima",
+   "status": 200
+  },
+  {
+   "rota": "POST /api/v1/rede-social/seguir",
+   "url": "/api/v1/rede-social/seguir",
+   "marcador": "tenant-b-vitima",
+   "status": 201
+  },
+  {
+   "rota": "POST /api/v1/rede-social/seguir",
+   "url": "/api/v1/rede-social/seguir",
+   "marcador": "tenant-b-vitima",
+   "status": 201
+  },
+  {
+   "rota": "POST /api/v1/rede-social/seguir",
+   "url": "/api/v1/rede-social/seguir",
+   "marcador": "tenant-b-vitima",
+   "status": 201
+  },
+  {
+   "rota": "POST /api/v1/verificacao-empresa",
+   "url": "/api/v1/verificacao-empresa",
+   "marcador": "pendente",
+   "status": 201
+  },
+  {
+   "rota": "GET /api/v1/saude-contas/desempenho/funil",
+   "url": "/api/v1/saude-contas/desempenho/funil",
+   "marcador": "Descoberta",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/saude-contas/desempenho/funil",
+   "url": "/api/v1/saude-contas/desempenho/funil",
+   "marcador": "Descoberta",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/saude-contas/desempenho/funil",
+   "url": "/api/v1/saude-contas/desempenho/funil",
+   "marcador": "Descoberta",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/usuarios",
+   "url": "/api/v1/usuarios",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/usuarios",
+   "url": "/api/v1/usuarios",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/usuarios",
+   "url": "/api/v1/usuarios",
+   "marcador": "whatsapp",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/inteligencia/agentes",
+   "url": "/api/v1/inteligencia/agentes",
+   "marcador": "rascunho",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/inteligencia/agentes",
+   "url": "/api/v1/inteligencia/agentes",
+   "marcador": "rascunho",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/inteligencia/agentes",
+   "url": "/api/v1/inteligencia/agentes",
+   "marcador": "rascunho",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/inteligencia/agente/ferramentas",
+   "url": "/api/v1/inteligencia/agente/ferramentas",
+   "marcador": "rascunho",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/inteligencia/agente/ferramentas",
+   "url": "/api/v1/inteligencia/agente/ferramentas",
+   "marcador": "rascunho",
+   "status": 200
+  },
+  {
+   "rota": "GET /api/v1/inteligencia/agente/ferramentas",
+   "url": "/api/v1/inteligencia/agente/ferramentas",
+   "marcador": "rascunho",
+   "status": 200
+  }
+ ],
+ "violacoes": [
+  "post_rede_social(2,) nova (dono tenant-a-atacante) referencia ['post_rede_social#1']",
+  "comentario_post(1,) nova (dono tenant-a-atacante) referencia ['post_rede_social#1']",
+  "comentario_post(2,) nova (dono tenant-a-atacante) referencia ['post_rede_social#1']",
+  "comentario_post(3,) nova (dono tenant-a-atacante) referencia ['post_rede_social#1']",
+  "oferta(5,) nova (dono tenant-a-atacante) referencia ['icp#1']",
+  "oferta(6,) nova (dono tenant-a-atacante) referencia ['icp#2']",
+  "oferta(7,) nova (dono tenant-a-atacante) referencia ['icp#2']",
+  "reacao_post(1,) nova (dono tenant-a-atacante) referencia ['post_rede_social#1']"
+ ]
+}

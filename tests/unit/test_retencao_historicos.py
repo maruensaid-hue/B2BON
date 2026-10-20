@@ -10,6 +10,8 @@ from app.models.coleta_fonte import ExecucaoColetaFonte
 from app.models.coleta_site import ColetaSiteConta, IndicadorFinanceiroConta
 from app.models.conta import Conta
 from app.models.creditos_ia import CacheRespostaIa
+from app.models.entrega_webhook import EntregaWebhook
+from app.models.evento_dominio import EventoDominio
 from app.models.tenant import Tenant
 from app.services import retencao_historicos_service as retencao
 
@@ -164,4 +166,65 @@ def test_rota_de_cron_exige_segredo_e_executa(client, monkeypatch):
     monkeypatch.setattr(settings, "cron_secret", "segredo-retencao")
     assert client.post("/api/v1/cron/podar-historicos").status_code == 403
     resposta = client.post("/api/v1/cron/podar-historicos", headers={"X-Cron-Secret": "segredo-retencao"})
-    assert resposta.status_code == 200 and set(resposta.json()) == {"cache_ia_expirado", "execucoes_coleta_fonte", "coletas_de_site"}
+    assert resposta.status_code == 200 and set(resposta.json()) == {"cache_ia_expirado", "execucoes_coleta_fonte", "coletas_de_site", "eventos_processados", "entregas_webhook"}
+
+
+# --- Outbox de eventos e entregas de webhook ---------------------------------------------------------------------------------------------
+
+
+def _evento(db, dias, processado=True, evento_id=None):
+    e = EventoDominio(evento_id=evento_id or f"ev-{dias}-{processado}-{db.query(EventoDominio).count()}", tenant_id=TENANT, tipo="t", agregado_tipo="a",
+                      agregado_id="1", ocorrido_em=_dias(dias), processado_em=_dias(dias) if processado else None)
+    db.add(e)
+    db.commit()
+    return e.id
+
+
+def test_evento_processado_antigo_sai_mas_pendente_e_recente_ficam(db_session, base):
+    antigo_processado = _evento(db_session, 100, processado=True)
+    antigo_pendente = _evento(db_session, 100, processado=False)  # nunca processado: ainda precisa ser tentado
+    recente_processado = _evento(db_session, 5, processado=True)
+
+    resultado = retencao.podar(db_session, AGORA)
+
+    assert resultado["eventos_processados"] == 1
+    assert _ids(db_session, EventoDominio) == sorted([antigo_pendente, recente_processado])
+    assert antigo_processado not in _ids(db_session, EventoDominio)
+
+
+def _entrega(db, dias, status):
+    from app.models.assinatura_webhook_tenant import AssinaturaWebhookTenant
+
+    assinatura = db.query(AssinaturaWebhookTenant).first()
+    if assinatura is None:
+        assinatura = AssinaturaWebhookTenant(tenant_id=TENANT, url="https://exemplo.com.br/hook", segredo="s", eventos=["x"], ativa=True)
+        db.add(assinatura)
+        db.flush()
+    entrega = EntregaWebhook(assinatura_id=assinatura.id, tenant_id=TENANT, evento_id=f"e-{dias}-{status}", tipo="x", status=status, criado_em=_dias(dias))
+    db.add(entrega)
+    db.commit()
+    return entrega.id
+
+
+def test_entrega_de_webhook_concluida_antiga_sai_e_a_pendente_nunca(db_session, base):
+    velha_entregue = _entrega(db_session, 200, "entregue")
+    velha_desistida = _entrega(db_session, 200, "desistida")
+    velha_pendente = _entrega(db_session, 200, "pendente")
+    recente_entregue = _entrega(db_session, 10, "entregue")
+
+    resultado = retencao.podar(db_session, AGORA)
+
+    assert resultado["entregas_webhook"] == 2
+    restantes = _ids(db_session, EntregaWebhook)
+    assert restantes == sorted([velha_pendente, recente_entregue])
+    assert velha_entregue not in restantes and velha_desistida not in restantes
+
+
+def test_retencao_de_eventos_respeita_a_configuracao_e_e_idempotente(db_session, base, monkeypatch):
+    _evento(db_session, 20, processado=True)
+    monkeypatch.setattr(settings, "retencao_eventos_processados_dias", 10)
+
+    primeira = retencao.podar(db_session, AGORA)
+    segunda = retencao.podar(db_session, AGORA)
+
+    assert primeira["eventos_processados"] == 1 and segunda["eventos_processados"] == 0

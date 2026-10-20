@@ -129,7 +129,7 @@ def test_listar_comentarios_ordem_cronologica(db_session):
     post_rede_social_service.comentar(db_session, TENANT_A, str(autor.id), post["id"], "Primeiro")
     post_rede_social_service.comentar(db_session, TENANT_A, str(autor.id), post["id"], "Segundo")
 
-    comentarios = post_rede_social_service.listar_comentarios(db_session, post["id"])
+    comentarios = post_rede_social_service.listar_comentarios(db_session, TENANT_A, post["id"])
 
     assert [item["texto"] for item in comentarios] == ["Primeiro", "Segundo"]
 
@@ -218,7 +218,7 @@ def test_criar_post_com_foto_anexada_comprime_e_serializa_midia(db_session):
     assert post["midias"][0]["tipo"] == "imagem"
     assert post["midias"][0]["url"] == f"/rede-social/posts/{post['id']}/midia/{post['midias'][0]['id']}"
 
-    midia = post_rede_social_service.obter_midia(db_session, post["id"], post["midias"][0]["id"])
+    midia = post_rede_social_service.obter_midia(db_session, TENANT_A, post["id"], post["midias"][0]["id"])
     assert midia.tipo_mime == "image/jpeg"
     assert midia.conteudo is not None
     assert midia.tamanho_bytes == len(midia.conteudo)
@@ -291,7 +291,7 @@ def test_obter_midia_levanta_nao_encontrado_quando_post_nao_tem_midia(db_session
     post = post_rede_social_service.criar(db_session, TENANT_A, str(autor.id), "Sem mídia", None, None)
 
     with pytest.raises(NaoEncontrado):
-        post_rede_social_service.obter_midia(db_session, post["id"], 1)
+        post_rede_social_service.obter_midia(db_session, TENANT_A, post["id"], 1)
 
 
 def test_compartilhar_cria_repost_apontando_pro_original(db_session):

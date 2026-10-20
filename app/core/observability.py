@@ -27,6 +27,21 @@ _correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=N
 logger_acesso = logging.getLogger("b2bon.acesso")
 
 
+TAXA_TRACES = 0.1
+# Rotas de máquina: os crons (7 chamadas a cada 15 min) e o health check respondem pela maior parte do tráfego da API e não trazem informação de
+# desempenho que um usuário perceba. Erros delas continuam sendo capturados (o amostrador só afeta transações de desempenho).
+_CAMINHOS_SEM_TRACE = ("/api/v1/cron/", "/health")
+
+
+def amostrar_traces(contexto_de_amostragem: dict) -> float:
+    """`traces_sampler` do Sentry: 10% das requisições de usuário, 0% das rotas de máquina (poupa a cota de transações)."""
+    escopo = contexto_de_amostragem.get("asgi_scope") or {}
+    caminho = escopo.get("path") or (contexto_de_amostragem.get("wsgi_environ") or {}).get("PATH_INFO", "")
+    if caminho == "/health" or caminho.startswith(_CAMINHOS_SEM_TRACE[0]):
+        return 0.0
+    return TAXA_TRACES
+
+
 def correlation_id_atual() -> str | None:
     return _correlation_id.get()
 

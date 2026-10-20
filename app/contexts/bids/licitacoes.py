@@ -12,8 +12,11 @@ from app.contexts.sourcing import contract as sourcing
 from app.models.contrato_venda_publica import ContratoVendaPublica
 from app.models.decisao_go_no_go import DecisaoGoNoGo
 from app.models.documento_licitacao import DocumentoLicitacao
+from app.models.conta import Conta
 from app.models.licitacao import Licitacao
+from app.models.oferta import Oferta
 from app.models.requisito_licitacao import RequisitoLicitacao
+from app.models.usuario import Usuario
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
@@ -42,8 +45,18 @@ def _validar(dados: dict) -> None:
         raise ValidacaoFalhou(f"Modalidade inválida: {dados['modalidade']}")
 
 
+def _validar_referencias(db: Session, tenant_id: str, dados: dict) -> None:
+    """V5.2.1: `conta_id`, `oferta_id` e `responsavel_usuario_id` vêm do cliente. Sem esta checagem uma licitação de um tenant podia
+    apontar para a conta/oferta/usuário de outro (e a análise Go/No-Go lia a oferta alheia)."""
+    for campo, modelo, rotulo in (("conta_id", Conta, "Conta"), ("oferta_id", Oferta, "Oferta"), ("responsavel_usuario_id", Usuario, "Usuário")):
+        valor = dados.get(campo)
+        if valor is not None and db.query(modelo.id).filter_by(id=valor, tenant_id=tenant_id).first() is None:
+            raise NaoEncontrado(f"{rotulo} {valor} não encontrada")
+
+
 def criar(db: Session, tenant_id: str, usuario_id: int | None, dados: dict) -> Licitacao:
     _validar(dados)
+    _validar_referencias(db, tenant_id, dados)
     licitacao = Licitacao(tenant_id=tenant_id, fonte="MANUAL", status=fluxo.de(dados.get("modalidade")).inicial,
                           **{k: v for k, v in dados.items() if k in CAMPOS_EDITAVEIS})
     db.add(licitacao)
@@ -56,6 +69,7 @@ def criar(db: Session, tenant_id: str, usuario_id: int | None, dados: dict) -> L
 
 def atualizar(db: Session, tenant_id: str, usuario_id: int | None, licitacao_id: int, dados: dict) -> Licitacao:
     _validar(dados)
+    _validar_referencias(db, tenant_id, dados)
     licitacao = obter(db, tenant_id, licitacao_id)
     for campo, valor in dados.items():
         if campo in CAMPOS_EDITAVEIS:
@@ -310,6 +324,7 @@ def decidir(
 
 
 def criar_contrato(db: Session, tenant_id: str, usuario_id: int | None, dados: dict) -> ContratoVendaPublica:
+    _validar_referencias(db, tenant_id, {"conta_id": dados.get("conta_id")})
     if dados.get("licitacao_id") is not None:
         licitacao = obter(db, tenant_id, dados["licitacao_id"])
         dados["orgao_nome"] = dados.get("orgao_nome") or licitacao.orgao_nome

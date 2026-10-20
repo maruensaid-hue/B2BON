@@ -2,6 +2,7 @@ import re
 
 from sqlalchemy.orm import Session
 
+from app.models.icp import ICP
 from app.models.material_oferta import MaterialOferta
 from app.models.oferta import Oferta
 from app.schemas.oferta import CAMPOS_INTELIGENCIA_OFERTA, OfertaCreateSchema
@@ -56,7 +57,15 @@ def _obter(db: Session, tenant_id: str, oferta_id: int) -> Oferta:
     return oferta
 
 
+def _exigir_icp_do_tenant(db: Session, tenant_id: str, icp_id: int | None) -> None:
+    """V5.2.1: o `icp_id` vem do cliente; sem esta checagem a oferta de um tenant podia apontar para o ICP de outro (referência
+    cruzada de integridade e oráculo de existência de ids alheios)."""
+    if icp_id is not None and db.query(ICP.id).filter_by(id=icp_id, tenant_id=tenant_id).first() is None:
+        raise NaoEncontrado(f"ICP {icp_id} não encontrado")
+
+
 def criar(db: Session, tenant_id: str, ator_id: str | None, dados: OfertaCreateSchema) -> Oferta:
+    _exigir_icp_do_tenant(db, tenant_id, dados.icp_id)
     oferta = Oferta(
         tenant_id=tenant_id,
         icp_id=dados.icp_id,
@@ -85,6 +94,7 @@ def criar(db: Session, tenant_id: str, ator_id: str | None, dados: OfertaCreateS
 
 def atualizar(db: Session, tenant_id: str, ator_id: str | None, oferta_id: int, dados: OfertaCreateSchema) -> Oferta:
     oferta = _obter(db, tenant_id, oferta_id)
+    _exigir_icp_do_tenant(db, tenant_id, dados.icp_id)
     oferta.icp_id = dados.icp_id
     oferta.nome = dados.nome
     oferta.descricao = dados.descricao

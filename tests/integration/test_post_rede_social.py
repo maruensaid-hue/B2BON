@@ -203,3 +203,25 @@ def test_compartilhar_o_mesmo_post_duas_vezes_retorna_erro(client, criar_usuario
     resposta = client.post(f"/api/v1/rede-social/posts/{post['id']}/compartilhar", headers=headers_b)
 
     assert resposta.status_code == 422
+
+
+# --- V5.2.1: comentários e mídia exigem sessão e respeitam o bloqueio entre empresas ---------------------------------------------------
+
+
+def test_comentarios_e_midia_sem_sessao_sao_recusados(client):
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Post"}).json()
+    sem_sessao = {"Authorization": ""}
+
+    assert client.get(f"/api/v1/rede-social/posts/{post['id']}/comentarios", headers=sem_sessao).status_code == 401
+    assert client.get(f"/api/v1/rede-social/posts/{post['id']}/midia/1", headers=sem_sessao).status_code == 401
+
+
+def test_empresa_bloqueada_nao_ve_comentarios_nem_midia_do_post(client, criar_usuario_autenticado):
+    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+    post = client.post("/api/v1/rede-social/posts", data={"texto": "Post de A"}).json()
+    assert client.get(f"/api/v1/rede-social/posts/{post['id']}/comentarios", headers=headers_b).status_code == 200
+
+    assert client.post(f"/api/v1/rede-social/bloquear/{TENANT_B}").status_code == 200
+
+    assert client.get(f"/api/v1/rede-social/posts/{post['id']}/comentarios", headers=headers_b).status_code == 404
+    assert client.get(f"/api/v1/rede-social/posts/{post['id']}/midia/1", headers=headers_b).status_code == 404

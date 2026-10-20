@@ -171,3 +171,41 @@ def test_upload_material_com_nome_de_path_traversal_nao_escapa_o_registro(client
     material_id = resposta.json()["id"]
     baixado = client.get(f"/api/v1/ofertas/{oferta['id']}/materiais/{material_id}")
     assert baixado.content == b"%PDF-1.4 x"
+
+
+# --- V5.2.1: oferta não pode apontar para ICP de outro tenant ---------------------------------------------------------------------------
+
+
+def _icp_de_outro_tenant(db_session) -> int:
+    from app.models.icp import ICP
+
+    icp = ICP(tenant_id="tenant-outro", grupo_id="g-outro", nome="ICP confidencial de outro tenant", segmento="Indústria", porte="Grande",
+              regiao="Sul")
+    db_session.add(icp)
+    db_session.commit()
+    return icp.id
+
+
+def test_criar_oferta_com_icp_de_outro_tenant_e_recusado(client, db_session):
+    icp_alheio = _icp_de_outro_tenant(db_session)
+
+    resposta = client.post("/api/v1/ofertas", json={"nome": "Oferta", "descricao": "d", "diferenciais": [], "provas_sociais": [], "icp_id": icp_alheio})
+
+    assert resposta.status_code == 404
+    assert client.get("/api/v1/ofertas").json() == []
+
+
+def test_editar_oferta_para_icp_de_outro_tenant_e_recusado_e_nao_altera_a_oferta(client, criar_oferta, db_session):
+    oferta = criar_oferta(nome="Original")
+    icp_alheio = _icp_de_outro_tenant(db_session)
+
+    resposta = client.put(f"/api/v1/ofertas/{oferta['id']}", json={"nome": "Editada", "descricao": "d", "diferenciais": [], "provas_sociais": [], "icp_id": icp_alheio})
+
+    assert resposta.status_code == 404
+    atual = next(o for o in client.get("/api/v1/ofertas").json() if o["id"] == oferta["id"])
+    assert atual["nome"] == "Original" and atual["icp_id"] is None
+
+
+def test_oferta_com_icp_do_proprio_tenant_continua_funcionando(client, criar_icp, criar_oferta):
+    icp = criar_icp()
+    assert criar_oferta(icp_id=icp["id"])["icp_id"] == icp["id"]

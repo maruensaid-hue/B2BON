@@ -391,14 +391,12 @@ def listar_feed(
 def baixar_midia_post(
     post_id: int,
     midia_id: int,
+    tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> Response:
-    """Serve uma foto/vídeo do carrossel (blob comprimido por
-    `midia_service`) — sem exigência de tenant específico, mesmo
-    padrão de acesso de `listar_comentarios` abaixo: o post já é
-    visível pra toda a rede via `listar_feed`, então a mídia dele não
-    é mais restrita que o post em si."""
-    midia = post_rede_social_service.obter_midia(db, post_id, midia_id)
+    """Serve uma foto/vídeo do carrossel (blob comprimido por `midia_service`). Exige sessão (V5.2.1): antes era público e
+    enumerável por id, e ignorava o bloqueio entre empresas que o feed respeita. O frontend já baixa com requisição autenticada."""
+    midia = post_rede_social_service.obter_midia(db, tenant_id, post_id, midia_id)
     return Response(content=midia.conteudo, media_type=midia.tipo_mime)
 
 
@@ -428,9 +426,10 @@ def comentar_post(
 @router.get("/posts/{post_id}/comentarios", response_model=list[ComentarioPostSchema])
 def listar_comentarios(
     post_id: int,
+    tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> list[ComentarioPostSchema]:
-    return post_rede_social_service.listar_comentarios(db, post_id)
+    return post_rede_social_service.listar_comentarios(db, tenant_id, post_id)
 
 
 @router.post("/posts/{post_id}/reagir", response_model=ReacaoPostSchema)

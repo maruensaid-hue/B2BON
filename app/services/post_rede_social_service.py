@@ -82,8 +82,17 @@ def criar(
     return _serializar(db, post, tenant_id_atual=tenant_id)
 
 
-def obter_midia(db: Session, post_id: int, midia_id: int) -> MidiaPost:
-    _obter(db, post_id)
+def _obter_visivel(db: Session, tenant_id_atual: str, post_id: int) -> PostRedeSocial:
+    """Post que o consultante pode ver: o feed já esconde o autor bloqueado (em qualquer direção); comentários e mídia seguem a
+    mesma regra, e quem não pode ver recebe o mesmo 404 de post inexistente (não revela que o post existe)."""
+    post = _obter(db, post_id)
+    if post.tenant_id != tenant_id_atual and post.tenant_id in privacidade.bloqueados(db, tenant_id_atual):
+        raise NaoEncontrado(f"Post {post_id} não encontrado")
+    return post
+
+
+def obter_midia(db: Session, tenant_id_atual: str, post_id: int, midia_id: int) -> MidiaPost:
+    _obter_visivel(db, tenant_id_atual, post_id)
     midia = db.query(MidiaPost).filter_by(id=midia_id, post_id=post_id).one_or_none()
     if midia is None:
         raise NaoEncontrado(f"Mídia {midia_id} não encontrada no post {post_id}")
@@ -239,8 +248,8 @@ def comentar(
     return _serializar_comentario(db, comentario)
 
 
-def listar_comentarios(db: Session, post_id: int, limite: int = _LIMITE_COMENTARIOS_PADRAO) -> list[dict]:
-    _obter(db, post_id)
+def listar_comentarios(db: Session, tenant_id_atual: str, post_id: int, limite: int = _LIMITE_COMENTARIOS_PADRAO) -> list[dict]:
+    _obter_visivel(db, tenant_id_atual, post_id)
     comentarios = (
         db.query(ComentarioPost)
         .filter_by(post_id=post_id)

@@ -12,7 +12,7 @@ import app.models  # noqa: F401 — registra as tabelas em Base.metadata
 from app.api.v1.router import router as api_v1_router
 from app.core.config import settings
 from app.core.logging import configure_logging
-from app.core.observability import CorrelationIdMiddleware
+from app.core.observability import CorrelationIdMiddleware, amostrar_traces
 from app.services.demo import bloqueio as demo_bloqueio
 from app.services.demo import contexto as demo_contexto
 from app.db.base import Base
@@ -41,7 +41,7 @@ if settings.sentry_dsn:
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
         environment="production" if settings.e_ambiente_producao else "development",
-        traces_sample_rate=0.1,
+        traces_sampler=amostrar_traces,
     )
 
 # Dev/testes (SQLite): cria as tabelas que ainda não existem a cada
