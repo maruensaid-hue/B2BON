@@ -166,7 +166,7 @@ def test_rota_de_cron_exige_segredo_e_executa(client, monkeypatch):
     monkeypatch.setattr(settings, "cron_secret", "segredo-retencao")
     assert client.post("/api/v1/cron/podar-historicos").status_code == 403
     resposta = client.post("/api/v1/cron/podar-historicos", headers={"X-Cron-Secret": "segredo-retencao"})
-    assert resposta.status_code == 200 and set(resposta.json()) == {"cache_ia_expirado", "execucoes_coleta_fonte", "coletas_de_site", "eventos_processados", "entregas_webhook", "corpus_licitacoes_sem_vinculo"}
+    assert resposta.status_code == 200 and set(resposta.json()) == {"cache_ia_expirado", "execucoes_coleta_fonte", "coletas_de_site", "eventos_processados", "entregas_webhook", "alertas_licitacao", "corpus_licitacoes_sem_vinculo"}
 
 
 # --- Outbox de eventos e entregas de webhook ---------------------------------------------------------------------------------------------
@@ -260,3 +260,27 @@ def test_corpus_sem_vinculo_e_antigo_sai_com_o_historico_mas_o_acompanhado_e_o_r
     assert resultado["corpus_licitacoes_sem_vinculo"] == 1
     assert _ids(db_session, LicitacaoPublica) == sorted([velho_acompanhado, recente_sem_vinculo])
     assert velho_sem_vinculo not in {e.licitacao_publica_id for e in db_session.query(EventoLicitacaoPublica)}  # o histórico dele saiu junto
+
+
+def test_alertas_antigos_nao_acompanhados_saem_e_o_acompanhado_e_o_corpus_que_ele_referencia_ficam(db_session, base):
+    from app.models.alerta_licitacao import AlertaLicitacao
+    from app.models.licitacao_publica import LicitacaoPublica
+
+    def alerta(corpus_id, dias, estado):
+        a = AlertaLicitacao(tenant_id=TENANT, corpus_id=corpus_id, score=50, fatores=[], regras=[], estado=estado, criado_em=_dias(dias))
+        db_session.add(a)
+        db_session.commit()
+        return a.id
+
+    velho_novo = alerta(_publica(db_session, 10, 500), 300, "novo")
+    velho_dispensado = alerta(_publica(db_session, 11, 500), 300, "dispensado")
+    corpus_do_acompanhado = _publica(db_session, 12, 500)
+    velho_acompanhado = alerta(corpus_do_acompanhado, 300, "acompanhado")
+    recente = alerta(_publica(db_session, 13, 5), 5, "novo")
+
+    resultado = retencao.podar(db_session, AGORA)
+
+    assert resultado["alertas_licitacao"] == 2
+    assert _ids(db_session, AlertaLicitacao) == sorted([velho_acompanhado, recente])
+    assert velho_novo not in _ids(db_session, AlertaLicitacao) and velho_dispensado not in _ids(db_session, AlertaLicitacao)
+    assert corpus_do_acompanhado in _ids(db_session, LicitacaoPublica)  # um alerta que sobrou mantém o edital (FK)

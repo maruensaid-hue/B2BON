@@ -374,6 +374,32 @@ def coletar_licitacoes(fonte: bids_contract.FontePncp = Depends(get_fonte_pncp),
     return bids_contract.coleta.executar_agendada(db, fonte)
 
 
+@router.post("/processar-alertas-licitacoes", dependencies=[Depends(_exigir_segredo_cron)])
+def processar_alertas_licitacoes(db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)) -> dict:
+    """Alertas de oportunidades (sem IA): para cada tenant com regra ativa avalia os editais novos/alterados do corpus e envia o resumo por e-mail de
+    sistema (só com `ALERTAS_LICITACAO_EMAIL_HABILITADO`). Idempotente; a falha de um tenant não afeta os outros. Roda depois da coleta (workflow)."""
+    from app.models.alerta_licitacao import RegraAlertaLicitacao
+
+    com_regra = {t for (t,) in db.query(RegraAlertaLicitacao.tenant_id).filter(RegraAlertaLicitacao.ativa.is_(True)).distinct().all()}
+    resumo = {"tenants": 0, "alertas_criados": 0, "alertas_atualizados": 0, "resumos_enviados": 0, "falhas": 0}
+    for tenant in _tenants_reais(db):
+        if tenant.id not in com_regra:
+            continue
+        resumo["tenants"] += 1
+        try:
+            avaliacao = bids_contract.alertas.avaliar_tenant(db, tenant.id)
+            entrega = bids_contract.alertas.entregar(db, tenant.id, email)
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            _registrar_falha_tenant(tenant.id)
+            resumo["falhas"] += 1
+            continue
+        resumo["alertas_criados"] += avaliacao["criados"]
+        resumo["alertas_atualizados"] += avaliacao["atualizados"]
+        resumo["resumos_enviados"] += 1 if entrega["estado"] == "enviado" else 0
+    return resumo
+
+
 @router.post("/sourcing-sincronizar", dependencies=[Depends(_exigir_segredo_cron)])
 def sourcing_sincronizar(db: Session = Depends(get_db)) -> dict:
     """Sourcing S3 (expand): backfill idempotente das tabelas unificadas a

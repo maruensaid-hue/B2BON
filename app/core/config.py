@@ -266,8 +266,12 @@ class Settings(BaseSettings):
     # Outbox de eventos já processados e entregas de webhook já concluídas: ninguém lê o registro antigo (só o processador, uma vez).
     retencao_eventos_processados_dias: int = 60
     retencao_entregas_webhook_dias: int = 90
+    # Alertas de licitação por e-mail (resumo aos administradores). Desligado por padrão: os alertas aparecem no painel; o e-mail só sai com esta chave.
+    alertas_licitacao_email_habilitado: bool = False
     # Corpus público de licitações: só sai edital que NENHUM tenant acompanha e que não é coletado há tanto tempo.
     retencao_corpus_sem_vinculo_dias: int = 365
+    # Alertas de licitação que o tenant não acompanha (novo/visto/dispensado) e já são antigos.
+    retencao_alertas_licitacao_dias: int = 180
 
     # Autenticação real do núcleo (Onda A). Chave dedicada — não reaproveita
     # secret_key (usada para HMAC de links públicos) para segregar o risco.

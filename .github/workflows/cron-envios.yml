@@ -210,6 +210,14 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      # Alertas por regra/ICP sobre o que a coleta acabou de gravar no corpus. Sem IA; o e-mail só sai com ALERTAS_LICITACAO_EMAIL_HABILITADO.
+      - name: Chamar POST /cron/processar-alertas-licitacoes
+        if: always()
+        run: |
+          curl --fail --show-error --silent --max-time 300             -X POST "${API_BASE_URL}/cron/processar-alertas-licitacoes"             -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
   atualizar-recorte-cnpj:
     runs-on: ubuntu-latest

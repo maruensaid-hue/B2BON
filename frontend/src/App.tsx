@@ -26,6 +26,9 @@ const AdminVerificacoesEmpresa = lazy(() =>
 );
 const AdminTenants = lazy(() => import("@/pages/admin/AdminTenants").then((m) => ({ default: m.AdminTenants })));
 const Licitacoes = lazy(() => import("@/pages/bids/Licitacoes").then((m) => ({ default: m.Licitacoes })));
+const AlertasLicitacoes = lazy(() =>
+  import("@/pages/bids/AlertasLicitacoes").then((m) => ({ default: m.AlertasLicitacoes })),
+);
 const LicitacaoWorkspace = lazy(() =>
   import("@/pages/bids/LicitacaoWorkspace").then((m) => ({ default: m.LicitacaoWorkspace })),
 );
@@ -338,6 +341,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <Licitacoes />
+              </Suspense>
+            }
+          />
+          <Route
+            path="bids/alertas"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <AlertasLicitacoes />
               </Suspense>
             }
           />

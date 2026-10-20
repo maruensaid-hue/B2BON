@@ -193,3 +193,31 @@ def test_backfill_do_corpus_sobre_licitacoes_existentes_vincula_todas_e_preserva
         assert con.execute(sa.text("SELECT vencedor FROM licitacao WHERE titulo = 'Software A'")).scalar() == "Segredo A"
     command.upgrade(config, "head")  # o ciclo completo funciona
     _limpar_corpus_de_teste(engine)
+
+
+# --- e2c4f6a8b0d3: alertas de licitação -----------------------------------------------------------------------------------------------------
+
+TABELAS_ALERTAS = ("regra_alerta_licitacao", "alerta_licitacao", "estado_alertas_licitacao")
+
+
+def test_migracao_dos_alertas_cria_as_tabelas_com_unicidade_e_o_downgrade_so_remove_o_que_e_dela(ambiente):
+    engine, config = ambiente
+    command.upgrade(config, "head")
+    assert set(TABELAS_ALERTAS) <= _tabelas(engine)
+    with engine.begin() as con:
+        con.execute(sa.text("DELETE FROM alerta_licitacao"))
+        con.execute(sa.text("DELETE FROM licitacao_publica WHERE fonte_id_externo = 'ALMIGR-1'"))
+        pub = con.execute(sa.text("INSERT INTO licitacao_publica (fonte, fonte_id_externo, titulo, modalidade, hash_conteudo, versao) "
+                                  "VALUES ('PNCP', 'ALMIGR-1', 't', 'PUBLIC_TENDER', 'h', 1) RETURNING id")).scalar()
+        inserir = sa.text("INSERT INTO alerta_licitacao (tenant_id, corpus_id, score, fatores, regras) VALUES ('t-alm', :c, 80, '[]', '[]')")
+        con.execute(inserir, {"c": pub})
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as con:
+        con.execute(inserir, {"c": pub})  # um alerta por (tenant, edital): o banco recusa o segundo
+
+    command.downgrade(config, "d1b3e5a7c9f1")
+
+    assert not set(TABELAS_ALERTAS) & _tabelas(engine)
+    assert "licitacao_publica" in _tabelas(engine)  # o corpus (migração anterior) permanece
+    command.upgrade(config, "head")
+    with engine.begin() as con:
+        con.execute(sa.text("DELETE FROM licitacao_publica WHERE fonte_id_externo = 'ALMIGR-1'"))

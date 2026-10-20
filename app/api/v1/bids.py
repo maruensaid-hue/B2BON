@@ -148,6 +148,86 @@ def listar_fontes() -> list[dict]:
     return bids.fontes.fontes()
 
 
+# --- Alertas de oportunidades por regra/ICP (V5.2.1, Fase 4) -------------------------------------
+
+
+class RegraAlertaEntrada(BaseModel):
+    nome: str | None = None
+    ativa: bool | None = None
+    icp_id: int | None = None
+    palavras_chave: list[str] | None = None
+    palavras_excluir: list[str] | None = None
+    ufs: list[str] | None = None
+    modalidades: list[str] | None = None
+    valor_minimo: float | None = None
+    valor_maximo: float | None = None
+    dias_minimos_prazo: int | None = None
+    usar_portfolio: bool | None = None
+    relevancia_minima: int | None = None
+    frequencia: Literal["imediata", "diaria"] | None = None
+
+
+_SO_ADMIN = [Depends(exigir_papel("admin", "super_admin"))]
+
+
+@router.get("/alertas/regras")
+def listar_regras_alerta(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
+    return [bids.alertas.regra_dict(r) for r in bids.alertas.listar_regras(db, tenant_id)]
+
+
+@router.post("/alertas/regras", status_code=201, dependencies=_SO_ADMIN)
+def criar_regra_alerta(dados: RegraAlertaEntrada, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
+                       db: Session = Depends(get_db)) -> dict:
+    return bids.alertas.regra_dict(bids.alertas.criar_regra(db, tenant_id, ator_id, dados.model_dump(exclude_unset=True)))
+
+
+@router.put("/alertas/regras/{regra_id}", dependencies=_SO_ADMIN)
+def atualizar_regra_alerta(regra_id: int, dados: RegraAlertaEntrada, tenant_id: str = Depends(get_tenant_id),
+                           ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
+    return bids.alertas.regra_dict(bids.alertas.atualizar_regra(db, tenant_id, ator_id, regra_id, dados.model_dump(exclude_unset=True)))
+
+
+@router.delete("/alertas/regras/{regra_id}", status_code=204, dependencies=_SO_ADMIN)
+def excluir_regra_alerta(regra_id: int, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
+                         db: Session = Depends(get_db)) -> None:
+    bids.alertas.excluir_regra(db, tenant_id, ator_id, regra_id)
+
+
+@router.get("/alertas/resumo")
+def resumo_alertas(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    return bids.alertas.resumo(db, tenant_id)
+
+
+@router.post("/alertas/avaliar", dependencies=_SO_ADMIN)
+def avaliar_alertas(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    """Avalia agora o corpus contra as regras do tenant (idempotente). Não envia e-mail: a entrega é do agendador."""
+    return bids.alertas.avaliar_tenant(db, tenant_id)
+
+
+@router.get("/alertas")
+def listar_alertas(estado: str | None = None, score_minimo: int | None = None, regra_id: int | None = None, limite: int = 100,
+                   tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
+    return bids.alertas.listar(db, tenant_id, estado, score_minimo, regra_id, limite)
+
+
+@router.post("/alertas/{alerta_id}/visto")
+def marcar_alerta_visto(alerta_id: int, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    return bids.alertas.marcar_visto(db, tenant_id, alerta_id)
+
+
+@router.post("/alertas/{alerta_id}/dispensar")
+def dispensar_alerta(alerta_id: int, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
+                     db: Session = Depends(get_db)) -> dict:
+    return bids.alertas.dispensar(db, tenant_id, ator_id, alerta_id)
+
+
+@router.post("/alertas/{alerta_id}/acompanhar")
+def acompanhar_alerta(alerta_id: int, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
+                      db: Session = Depends(get_db)) -> dict:
+    alerta, licitacao = bids.alertas.acompanhar(db, tenant_id, _usuario_id(ator_id), alerta_id)
+    return {"alerta": alerta, "licitacao": licitacao}
+
+
 @router.get("/corpus")
 def listar_corpus(response: Response, q: str | None = None, uf: str | None = None, modalidade: str | None = None,
                   situacao: str | None = None, desde: datetime | None = None, cursor: str | None = None, limite: int | None = None,

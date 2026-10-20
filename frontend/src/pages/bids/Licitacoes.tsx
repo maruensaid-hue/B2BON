@@ -191,6 +191,9 @@ export function Licitacoes() {
         <div className="flex items-center gap-2">
           <div className="font-head text-xl font-bold">Licitações</div>
           <BotaoReverTutorial tutorial={tutorial} />
+          <Link to="/bids/alertas" className="ml-2 text-[12px] text-cyan hover:underline">
+            🔔 Alertas de oportunidades
+          </Link>
         </div>
         <div className="text-[11px] text-muted">
           Bid Intelligence — editais e RFPs que a sua empresa acompanha. A
