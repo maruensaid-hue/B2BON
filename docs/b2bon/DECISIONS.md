@@ -1447,3 +1447,16 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   `tests/integration/test_envio_exige_aprovacao.py`, inclusive o caso de defesa em profundidade (mensagem pendente com horário vencido não sai).
 - **Não feito (de propósito)**: provedores de IA adicionais; ativar PNCP; corpus público comum entre tenants; leitura de PDFs de RI; normalização de caixa de e-mail. Ver relatório V5.2.
 - **Status**: ACEITA; sem push, sem deploy, sem alteração de produção.
+
+
+## D-093 · 2026-10-20 · V5.2.1: isolamento rota a rota, corpus público de licitações, alertas por ICP e RI
+
+- **Isolamento (Fase 1)**: auditoria das 662 rotas efetivas, varredura dinâmica (587 rotas de sessão, ids reais de outro tenant) e estática (consultas sem tenant). Falhas comprovadas e corrigidas:
+  webhooks internos públicos (agora `X-Webhook-Secret`), webhook da Meta sem assinatura (agora HMAC, falha fechada), comentários/mídia de posts públicos (agora sessão + bloqueio),
+  licitação/contrato/oferta aceitando referências de outro tenant (agora validadas). Guarda de CI: rota pública nova precisa ser classificada.
+- **Custos (Fase 2)**: sem acesso a faturas, nenhum valor inventado; Sentry não amostra crons/health; poda de eventos processados e entregas de webhook. Otimizações com troca de comportamento (pular tenants ociosos no cron, mover binários para storage de objetos, trocar o Redis) **não** foram feitas e estão justificadas no relatório.
+- **Corpus (Fase 3)**: fato público único por (fonte, id externo) em `licitacao_publica`, sem `tenant_id`; cópia privada em `licitacao` ligada por `corpus_id`. Só o relevante para algum tenant entra (custo de armazenamento ≤ ao anterior).
+- **Alertas (Fase 4)**: determinísticos, sem IA, um por (tenant, edital), com fatores explicáveis; e-mail por resumo, **desligado por padrão**. PNCP continua desligado em produção; nenhuma UF/palavra-chave inventada.
+- **RI (Fase 5)**: leitura de PDF em subprocesso isolado; indicadores só do que está escrito com moeda; sem OCR; arquivo não guardado; sem IA. Painel visual e busca automática do PDF no site de RI **não** feitos.
+- **IA (Fase 6)**: nenhum provedor adicional habilitado; complemento documental em `PROVEDORES_IA.md`.
+- **Status**: ACEITA; sem deploy. Push ao staging autorizado pelo PO, mas bloqueado pelo harness (ver relatório).

@@ -62,6 +62,7 @@ from app.api.v1.portal_fornecedor import router_link as portal_fornecedor_link_r
 from app.api.v1.portal_fornecedor import router_rede as portal_fornecedor_rede_router
 from app.api.v1.strategic_sourcing import router as strategic_sourcing_router
 from app.api.v1.coletas_site import router as coletas_site_router
+from app.api.v1.ri import router as ri_router
 from app.api.v1.prospeccao_contas import router as prospeccao_contas_router
 from app.api.v1.regras_aprendidas import router as regras_aprendidas_router
 from app.api.v1.relatorios import router as relatorios_router
@@ -121,6 +122,7 @@ router.include_router(onboarding_router, dependencies=_exige_licenca)
 # `/contas/{conta_id}`.
 router.include_router(prospeccao_contas_router, dependencies=_exige_predator)
 router.include_router(coletas_site_router, dependencies=_exige_predator)
+router.include_router(ri_router, dependencies=_exige_predator)
 router.include_router(contas_router, dependencies=_exige_organizacao)
 router.include_router(listas_prospeccao_router, dependencies=_exige_predator)
 router.include_router(aprovacoes_router, dependencies=_exige_predator)

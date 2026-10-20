@@ -855,6 +855,15 @@ def limitar_ia_por_tenant(max_tentativas: int = 20, janela_segundos: int = 300):
     return _dependencia
 
 
+def limitar_pdf_por_tenant(max_tentativas: int = 12, janela_segundos: int = 300):
+    """Leitura de PDF é CPU (subprocesso) e rede: teto por tenant. Mesmo bucket do `limitador_ia`, chave com prefixo próprio (contador separado)."""
+
+    def _dependencia(tenant_id: str = Depends(get_tenant_id)) -> None:
+        limitador_ia.checar(f"pdf:{tenant_id}", max_tentativas, janela_segundos)
+
+    return _dependencia
+
+
 API_LIMITE_POR_MINUTO = 120
 
 

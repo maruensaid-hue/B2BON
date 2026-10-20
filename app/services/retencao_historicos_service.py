@@ -28,6 +28,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.contexts.bids import contract as bids_contract
 from app.core.config import settings
 from app.models.coleta_fonte import ExecucaoColetaFonte
 from app.models.coleta_site import ColetaSiteConta, IndicadorFinanceiroConta
@@ -35,8 +36,6 @@ from app.models.creditos_ia import CacheRespostaIa
 from app.models.entrega_webhook import EntregaWebhook
 from app.models.alerta_licitacao import AlertaLicitacao
 from app.models.evento_dominio import EventoDominio
-from app.models.licitacao import Licitacao
-from app.models.licitacao_publica import EventoLicitacaoPublica, LicitacaoPublica
 
 logger = logging.getLogger(__name__)
 
@@ -130,15 +129,9 @@ def _podar_alertas_licitacao(db: Session, agora: datetime) -> int:
 
 def _podar_corpus_sem_vinculo(db: Session, agora: datetime) -> int:
     corte = agora - timedelta(days=settings.retencao_corpus_sem_vinculo_dias)
-    referenciados = db.query(Licitacao.corpus_id).filter(Licitacao.corpus_id.isnot(None))
-    com_alerta = db.query(AlertaLicitacao.corpus_id)  # alerta ainda existente também mantém o edital (FK)
-    ids = [i for (i,) in db.query(LicitacaoPublica.id).filter(LicitacaoPublica.ultima_coleta_em < corte, LicitacaoPublica.id.notin_(referenciados),
-                                                              LicitacaoPublica.id.notin_(com_alerta)).all()]
-    if ids:
-        db.query(EventoLicitacaoPublica).filter(EventoLicitacaoPublica.licitacao_publica_id.in_(ids)).delete(synchronize_session=False)
-        db.query(LicitacaoPublica).filter(LicitacaoPublica.id.in_(ids)).delete(synchronize_session=False)
+    apagados = bids_contract.corpus.podar_sem_vinculo(db, corte)  # a barreira Buy/Sell: a tabela de licitação só é tocada pelo próprio contexto
     db.commit()
-    return len(ids)
+    return apagados
 
 
 def podar(db: Session, agora: datetime | None = None) -> dict:

@@ -53,7 +53,8 @@ except Exception:
 max_paginas, max_pagina, max_total = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
 dados = sys.stdin.buffer.read()
 def sair(**kw):
-    sys.stdout.write(json.dumps(kw, ensure_ascii=False)); sys.stdout.flush(); sys.exit(0)
+    # ASCII puro (escapa os acentos): a codificação do stdout do filho varia por sistema (cp1252 no Windows) e corromperia o texto.
+    sys.stdout.write(json.dumps(kw)); sys.stdout.flush(); sys.exit(0)
 try:
     import io
     from pypdf import PdfReader

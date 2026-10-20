@@ -182,6 +182,20 @@ def ids_acompanhados(db: Session, tenant_id: str, corpus_ids: list[int]) -> dict
     return {c: i for i, c in db.query(Licitacao.id, Licitacao.corpus_id).filter(Licitacao.tenant_id == tenant_id, Licitacao.corpus_id.in_(corpus_ids)).all()}
 
 
+def podar_sem_vinculo(db: Session, corte: datetime) -> int:
+    """Remove (com o histórico) o edital que NENHUMA cópia privada nem alerta referencia e que não é coletado desde `corte`. Não faz commit."""
+    from app.models.alerta_licitacao import AlertaLicitacao
+
+    referenciados = db.query(Licitacao.corpus_id).filter(Licitacao.corpus_id.isnot(None))
+    com_alerta = db.query(AlertaLicitacao.corpus_id)  # alerta ainda existente também mantém o edital (FK)
+    ids = [i for (i,) in db.query(LicitacaoPublica.id).filter(LicitacaoPublica.ultima_coleta_em < corte, LicitacaoPublica.id.notin_(referenciados),
+                                                              LicitacaoPublica.id.notin_(com_alerta)).all()]
+    if ids:
+        db.query(EventoLicitacaoPublica).filter(EventoLicitacaoPublica.licitacao_publica_id.in_(ids)).delete(synchronize_session=False)
+        db.query(LicitacaoPublica).filter(LicitacaoPublica.id.in_(ids)).delete(synchronize_session=False)
+    return len(ids)
+
+
 def obter(db: Session, corpus_id: int) -> LicitacaoPublica | None:
     return db.get(LicitacaoPublica, corpus_id)
 

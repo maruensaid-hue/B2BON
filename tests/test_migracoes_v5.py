@@ -221,3 +221,34 @@ def test_migracao_dos_alertas_cria_as_tabelas_com_unicidade_e_o_downgrade_so_rem
     command.upgrade(config, "head")
     with engine.begin() as con:
         con.execute(sa.text("DELETE FROM licitacao_publica WHERE fonte_id_externo = 'ALMIGR-1'"))
+
+
+# --- f3d5a7c9e1b4: documentos de RI ---------------------------------------------------------------------------------------------------------
+
+TABELAS_RI = ("documento_ri", "indicador_ri")
+
+
+def test_migracao_do_ri_cria_as_tabelas_com_unicidade_por_conta_e_hash_e_o_downgrade_preserva_o_resto(ambiente):
+    engine, config = ambiente
+    command.upgrade(config, "head")
+    assert set(TABELAS_RI) <= _tabelas(engine)
+    with engine.begin() as con:
+        con.execute(sa.text("DELETE FROM indicador_ri"))
+        con.execute(sa.text("DELETE FROM documento_ri WHERE tenant_id = 't-ri-mig'"))
+        con.execute(sa.text("DELETE FROM conta WHERE tenant_id = 't-ri-mig'"))
+        con.execute(sa.text("INSERT INTO tenant (id, razao_social) VALUES ('t-ri-mig', 'RI') ON CONFLICT (id) DO NOTHING") if engine.dialect.name == "postgresql"
+                    else sa.text("INSERT OR IGNORE INTO tenant (id, razao_social) VALUES ('t-ri-mig', 'RI')"))
+        conta_id = con.execute(sa.text("INSERT INTO conta (tenant_id, nome, status) VALUES ('t-ri-mig', 'C', 'prospectada') RETURNING id")).scalar()
+        inserir = sa.text("INSERT INTO documento_ri (tenant_id, conta_id, origem, nome_arquivo, sha256, tamanho_bytes, estado, avisos, sinais) "
+                          "VALUES ('t-ri-mig', :c, 'upload', 'a.pdf', 'abc', 10, 'processado', '[]', '[]')")
+        con.execute(inserir, {"c": conta_id})
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as con:
+        con.execute(inserir, {"c": conta_id})  # mesmo PDF na mesma conta: o banco recusa o segundo
+
+    command.downgrade(config, "e2c4f6a8b0d3")
+
+    assert not set(TABELAS_RI) & _tabelas(engine) and "alerta_licitacao" in _tabelas(engine)
+    command.upgrade(config, "head")
+    with engine.begin() as con:
+        con.execute(sa.text("DELETE FROM documento_ri WHERE tenant_id = 't-ri-mig'"))
+        con.execute(sa.text("DELETE FROM conta WHERE tenant_id = 't-ri-mig'"))

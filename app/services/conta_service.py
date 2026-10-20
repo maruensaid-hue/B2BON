@@ -656,6 +656,7 @@ def _apagar_dados_do_site(db: Session, conta_ids: list[int]) -> None:
     db.query(IndicadorFinanceiroConta).filter(IndicadorFinanceiroConta.conta_id.in_(conta_ids)).delete(synchronize_session=False)
     db.query(ColetaSiteConta).filter(ColetaSiteConta.conta_id.in_(conta_ids)).delete(synchronize_session=False)
     db.query(ConteudoPaginaSite).filter(ConteudoPaginaSite.conta_id.in_(conta_ids)).delete(synchronize_session=False)
+    predator_contract.ri.apagar_da_conta(db, conta_ids)  # documentos de RI e seus indicadores (FK para a conta)
 
 
 def excluir(db: Session, tenant_id: str, ator_id: str | None, conta_id: int) -> None:
@@ -1081,6 +1082,8 @@ def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LL
     linhas_decisores = contexto_decisores_texto(db, tenant_id, conta.id)
     linhas_atividades = atividade_service.contexto_recentes_texto(db, tenant_id, conta_id=conta.id)
     secao_padroes = _secao_padroes_observados_texto(metricas_service.calcular_padroes_observados(db, tenant_id))
+    fatos_ri = predator_contract.ri.contexto_financeiro_texto(db, tenant_id, conta.id)
+    secao_financeira = f"\n\n{intel.prompt_seguro.bloco_dados_externos('fatos_financeiros_publicos', fatos_ri)}" if fatos_ri else ""
 
     resposta = intel.gerar(
         db,
@@ -1094,6 +1097,7 @@ def sugerir_estrategia_venda(db: Session, tenant_id: str, conta_id: int, llm: LL
                 f"Decisores mapeados:\n{linhas_decisores}\n\n"
                 "Últimas atividades registradas:\n"
                 f"{intel.prompt_seguro.bloco_dados_externos('atividades_registradas', linhas_atividades)}"
+                f"{secao_financeira}"
                 f"{secao_padroes}\n\n"
                 "Com base SÓ nas informações acima (não invente nenhum dado além delas), recomende uma "
                 "estratégia de venda para esta conta cobrindo: persona inicial a abordar, abordagem sugerida, "

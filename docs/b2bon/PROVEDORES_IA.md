@@ -65,3 +65,21 @@ contatos e contexto comercial). Os demais dependem de avaliação jurídica/LGPD
 - Avaliação de privacidade/LGPD e marcação de `*_APROVADO_DADOS_REAIS`.
 - Teste real com dados fictícios e registro do resultado neste documento.
 - Hoje, com a Anthropic fora do ar e **nenhum** fallback aprovado, o comportamento segue o já existente: erro claro, disjuntor, coleta preservada.
+
+## Complemento V5.2.1 — preparação sem ativação (estado: **bloqueado para uso real**)
+
+Nenhum provedor adicional foi habilitado, nenhuma credencial foi configurada e nenhuma chamada real foi feita nesta fase; a auditoria da integração Anthropic e dos adaptadores da V5.1 não encontrou mudança necessária. O fallback só ocorre em falha **do provedor**, só para provedores aprovados (lista + credencial + modelo + aprovação de privacidade + custo) e nunca desvia dado privado para um provedor não aprovado.
+
+| Provedor | Região / transferência internacional | Aprovação (LGPD) | Custo/limite | Em que ambiente pode ser habilitado |
+|---|---|---|---|---|
+| Anthropic | em uso em produção (decisão anterior do PO; termos de retenção/região não reavaliados nesta fase) | em uso | pré-pago por token; consumo em `registro_uso_ia` | produção |
+| Cloudflare Workers AI | **a confirmar** na documentação do fornecedor | **pendente** (sem decisão) | limites documentados em "Como habilitar"; preço **não** presumido | nenhum até aprovação; depois staging com dados fictícios |
+| Groq | **a confirmar** | **pendente** | idem | idem |
+| OpenRouter | **a confirmar** (é intermediário: o modelo final define retenção e região) | **pendente** | idem | idem |
+| Google Gemini | **a confirmar**; o plano gratuito usa os dados para melhorar produtos e há revisão humana → **inadequado para dado real** | **negado no plano gratuito** | idem | só plano pago, após avaliação |
+
+**Custo, com premissas explícitas.** Custo da chamada = tokens de entrada/saída × preço por milhão de tokens **cadastrado e versionado** em `preco_modelo_ia`. Sem preço cadastrado o gateway **não estima** (não existe valor padrão inventado). Para estimar um provedor, o PO informa o preço vigente, o volume mensal e a proporção entrada/saída; qualquer número fora disso seria hipótese.
+
+**Tarefas que poderiam usar modelo alternativo sem expor dado sensível:** classificação e resumo do **objeto de editais públicos** (corpus, dado público) e normalização de texto público. **Não** podem: qualquer coisa com dado de CRM, mensagens de cadência, contatos, documentos de RI enviados por cliente, propostas ou conhecimento privado do tenant.
+
+Para destravar: credenciais, avaliação de privacidade/retenção/região, decisão de custo e `*_APROVADO_DADOS_REAIS=true` — nessa ordem — e teste real com dados fictícios antes de qualquer dado de cliente.

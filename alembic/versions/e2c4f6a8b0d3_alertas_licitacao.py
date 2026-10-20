@@ -38,6 +38,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("tenant_id", "nome", name="uq_regra_alerta_licitacao_tenant_nome"),
     )
     op.create_index("ix_regra_alerta_licitacao_tenant_id", "regra_alerta_licitacao", ["tenant_id"])
+    op.create_index("ix_regra_alerta_licitacao_icp_id", "regra_alerta_licitacao", ["icp_id"])
     op.create_table(
         "alerta_licitacao",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -78,5 +79,6 @@ def downgrade() -> None:
     op.drop_index("ix_alerta_licitacao_corpus_id", table_name="alerta_licitacao")
     op.drop_index("ix_alerta_licitacao_tenant_id", table_name="alerta_licitacao")
     op.drop_table("alerta_licitacao")
+    op.drop_index("ix_regra_alerta_licitacao_icp_id", table_name="regra_alerta_licitacao")
     op.drop_index("ix_regra_alerta_licitacao_tenant_id", table_name="regra_alerta_licitacao")
     op.drop_table("regra_alerta_licitacao")

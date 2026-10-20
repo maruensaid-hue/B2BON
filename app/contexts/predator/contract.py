@@ -12,8 +12,10 @@ from app.contexts.predator.prospeccao import (
     mapear_decisores,
 )
 from app.contexts.predator.prospeccao import _score_aderencia as score_aderencia
+from app.contexts.predator import ri  # documentos de RI e indicadores (V5.2.1, Fase 5): `predator.contract.ri`
 
 __all__ = [
+    "ri",
     "enfileirar_enriquecimento_em_lote",
     "enriquecer",
     "enriquecer_via_brasilapi",

@@ -103,6 +103,7 @@ INDICES_FK: tuple[tuple[str, str], ...] = (
     ("aprovacao", "mensagem_id"),
     ("tarefa_linkedin", "mensagem_id"),
     ("tarefa_linkedin", "decisor_id"),
+    ("regra_alerta_licitacao", "icp_id"),
 )
 
 

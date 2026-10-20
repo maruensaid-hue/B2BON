@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
 from app.contexts.map import contract as map_contract
+from app.contexts.predator import contract as predator_contract
 from app.contexts.shared import events as eventos
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
@@ -942,6 +943,8 @@ def gerar_meeting_brief(db: Session, tenant_id: str, ator_id: str | None, negoci
 
     linhas_decisores = conta_service.contexto_decisores_texto(db, tenant_id, conta.id)
     linhas_atividades = atividade_service.contexto_recentes_texto(db, tenant_id, negocio_id=negocio.id)
+    fatos_ri = predator_contract.ri.contexto_financeiro_texto(db, tenant_id, conta.id)
+    secao_financeira = f"{intel.prompt_seguro.bloco_dados_externos('fatos_financeiros_publicos', fatos_ri)}\n\n" if fatos_ri else ""
 
     oferta = db.query(Oferta).filter_by(id=negocio.oferta_id).one_or_none() if negocio.oferta_id else None
     linha_oferta = f"Oferta vinculada: {oferta.nome} — {oferta.descricao}" if oferta is not None else "Sem oferta vinculada."
@@ -957,6 +960,7 @@ def gerar_meeting_brief(db: Session, tenant_id: str, ator_id: str | None, negoci
                 f"{linha_oferta}\n\n"
                 f"Decisores mapeados:\n{linhas_decisores}\n\n"
                 f"Últimas atividades registradas:\n{linhas_atividades}\n\n"
+                f"{secao_financeira}"
                 "Com base SÓ nas informações acima (não invente nenhum dado além delas), escreva um briefing "
                 "curto para o vendedor se preparar para a próxima reunião com esta conta, cobrindo: objetivos da "
                 "reunião, perguntas a fazer, riscos a observar, resumo dos stakeholders envolvidos e próximos "
