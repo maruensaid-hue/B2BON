@@ -188,6 +188,8 @@ class IndicadorExtraido:
     formula: str | None = None
     origens: list[str] = field(default_factory=list)
     metodo: str = "regex_deterministico_v1"
+    # Quantos períodos DISTINTOS aparecem na janela do indicador: mais de um ("3T25, alta de 10% vs. 3T24") torna incerto a qual período o valor pertence.
+    periodos_proximos: int = 1
 
 
 def _periodo_proximo(texto: str, inicio: int, fim: int) -> str | None:
@@ -204,12 +206,29 @@ def _periodo_proximo(texto: str, inicio: int, fim: int) -> str | None:
     return melhor[2] if melhor else None
 
 
-def extrair_indicadores(paginas: list[Pagina]) -> list[IndicadorExtraido]:
+def _periodos_distintos(texto: str, inicio: int, fim: int) -> int:
+    base = max(0, inicio - _JANELA_PERIODO)
+    janela = texto[base: fim + _JANELA_PERIODO]
+    return len({formatar(m) for regex, formatar in _PERIODOS for m in regex.finditer(janela)})
+
+
+# Rótulos extras dos documentos de RI. Só os de significado inequívoco: "caixa" sozinho (fluxo de caixa ≠ saldo) e "investimentos" solto
+# (financeiros ≠ capex) ficam de fora de propósito. "Prejuízo" é um indicador PRÓPRIO, em módulo (sem sinal inferido): nunca vira lucro negativo.
+ROTULOS_RI = {
+    **_ROTULOS,
+    "prejuizo_liquido": r"preju[ií]zo\s+l[ií]quido",
+    "divida_bruta": r"d[ií]vida\s+bruta",
+    "caixa_equivalentes": r"caixa\s+e\s+equivalentes(?:\s+de\s+caixa)?",
+    "capex": r"\bcapex\b",
+}
+
+
+def extrair_indicadores(paginas: list[Pagina], rotulos: dict[str, str] | None = None) -> list[IndicadorExtraido]:
     """Só valores escritos com moeda explícita ao lado do rótulo do indicador. Nada é inferido."""
     achados: list[IndicadorExtraido] = []
     vistos: set[tuple] = set()
     for url, texto in paginas:
-        for nome, rotulo in _ROTULOS.items():
+        for nome, rotulo in (rotulos or _ROTULOS).items():
             for m_rotulo in re.finditer(rotulo, texto, re.IGNORECASE):
                 trecho_valor = texto[m_rotulo.end(): m_rotulo.end() + _JANELA_ROTULO_VALOR]
                 m_valor = _VALOR.search(trecho_valor)
@@ -229,8 +248,34 @@ def extrair_indicadores(paginas: list[Pagina]) -> list[IndicadorExtraido]:
                 achados.append(IndicadorExtraido(
                     nome=nome, valor_original=re.sub(r"\s+", " ", m_valor.group(0)).strip(), valor=numero * fator, moeda=moeda,
                     escala=escala_txt or "unidade", periodo=periodo, trecho=re.sub(r"\s+", " ", texto[max(0, inicio - 40): fim + 40]).strip(),
-                    url=url, confianca="alta" if periodo else "baixa",
+                    url=url, confianca="alta" if periodo else "baixa", periodos_proximos=_periodos_distintos(texto, inicio, fim),
                 ))
+    return achados
+
+
+# --- Sinais qualitativos (expansão, aquisição, investimento) --------------------------------------------------------------
+
+_SINAIS = {
+    "aquisicao": re.compile(r"\b(aquisi[cç][aã]o|adquiriu|incorpora[cç][aã]o|fus[aã]o)\b", re.IGNORECASE),
+    "expansao": re.compile(r"\b(expans[aã]o|nova\s+(?:unidade|f[aá]brica|planta|filial|loja)|inaugura[cç][aã]o|ampliou|amplia[cç][aã]o)\b", re.IGNORECASE),
+    "investimento": re.compile(r"\binvestimentos?\s+(?:de|em|total|previsto|planejado|realizado)|plano\s+de\s+investimentos?\b", re.IGNORECASE),
+    "reorganizacao": re.compile(r"\b(reestrutura[cç][aã]o|reorganiza[cç][aã]o|recupera[cç][aã]o\s+judicial|desinvestimento|venda\s+de\s+ativos)\b", re.IGNORECASE),
+}
+_SENTENCA = re.compile(r"[^.!?\n]{15,}[.!?]?")
+
+
+def extrair_sinais(paginas_numeradas: list[tuple[int, str]], maximo_por_tipo: int = 5) -> list[dict]:
+    """Sentenças que mencionam eventos corporativos, com a página. **Só evidência textual**: não dizem que a empresa precisa de algo; quem lê decide.
+    Limitado por tipo para não virar ruído; a sentença é cortada em 300 caracteres."""
+    por_tipo: dict[str, int] = {}
+    achados: list[dict] = []
+    for numero, texto in paginas_numeradas:
+        for sentenca in _SENTENCA.finditer(texto):
+            frase = re.sub(r"\s+", " ", sentenca.group(0)).strip()
+            for tipo, regex in _SINAIS.items():
+                if por_tipo.get(tipo, 0) < maximo_por_tipo and regex.search(frase):
+                    por_tipo[tipo] = por_tipo.get(tipo, 0) + 1
+                    achados.append({"tipo": tipo, "pagina": numero, "trecho": frase[:300]})
     return achados
 
 

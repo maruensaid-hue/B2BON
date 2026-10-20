@@ -67,6 +67,7 @@ from app.models.pesquisa_preco import PesquisaPreco
 from app.models.licitacao import Licitacao
 from app.models.licitacao_publica import EventoLicitacaoPublica, LicitacaoPublica
 from app.models.alerta_licitacao import AlertaLicitacao, EstadoAlertasLicitacao, RegraAlertaLicitacao
+from app.models.documento_ri import DocumentoRi, IndicadorRi
 from app.models.documento_licitacao import DocumentoLicitacao
 from app.models.requisito_licitacao import RequisitoLicitacao
 from app.models.documento_cofre import DocumentoCofre
@@ -200,6 +201,8 @@ __all__ = [
     "RegraAlertaLicitacao",
     "AlertaLicitacao",
     "EstadoAlertasLicitacao",
+    "DocumentoRi",
+    "IndicadorRi",
     "DocumentoLicitacao",
     "RequisitoLicitacao",
     "DocumentoCofre",
