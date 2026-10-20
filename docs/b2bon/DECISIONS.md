@@ -1405,3 +1405,24 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Não decidido (PO)**: credenciais/custo/LGPD dos provedores; lock de dependências do backend; corrigir ou não o enriquecimento do fluxo de convite (chamada sem `plan_limits`);
   leitura de PDFs de RI; corpus público comum de licitações.
 - **Status**: ACEITA; implantação depende de autorização (4 migrações aditivas: `e5b7d9f1a3c5`, `f6c8e0a2b4d6`, `a7d9f1b3c5e7`, `b8e0a2c4d6f8`).
+
+## D-091 · 2026-10-20 · Lock de dependências do backend e correções no fluxo de convite
+
+- **Contexto**: decisões do PO sobre a V5.1 — itens 1 (staging), 2 (PNCP desligado em produção), 3 (provedores de IA adiados), 4 (adotar lock) e 5 (investigar e corrigir o convite).
+- **Lock (item 4)**: `requirements.lock` e `requirements-dev.lock` (`uv pip compile --universal --generate-hashes`) passam a ser o que a imagem Docker, o CI e os jobs agendados instalam;
+  `tests/test_lock_sincronizado.py` impede divergência com o `pyproject.toml`. Validado para Python 3.12/3.11 (simulação de instalação), `pip-audit` limpo e suíte completa nas versões
+  travadas. O lock fixa versões mais novas que as do ambiente de desenvolvimento (SQLAlchemy 2.1.5, Pydantic 2.14.1, FastAPI 0.153); a imagem não pôde ser construída localmente.
+- **Convite (item 5) — falhas comprovadas por teste contra o código anterior (17 testes falhavam) e corrigidas**:
+  1. **Uso único não era atômico** (cadastro e vitrine): duas requisições simultâneas com o mesmo código passavam juntas pela validação e criavam duas contas/tenants.
+     Agora `auth_service.reivindicar_convite` faz um UPDATE condicional (`status = 'disponivel'`), antes de criar qualquer registro; a perdedora recebe "Convite já utilizado".
+  2. **E-mail duplicado concorrente** estourava `IntegrityError` (500) e, no cadastro de usuário, podia consumir o convite; agora vira "E-mail já cadastrado." e o rollback devolve o convite.
+  3. **Validade sem limites**: negativo gerava convite já vencido e valores enormes quebravam o cálculo de data. Agora 1 h a 8.760 h (`null` continua sendo "sem prazo"); padrão segue 168 h.
+  4. **Convite com status `expirado` passava na validação**; agora é recusado com a mensagem correta.
+  5. **Enriquecimento do convite de Rede Social nunca rodava**: `enriquecer`/`mapear_decisores` eram chamados sem `plan_limits` (obrigatório) e o `TypeError` era engolido. Agora a conta-prospect
+     entra na fila de enriquecimento (mesma transação do cadastro), processada pelo cron com limites do plano, retentativa e histórico; sai da requisição pública a chamada síncrona de IA/rede.
+  6. `GET /convites/vitrine/{codigo}/info` (pública) ganhou limite por IP (30 por 5 min) contra sondagem de códigos.
+- **Verificado e sem falha**: códigos de 64 bits aleatórios (`secrets.token_hex(8)`); revogar/reativar/excluir/listar filtram por tenant (404 para outro tenant); admin comum não gera convite de
+  `super_admin`; convite gratuito só admin; convite usado/revogado/vencido não cadastra; limite de usuários do plano aplicado no uso.
+- **Observado e NÃO alterado (decisão do PO)**: e-mails não são normalizados em minúsculas (`A@x.com` e `a@x.com` são contas distintas e o login é exato) — normalizar mexe em contas existentes;
+  qualquer admin pode gerar convites gratuitos sem teto; `validade_horas = null` continua permitido.
+- **Status**: ACEITA; sem deploy em produção (itens 2 e 3 permanecem como estão: PNCP desligado, provedores adicionais desligados).

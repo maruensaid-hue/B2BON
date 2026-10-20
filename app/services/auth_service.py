@@ -8,6 +8,8 @@ import bcrypt
 import jwt
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -365,6 +367,8 @@ def validar_convite_disponivel(db: Session, convite: _Convite | None, codigo: st
         raise RegraNegocioViolada("Convite revogado.")
     if convite.status == "usado":
         raise RegraNegocioViolada("Convite já utilizado.")
+    if convite.status == "expirado":
+        raise RegraNegocioViolada("Convite expirado.")
 
     validade = convite.validade_em
     if validade is not None:
@@ -375,6 +379,21 @@ def validar_convite_disponivel(db: Session, convite: _Convite | None, codigo: st
             db.commit()
             raise RegraNegocioViolada("Convite expirado.")
     return convite
+
+
+def reivindicar_convite(db: Session, convite: _Convite) -> None:
+    """Uso único ATÔMICO: marca o convite como usado só se ele ainda estiver `disponivel`, num único UPDATE condicional.
+
+    Validar e marcar em passos separados deixava duas requisições simultâneas com o mesmo código passarem juntas pela validação e
+    criarem duas contas com um convite de uso único (a janela inclui o hash de senha, centenas de milissegundos). No PostgreSQL a
+    segunda requisição espera o commit da primeira e então não encontra mais o status `disponivel` (0 linhas). Chamar logo depois
+    das validações baratas e antes de criar qualquer registro; se algo falhar adiante, o rollback devolve o convite."""
+    modelo = type(convite)
+    resultado = db.execute(update(modelo).where(modelo.id == convite.id, modelo.status == "disponivel").values(status="usado"))
+    if resultado.rowcount != 1:
+        db.rollback()
+        raise RegraNegocioViolada("Convite já utilizado.")
+    db.refresh(convite)
 
 
 def registrar_com_convite(
@@ -389,6 +408,7 @@ def registrar_com_convite(
     if db.query(Usuario).filter_by(email=email).one_or_none() is not None:
         raise RegraNegocioViolada("E-mail já cadastrado.")
     _verificar_limite_de_usuarios(db, convite.tenant_id)
+    reivindicar_convite(db, convite)
 
     usuario = Usuario(
         tenant_id=convite.tenant_id,
@@ -399,7 +419,11 @@ def registrar_com_convite(
         termos_aceitos_em=datetime.now(UTC),
     )
     db.add(usuario)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as erro:  # outro cadastro com o mesmo e-mail passou entre a checagem e o INSERT
+        db.rollback()
+        raise RegraNegocioViolada("E-mail já cadastrado.") from erro
 
     convite.status = "usado"
     convite.usado_por_usuario_id = usuario.id

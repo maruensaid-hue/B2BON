@@ -18,6 +18,7 @@ from app.llm.base import LLMProvider
 from app.models.auditoria import AuditLog
 from app.models.chave_api_parceiro import ChaveApiParceiro
 from app.models.convite_vitrine import ConviteVitrine
+from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
 from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
@@ -931,6 +932,8 @@ def criar_tenant_vitrine(
     if db.query(Usuario).filter_by(email=email_admin).one_or_none() is not None:
         raise RegraNegocioViolada("E-mail já cadastrado.")
 
+    auth_service.reivindicar_convite(db, convite)
+
     tenant_id = _gerar_tenant_id(db, razao_social)
     # Convite gratuito (raio-X 2026-08-27): tenant cortesia nasce
     # "distribuidor" (raiz da árvore, sem tenant pai), não "cliente" —
@@ -954,7 +957,11 @@ def criar_tenant_vitrine(
         termos_aceitos_em=datetime.now(UTC),
     )
     db.add(usuario)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as erro:  # outro cadastro com o mesmo e-mail passou entre a checagem e o INSERT
+        db.rollback()
+        raise RegraNegocioViolada("E-mail já cadastrado.") from erro
 
     if convite.gratuito:
         db.add(Licenca(tenant_id=tenant.id, plano_id=plano_id, status="ativa"))
@@ -980,22 +987,11 @@ def criar_tenant_vitrine(
         db, convite.tenant_id_origem, razao_social, cnpj, nome_admin, email_admin
     )
 
-    # Best-effort: a IA já sai pesquisando site e contatos dessa conta
-    # recém-criada, mas nada aqui pode travar o cadastro do tenant — se
-    # qualquer provedor falhar, só loga e segue (mesmo espírito de
-    # `sincronizar_com_tolerancia`).
-    try:
-        conta_service.enriquecer(
-            db, convite.tenant_id_origem, None, conta_prospect.id, llm, site_fetcher, web_search
-        )
-    except Exception:
-        logger.warning("Falha ao enriquecer via site a conta %s criada por convite de rede social", conta_prospect.id, exc_info=True)
-    try:
-        conta_service.mapear_decisores(
-            db, convite.tenant_id_origem, None, conta_prospect.id, account_data, contact_enrichment, graph
-        )
-    except Exception:
-        logger.warning("Falha ao mapear decisores da conta %s criada por convite de rede social", conta_prospect.id, exc_info=True)
+    # O enriquecimento (site + decisores) da conta-prospect entra na FILA em lote, na mesma transação do cadastro, e o cron o
+    # processa com os limites do plano, retentativa e histórico. Antes ele era chamado aqui, dentro da requisição pública e sem
+    # `plan_limits` (parâmetro obrigatório): o TypeError era engolido pelo `except Exception` e o enriquecimento nunca rodava.
+    # Os parâmetros llm/site_fetcher/web_search/account_data/contact_enrichment/graph seguem na assinatura por compatibilidade.
+    db.add(FilaEnriquecimentoConta(tenant_id=convite.tenant_id_origem, conta_id=conta_prospect.id))
 
     db.commit()
     db.refresh(usuario)

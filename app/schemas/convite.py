@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ConviteCadastroSchema(BaseModel):
@@ -16,9 +16,14 @@ class ConviteCadastroSchema(BaseModel):
     criado_em: datetime
 
 
+# Validade: de 1 hora a 1 ano. Negativo criava convite já vencido e valor enorme estourava o cálculo de data (500); `null`
+# continua significando "sem prazo".
+VALIDADE_HORAS_MAXIMA = 8760
+
+
 class GerarConviteRequestSchema(BaseModel):
     papel_concedido: str = "user"
-    validade_horas: int | None = 168
+    validade_horas: int | None = Field(default=168, ge=1, le=VALIDADE_HORAS_MAXIMA)
 
 
 class ConviteVitrineSchema(BaseModel):
@@ -35,7 +40,7 @@ class ConviteVitrineSchema(BaseModel):
 
 
 class GerarConviteVitrineRequestSchema(BaseModel):
-    validade_horas: int | None = 168
+    validade_horas: int | None = Field(default=168, ge=1, le=VALIDADE_HORAS_MAXIMA)
     email_destinatario: str | None = None
     # Só admin/super_admin pode marcar True — validado na rota, não aqui
     # (ver app/api/v1/convites.py). Concede o plano "Teste" sem checkout.

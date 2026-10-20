@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import limitar_por_ip
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_email_provider, get_tenant_id, get_usuario_atual
 from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
@@ -96,7 +97,11 @@ def gerar_convite_vitrine(
     return ConviteVitrineCriadoSchema.model_validate(convite)
 
 
-@router.get("/vitrine/{codigo}/info", response_model=ConviteVitrineInfoSchema)
+# Pública: limite por IP contra sondagem de códigos (generoso: uma pessoa abrindo o link não chega perto).
+@router.get(
+    "/vitrine/{codigo}/info", response_model=ConviteVitrineInfoSchema,
+    dependencies=[Depends(limitar_por_ip(max_tentativas=30, janela_segundos=300))],
+)
 def obter_info_convite_vitrine(codigo: str, db: Session = Depends(get_db)) -> ConviteVitrineInfoSchema:
     """Pública, sem autenticação — a tela de cadastro (`ConviteVitrine.tsx`)
     usa isso pra saber, antes de qualquer coisa, se esconde o seletor de

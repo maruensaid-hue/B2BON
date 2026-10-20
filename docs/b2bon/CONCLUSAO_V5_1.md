@@ -16,7 +16,7 @@ financeiros e sem tela de histórico.
 | 1 | Provedores adicionais de IA | **Implementado, mas não validado em ambiente real** (adapters + fallback testados com respostas simuladas; ativação **bloqueada externamente**: credenciais, aprovação de privacidade, decisão de custo) |
 | 2 | Coleta e monitoramento do PNCP | **Implementado e validado contra o serviço real em leitura** (adapter); a **ativação agendada em produção está pendente de validação externa** (`PNCP_HABILITADO`, merge no `master`, configuração do tenant) |
 | 3 | Auditoria de dependências | **Concluído e validado** (com o limite: backend sem lock file) |
-| 4 | Lint do backend e CI | **Concluído e validado localmente**; a execução no GitHub Actions só ocorre no próximo push (**Implementado, mas não validado em ambiente real** quanto ao CI) |
+| 4 | Lint do backend e CI | **Concluído e validado** — `ruff check .` rodou e passou no job `backend` do GitHub Actions (commit `1dde7db`) |
 | 5 | Enriquecimento de site | **Concluído e validado** nos requisitos de domínio, histórico, isolamento e independência de IA; **Parcial** em indicadores financeiros (só páginas HTML; PDFs de RI não são lidos) |
 
 ## 1. Provedores adicionais de IA
@@ -97,10 +97,11 @@ Detalhe em `AUDITORIA_DEPENDENCIAS.md`. `pip-audit`: 0 em 58 pacotes. `npm audit
 | `ruff check .` | All checks passed |
 | `pytest` unitários (`tests/unit`) | **1209 passaram**, 0 falhas |
 | `pytest` integração e demais (`tests`, sem `unit` e sem `desempenho`) | **1383 passaram**, 12 ignorados, 0 falhas (inclui `test_alembic_upgrade.py`: cadeia até `b8e0a2c4d6f8` em SQLite) |
-| Suíte em PostgreSQL / `alembic upgrade head` em PG limpo | **não executado localmente** (sem PG); roda no job `postgres-migrations` do CI |
+| `alembic upgrade head` em PostgreSQL limpo | **aprovado no GitHub Actions** (job `postgres-migrations`, commit `1dde7db`): as 4 migrações novas aplicam em Postgres |
 | Frontend: `tsc --noEmit`, `npm run build`, `npm run lint` | sem erros de tipo; build OK; lint com os mesmos 25 avisos preexistentes |
 | `npm audit` / `pip-audit .` | 0 / 0 vulnerabilidades |
-| E2E Playwright | **não executado** (roda no CI); a tela nova foi verificada com Playwright local contra banco descartável |
+| E2E Playwright | **aprovado no GitHub Actions** (job `e2e`, commit `1dde7db`); a tela nova também foi verificada com Playwright local contra banco descartável |
+| CI completo do commit `1dde7db` (staging) | **sucesso nos 4 jobs**: `backend` (inclui `ruff check .` + `pytest`), `postgres-migrations`, `frontend`, `e2e` |
 | Isolamento entre tenants | testes negativos novos: coleta PNCP (config/saúde/execuções), histórico de coletas (lista, detalhe, reprocesso, confirmação), `/admin/provedores-ia` |
 | Indisponibilidade de IA | `test_nucleo_sem_ia.py`, disjuntor, `concluida_sem_ia`, fila com retentativa |
 | Falha e recuperação do PNCP | `test_coleta_pncp.py` (falha, falha no meio, retomada sem duplicar, execução esquecida, falhando/atrasada) |
@@ -110,4 +111,14 @@ Detalhe em `AUDITORIA_DEPENDENCIAS.md`. `pip-audit`: 0 em 58 pacotes. `npm audit
 ## Ações para ativação em produção (todas dependem de autorização)
 
 1. Commit/push e deploy (inclui 4 migrações aditivas já listadas). 2. `PNCP_HABILITADO=true` e configuração do tenant. 3. Credenciais, avaliação LGPD e decisão de custo para qualquer provedor adicional.
-4. Decisão sobre o lock de dependências do backend e sobre o bug do fluxo de convite. 5. Executar o E2E (Playwright) no CI e validar as migrações em PostgreSQL (job existente).
+4. Decisão sobre o lock de dependências do backend e sobre o bug do fluxo de convite. 5. (feito no staging: E2E e migrações em PostgreSQL passaram no CI).
+
+## Decisões do PO após a V5.1 (2026-10-20) e resultado
+
+| Item | Decisão | Resultado |
+|---|---|---|
+| 1. Commit e envio ao staging | prosseguir com verificações; sem deploy em produção | Branch e relação com `staging` conferidas (avanço direto), cadeia de migrações linear com head único (`d2e4…→e5b7…→f6c8…→a7d9…→b8e0…`, todas aditivas), suítes verdes; V5.1 enviada (`1dde7db`) e os itens 4 e 5 em commits seguintes. **Produção não foi tocada.** |
+| 2. PNCP | manter desativado em produção | Nada a fazer: já é desligado por padrão (`PNCP_HABILITADO=false`, sem configuração de tenant). Pendente: UFs e palavras-chave. |
+| 3. Provedores de IA | adiar a ativação | Nada ativado. Avaliação de credenciais, LGPD, retenção e custo segue pendente (ver `PROVEDORES_IA.md`). |
+| 4. Lock do backend | adotar, compatível com Python 3.12 | **Concluído e validado** (simulação 3.12/3.11, `pip-audit` 0, suíte nas versões travadas); imagem Docker **não** construída localmente. Ver `AUDITORIA_DEPENDENCIAS.md` e D-091. |
+| 5. Fluxo de convite | investigar e corrigir se houver falha comprovada | **6 falhas comprovadas e corrigidas** (uso único atômico, e-mail duplicado concorrente, validade, status expirado, enriquecimento morto, endpoint público sem limite), com 30 testes novos. Ver D-091. |
