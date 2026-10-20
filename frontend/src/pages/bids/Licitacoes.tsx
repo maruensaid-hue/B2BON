@@ -223,6 +223,10 @@ export function Licitacoes() {
                       {data(l.prazo_proposta)}
                     </span>
                   </span>
+                  <span className="flex items-center gap-1.5">
+                  {l.externa_exige_atencao && (
+                    <Badge tone="red">{l.situacao_externa} na fonte</Badge>
+                  )}
                   <Badge
                     tone={
                       l.status === "GO" || l.status === "GANHA"
@@ -234,6 +238,7 @@ export function Licitacoes() {
                   >
                     {l.status}
                   </Badge>
+                  </span>
                 </Link>
               ))}
               {proximo && (

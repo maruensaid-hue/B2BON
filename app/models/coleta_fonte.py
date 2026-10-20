@@ -45,6 +45,8 @@ class ExecucaoColetaFonte(Base):
     inseridos: Mapped[int] = mapped_column(Integer, default=0)
     atualizados: Mapped[int] = mapped_column(Integer, default=0)
     ignorados: Mapped[int] = mapped_column(Integer, default=0)
+    # Registros já ingeridos que a fonte alterou (retificação) ou cuja situação mudou (anulada, revogada, suspensa).
+    alterados_na_fonte: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     paginas: Mapped[int] = mapped_column(Integer, default=0)
     tentativas: Mapped[int] = mapped_column(Integer, default=0)  # chamadas HTTP à fonte, somadas
     erro: Mapped[str | None] = mapped_column(String, nullable=True)

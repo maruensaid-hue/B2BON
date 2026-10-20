@@ -1426,3 +1426,24 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Observado e NÃO alterado (decisão do PO)**: e-mails não são normalizados em minúsculas (`A@x.com` e `a@x.com` são contas distintas e o login é exato) — normalizar mexe em contas existentes;
   qualquer admin pode gerar convites gratuitos sem teto; `validade_horas = null` continua permitido.
 - **Status**: ACEITA; sem deploy em produção (itens 2 e 3 permanecem como estão: PNCP desligado, provedores adicionais desligados).
+
+
+## D-092 · 2026-10-20 · V5.2: auditoria de persistência do site, PNCP incremental, retenção e fórmulas do MAP
+
+- **Contexto**: Master Prompt V5.2 (continuar sem recomeçar; auditar com evidência; corrigir só o que se prova com teste; sem deploy, sem produção, sem serviço pago).
+- **Falhas comprovadas por teste antes da correção**:
+  1. Excluir conta com histórico de coleta/indicadores violava FK (500). `conta_service._apagar_dados_do_site` apaga indicadores → coletas → conteúdo, na exclusão individual e em lote.
+  2. Persistência de `conteudo_pagina_site`: sem teto de páginas/caracteres no backend e sobrescrita cega. Agora no máximo 8 páginas por conta, 8.000 caracteres por página, upsert que só
+     substitui por conteúdo mais novo, poda das excedentes e tolerância a corrida (`IntegrityError`).
+  3. Crawler aceitava qualquer MIME; agora só HTML/texto (`ConteudoNaoSuportado`), com testes de formas hostis de IP.
+  4. PNCP só via edital novo (`/publicacao`); retificação, suspensão, revogação e anulação passavam despercebidas. A coleta usa `/atualizacao`, guarda `situacao_externa`
+     e `atualizado_externo_em`, conta `alterados_na_fonte` e a tela marca o edital. O status interno **não** muda sozinho.
+  5. Churn do MAP dividia todos os cancelamentos do mês pela base inicial (passava de 100%); ROI com LTV 0 virava "sem dado"; `periodo` inválido gerava 500. Corrigidos (coorte, `is None`, 422).
+- **Retenção** (nova, `retencao_historicos_service`, rota `/cron/podar-historicos`, passo diário no workflow): coletas de site 180 dias, execuções de coleta 90 dias, cache de IA vencido; nunca apaga
+  o cursor da coleta, a última coleta bem-sucedida de cada conta, as confirmadas manualmente nem as em andamento.
+- **Migrações**: `c9f1b3d5e7a9` (situação externa). `tests/test_migracoes_v5.py` sobe o esquema até a revisão anterior, insere dados e migra; passo próprio no CI para PostgreSQL. Validado em SQLite; a
+  validação em PostgreSQL real só acontece no CI (staging exige autorização).
+- **Aprovação humana**: já era garantida por duas travas (`ativar` recusa toque pendente/rejeitado; o envio só seleciona `aprovado`/`falhou`). Faltava teste; agora há
+  `tests/integration/test_envio_exige_aprovacao.py`, inclusive o caso de defesa em profundidade (mensagem pendente com horário vencido não sai).
+- **Não feito (de propósito)**: provedores de IA adicionais; ativar PNCP; corpus público comum entre tenants; leitura de PDFs de RI; normalização de caixa de e-mail. Ver relatório V5.2.
+- **Status**: ACEITA; sem push, sem deploy, sem alteração de produção.

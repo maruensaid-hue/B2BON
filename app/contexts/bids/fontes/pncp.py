@@ -80,6 +80,8 @@ def normalizar(registro: dict) -> LicitacaoExterna | None:
         valor_estimado=float(valor) if isinstance(valor, int | float) else None,
         url=link or registro.get("linkSistemaOrigem"),
         bruto=registro,
+        situacao_externa=(registro.get("situacaoCompraNome") or None),
+        atualizado_externo_em=_data(registro.get("dataAtualizacaoGlobal") or registro.get("dataAtualizacao")),
     )
 
 
@@ -91,14 +93,14 @@ class FontePncp(FonteLicitacoes):
         self._cliente = cliente or httpx.Client(base_url=URL_BASE, timeout=20)
         self._dormir = dormir
 
-    def _consultar(self, params: dict) -> tuple[dict | None, int]:
+    def _consultar(self, params: dict, endpoint: str = "publicacao") -> tuple[dict | None, int]:
         """GET com retentativa limitada e espera progressiva (1 s, 2 s, ...; respeita `Retry-After` até 30 s) só para
         falhas transitórias: erro de rede/timeout, 429 e 5xx. 4xx de requisição inválida não se repete."""
         ultimo = "PNCP indisponível no momento."
         for tentativa in range(1, _TENTATIVAS + 1):
             espera = float(2 ** (tentativa - 1))
             try:
-                resposta = self._cliente.get("/contratacoes/publicacao", params=params)
+                resposta = self._cliente.get(f"/contratacoes/{endpoint}", params=params)
             except httpx.HTTPError as erro:
                 ultimo = f"PNCP indisponível no momento ({type(erro).__name__})."
             else:
@@ -124,15 +126,18 @@ class FontePncp(FonteLicitacoes):
         raise ErroFonte(ultimo, _TENTATIVAS, True)
 
     def buscar_pagina(self, data_inicial: str, data_final: str, modalidade: int | None, pagina: int = 1,
-                      uf: str | None = None) -> PaginaPncp:
-        """Datas AAAAMMDD. A modalidade é obrigatória no serviço real."""
+                      uf: str | None = None, endpoint: str = "publicacao") -> PaginaPncp:
+        """Datas AAAAMMDD. A modalidade é obrigatória no serviço real. `endpoint`: `publicacao` (o que foi publicado na janela) ou
+        `atualizacao` (o que foi publicado OU alterado na janela: retificação, anulação, revogação, suspensão; mesmos parâmetros)."""
+        if endpoint not in ("publicacao", "atualizacao"):
+            raise ValidacaoFalhou("Endpoint do PNCP inválido.")
         if modalidade not in MODALIDADES_VALIDAS:
             raise ValidacaoFalhou("Informe a modalidade do PNCP (código de 1 a 19).")
         params: dict = {"dataInicial": data_inicial, "dataFinal": data_final, "pagina": pagina,
                         "tamanhoPagina": TAMANHO_PAGINA, "codigoModalidadeContratacao": modalidade}
         if uf:
             params["uf"] = uf.upper()
-        corpo, tentativas = self._consultar(params)
+        corpo, tentativas = self._consultar(params, endpoint)
         if corpo is None:
             return PaginaPncp([], pagina, 0, 0, 0, tentativas)
         brutos = corpo["data"]

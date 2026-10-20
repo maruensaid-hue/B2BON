@@ -67,6 +67,14 @@ jobs:
           # Chave Fernet exclusiva e descartável para CI; nunca reutilizar em ambientes reais.
           CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: alembic upgrade head
+      # V5.x: as migrações novas sobre dados da versão anterior (preserva e aplica defaults), o índice único parcial no banco e o ciclo
+      # downgrade → upgrade. O banco é o descartável do próprio job; o teste volta ao head sozinho.
+      - name: Migrações da V5.x sobre dados anteriores (PostgreSQL)
+        env:
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
+          B2BON_TESTE_PG_MIGRACAO_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
+          CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        run: pytest -q tests/test_migracoes_v5.py
 
   frontend:
     runs-on: ubuntu-latest

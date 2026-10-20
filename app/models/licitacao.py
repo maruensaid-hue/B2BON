@@ -31,6 +31,10 @@ class Licitacao(Base):
     prazo_esclarecimento: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     valor_estimado: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String)
+    # Vindos da fonte pública (PNCP): situação (Divulgada/Revogada/Anulada/Suspensa) e a última atualização do registro na fonte.
+    # Não alteram `status`, que é o fluxo interno do vendedor: só sinalizam. Nulos para licitação cadastrada à mão.
+    situacao_externa: Mapped[str | None] = mapped_column(String, nullable=True)
+    atualizado_externo_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     responsavel_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
     concorrentes: Mapped[list | None] = mapped_column(JSON, nullable=True)
     parceiros: Mapped[list | None] = mapped_column(JSON, nullable=True)

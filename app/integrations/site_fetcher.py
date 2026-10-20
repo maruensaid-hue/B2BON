@@ -114,11 +114,27 @@ def _get_seguro(url: str) -> httpx.Response:
     )
 
 
+class ConteudoNaoSuportado(httpx.HTTPError):
+    """O endereço respondeu, mas não com uma página de texto (PDF, imagem, arquivo binário, JSON...)."""
+
+
+# Só estes tipos viram texto de página. Sem cabeçalho `Content-Type` a resposta é aceita (sites antigos); qualquer outro tipo é recusado em vez
+# de decodificar bytes arbitrários como se fossem HTML.
+_TIPOS_ACEITOS = {"text/html", "application/xhtml+xml", "text/plain"}
+
+
+def _texto_da_pagina(resposta: httpx.Response) -> str:
+    tipo = resposta.headers.get("content-type", "").split(";")[0].strip().lower()
+    if tipo and tipo not in _TIPOS_ACEITOS:
+        raise ConteudoNaoSuportado(f"Tipo de conteúdo não suportado: {tipo}")
+    return html_para_texto(resposta.text)[:_MAX_CHARS_POR_PAGINA]
+
+
 def _buscar_pagina(base_url: str, caminho: str) -> str | None:
     try:
         resposta = _get_seguro(f"{base_url}{caminho}")
         resposta.raise_for_status()
-        return html_para_texto(resposta.text)[:_MAX_CHARS_POR_PAGINA]
+        return _texto_da_pagina(resposta)
     except httpx.HTTPError:
         return None
 
@@ -144,7 +160,7 @@ def buscar_conteudo_site(dominio: str) -> str:
     base_url = f"https://{dominio_limpo}"
     home = _get_seguro(base_url)
     home.raise_for_status()
-    texto_home = html_para_texto(home.text)[:_MAX_CHARS_POR_PAGINA]
+    texto_home = _texto_da_pagina(home)
 
     paginas: dict[str, str] = {base_url: texto_home}
 

@@ -13,6 +13,7 @@ import unicodedata
 from datetime import UTC, datetime
 
 import httpx
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
@@ -21,7 +22,7 @@ from app.contexts.shared import matching
 from app.contexts.shared.organizations import decisores_da_conta, normalizar_dominio, obter_conta
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.integrations.brasilapi_client import BrasilApiClient
-from app.integrations.site_fetcher import HostNaoPublico, SiteFetcher
+from app.integrations.site_fetcher import ConteudoNaoSuportado, HostNaoPublico, SiteFetcher
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.campo_enriquecido import CampoEnriquecido
@@ -268,14 +269,56 @@ def _paginas_do_texto(texto_site: str) -> list[tuple[str, str]]:
     return [(partes[i].strip(), partes[i + 1].strip()) for i in range(1, len(partes) - 1, 2) if partes[i].strip()]
 
 
+# Limites aplicados no BACKEND, na gravação (o coletor já respeita os mesmos números, mas o armazenamento não confia nele).
+MAX_PAGINAS_GUARDADAS_POR_CONTA = 8
+MAX_CHARS_CONTEUDO_GUARDADO = 8000
+_CARACTERES_DE_CONTROLE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _conteudo_para_guardar(conteudo: str) -> str:
+    """Sem NUL/controle (o PostgreSQL recusa NUL em texto e a gravação inteira falharia) e no tamanho máximo."""
+    return _CARACTERES_DE_CONTROLE.sub("", conteudo).strip()[:MAX_CHARS_CONTEUDO_GUARDADO]
+
+
+def _consultar_paginas_guardadas(db: Session, conta_id: int) -> dict[str, ConteudoPaginaSite]:
+    return {p.url: p for p in db.query(ConteudoPaginaSite).filter_by(conta_id=conta_id).all()}
+
+
+def _atualizar_se_mais_nova(pagina: ConteudoPaginaSite, conteudo: str, coletado_em: datetime) -> None:
+    """Coleta mais antiga nunca sobrescreve uma mais nova: duas coletas concorrentes da mesma conta terminam em ordem imprevisível."""
+    if pagina.coletado_em is None or coletado_em >= pagina.coletado_em:
+        pagina.conteudo, pagina.coletado_em = conteudo, coletado_em
+
+
 def _guardar_paginas(db: Session, tenant_id: str, conta_id: int, paginas: list[tuple[str, str]], agora: datetime) -> None:
-    """Guarda o conteúdo coletado de cada página (a última coleta por URL), para reanalisar sem acessar o site."""
-    existentes = {p.url: p for p in db.query(ConteudoPaginaSite).filter_by(conta_id=conta_id).all()}
-    for url, conteudo in paginas:
+    """Guarda o conteúdo coletado de cada página (a última coleta por URL), para reanalisar sem acessar o site.
+
+    No máximo `MAX_PAGINAS_GUARDADAS_POR_CONTA` linhas por conta: passada a coleta, as mais antigas além do limite são podadas (um site que
+    muda de estrutura não pode acumular páginas sem fim). Inserção concorrente da mesma (conta, URL) cai na restrição única e vira
+    atualização condicional, nunca em erro 500."""
+    coletado_em = agora.replace(tzinfo=None)
+    existentes = _consultar_paginas_guardadas(db, conta_id)
+    for url, bruto in paginas[:MAX_PAGINAS_GUARDADAS_POR_CONTA]:
+        conteudo = _conteudo_para_guardar(bruto)
+        if not conteudo:
+            continue  # página vazia não substitui o conteúdo bom já guardado
         if url in existentes:
-            existentes[url].conteudo, existentes[url].coletado_em = conteudo, agora
-        else:
-            db.add(ConteudoPaginaSite(tenant_id=tenant_id, conta_id=conta_id, url=url, conteudo=conteudo, coletado_em=agora))
+            _atualizar_se_mais_nova(existentes[url], conteudo, coletado_em)
+            continue
+        try:
+            with db.begin_nested():
+                db.add(ConteudoPaginaSite(tenant_id=tenant_id, conta_id=conta_id, url=url, conteudo=conteudo, coletado_em=coletado_em))
+                db.flush()
+        except IntegrityError:
+            atual = db.query(ConteudoPaginaSite).filter_by(conta_id=conta_id, url=url).one()
+            _atualizar_se_mais_nova(atual, conteudo, coletado_em)
+    db.flush()
+    todas = (
+        db.query(ConteudoPaginaSite).filter_by(conta_id=conta_id)
+        .order_by(ConteudoPaginaSite.coletado_em.desc(), ConteudoPaginaSite.id.desc()).all()
+    )
+    for excedente in todas[MAX_PAGINAS_GUARDADAS_POR_CONTA:]:
+        db.delete(excedente)
 
 
 _CHARS_POR_PAGINA_NO_PROMPT = 2500  # a IA recebe o começo de cada página; a extração determinística lê o texto inteiro
@@ -371,6 +414,11 @@ def enriquecer(
         falhar(
             f'Não conseguimos acessar "{dominio}" — o domínio não existe ou não resolve. '
             'Confirme o endereço em "Editar dados da conta".', erro,
+        )
+    except ConteudoNaoSuportado as erro:
+        falhar(
+            f'O endereço "{dominio}" não devolveu uma página de site (tipo de conteúdo não suportado). '
+            'Confirme o domínio em "Editar dados da conta".', erro,
         )
     except httpx.HTTPStatusError as erro:
         falhar(

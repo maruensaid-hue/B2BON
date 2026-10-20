@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
@@ -134,7 +134,7 @@ def desempenho_funil(
 
 @router.get("/desempenho/economia", response_model=DashboardEconomiaSchema)
 def desempenho_economia(
-    periodo: str,
+    periodo: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Mês no formato AAAA-MM"),
     vendedor_usuario_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),

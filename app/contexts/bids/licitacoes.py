@@ -67,9 +67,26 @@ def atualizar(db: Session, tenant_id: str, usuario_id: int | None, licitacao_id:
     return licitacao
 
 
-def ingerir(db: Session, tenant_id: str, usuario_id: int | None, externas: list[LicitacaoExterna]) -> dict:
-    """Tender ingestion idempotente por (tenant, fonte, id externo)."""
-    criadas, atualizadas = [], []
+SITUACOES_ENCERRADAS_OU_SUSPENSAS = ("revogad", "anulad", "suspens", "cancelad")
+
+
+def situacao_externa_exige_atencao(situacao: str | None) -> bool:
+    """Revogada, anulada, suspensa ou cancelada na fonte: o vendedor precisa saber antes de seguir com a proposta."""
+    return bool(situacao) and any(situacao.strip().lower().startswith(prefixo) for prefixo in SITUACOES_ENCERRADAS_OU_SUSPENSAS)
+
+
+def _valor_auditavel(valor):
+    return valor.isoformat() if isinstance(valor, datetime) else valor
+
+
+def ingerir_detalhado(db: Session, tenant_id: str, usuario_id: int | None, externas: list[LicitacaoExterna]) -> dict:
+    """Ingestão idempotente por (tenant, fonte, id externo) que também registra o que a FONTE alterou em edital já ingerido.
+
+    - situação externa mudou (ex.: Divulgada → Anulada/Suspensa/Revogada): evento `licitacao_situacao_externa_alterada` (de, para, quando);
+    - conteúdo mudou (retificação: prazo, valor, objeto, órgão...): evento `licitacao_retificada_na_fonte` com os campos e, para prazo e valor, o antes/depois.
+    Nada disso mexe no `status` interno do vendedor nem apaga dado; só atualiza e deixa o histórico. Sem mudança, nenhum evento (re-coletar não gera ruído).
+    Devolve criadas, atualizadas e `alteradas` ([{id, situacao_alterada, retificada}])."""
+    criadas, atualizadas, alteradas = [], [], []
     for ext in externas:
         existente = db.query(Licitacao).filter_by(tenant_id=tenant_id, fonte=ext.fonte, fonte_id_externo=ext.id_externo).one_or_none()
         campos = {
@@ -77,20 +94,46 @@ def ingerir(db: Session, tenant_id: str, usuario_id: int | None, externas: list[
             "modalidade": ext.modalidade, "data_publicacao": ext.data_publicacao, "prazo_proposta": ext.prazo_proposta,
             "valor_estimado": ext.valor_estimado, "fonte_url": ext.url,
         }
+        externos = {"situacao_externa": ext.situacao_externa, "atualizado_externo_em": ext.atualizado_externo_em}
         if existente is None:
             licitacao = Licitacao(tenant_id=tenant_id, fonte=ext.fonte, fonte_id_externo=ext.id_externo,
-                                  status=fluxo.de(ext.modalidade).inicial, **campos)
+                                  status=fluxo.de(ext.modalidade).inicial, **campos, **externos)
             db.add(licitacao)
             db.flush()
             criadas.append(licitacao.id)
-        else:
-            for campo, valor in campos.items():
-                setattr(existente, campo, valor)
-            atualizadas.append(existente.id)
+            continue
+        mudou = {campo: (getattr(existente, campo), valor) for campo, valor in campos.items() if getattr(existente, campo) != valor}
+        situacao_anterior = existente.situacao_externa
+        situacao_mudou = ext.situacao_externa is not None and situacao_anterior is not None and situacao_anterior != ext.situacao_externa
+        for campo, valor in {**campos, **externos}.items():
+            if campo in externos and valor is None:
+                continue  # fonte que não informa situação/atualização não apaga o que já se sabe
+            setattr(existente, campo, valor)
+        atualizadas.append(existente.id)
+        if situacao_mudou:
+            auditoria_service.registrar(
+                db, tenant_id, "licitacao_situacao_externa_alterada", "licitacao", existente.id, _ator(usuario_id),
+                {"de": situacao_anterior, "para": ext.situacao_externa, "atualizado_na_fonte_em": _valor_auditavel(ext.atualizado_externo_em),
+                 "exige_atencao": situacao_externa_exige_atencao(ext.situacao_externa)},
+            )
+        if mudou:
+            detalhes: dict = {"campos": sorted(mudou), "atualizado_na_fonte_em": _valor_auditavel(ext.atualizado_externo_em)}
+            for campo in ("prazo_proposta", "valor_estimado"):
+                if campo in mudou:
+                    detalhes[campo] = {"de": _valor_auditavel(mudou[campo][0]), "para": _valor_auditavel(mudou[campo][1])}
+            auditoria_service.registrar(db, tenant_id, "licitacao_retificada_na_fonte", "licitacao", existente.id, _ator(usuario_id), detalhes)
+        if situacao_mudou or mudou:
+            alteradas.append({"id": existente.id, "situacao_alterada": situacao_mudou, "retificada": bool(mudou)})
     auditoria_service.registrar(db, tenant_id, "licitacoes_ingeridas", "licitacao", 0, _ator(usuario_id),
-                                {"criadas": len(criadas), "atualizadas": len(atualizadas)})
+                                {"criadas": len(criadas), "atualizadas": len(atualizadas), "alteradas_na_fonte": len(alteradas)})
     db.commit()
-    return {"criadas": criadas, "atualizadas": atualizadas}
+    return {"criadas": criadas, "atualizadas": atualizadas, "alteradas": alteradas}
+
+
+def ingerir(db: Session, tenant_id: str, usuario_id: int | None, externas: list[LicitacaoExterna]) -> dict:
+    """Tender ingestion idempotente por (tenant, fonte, id externo). Formato original da resposta: criadas e atualizadas."""
+    resultado = ingerir_detalhado(db, tenant_id, usuario_id, externas)
+    return {"criadas": resultado["criadas"], "atualizadas": resultado["atualizadas"]}
 
 
 def mudar_status(db: Session, tenant_id: str, usuario_id: int | None, licitacao_id: int, status: str) -> Licitacao:
@@ -291,6 +334,8 @@ def como_dict(lic: Licitacao) -> dict:
         "valor_estimado": lic.valor_estimado, "status": lic.status, "responsavel_usuario_id": lic.responsavel_usuario_id,
         "concorrentes": lic.concorrentes or [], "parceiros": lic.parceiros or [], "vencedor": lic.vencedor,
         "valor_proposta": lic.valor_proposta, "motivo_resultado": lic.motivo_resultado, "criado_em": lic.criado_em,
+        "situacao_externa": lic.situacao_externa, "atualizado_externo_em": lic.atualizado_externo_em,
+        "externa_exige_atencao": situacao_externa_exige_atencao(lic.situacao_externa),
     }
 
 

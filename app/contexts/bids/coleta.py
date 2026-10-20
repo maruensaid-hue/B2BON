@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 FONTE = "PNCP"
 _EXECUCAO_ABANDONADA = timedelta(minutes=30)
 _PAUSA_ENTRE_PAGINAS_SEGUNDOS = 0.5
-_MAX_PAGINAS_POR_EXECUCAO = 60  # 3.000 registros por execução
+_MAX_PAGINAS_POR_EXECUCAO = 100  # 5.000 registros por execução
 _MAX_JANELA_DIAS = 7
 _LIMITES = {"janela_dias": (1, _MAX_JANELA_DIAS), "max_novas_por_execucao": (1, 1000)}
 
@@ -195,16 +195,21 @@ def _coletar(db: Session, tenant_id: str, cfg: ConfiguracaoColetaFonte, fonte: F
             while True:
                 if execucao.paginas >= _MAX_PAGINAS_POR_EXECUCAO or execucao.inseridos >= cfg.max_novas_por_execucao:
                     return True
-                resultado: PaginaPncp = fonte.buscar_pagina(execucao.data_inicial, execucao.data_final, modalidade, pagina, uf)
+                # `atualizacao` traz o publicado E o alterado na janela: é por ele que anulação, revogação, suspensão e retificação de edital
+                # já ingerido chegam (a consulta por `publicacao` só enxerga edital novo).
+                resultado: PaginaPncp = fonte.buscar_pagina(
+                    execucao.data_inicial, execucao.data_final, modalidade, pagina, uf, "atualizacao"
+                )
                 execucao.paginas += 1
                 execucao.tentativas += resultado.tentativas
                 relevantes = [i for i in resultado.itens if _casa(i, cfg)]
                 execucao.consultados += len(resultado.itens) + resultado.ignorados
                 execucao.ignorados += resultado.ignorados + len(resultado.itens) - len(relevantes)
                 if relevantes:
-                    ingerido = licitacoes.ingerir(db, tenant_id, None, relevantes)
+                    ingerido = licitacoes.ingerir_detalhado(db, tenant_id, None, relevantes)
                     execucao.inseridos += len(ingerido["criadas"])
                     execucao.atualizados += len(ingerido["atualizadas"])
+                    execucao.alterados_na_fonte += len(ingerido["alteradas"])
                 db.commit()  # progresso por página: uma falha adiante não perde o que já entrou
                 if pagina >= resultado.total_paginas:
                     break
@@ -298,7 +303,7 @@ def execucao_dict(e: ExecucaoColetaFonte) -> dict:
     return {
         "id": e.id, "fonte": e.fonte, "disparo": e.disparo, "estado": e.estado, "iniciada_em": e.iniciada_em,
         "concluida_em": e.concluida_em, "duracao_ms": e.duracao_ms, "consultados": e.consultados, "inseridos": e.inseridos,
-        "atualizados": e.atualizados, "ignorados": e.ignorados, "paginas": e.paginas, "tentativas": e.tentativas,
+        "atualizados": e.atualizados, "alterados_na_fonte": e.alterados_na_fonte, "ignorados": e.ignorados, "paginas": e.paginas, "tentativas": e.tentativas,
         "erro": e.erro, "data_inicial": e.data_inicial, "data_final": e.data_final, "cursor_referencia": e.cursor_referencia,
     }
 

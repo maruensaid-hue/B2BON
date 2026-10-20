@@ -15,8 +15,8 @@ from app.contexts.shared.organizations import OrganizationRef
 
 
 def calcular_roi(ltv_medio: float | None, cac: float | None) -> float | None:
-    """Razão LTV/CAC. Sem os dois valores não há como calcular."""
-    if not ltv_medio or not cac:
+    """Razão LTV/CAC. Sem os dois valores (ou com CAC zero, que não divide) não há como calcular. LTV zero com CAC positivo é dado: razão 0."""
+    if ltv_medio is None or not cac:
         return None
     return ltv_medio / cac
 
@@ -82,7 +82,10 @@ def dashboard_economia(
         for conta in contas_clientes
         if conta.cliente_cancelado_em and inicio_periodo <= conta.cliente_cancelado_em.date() <= fim_periodo
     ]
-    taxa_churn = (len(cancelados_periodo) / len(ativos_inicio)) if ativos_inicio else None
+    # Churn do período = clientes DA BASE INICIAL que cancelaram ÷ clientes ativos no início. Quem entrou e cancelou dentro do próprio período
+    # não está no denominador, então não pode estar no numerador (senão a taxa passava de 100%).
+    cancelados_da_base = [c for c in ativos_inicio if c.cliente_cancelado_em and inicio_periodo <= c.cliente_cancelado_em.date() <= fim_periodo]
+    taxa_churn = (len(cancelados_da_base) / len(ativos_inicio)) if ativos_inicio else None
 
     roi = calcular_roi(ltv_medio, cac) if vendedor_usuario_id is None else None
     cs = calcular_cs_score(
@@ -98,6 +101,7 @@ def dashboard_economia(
         "novos_clientes": len(novos_clientes),
         "clientes_ativos_inicio_periodo": len(ativos_inicio),
         "clientes_cancelados_periodo": len(cancelados_periodo),
+        "cancelados_da_base_inicial": len(cancelados_da_base),
         "roi": roi,
         "cs_score": cs["cs_score"],
         "nps_medio": cs["nps_medio"],

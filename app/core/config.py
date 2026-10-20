@@ -254,6 +254,9 @@ class Settings(BaseSettings):
     # Retenção automática de titulares prospectados (raio-X/LGPD) — 24
     # meses sem nenhuma interação e sem ter virado cliente.
     dias_retencao_titular_inativo: int = 730
+    # Retenção dos históricos que crescem sem parar (poda diária, ver retencao_historicos_service): coletas de site e execuções da coleta de fonte pública.
+    retencao_coleta_site_dias: int = 180
+    retencao_execucao_coleta_dias: int = 90
 
     # Autenticação real do núcleo (Onda A). Chave dedicada — não reaproveita
     # secret_key (usada para HMAC de links públicos) para segregar o risco.

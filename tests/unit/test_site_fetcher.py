@@ -63,6 +63,7 @@ def test_buscar_conteudo_site_respeita_orcamento_de_tempo_para_paginas_extras():
     home é tentada uma vez que o tempo já estourou."""
     home_resposta = MagicMock(spec=httpx.Response)
     home_resposta.is_redirect = False
+    home_resposta.headers = {"content-type": "text/html; charset=utf-8"}
     home_resposta.text = '<html><a href="/sobre">Sobre</a></html>'
     home_resposta.raise_for_status = MagicMock()
 
@@ -100,3 +101,63 @@ def test_buscar_conteudo_site_bloqueia_redirect_para_ip_privado():
     ):
         with pytest.raises(HostNaoPublico):
             buscar_conteudo_site("publico.com.br")
+
+
+def _resposta(corpo: bytes, tipo: str | None, status: int = 200) -> httpx.Response:
+    cabecalhos = {"content-type": tipo} if tipo else {}
+    return httpx.Response(status, content=corpo, headers=cabecalhos, request=httpx.Request("GET", "https://publico.com.br/"))
+
+
+def _com_resposta(resposta):
+    return (
+        patch("app.integrations.site_fetcher.socket.getaddrinfo", return_value=_addrinfo_para("93.184.216.34")),
+        patch("app.core.ssrf._requisicao_fixada", return_value=resposta),
+    )
+
+
+@pytest.mark.parametrize("tipo", ["application/pdf", "image/png", "application/octet-stream", "application/zip", "application/json", "video/mp4"])
+def test_home_com_tipo_de_conteudo_que_nao_e_pagina_e_recusada(tipo):
+    from app.integrations.site_fetcher import ConteudoNaoSuportado
+
+    p1, p2 = _com_resposta(_resposta(b"%PDF-1.7 binario", tipo))
+    with p1, p2:
+        with pytest.raises(ConteudoNaoSuportado, match="não suportado"):
+            buscar_conteudo_site("publico.com.br")
+
+
+@pytest.mark.parametrize("tipo", ["text/html", "text/html; charset=iso-8859-1", "TEXT/HTML", "application/xhtml+xml", "text/plain", None])
+def test_tipos_de_pagina_e_resposta_sem_cabecalho_sao_aceitos(tipo):
+    p1, p2 = _com_resposta(_resposta(b"<html><body>Ola mundo</body></html>", tipo))
+    with p1, p2:
+        assert "Ola mundo" in buscar_conteudo_site("publico.com.br")
+
+
+def test_subpagina_com_tipo_inesperado_e_ignorada_sem_derrubar_a_coleta():
+    respostas = iter([_resposta(b"<html>home</html>", "text/html"), _resposta(b"%PDF", "application/pdf")] + [_resposta(b"", "text/html", 404)] * 40)
+    with patch("app.integrations.site_fetcher.socket.getaddrinfo", return_value=_addrinfo_para("93.184.216.34")),             patch("app.core.ssrf._requisicao_fixada", side_effect=lambda *a, **k: next(respostas)):
+        resultado = buscar_conteudo_site("publico.com.br")
+    assert resultado.count("=== ") == 1 and "home" in resultado
+
+
+@pytest.mark.parametrize(
+    "dominio",
+    [
+        "2130706433",              # 127.0.0.1 em decimal
+        "0x7f.0.0.1",              # hexadecimal
+        "0177.0.0.1",              # octal
+        "127.1",                   # forma curta
+        "[::1]",                   # IPv6 loopback
+        "[::ffff:127.0.0.1]",      # IPv4 mapeado em IPv6
+        "localhost",
+        "LOCALHOST.",              # maiúsculas e ponto final
+        "169.254.169.254",         # metadados de nuvem
+        "user:senha@127.0.0.1",    # credenciais embutidas
+        "127.0.0.1:6379",          # porta de serviço interno
+    ],
+)
+def test_codificacoes_hostis_de_destino_interno_nao_chegam_a_rede(dominio):
+    """Sem mockar o DNS: a resolução real de cada forma tem que cair em endereço não público (ou a URL ser recusada) antes de qualquer conexão."""
+    with patch("app.core.ssrf._requisicao_fixada") as rede:
+        with pytest.raises(httpx.HTTPError):
+            buscar_conteudo_site(dominio)
+    rede.assert_not_called()

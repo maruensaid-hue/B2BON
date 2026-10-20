@@ -54,6 +54,7 @@ def processo(lic: Licitacao) -> dict:
             "modalidade": lic.modalidade, "prazo_esclarecimento": _iso(lic.prazo_esclarecimento),
             "concorrentes": lic.concorrentes, "parceiros": lic.parceiros, "vencedor": lic.vencedor,
             "valor_proposta": lic.valor_proposta, "motivo_resultado": lic.motivo_resultado,
+            "situacao_externa": lic.situacao_externa, "atualizado_externo_em": _iso(lic.atualizado_externo_em),
         },
         "criado_em": espelho.carregado(lic, "criado_em"),
     }
@@ -115,6 +116,7 @@ def licitacao_de(linha: dict) -> SimpleNamespace:
         valor_estimado=_float(linha["valor_estimado"]), status=linha["status"], responsavel_usuario_id=linha["responsavel_usuario_id"],
         concorrentes=extras.get("concorrentes"), parceiros=extras.get("parceiros"), vencedor=extras.get("vencedor"),
         valor_proposta=_float(extras.get("valor_proposta")), motivo_resultado=extras.get("motivo_resultado"), criado_em=linha["criado_em"],
+        situacao_externa=extras.get("situacao_externa"), atualizado_externo_em=_data(extras.get("atualizado_externo_em")),
     )
 
 

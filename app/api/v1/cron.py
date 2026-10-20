@@ -56,6 +56,7 @@ from app.services import (
     reuniao_service,
     tenant_service,
     titular_service,
+    retencao_historicos_service,
     webhook_parceiro_service,
 )
 from app.services.demo import sessao as demo_sessao
@@ -228,6 +229,13 @@ def suspender_licencas_vencidas(db: Session = Depends(get_db)) -> dict:
     vencida continuava dando acesso total até um humano mudar o status
     manualmente pela tela de Admin."""
     return {"tenants_suspensos": tenant_service.suspender_licencas_vencidas(db)}
+
+
+@router.post("/podar-historicos", dependencies=[Depends(_exigir_segredo_cron)])
+def podar_historicos(db: Session = Depends(get_db)) -> dict:
+    """Retenção diária dos históricos que só cresciam: cache de IA vencido, execuções da coleta de fonte pública e coletas de site (com
+    indicadores). Protege o cursor da coleta, a última coleta bem-sucedida e a confirmação manual de domínio. Idempotente."""
+    return retencao_historicos_service.podar(db)
 
 
 @router.post("/podar-recorte-cnpj", dependencies=[Depends(_exigir_segredo_cron)])

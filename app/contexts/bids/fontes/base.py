@@ -24,6 +24,10 @@ class LicitacaoExterna:
     valor_estimado: float | None
     url: str | None
     bruto: dict = field(default_factory=dict, compare=False)
+    # Situação na fonte (PNCP: Divulgada, Revogada, Anulada, Suspensa) e quando a fonte atualizou o registro pela última vez:
+    # é assim que cancelamento, suspensão e retificação de um edital já ingerido chegam ao produto.
+    situacao_externa: str | None = field(default=None, compare=False)
+    atualizado_externo_em: datetime | None = field(default=None, compare=False)
 
 
 class FonteLicitacoes(ABC):

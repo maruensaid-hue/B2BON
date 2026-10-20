@@ -10,6 +10,9 @@ export interface Licitacao {
   prazo_proposta: string | null;
   valor_estimado: number | null;
   status: string;
+  /** Situação na fonte pública (PNCP): Divulgada, Revogada, Anulada, Suspensa. Nula em licitação cadastrada à mão. */
+  situacao_externa?: string | null;
+  externa_exige_atencao?: boolean;
 }
 
 export const MODALIDADES: Record<string, string> = {

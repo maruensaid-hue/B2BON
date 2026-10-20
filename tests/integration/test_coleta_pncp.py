@@ -35,8 +35,8 @@ class FonteFalsa:
     def __init__(self, paginas=None, total_paginas=1):
         self.paginas, self.total_paginas, self.chamadas, self.falhar = paginas or {}, total_paginas, [], 0
 
-    def buscar_pagina(self, data_inicial, data_final, modalidade, pagina=1, uf=None):
-        self.chamadas.append((data_inicial, data_final, modalidade, pagina, uf))
+    def buscar_pagina(self, data_inicial, data_final, modalidade, pagina=1, uf=None, endpoint="publicacao"):
+        self.chamadas.append((data_inicial, data_final, modalidade, pagina, uf, endpoint))
         if self.falhar:
             self.falhar -= 1
             raise ErroFonte("PNCP respondeu 503.", tentativas=3)

@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -565,7 +565,7 @@ def dashboard_atividade(
 
 @router.get("/dashboard/economia", response_model=DashboardEconomiaSchema, dependencies=[Depends(exigir_papel("super_admin", "admin"))])
 def dashboard_economia(
-    periodo: str,
+    periodo: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Mês no formato AAAA-MM"),
     vendedor_usuario_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
