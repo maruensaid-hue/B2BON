@@ -13,7 +13,15 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
+from app.api.deps import (
+    exigir_papel,
+    get_ator_id,
+    get_db,
+    get_llm_provider,
+    get_tenant_id,
+    get_usuario_atual,
+    limitar_ia_por_tenant,
+)
 from app.api.respostas import arquivo_com_hash
 from app.contexts.bids import contract as bids
 from app.contexts.intelligence import contract as intel
@@ -385,7 +393,7 @@ def listar_contratos(tenant_id: str = Depends(get_tenant_id), db: Session = Depe
     return [bids.contratos.como_dict(c) for c in db.query(ContratoVendaPublica).filter_by(tenant_id=tenant_id).order_by(ContratoVendaPublica.id)]
 
 
-@router.post("/contratos", status_code=201)
+@router.post("/contratos", status_code=201, dependencies=[Depends(exigir_papel("admin", "super_admin"))])
 def criar_contrato(dados: ContratoEntrada, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
                    db: Session = Depends(get_db)) -> dict:
     return bids.contratos.como_dict(bids.licitacoes.criar_contrato(db, tenant_id, _usuario_id(ator_id), dados.model_dump()))

@@ -14,7 +14,15 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
+from app.api.deps import (
+    exigir_papel,
+    get_ator_id,
+    get_db,
+    get_llm_provider,
+    get_tenant_id,
+    get_usuario_atual,
+    limitar_ia_por_tenant,
+)
 from app.api.respostas import arquivo_com_hash
 from app.contexts.procurement import contract as compras
 from app.llm.base import LLMProvider
@@ -217,7 +225,7 @@ def decidir_aprovacao(processo_id: int, dados: AprovacaoDecisao, tenant_id: str 
     return estrategico.como_dict(estrategico.decidir_aprovacao(db, tenant_id, usuario, processo_id, dados.aprovar, dados.motivo))
 
 
-@router.post("/processos/{processo_id}/contrato", status_code=201)
+@router.post("/processos/{processo_id}/contrato", status_code=201, dependencies=[Depends(exigir_papel("admin", "super_admin"))])
 def contratar(processo_id: int, dados: ContratoEntrada, tenant_id: str = Depends(get_tenant_id),
               ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
     return estrategico.serializar(estrategico.contratar(db, tenant_id, _usuario_id(ator_id), processo_id, dados.model_dump()),

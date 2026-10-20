@@ -63,6 +63,24 @@ def test_menu_do_login_mostra_todos_os_modulos_so_ao_super_admin(client, criar_u
     assert not any(cliente[f"modulo_{m}"] for m in NOVOS)
 
 
+@pytest.mark.parametrize("rota", ("/api/v1/bids/contratos", "/api/v1/sourcing/processos/1/contrato"))
+def test_usuario_comum_nao_cria_contrato(client, criar_usuario_autenticado, rota):
+    """Contrato é ato de gestão: o papel `user` recebe 403 mesmo com o módulo liberado pelo plano."""
+    headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="user-contrato@acesso-total.com.br")
+
+    assert client.post(rota, json={"objeto": "Licenças"}, headers=headers).status_code == 403
+
+
+@pytest.mark.parametrize("papel", ["admin", "super_admin"])
+def test_gestor_passa_da_barreira_de_contrato(client, criar_usuario_autenticado, papel):
+    """Admin e super_admin não são barrados pelo papel (a resposta pode ser outra, mas nunca 403 de permissão)."""
+    headers = criar_usuario_autenticado(TENANT_ID, papel=papel, email=f"{papel}-contrato@acesso-total.com.br")
+
+    resposta = client.post("/api/v1/bids/contratos", json={"objeto": "Licenças"}, headers=headers)
+
+    assert resposta.status_code != 403
+
+
 def test_menu_do_cliente_nao_muda_com_a_chave_desligada(client, monkeypatch):
     monkeypatch.setattr(settings, "super_admin_acesso_total_modulos", False)
 

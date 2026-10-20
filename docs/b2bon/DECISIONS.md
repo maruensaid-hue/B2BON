@@ -1361,4 +1361,8 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Testes**: a suíte passa a rodar com a chave desligada por padrão (o usuário padrão dos testes é super_admin e os
   testes de plano simulam módulos bloqueados); `test_super_admin_acesso_total.py` e
   `test_entitlements_acesso_total.py` ligam a chave e cobrem super admin, admin, usuário e a chave desligada.
+- **Nível usuário (PO, 2026-10-20)**: criar contrato é ato de gestão. `POST /bids/contratos` e
+  `POST /sourcing/processos/{id}/contrato` passam a exigir `admin` ou `super_admin` (`exigir_papel`); o papel `user`
+  recebe 403 mesmo com o módulo liberado pelo plano. **Fora desta decisão (continuam abertos ao `user`)**: exclusão de
+  item do cofre, link de acesso de fornecedor, cadastro/resultado de licitação e os recursos genéricos do procurement.
 - **Status**: ACEITA.
