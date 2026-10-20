@@ -28,7 +28,8 @@ jobs:
       - name: Instalar ffmpeg (compressão de vídeo da Rede Social)
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Instalar dependências
-        run: pip install -e ".[dev]"
+        # Versões travadas (requirements-dev.lock): CI e produção testam o mesmo conjunto; só o pacote do projeto vai em modo editável.
+        run: pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
       # Mesma verificação do desenvolvimento local (`ruff check .`, regras em [tool.ruff] do pyproject.toml): bugs reais
       # (nomes indefinidos, imports/variáveis mortos, armadilhas do bugbear, chamadas perigosas), não estilo.
       - name: Lint do backend (ruff)
@@ -58,7 +59,8 @@ jobs:
         with:
           python-version: "3.11"
       - name: Instalar dependências
-        run: pip install -e ".[dev]"
+        # Versões travadas (requirements-dev.lock): CI e produção testam o mesmo conjunto; só o pacote do projeto vai em modo editável.
+        run: pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
       - name: Validar cadeia Alembic em PostgreSQL limpo
         env:
           DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
@@ -94,7 +96,8 @@ jobs:
         with:
           python-version: "3.11"
       - name: Instalar dependências do backend
-        run: pip install -e ".[dev]"
+        # Versões travadas (requirements-dev.lock): CI e produção testam o mesmo conjunto; só o pacote do projeto vai em modo editável.
+        run: pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
       - uses: actions/setup-node@v4
         with:
           node-version: "20"

@@ -15,10 +15,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: pip-audit (dependências resolvidas do pyproject.toml)
+      - name: pip-audit (versões travadas em requirements.lock, as mesmas da imagem de produção)
         run: |
           pip install pip-audit
-          pip-audit .
+          pip-audit -r requirements.lock --require-hashes
+      - name: pip-audit (dependências resolvidas do pyproject.toml hoje — detecta versão nova vulnerável antes do próximo lock)
+        run: pip-audit .
 
   node:
     runs-on: ubuntu-latest

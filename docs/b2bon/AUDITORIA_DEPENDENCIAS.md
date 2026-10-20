@@ -27,15 +27,25 @@ Detalhe das duas altas corrigidas (nenhuma tocava código em produção; ficam n
 
 - **Corrigidas**: as 2 do frontend. **Não corrigidas**: nenhuma. **Mitigadas / não aplicáveis**: as 2 eram só de build (não chegam ao runtime do usuário).
 
+## Lock do backend (adotado em 2026-10-20, decisão do PO)
+
+O backend passou a ter `requirements.lock` e `requirements-dev.lock` (resolução universal com hashes, gerada com `uv pip compile --universal`). A imagem Docker, o CI e os
+jobs agendados instalam o lock (`pip install --require-hashes -r ...`, depois `pip install --no-deps -e .`). Validação para o Python 3.12 de produção: (1) simulação
+de instalação `uv pip sync --dry-run --python-version 3.12 --python-platform x86_64-manylinux_2_28` (e 3.11, arm64) confirma wheel e hash de cada pacote; (2) suíte inteira
+(1209 unitários + 1383 de integração) passou num ambiente instalado do lock; (3) `pip-audit -r requirements.lock --require-hashes`: 0 vulnerabilidades. **Não foi possível
+construir a imagem Docker localmente** (Docker Desktop desligado); o build real acontece no deploy do staging.
+
+**Atenção — o lock fixa versões mais novas que as do ambiente de desenvolvimento** (ex.: SQLAlchemy 2.1.5 contra 2.0.51, Pydantic 2.14.1 contra 2.13.4, FastAPI 0.153 contra
+0.141): é o que um build novo da imagem resolveria (o `pyproject.toml` não tinha teto de versão), agora fixo e testado. A camada de dependências do Render só é refeita quando o lock
+muda. `tests/test_lock_sincronizado.py` impede o lock de ficar para trás do `pyproject.toml`.
+
 ## Limites desta auditoria (não é cobertura total)
 
-- Backend **sem lock file**: o resultado vale para o que a resolução devolveu hoje, com Python 3.14; a imagem de produção (Python 3.12) pode resolver
-  versões diferentes. Mitigação: o workflow agendado abaixo roda `pip-audit .` com Python 3.12. Recomendação (decisão do PO): adotar um lock
-  (ex.: `uv lock`/`pip-compile`) — mexe no deploy, por isso não foi feito aqui.
+- (resolvido) O backend não tinha lock; agora tem — ver a seção acima. Resta o limite de que a auditoria cobre as dependências Python, não o sistema operacional da imagem.
 - Não cobre pacotes do sistema operacional da imagem Docker (`python:3.12-slim`) nem o Cloudflare Worker em runtime além das dependências do `package.json`.
 - `pip-audit` consulta o banco de avisos do PyPI; vulnerabilidades ainda não publicadas não aparecem.
 
 ## Rotina contínua
 
-`.github/workflows/auditoria-dependencias.yml`: roda toda segunda-feira (e sob demanda) `pip-audit .` (Python 3.12) e `npm audit` (Node 20).
+`.github/workflows/auditoria-dependencias.yml`: roda toda segunda-feira (e sob demanda) `pip-audit -r requirements.lock` (o que a produção instala), `pip-audit .` (o que um lock novo resolveria hoje) e `npm audit` (Node 20).
 **Não bloqueia o CI de cada PR** de propósito: um aviso novo de terceiros não deve travar uma entrega sem relação; vermelho = abrir o relatório do job.

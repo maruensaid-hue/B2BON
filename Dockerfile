@@ -11,12 +11,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
+# Dependências travadas por `requirements.lock` (resolução universal, com hashes, válida para Python 3.11+ e testada em 3.12/Linux):
+# a imagem instala exatamente as versões auditadas e testadas, não "a mais nova do dia". Atualizar: ver README ("Dependências do backend").
+# Esta camada só é refeita quando o lock muda (cache de build do Render).
+COPY pyproject.toml requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
+
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
 
-RUN pip install --no-cache-dir .
+# Só o pacote do projeto: as dependências já vieram do lock.
+RUN pip install --no-cache-dir --no-deps .
 
 EXPOSE 8000
 

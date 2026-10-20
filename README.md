@@ -107,6 +107,25 @@ npm run dev
 Copie `frontend/.env.example` para `frontend/.env` — o padrão já é
 `VITE_API_BASE_URL=http://localhost:8000/api/v1`, certo para dev local.
 
+## Dependências do backend (lock)
+
+`requirements.lock` (runtime, usado pela imagem Docker e pelos jobs agendados) e `requirements-dev.lock` (runtime + `pytest` e `ruff`, usado no CI) travam
+**toda** a árvore de dependências com hashes. A resolução é universal (vale para Python 3.11 e 3.12 — produção roda 3.12 — e posteriores, Linux/Windows/macOS) e foi
+validada: simulação de instalação para 3.12 e 3.11 (x86_64 e arm64), `pip-audit` sem vulnerabilidades e a suíte inteira passando com essas versões.
+
+```bash
+# instalar exatamente o que o CI/produção usam
+pip install --require-hashes -r requirements-dev.lock && pip install --no-deps -e .
+
+# mudou o pyproject.toml, ou quer atualizar versões? regere os dois e rode a suíte
+pip install uv
+uv pip compile pyproject.toml --universal --generate-hashes --no-header -o requirements.lock
+uv pip compile pyproject.toml --extra dev --universal --generate-hashes --no-header -o requirements-dev.lock
+```
+
+`tests/test_lock_sincronizado.py` falha se uma dependência do `pyproject.toml` ficar fora do lock (ou numa versão que a faixa não aceita): como a imagem
+instala só o lock, isso viraria `ImportError` em produção. Atualização de versão = commit próprio, com a suíte verde e `pip-audit -r requirements.lock`.
+
 ## Lint do backend
 
 ```bash
