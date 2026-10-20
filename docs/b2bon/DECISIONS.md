@@ -1388,3 +1388,20 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Não decidido (aguarda o PO)**: segundo provedor de IA/fallback (credenciais, privacidade, custo).
 - **Reversão**: `AI_DISJUNTOR_FALHAS=0` desliga o disjuntor; a migração tem `downgrade`.
 - **Status**: ACEITA. Implantação em produção depende de autorização (inclui aplicar a migração).
+
+## D-090 · 2026-10-20 · V5.1: provedores de IA, coleta PNCP, dependências, lint e enriquecimento de site
+
+- **Contexto**: as cinco pendências da auditoria (D-089). Resultado item a item em `CONCLUSAO_V5_1.md`.
+- **Decisão (implementada, não publicada)**:
+  - **Provedores de IA** (`PROVEDORES_IA.md`): adapters Cloudflare/Groq/OpenRouter/Gemini + fallback atrás de quatro travas (lista, credencial+modelo, aprovação de privacidade
+    explícita, custo/plano), teto diário e disjuntor por provedor. Padrão inalterado (só Anthropic). Nenhum provedor novo habilitado nem aprovado para dados reais; **Gemini gratuito
+    não deve ser aprovado** (usa dados para melhorar produtos, revisão humana).
+  - **PNCP** (`COLETA_PNCP.md`): adapter corrigido para o contrato real (modalidade obrigatória, página ≤ 50); coleta agendada a cada 6 h, por tenant, desligada por padrão,
+    com cursor, idempotência, execução única, saúde e alertas. Sem IA.
+  - **Dependências** (`AUDITORIA_DEPENDENCIAS.md`): 2 altas de build corrigidas sem `--force`; auditoria semanal em workflow próprio que não bloqueia PRs.
+  - **Lint**: `ruff` com regras de bug/risco no `pyproject.toml` e no CI (`ruff check .`); `B008` e `E741` ignoradas por decisão documentada.
+  - **Enriquecimento**: domínio confirmado por evidências (nome parecido nunca confirma; divergente bloqueia análise e indicadores), indicadores financeiros determinísticos com fonte,
+    período, unidade e fórmula, histórico persistido e tela `Histórico de Coletas` com reprocesso e validação manual. HTML vira texto visível antes de truncar.
+- **Não decidido (PO)**: credenciais/custo/LGPD dos provedores; lock de dependências do backend; corrigir ou não o enriquecimento do fluxo de convite (chamada sem `plan_limits`);
+  leitura de PDFs de RI; corpus público comum de licitações.
+- **Status**: ACEITA; implantação depende de autorização (4 migrações aditivas: `e5b7d9f1a3c5`, `f6c8e0a2b4d6`, `a7d9f1b3c5e7`, `b8e0a2c4d6f8`).

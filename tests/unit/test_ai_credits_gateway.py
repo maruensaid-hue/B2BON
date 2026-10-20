@@ -85,7 +85,7 @@ def test_feature_nao_cacheavel_sempre_chama_provedor(db_session):
 
 
 def test_falha_do_provedor_libera_reserva_e_nao_cobra(db_session):
-    with pytest.raises(Exception):
+    with pytest.raises(ConnectionError):
         gerar(db_session, LLMForaDoAr(), ContextoIA(tenant_id=TENANT, feature="crm.meeting_brief"), LLMRequest(prompt="p"))
     assert _disponivel(db_session) == 1000
     execucao = db_session.query(ExecucaoIa).filter_by(tenant_id=TENANT).one()

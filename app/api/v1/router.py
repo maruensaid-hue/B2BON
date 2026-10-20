@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.api.deps import exigir_algum_modulo, exigir_licenca_ativa, exigir_modulo
+from app.api.v1.admin_provedores_ia import router as admin_provedores_ia_router
 from app.api.v1.admin_tenants import router as admin_tenants_router
 from app.api.v1.agente_corporativo import router as agente_corporativo_router
 from app.api.v1.aprovacoes import router as aprovacoes_router
@@ -60,6 +61,7 @@ from app.api.v1.procurement import router as procurement_router
 from app.api.v1.portal_fornecedor import router_link as portal_fornecedor_link_router
 from app.api.v1.portal_fornecedor import router_rede as portal_fornecedor_rede_router
 from app.api.v1.strategic_sourcing import router as strategic_sourcing_router
+from app.api.v1.coletas_site import router as coletas_site_router
 from app.api.v1.prospeccao_contas import router as prospeccao_contas_router
 from app.api.v1.regras_aprendidas import router as regras_aprendidas_router
 from app.api.v1.relatorios import router as relatorios_router
@@ -118,6 +120,7 @@ router.include_router(onboarding_router, dependencies=_exige_licenca)
 # Prospecção (C3) ANTES de `contas`: `/contas/franquia` não pode cair em
 # `/contas/{conta_id}`.
 router.include_router(prospeccao_contas_router, dependencies=_exige_predator)
+router.include_router(coletas_site_router, dependencies=_exige_predator)
 router.include_router(contas_router, dependencies=_exige_organizacao)
 router.include_router(listas_prospeccao_router, dependencies=_exige_predator)
 router.include_router(aprovacoes_router, dependencies=_exige_predator)
@@ -172,6 +175,7 @@ router.include_router(representantes_router)
 router.include_router(central_negocios_router)
 router.include_router(rotulos_hierarquia_router)
 router.include_router(admin_tenants_router)
+router.include_router(admin_provedores_ia_router)
 # Fase 2 da hierarquia (raio-X): /integracoes é JWT (Distribuidor logado
 # gerenciando chave/webhook próprios), /parceiros é chave de API (sistema
 # do Distribuidor chamando de fora) — nenhum dos dois passa por

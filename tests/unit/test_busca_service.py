@@ -5,7 +5,6 @@ from app.models.icp import ICP
 from app.models.negocio import Negocio
 from app.models.plano import Plano
 from app.models.licenca import Licenca
-from app.models.proposta_negocio import PropostaNegocio
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.services import busca_service, crm_service, proposta_service

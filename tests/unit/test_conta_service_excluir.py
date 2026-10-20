@@ -9,6 +9,7 @@ from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
 from app.models.indicacao import Indicacao
 from app.models.mensagem import Mensagem
 from app.models.negocio import Negocio
+from app.models.usuario import Usuario
 from app.services import conta_service
 from app.services.errors import RegraNegocioViolada
 
@@ -193,7 +194,7 @@ def test_excluir_lote_leads_com_conta_ids_restringe_selecao(db_session):
     assert db_session.query(Conta).filter_by(id=fora_da_selecao.id).one_or_none() is not None
 
 
-def _criar_super_admin(db_session, email: str = "super@teste.com") -> "Usuario":
+def _criar_super_admin(db_session, email: str = "super@teste.com") -> Usuario:
     from app.models.usuario import Usuario
 
     usuario = Usuario(tenant_id=TENANT_ID, email=email, nome="Super", papel="super_admin", senha_hash="x")

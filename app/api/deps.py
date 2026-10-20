@@ -20,7 +20,8 @@ from app.integrations.central_negocios_client import (
     buscar_noticias,
 )
 from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
-from app.llm.claude_provider import ClaudeProvider
+from app.llm.base import LLMProvider
+from app.llm.fallback import construir_provedor
 from app.models.chave_api_parceiro import ChaveApiParceiro
 from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
@@ -100,8 +101,9 @@ def get_graph_client() -> Neo4jClient:
     return Neo4jClient()
 
 
-def get_llm_provider() -> ClaudeProvider:
-    return ClaudeProvider()
+def get_llm_provider(db: Session = Depends(get_db)) -> LLMProvider:
+    """Anthropic, como sempre. Com `AI_PROVEDORES_FALLBACK` (desligado por padrão) e provedores aprovados, ela ganha fallback."""
+    return construir_provedor(db)
 
 
 def _site_ficticio(dominio: str) -> str:

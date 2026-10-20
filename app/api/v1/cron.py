@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     get_account_data_provider,
+    get_brasilapi_client,
     get_contact_enrichment_provider,
     get_db,
     get_sessao_factory,
@@ -20,6 +21,8 @@ from app.api.deps import (
     resolver_email_provider,
     resolver_whatsapp_provider,
 )
+from app.api.v1.bids import get_fonte_pncp
+from app.contexts.bids import contract as bids_contract
 from app.contexts.finops import contract as finops
 from app.contexts.governo import contract as governo
 from app.contexts.integrations import contract as integracoes
@@ -28,6 +31,7 @@ from app.contexts.platform.contract import webhooks
 from app.contexts.sourcing import contract as sourcing
 from app.contexts.shared import events
 from app.core.config import settings
+from app.integrations.brasilapi_client import BrasilApiClient
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
@@ -255,6 +259,7 @@ def processar_fila_enriquecimento(
     contact_enrichment: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider),
     graph: Neo4jClient = Depends(get_graph_client),
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+    brasilapi_client: BrasilApiClient = Depends(get_brasilapi_client),
 ) -> dict:
     """Processa em lotes pequenos a fila de enriquecimento (site +
     decisores) de contas criadas em massa (ex.: importação de planilha de
@@ -263,7 +268,7 @@ def processar_fila_enriquecimento(
     empresa (raio-X: planilha grande estourando timeout do proxy do
     Render, mesmo raciocínio do recorte de CNPJ)."""
     return enriquecimento_fila_service.processar_pendentes(
-        db, llm, site_fetcher, web_search, account_data, contact_enrichment, graph, plan_limits
+        db, llm, site_fetcher, web_search, account_data, contact_enrichment, graph, plan_limits, brasilapi_client
     )
 
 
@@ -352,6 +357,13 @@ def integracoes_crm_diario(db: Session = Depends(get_db)) -> dict:
     """D-087, 1x/dia: refaz o índice de deduplicação de cada conexão e publica
     os sinais de risco do MAP nas contas-cliente do CRM (só o que mudou)."""
     return {"indices": integracoes.obter_escrita().rotina_diaria(db), "sinais_map": map_contract.obter_sinais_crm().rotina_diaria(db)}
+
+
+@router.post("/coletar-licitacoes", dependencies=[Depends(_exigir_segredo_cron)])
+def coletar_licitacoes(fonte: bids_contract.FontePncp = Depends(get_fonte_pncp), db: Session = Depends(get_db)) -> dict:
+    """Coleta agendada do PNCP (sem IA) para os tenants que ativaram e configuraram a coleta. Idempotente e com uma execução
+    por vez por tenant; desligada enquanto `PNCP_HABILITADO` for falso. Agendada a cada 6 h pelo workflow `cron-envios.yml`."""
+    return bids_contract.coleta.executar_agendada(db, fonte)
 
 
 @router.post("/sourcing-sincronizar", dependencies=[Depends(_exigir_segredo_cron)])

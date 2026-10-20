@@ -472,7 +472,7 @@ def test_tenant_vitrine_acessa_rede_social_mas_nao_modulo_pago(client, criar_pla
     com token válido."""
     convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
     plano = criar_plano()
-    token = client.post(
+    client.post(
         "/api/v1/auth/registrar-vitrine",
         json={
             "codigo_convite": convite["codigo"],
@@ -782,7 +782,7 @@ def test_webhook_mercadopago_com_assinatura_valida_ativa_licenca(
     até o webhook confirmar — depois disso, o módulo pago libera."""
     convite = client.post("/api/v1/convites/vitrine", json={"validade_horas": 24}).json()
     plano = criar_plano()
-    resposta_cadastro = client.post(
+    client.post(
         "/api/v1/auth/registrar-vitrine",
         json={
             "codigo_convite": convite["codigo"],

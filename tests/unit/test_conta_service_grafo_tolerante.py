@@ -1,4 +1,3 @@
-import pytest
 
 from app.models.conta import Conta
 from app.models.icp import ICP

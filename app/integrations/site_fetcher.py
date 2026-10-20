@@ -2,6 +2,7 @@ import re
 import socket  # noqa: F401 — os testes substituem `socket.getaddrinfo` por este módulo
 import time
 from collections.abc import Callable
+from html.parser import HTMLParser
 
 import httpx
 
@@ -10,7 +11,7 @@ from app.core.ssrf import DestinoNaoPublico, requisitar_publico, resolver_public
 SiteFetcher = Callable[[str], str]
 
 _MAX_PAGINAS = 8
-_MAX_CHARS_POR_PAGINA = 2500
+_MAX_CHARS_POR_PAGINA = 8000  # de TEXTO visível por página (a IA recebe só os primeiros 2.500 de cada; a extração determinística lê tudo)
 _MAX_REDIRECTS = 3
 _TIMEOUT_POR_REQUISICAO_SEGUNDOS = 5.0
 # Teto de corpo por página (decodificado): só ~2.500 caracteres viram texto, o resto serve para achar links da home.
@@ -61,6 +62,49 @@ _REGEX_LINKS_INTERNOS = re.compile(
 )
 
 
+QUEBRA = chr(10)
+
+
+class _ExtratorDeTexto(HTMLParser):
+    """HTML → texto visível: descarta script, estilo, cabeçalho técnico e SVG; quebra de linha nos blocos."""
+
+    _IGNORAR = {"script", "style", "noscript", "head", "svg", "template", "iframe"}
+    _BLOCOS = {"p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "article", "footer", "header", "td", "address"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._ignorando = 0
+        self.partes: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._IGNORAR:
+            self._ignorando += 1
+        elif tag in self._BLOCOS:
+            self.partes.append(QUEBRA)
+
+    def handle_endtag(self, tag):
+        if tag in self._IGNORAR and self._ignorando:
+            self._ignorando -= 1
+        elif tag in self._BLOCOS:
+            self.partes.append(QUEBRA)
+
+    def handle_data(self, data):
+        if not self._ignorando:
+            self.partes.append(data)
+
+
+def html_para_texto(html: str) -> str:
+    """Texto visível da página, com espaços colapsados. Conteúdo que não é HTML passa como está."""
+    extrator = _ExtratorDeTexto()
+    try:
+        extrator.feed(html)
+        extrator.close()
+    except Exception:  # noqa: BLE001 — HTML quebrado nunca derruba a coleta; cai no texto bruto
+        return re.sub(r"\s+", " ", html).strip()
+    linhas = (re.sub(r"[^\S\n]+", " ", linha).strip() for linha in "".join(extrator.partes).split(QUEBRA))
+    return QUEBRA.join(linha for linha in linhas if linha)
+
+
 def _get_seguro(url: str) -> httpx.Response:
     """GET com as defesas de `app.core.ssrf` em cada salto: IP validado e usado na conexão (sem DNS rebinding),
     só portas 80/443, teto de bytes por página e redirecionamentos seguidos manualmente e revalidados."""
@@ -74,7 +118,7 @@ def _buscar_pagina(base_url: str, caminho: str) -> str | None:
     try:
         resposta = _get_seguro(f"{base_url}{caminho}")
         resposta.raise_for_status()
-        return resposta.text[:_MAX_CHARS_POR_PAGINA]
+        return html_para_texto(resposta.text)[:_MAX_CHARS_POR_PAGINA]
     except httpx.HTTPError:
         return None
 
@@ -100,7 +144,7 @@ def buscar_conteudo_site(dominio: str) -> str:
     base_url = f"https://{dominio_limpo}"
     home = _get_seguro(base_url)
     home.raise_for_status()
-    texto_home = home.text[:_MAX_CHARS_POR_PAGINA]
+    texto_home = html_para_texto(home.text)[:_MAX_CHARS_POR_PAGINA]
 
     paginas: dict[str, str] = {base_url: texto_home}
 

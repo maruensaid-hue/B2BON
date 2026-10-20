@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 from app.models.atividade import Atividade
 from app.models.conta import Conta

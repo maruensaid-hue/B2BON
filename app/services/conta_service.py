@@ -342,7 +342,9 @@ def importar_participantes(
             db.add(conta)
             db.flush()
             if sincronizar_com_tolerancia(
-                lambda: graph.upsert_conta(tenant_id, conta.id, {"nome": conta.nome, "cnpj": conta.cnpj}), "conta", conta.id
+                lambda: graph.upsert_conta(tenant_id, conta.id, {"nome": conta.nome, "cnpj": conta.cnpj}),  # noqa: B023 — roda na mesma iteração
+                "conta",
+                conta.id,
             ):
                 conta.neo4j_node_id = str(conta.id)
             contas_por_nome[chave_empresa] = conta

@@ -115,10 +115,10 @@ def test_enriquecer_conta_registra_fonte_e_data(client, db_session, criar_icp, f
 
     assert resposta.status_code == 200
     campos = resposta.json()["campos"]
-    # 1 "pagina_pesquisada" (do marcador === url === do site_fetcher) + 2 campos da IA
-    assert len(campos) == 3
+    # 1 "pagina_pesquisada" (do marcador === url === do site_fetcher) + 1 "dominio_verificado" (verificação determinística) + 2 campos da IA
+    assert len(campos) == 4
     for campo in campos:
-        assert campo["fonte"] == "pesquisa_no_site"
+        assert campo["fonte"] == ("verificacao_dominio" if campo["campo"] == "dominio_verificado" else "pesquisa_no_site")
         assert campo["coletado_em"]
     assert any(campo["campo"] == "pagina_pesquisada" for campo in campos)
 

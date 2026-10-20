@@ -555,6 +555,10 @@ def _disjuntor_ia_fechado():
     """O disjuntor do gateway é estado de processo: nenhum teste herda o circuito aberto de outro."""
     from app.contexts.intelligence.disjuntor import disjuntor_ia
 
+    from app.llm import fallback
+
     disjuntor_ia.reiniciar()
+    fallback.reiniciar_disjuntores()
     yield
     disjuntor_ia.reiniciar()
+    fallback.reiniciar_disjuntores()

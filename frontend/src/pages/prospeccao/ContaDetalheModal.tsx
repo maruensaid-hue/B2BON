@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -467,6 +468,9 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
             <Button size="sm" disabled={carregando !== null} onClick={enriquecerSite}>
               Pesquisar empresa (site)
             </Button>
+            <Link to={`/historico-coletas?conta=${contaId}`} onClick={onClose} className="inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold tracking-wide text-muted hover:text-text">
+              Histórico de coletas
+            </Link>
             <Button
               size="sm"
               disabled={carregando !== null || !conta.cnpj}

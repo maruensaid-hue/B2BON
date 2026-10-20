@@ -27,12 +27,39 @@ class Settings(BaseSettings):
     ai_limite_automatico_por_hora: int = 300
     # Disjuntor do gateway: após N falhas seguidas do PROVEDOR, as chamadas falham rápido (sem gastar timeout nem
     # reservar crédito) por esta pausa; depois uma chamada de teste decide se fecha. 0 desliga o disjuntor.
+    # Provedores adicionais de IA (fallback). TUDO DESLIGADO por padrão: lista vazia = só a Anthropic, como sempre.
+    # Um provedor só recebe chamadas se estiver na lista, tiver credencial e modelo, estiver marcado como aprovado para dados
+    # reais (privacidade avaliada), declarar plano "gratuito" (ou o fallback pago for permitido) e não passar do teto diário.
+    # Ver docs/b2bon/PROVEDORES_IA.md.
+    ai_provedores_fallback: str = ""  # ordem de tentativa, separada por vírgula: cloudflare,groq,openrouter,gemini
+    ai_fallback_permite_pago: bool = False
+    ai_fallback_limite_diario: int = 200  # chamadas bem-sucedidas por provedor por dia (UTC)
+    cloudflare_ai_account_id: str = ""
+    cloudflare_ai_api_token: str = ""
+    cloudflare_ai_modelo: str = ""
+    cloudflare_ai_plano: str = "gratuito"
+    cloudflare_ai_aprovado_dados_reais: bool = False
+    groq_api_key: str = ""
+    groq_modelo: str = ""
+    groq_plano: str = "gratuito"
+    groq_aprovado_dados_reais: bool = False
+    openrouter_api_key: str = ""
+    openrouter_modelo: str = ""  # com plano gratuito, o id TEM que terminar em ":free"
+    openrouter_plano: str = "gratuito"
+    openrouter_aprovado_dados_reais: bool = False
+    gemini_api_key: str = ""
+    gemini_modelo: str = ""
+    gemini_plano: str = "gratuito"
+    gemini_aprovado_dados_reais: bool = False
     ai_disjuntor_falhas: int = 5
     ai_disjuntor_pausa_segundos: int = 60
     # Câmbio USD→BRL: não é configuração de ambiente. Vem da tabela `cotacao_cambio` (D-075, OI-018),
     # informada no Admin → Parâmetros financeiros com fonte e vigência.
     # Fase 9: ingestão do PNCP (EXPERIMENTAL, não validada contra a API real).
     pncp_habilitado: bool = False
+    # Coleta agendada de fontes públicas: sem sincronização concluída há mais de N horas = "atrasada"; N falhas seguidas = "falhando".
+    coleta_atraso_horas: int = 24
+    coleta_falhas_alerta: int = 3
     # Fase 13: conectores de CRM externos em BETA que o operador liberou
     # para conexão (lista separada por vírgula, ex.: "salesforce,hubspot").
     # Vazio = aparecem no hub, mas ninguém conecta.

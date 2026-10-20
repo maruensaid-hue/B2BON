@@ -107,6 +107,19 @@ npm run dev
 Copie `frontend/.env.example` para `frontend/.env` — o padrão já é
 `VITE_API_BASE_URL=http://localhost:8000/api/v1`, certo para dev local.
 
+## Lint do backend
+
+```bash
+pip install -e ".[dev]"   # instala o ruff
+ruff check .              # a mesma verificação roda no CI (job "backend"); falhou = o PR não passa
+```
+
+Regras em `[tool.ruff]` do `pyproject.toml`: só o que aponta bug ou risco (nomes indefinidos, imports e variáveis não usados,
+armadilhas do bugbear, chamadas perigosas), não estilo. `B008` (`Depends(...)` em argumento padrão) e `E741` ficam ignoradas por
+decisão: `Depends` é o padrão do FastAPI e nomes curtos não escondem bug. Um aviso legítimo se corrige no código; se for falso
+positivo, use `# noqa: <regra>` na linha **com o motivo** (ex.: `# noqa: B023 — roda na mesma iteração`). `ruff check . --fix`
+aplica só as correções seguras. O lint não substitui os testes nem a auditoria de dependências (`docs/b2bon/AUDITORIA_DEPENDENCIAS.md`).
+
 ## Testes
 
 ```bash

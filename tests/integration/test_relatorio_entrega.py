@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 from app.models.campanha import Campanha, CampanhaDestinatario
-from app.models.mensagem import Mensagem
 from app.services import aprovacao_service
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 
@@ -113,7 +112,7 @@ def test_envios_email_classifica_cada_mensagem_individualmente(
     com_erro.bounce_em = datetime.now(UTC)
     com_erro.motivo_bounce = "550 mailbox não existe"
 
-    pendente = aprovacao_service.criar_proposta(
+    aprovacao_service.criar_proposta(
         db_session, TENANT_ID, None, decisor.id, "email", None, "Oi 4", StubPlanLimitsProvider(),
     )
     db_session.commit()

@@ -53,7 +53,11 @@ def test_abre_apos_n_falhas_seguidas_e_fecha_com_sucesso():
 
 def test_sucesso_zera_a_contagem():
     d = Disjuntor(_Relogio())
-    d.falha(); d.falha(); d.sucesso(); d.falha(); d.falha()
+    d.falha()
+    d.falha()
+    d.sucesso()
+    d.falha()
+    d.falha()
     assert d.permite()
 
 

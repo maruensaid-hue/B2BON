@@ -28,11 +28,11 @@ reauditado nesta rodada**, está escrito assim; nada foi marcado como concluído
 | F4 | Alta | **A coleta do site era descartada se a IA falhasse** (`enriquecer` só gravava depois de `intel.gerar`). Violava “a coleta deve funcionar sem IA”. | **Corrigido**: domínio descoberto, páginas pesquisadas (URL, fonte, data) e a marca `analise_ia=pendente` são gravados antes de a IA ser exigida. |
 | F5 | Média | **Fila de enriquecimento**: IA fora do ar marcava a conta `falhou` em definitivo (sem retentativa). | **Corrigido**: volta para a fila com espera 15/30/60/120 min, máx. 5 tentativas, depois `falhou` com o motivo. Migração `e5b7d9f1a3c5` (colunas `tentativas`, `proxima_tentativa_em`). |
 | F6 | Média | **Gateway sem circuit breaker**: provedor fora do ar custava ~25 s por chamada e reservava crédito a cada tentativa. | **Corrigido**: disjuntor (5 falhas seguidas do provedor → 60 s de pausa, uma chamada de teste, reabre se falhar); reserva de créditos liberada; resposta vazia/cortada **não** conta como provedor fora do ar. Configurável (`AI_DISJUNTOR_*`, 0 desliga). |
-| F7 | Média | **Um único provedor de IA** (Anthropic). Sem adapters nem fallback para Workers AI/Groq/OpenRouter/Gemini. | **Pendente / bloqueado**: exige credenciais, validação de privacidade/retenção e política de custo (prompt §6.2–6.3) — decisão sua. O disjuntor e `IAIndisponivel` já deixam o ponto de encaixe pronto. |
+| F7 | Média | Um único provedor de IA (Anthropic). | **Arquitetura entregue na V5.1 (2026-10-20)**: adapters Cloudflare Workers AI, Groq, OpenRouter e Gemini + fallback controlado, **todos desligados e sem teste real** (sem credenciais/aprovação). Ver `PROVEDORES_IA.md`. Ativação: bloqueada externamente. |
 | F8 | Média | **RAG sem vetores**: busca por palavras-chave (`texto.py`), sem pgvector. | **Pendente**: avaliar pgvector no Neon antes de qualquer banco vetorial; só se houver necessidade comprovada. |
-| F9 | Média | **Coleta PNCP sem rotina agendada**: o conector existe (`bids/fontes/pncp.py`) e a ingestão é idempotente, mas não há cron de coleta incremental/saúde da fonte. | **Pendente** (parcial). |
-| F10 | Baixa | Lint do backend sem configuração/gate; `ruff` sem config reporta 1.524 achados (1.040 são B008, padrão FastAPI) — **não é um gate válido**. | **Registrado** (definir regras mínimas e pôr no CI). |
-| F11 | Info | `pip-audit`/`npm audit` **não executados** (ferramenta ausente). Dependências vulneráveis: **não verificado**. | **Pendente**. |
+| F9 | Média | Coleta PNCP sem rotina agendada e com o adapter fora do contrato real (modalidade obrigatória). | **Corrigido na V5.1**: adapter alinhado ao serviço real (validado por consulta de leitura), coleta agendada a cada 6 h com cursor, idempotência, execução única, saúde e alertas. Ativação real pendente (`PNCP_HABILITADO`, configuração do tenant). Ver `COLETA_PNCP.md`. |
+| F10 | Baixa | Lint do backend sem configuração/gate. | **Corrigido na V5.1**: `[tool.ruff]` no `pyproject.toml` (regras de bug/risco), 44 achados tratados, passo `ruff check .` no job `backend` do CI. |
+| F11 | Info | `pip-audit`/`npm audit` não executados. | **Executados na V5.1**: Python 0 vulnerabilidades (58 pacotes); Node 2 altas de build corrigidas (`npm audit fix`, sem `--force`) → 0. Sem lock no backend (limite registrado). Ver `AUDITORIA_DEPENDENCIAS.md`. |
 | F12 | Baixa | RSS de portais (`central_negocios_client`) usa `follow_redirects=True`, mas as URLs são fixas no código (sem entrada de usuário). | **Registrado**, risco baixo. |
 | F13 | Baixa | O limite semanal de enriquecimento (`verificar_e_registrar`) conta cada tentativa, inclusive as retentativas por IA fora do ar. | **Registrado**. |
 | F14 | Decisão | O conteúdo das páginas coletadas não era persistido (só URLs/data/fonte). | **Corrigido por decisão do PO (2026-10-20)**: tabela `conteudo_pagina_site` (migração `f6c8e0a2b4d6`), uma linha por conta+URL (a coleta nova substitui a anterior, ≈2.500 caracteres × no máx. 8 páginas), apagada junto com a conta e na exclusão do tenant. Ainda **não há** rotina que reanalise a partir do conteúdo guardado (hoje a retentativa coleta de novo). |
@@ -68,20 +68,20 @@ Legenda: ✅ concluído e validado · 🟡 parcial · 🔴 pendente · ⛔ bloqu
 
 | # | Critério | Estado |
 |---|---|---|
-| 1 | Identificar/confirmar o site oficial | 🟡 descoberta por busca + similaridade de nome; não cruza CNPJ/endereço nem pede confirmação humana |
+| 1 | Identificar/confirmar o site oficial | ✅ (V5.1) confirmação por evidências (CNPJ exibido, e-mail do cadastro público, CEP/endereço, telefone); nome parecido nunca confirma; estados confirmado/provável/inconclusivo/divergente e validação manual |
 | 2 | Coleta sem inferência de IA | ✅ (teste `test_ia_fora_do_ar_nao_perde_a_coleta_do_site`) |
 | 3 | Dados persistidos e rastreáveis | ✅ URL, fonte, data e conteúdo de cada página gravados (teste com e sem IA) |
 | 4 | Páginas relevantes identificadas | ✅ 22 caminhos candidatos + links da home por palavra-chave (máx. 8 páginas) |
-| 5 | Fontes e datas apresentadas | 🟡 gravadas; exibição na tela não verificada nesta rodada |
+| 5 | Fontes e datas apresentadas | ✅ (V5.1) tela `Histórico de Coletas` mostra páginas, datas, evidências e indicadores com URL |
 | 6 | Ausência não vira invenção | 🟡 instrução no prompt + delimitação; sem verificação automática da resposta |
-| 7 | Análise posterior por IA | 🟡 fila reprocessa sozinha; reprocesso manual = rodar “Enriquecer” de novo |
+| 7 | Análise posterior por IA | ✅ (V5.1) fila com retentativa e botão de reprocesso que gera nova coleta ligada à anterior |
 | 8 | Indisponibilidade de IA não impede a coleta | ✅ |
 | 9 | Resultado no CRM e envio ao PREDATOR | 🟡 ficha da conta ✅; alimentação do contexto do PREDATOR não verificada |
 | 10 | Testes de SSRF, redirecionamento, DNS, limites | ✅ `test_ssrf.py` (rebinding, redirect interno, laço, porta, esquema, corpo gigante, gzip) |
 | 11 | Conteúdo malicioso não altera instruções | ✅ delimitador neutralizado + instrução de sistema (`test_enriquecer_delimita_conteudo_externo_no_prompt`); defesa estrutural: nenhuma ferramenta privilegiada é acionada pela análise |
 | 12 | Isolamento entre tenants | ✅ `obter_conta` filtra por `tenant_id` |
-| — | Relatórios financeiros públicos com indicador/período/URL (§10.3) | 🔴 hoje é texto livre gerado pela IA; não há extração estruturada com origem |
-| — | Histórico de coletas e reprocesso por botão (§10.6) | 🟡 histórico em `campo_enriquecido` + atividade; sem tela de histórico dedicada |
+| — | Relatórios financeiros públicos com indicador/período/URL (§10.3) | 🟡 (V5.1) extração determinística de receita, lucro, EBITDA e dívida em páginas HTML com valor, moeda, escala, período, trecho e URL; margem derivada com fórmula; **PDFs de RI não são lidos** |
+| — | Histórico de coletas e reprocesso por botão (§10.6) | ✅ (V5.1) `coleta_site_conta` persistida, tela e reprocesso, isolados por tenant |
 
 ## 5. Plano derivado das evidências
 
@@ -95,3 +95,7 @@ tenant rota por rota com teste negativo automático.
 
 - Aplicar as migrações `e5b7d9f1a3c5` e `f6c8e0a2b4d6` em produção (aditivas, não destrutivas) — vão junto do deploy.
 - Qualquer provedor de IA novo (credenciais, custo, privacidade).
+
+## 7. Atualização V5.1 (2026-10-20)
+
+As cinco pendências desta auditoria foram tratadas; o resultado item a item (estado, evidências, riscos e ativação) está em `CONCLUSAO_V5_1.md`.

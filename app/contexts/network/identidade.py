@@ -30,7 +30,7 @@ def cnpj_valido(cnpj: str | None) -> bool:
 
     def dv(base: str) -> str:
         pesos = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2][-len(base):]
-        resto = sum(int(d) * p for d, p in zip(base, pesos)) % 11
+        resto = sum(int(d) * p for d, p in zip(base, pesos, strict=False)) % 11
         return "0" if resto < 2 else str(11 - resto)
 
     return digitos[12] == dv(digitos[:12]) and digitos[13] == dv(digitos[:13])

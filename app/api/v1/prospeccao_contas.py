@@ -117,8 +117,11 @@ def enriquecer_conta(
     site_fetcher: SiteFetcher = Depends(get_site_fetcher),
     web_search: WebSearchProvider = Depends(get_web_search_provider),
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+    brasilapi_client: BrasilApiClient = Depends(get_brasilapi_client),
 ) -> EnriquecerContaResponseSchema:
-    campos = prospeccao.enriquecer(db, tenant_id, ator_id, conta_id, llm, site_fetcher, web_search, plan_limits)
+    campos = prospeccao.enriquecer(
+        db, tenant_id, ator_id, conta_id, llm, site_fetcher, web_search, plan_limits, consulta_cnpj=brasilapi_client
+    )
     return EnriquecerContaResponseSchema(campos=campos)
 
 

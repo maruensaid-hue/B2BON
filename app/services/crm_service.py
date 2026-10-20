@@ -11,7 +11,6 @@ from app.contexts.shared import events as eventos
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.atividade import Atividade
-from app.models.icp import ICP
 from app.models.conta import Conta
 from app.models.custo_aquisicao import CustoAquisicao
 from app.models.decisor import Decisor

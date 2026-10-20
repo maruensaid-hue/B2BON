@@ -20,13 +20,16 @@ on:
     # AI Credits (Fase 15, TD-093): de hora em hora, fora do minuto 0 para
     # não disputar o horário cheio. Job próprio abaixo.
     - cron: "7 * * * *"
+    # Coleta do PNCP (sem IA): a fonte publica uma vez por dia e a coleta é idempotente com janela curta; a cada 6 h recupera
+    # falhas sem pressionar o portal. Job próprio abaixo; desligada até PNCP_HABILITADO=true na API.
+    - cron: "43 */6 * * *"
   workflow_dispatch: {}
 
 jobs:
   processar-envios:
     runs-on: ubuntu-latest
     # O disparo horário é só dos AI Credits (job creditos-ia).
-    if: github.event.schedule != '7 * * * *'
+    if: github.event.schedule != '7 * * * *' && github.event.schedule != '43 */6 * * *'
     steps:
       - name: Chamar POST /cron/processar-envios
         run: |
@@ -177,6 +180,23 @@ jobs:
         run: |
           curl --fail --show-error --silent \
             -X POST "${API_BASE_URL}/cron/creditos-ia" \
+            -H "X-Cron-Secret: ${CRON_SECRET}"
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+  coletar-licitacoes:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '43 */6 * * *' || github.event_name == 'workflow_dispatch'
+    # Uma coleta por vez; o próprio serviço também impede execução concorrente por tenant.
+    concurrency:
+      group: cron-coleta-licitacoes
+      cancel-in-progress: false
+    steps:
+      - name: Chamar POST /cron/coletar-licitacoes (PNCP, sem IA)
+        run: |
+          curl --fail --show-error --silent --max-time 600 \
+            -X POST "${API_BASE_URL}/cron/coletar-licitacoes" \
             -H "X-Cron-Secret: ${CRON_SECRET}"
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://b2bon-api.onrender.com/api/v1' }}

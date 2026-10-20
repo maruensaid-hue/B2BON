@@ -352,7 +352,7 @@ def test_dashboard_funil_calcula_taxa_de_conversao(db_session):
     decisor = _criar_decisor(db_session, conta)
     estagios = {e.tipo: e for e in crm_service.listar_estagios(db_session, TENANT_ID)}
     n1 = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "N1", valor=100.0)
-    n2 = crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "N2", valor=200.0)
+    crm_service.criar_negocio(db_session, TENANT_ID, None, conta.id, decisor.id, "N2", valor=200.0)
     crm_service.mover_estagio(db_session, TENANT_ID, None, n1.id, estagios["ganho"].id)
 
     resultado = crm_service.dashboard_funil(db_session, TENANT_ID)

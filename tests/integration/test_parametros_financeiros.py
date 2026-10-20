@@ -138,7 +138,7 @@ def test_entitlements_invalidos_sao_recusados_e_mudanca_e_auditada(client, db_se
 def test_parametros_tributarios_do_po_sem_inventar_o_que_falta():
     perfis = {tipo: (item, codigo, MIG.componentes(presuncao, iss)) for tipo, item, codigo, presuncao, iss, _ in MIG.PERFIS}
     assert set(perfis) == {"SOFTWARE_LICENSE", "SAAS_SUBSCRIPTION", "IMPLEMENTATION"}  # consultoria e suporte: sem perfil
-    for tipo, (_, _, componentes_) in perfis.items():
+    for _, _, componentes_ in perfis.values():
         t = {c["tributo"]: c for c in componentes_}
         assert (t["PIS"]["aliquota"], t["COFINS"]["aliquota"]) == (0.0065, 0.03)
         assert (t["IRPJ"]["aliquota"], t["IRPJ"]["presuncao"], t["CSLL"]["aliquota"], t["CSLL"]["presuncao"]) == (0.15, 0.32, 0.09, 0.32)

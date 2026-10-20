@@ -17,7 +17,6 @@ from app.contexts.procurement.fluxo import LEI_14133
 from app.contexts.procurement.tipos import STATUS_PROCESSO_FINAIS
 from app.contexts.shared.texto import termos_em_comum
 from app.models.contrato_compra import ContratoCompra
-from app.models.evento_contrato_compra import EventoContratoCompra
 from app.models.item_pca import ItemPca
 from app.models.orgao_publico import OrgaoPublico
 from app.models.processo_contratacao import ProcessoContratacao

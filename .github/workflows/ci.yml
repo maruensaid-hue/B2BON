@@ -29,6 +29,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Instalar dependências
         run: pip install -e ".[dev]"
+      # Mesma verificação do desenvolvimento local (`ruff check .`, regras em [tool.ruff] do pyproject.toml): bugs reais
+      # (nomes indefinidos, imports/variáveis mortos, armadilhas do bugbear, chamadas perigosas), não estilo.
+      - name: Lint do backend (ruff)
+        run: ruff check .
       - name: Rodar testes
         run: pytest -q
 

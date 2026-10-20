@@ -1,6 +1,5 @@
 from app.models.faq_item import FaqItem
 from app.models.oferta import Oferta
-from app.models.perfil_empresa import PerfilEmpresa
 from app.services import agente_corporativo_service, rede_social_service
 from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 from tests.fakes import FakeLLMProvider

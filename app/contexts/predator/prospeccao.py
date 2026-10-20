@@ -16,6 +16,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
+from app.contexts.predator import inteligencia_site
 from app.contexts.shared import matching
 from app.contexts.shared.organizations import decisores_da_conta, normalizar_dominio, obter_conta
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
@@ -24,6 +25,7 @@ from app.integrations.site_fetcher import HostNaoPublico, SiteFetcher
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.campo_enriquecido import CampoEnriquecido
+from app.models.coleta_site import ColetaSiteConta, IndicadorFinanceiroConta
 from app.models.conta import Conta
 from app.models.conteudo_pagina_site import ConteudoPaginaSite
 from app.models.decisor import Decisor
@@ -109,7 +111,9 @@ def gerar_lista(
         db.flush()
 
         if sincronizar_com_tolerancia(
-            lambda: graph.upsert_conta(tenant_id, conta.id, {"nome": conta.nome, "cnpj": conta.cnpj}), "conta", conta.id
+            lambda: graph.upsert_conta(tenant_id, conta.id, {"nome": conta.nome, "cnpj": conta.cnpj}),  # noqa: B023 — roda na mesma iteração
+            "conta",
+            conta.id,
         ):
             conta.neo4j_node_id = str(conta.id)
 
@@ -264,14 +268,50 @@ def _paginas_do_texto(texto_site: str) -> list[tuple[str, str]]:
     return [(partes[i].strip(), partes[i + 1].strip()) for i in range(1, len(partes) - 1, 2) if partes[i].strip()]
 
 
-def _guardar_paginas(db: Session, tenant_id: str, conta_id: int, texto_site: str, agora: datetime) -> None:
+def _guardar_paginas(db: Session, tenant_id: str, conta_id: int, paginas: list[tuple[str, str]], agora: datetime) -> None:
     """Guarda o conteúdo coletado de cada página (a última coleta por URL), para reanalisar sem acessar o site."""
     existentes = {p.url: p for p in db.query(ConteudoPaginaSite).filter_by(conta_id=conta_id).all()}
-    for url, conteudo in _paginas_do_texto(texto_site):
+    for url, conteudo in paginas:
         if url in existentes:
             existentes[url].conteudo, existentes[url].coletado_em = conteudo, agora
         else:
             db.add(ConteudoPaginaSite(tenant_id=tenant_id, conta_id=conta_id, url=url, conteudo=conteudo, coletado_em=agora))
+
+
+_CHARS_POR_PAGINA_NO_PROMPT = 2500  # a IA recebe o começo de cada página; a extração determinística lê o texto inteiro
+
+
+def _texto_para_prompt(paginas: list[tuple[str, str]]) -> str:
+    return "\n\n".join(f"=== {url} ===\n{texto[:_CHARS_POR_PAGINA_NO_PROMPT]}" for url, texto in paginas)
+
+
+def _registro_publico(consulta_cnpj: BrasilApiClient | None, cnpj: str | None, avisos: list[str]) -> dict | None:
+    """Cadastro público do CNPJ (BrasilAPI) para comparar e-mail/endereço/telefone. Indisponível = sem comparação, com aviso."""
+    digitos = "".join(c for c in (cnpj or "") if c.isdigit())
+    if consulta_cnpj is None or len(digitos) != 14:
+        return None
+    try:
+        return consulta_cnpj(digitos)
+    except Exception:  # noqa: BLE001 — rede/404/limite da BrasilAPI: a coleta segue, só sem essa evidência
+        avisos.append("A consulta ao cadastro público do CNPJ falhou: e-mail, endereço e telefone oficiais não foram comparados.")
+        return None
+
+
+def _aplicar_verificacao(coleta: ColetaSiteConta, verificacao: inteligencia_site.VerificacaoDominio, origem: str) -> None:
+    coleta.dominio_origem = origem
+    coleta.dominio_situacao = verificacao.situacao
+    coleta.dominio_pontuacao = verificacao.pontuacao
+    coleta.dominio_evidencias = verificacao.evidencias
+    coleta.dominio_limitacoes = verificacao.limitacoes
+
+
+def _validacao_manual_anterior(db: Session, conta_id: int, dominio: str) -> ColetaSiteConta | None:
+    """Confirmação manual vale para o mesmo domínio da mesma conta: nova coleta não a desfaz."""
+    return (
+        db.query(ColetaSiteConta)
+        .filter_by(conta_id=conta_id, dominio=dominio, dominio_situacao="confirmado_manualmente")
+        .order_by(ColetaSiteConta.id.desc()).first()
+    )
 
 
 def enriquecer(
@@ -283,56 +323,110 @@ def enriquecer(
     site_fetcher: SiteFetcher,
     web_search: WebSearchProvider,
     plan_limits: PlanLimitsProvider,
+    consulta_cnpj: BrasilApiClient | None = None,
+    disparo: str = "manual",
+    reprocesso_de_id: int | None = None,
 ) -> list[CampoEnriquecido]:
-    """Pesquisa ampla dentro do site institucional da conta, com ficha de
-    campos enriquecidos e fonte/data de cada dado (E2-H2).
+    """Pesquisa ampla dentro do site institucional da conta, com ficha de campos enriquecidos, fonte/data de cada dado
+    (E2-H2) e um registro persistido de cada execução (`ColetaSiteConta`).
 
-    Não fica só na home: `site_fetcher` já tenta páginas de sobre,
-    investidores, notícias, vagas abertas e privacidade quando existem
-    (best-effort). O prompt pede sinais de porte/atuação, crescimento,
-    marcos históricos, novos projetos, vagas abertas e presença de
-    política de privacidade/LGPD — cobre prospecção para qualquer
-    oferta, não só compliance. Cada página efetivamente pesquisada
-    também vira um campo `pagina_pesquisada`, que funciona como o
-    histórico da pesquisa feita.
+    Ordem: (1) coleta determinística do site; (2) confirmação do domínio por evidências (CNPJ, e-mail, endereço, telefone);
+    (3) extração de indicadores financeiros públicos com origem; (4) grava tudo; (5) só então a análise por IA. Os passos 1–4
+    não dependem de IA: se ela estiver fora do ar, a coleta fica salva e a análise, pendente. Domínio `divergente` (o site exibe
+    outro CNPJ e nada prova que é a empresa) não alimenta indicadores, resumo nem IA.
 
-    Se a conta ainda não tem domínio cadastrado, tenta descobrir o site
-    oficial sozinha via `web_search` e já salva o domínio encontrado na
-    ficha da empresa — não busca de novo nas próximas pesquisas.
-    """
+    Se a conta ainda não tem domínio cadastrado, tenta descobrir o site oficial via `web_search` — o domínio descoberto só é
+    gravado na conta depois que o site responde e não é divergente."""
     enriquecimento_limite_service.verificar_e_registrar(db, tenant_id, "site", plan_limits)
     conta = obter_conta(db, tenant_id, conta_id)
+    agora = datetime.now(UTC)
+    coleta = ColetaSiteConta(
+        tenant_id=tenant_id, conta_id=conta.id, dominio=conta.dominio, disparo=disparo, reprocesso_de_id=reprocesso_de_id,
+        estado="em_andamento", iniciada_em=agora, fontes=[], avisos=[], dominio_evidencias=[], dominio_limitacoes=[],
+    )
+    db.add(coleta)
+    db.flush()
+
+    def falhar(mensagem: str, causa: Exception | None = None) -> None:
+        """Registra a falha no histórico (e a persiste) antes de devolver o erro de negócio ao usuário."""
+        coleta.estado, coleta.erro, coleta.concluida_em = "falhou", mensagem, datetime.now(UTC)
+        db.commit()
+        raise RegraNegocioViolada(mensagem) from causa
+
     dominio_descoberto: str | None = None
-    if not conta.dominio:
+    dominio = conta.dominio
+    if not dominio:
         dominio_descoberto = _descobrir_dominio(conta.nome_fantasia or conta.nome, web_search)
         if not dominio_descoberto:
-            raise RegraNegocioViolada(
+            falhar(
                 "Não foi possível descobrir automaticamente o site da empresa — "
                 "cadastre o domínio manualmente e tente de novo."
             )
-        conta.dominio = dominio_descoberto
-        db.flush()
+        dominio = dominio_descoberto
+    coleta.dominio = dominio
 
     try:
-        texto_site = site_fetcher(conta.dominio)
+        texto_site = site_fetcher(dominio)
     except HostNaoPublico as erro:
-        raise RegraNegocioViolada(
-            f'Não conseguimos acessar "{conta.dominio}" — o domínio não existe ou não resolve. '
-            'Confirme o endereço em "Editar dados da conta".'
-        ) from erro
+        falhar(
+            f'Não conseguimos acessar "{dominio}" — o domínio não existe ou não resolve. '
+            'Confirme o endereço em "Editar dados da conta".', erro,
+        )
     except httpx.HTTPStatusError as erro:
-        raise RegraNegocioViolada(
-            f'O site "{conta.dominio}" recusou o acesso (erro {erro.response.status_code}) — pode ser '
+        falhar(
+            f'O site "{dominio}" recusou o acesso (erro {erro.response.status_code}) — pode ser '
             'proteção antibot do próprio site, ou o domínio pode não ser o correto. Confirme em '
-            '"Editar dados da conta" ou tente novamente mais tarde.'
-        ) from erro
+            '"Editar dados da conta" ou tente novamente mais tarde.', erro,
+        )
     except httpx.HTTPError as erro:
-        raise RegraNegocioViolada(
-            f'Não conseguimos acessar "{conta.dominio}" agora (site fora do ar ou muito lento). '
-            "Tente novamente mais tarde."
-        ) from erro
+        falhar(
+            f'Não conseguimos acessar "{dominio}" agora (site fora do ar ou muito lento). '
+            "Tente novamente mais tarde.", erro,
+        )
 
-    agora = datetime.now(UTC)
+    paginas = _paginas_do_texto(texto_site)
+    coleta.paginas, coleta.fontes = len(paginas), [url for url, _ in paginas]
+    avisos: list[str] = []
+
+    # (2) Confirmação do domínio — evidências determinísticas, nunca só a semelhança do nome.
+    registro = _registro_publico(consulta_cnpj, conta.cnpj, avisos)
+    verificacao = inteligencia_site.verificar_dominio(dominio, paginas, conta.cnpj, conta.nome, registro)
+    origem = "descoberto_busca" if dominio_descoberto else "cadastrado"
+    _aplicar_verificacao(coleta, verificacao, origem)
+    manual = _validacao_manual_anterior(db, conta.id, dominio)
+    if manual is not None and verificacao.situacao != "confirmado":
+        coleta.dominio_situacao = "confirmado_manualmente"
+        coleta.dominio_validado_por, coleta.dominio_validado_em = manual.dominio_validado_por, manual.dominio_validado_em
+    divergente = coleta.dominio_situacao == "divergente"
+    if divergente:
+        avisos.append(
+            "O site exibe outro CNPJ e nada prova que pertence a esta empresa: indicadores, resumo e análise por IA não foram "
+            "gerados. Confira o domínio em \"Editar dados da conta\"."
+        )
+    elif coleta.dominio_situacao in ("provavel", "inconclusivo"):
+        avisos.append("Domínio não confirmado por evidências suficientes: validação manual recomendada antes de usar as conclusões.")
+    if origem == "descoberto_busca" and coleta.dominio_situacao in ("provavel", "inconclusivo"):
+        avisos.append("Domínio descoberto por busca na web e só por semelhança de nome: trate como candidato.")
+
+    # (3) Indicadores financeiros públicos, só do que está escrito, com fonte, período e unidade.
+    indicadores: list[inteligencia_site.IndicadorExtraido] = []
+    if divergente:
+        coleta.financeiro_estado = "nao_avaliado_dominio_divergente"
+    else:
+        publicados = inteligencia_site.extrair_indicadores(paginas)
+        indicadores = publicados + inteligencia_site.derivar_indicadores(publicados)
+        coleta.financeiro_estado = "encontrados" if publicados else "nao_encontrado"
+    for ind in indicadores:
+        db.add(IndicadorFinanceiroConta(
+            tenant_id=tenant_id, conta_id=conta.id, coleta_id=coleta.id, nome=ind.nome, tipo=ind.tipo, valor=ind.valor,
+            moeda=ind.moeda, escala=ind.escala, valor_original=ind.valor_original, periodo=ind.periodo, url_fonte=ind.url,
+            trecho=ind.trecho, metodo_extracao=ind.metodo, confianca=ind.confianca, formula=ind.formula, origens=ind.origens,
+            coletado_em=agora,
+        ))
+
+    # (4) A coleta vale por si: campos de proveniência e conteúdo das páginas ficam gravados antes de qualquer IA.
+    if dominio_descoberto and not divergente:
+        conta.dominio = dominio_descoberto
     campos: list[CampoEnriquecido] = []
     if dominio_descoberto:
         campos.append(
@@ -341,15 +435,35 @@ def enriquecer(
                 fonte="busca_web", coletado_em=agora,
             )
         )
-    for url_pagina in re.findall(r"=== (.*?) ===", texto_site):
+    for url_pagina, _ in paginas:
         campos.append(
             CampoEnriquecido(
                 conta_id=conta.id, campo="pagina_pesquisada", valor=url_pagina,
                 fonte="pesquisa_no_site", coletado_em=agora,
             )
         )
-    _guardar_paginas(db, tenant_id, conta.id, texto_site, agora)
-    # A coleta do site é determinística e vale por si: fica gravada mesmo que a análise por IA falhe (AI-independent core).
+    campos.append(
+        CampoEnriquecido(
+            conta_id=conta.id, campo="dominio_verificado", valor=coleta.dominio_situacao or "inconclusivo",
+            fonte="verificacao_dominio", coletado_em=agora,
+        )
+    )
+    _guardar_paginas(db, tenant_id, conta.id, paginas, agora)
+
+    if divergente:
+        coleta.estado, coleta.avisos, coleta.concluida_em = "concluida", avisos, datetime.now(UTC)
+        db.add_all(campos)
+        atividade_service.registrar(
+            db, tenant_id, conta_id=conta.id, tipo="sistema",
+            descricao="Site coletado, mas o domínio não bate com a empresa (CNPJ divergente): análise não gerada", ator_id=ator_id,
+        )
+        auditoria_service.registrar(db, tenant_id, "conta_site_dominio_divergente", "conta", conta.id, ator_id, {"coleta_id": coleta.id}, conta_id=conta.id)
+        db.commit()
+        for campo_registro in campos:
+            db.refresh(campo_registro)
+        return campos
+
+    # (5) Análise por IA — a única etapa que depende dela.
     try:
         resposta = intel.gerar(
             db,
@@ -382,7 +496,7 @@ def enriquecer(
                     "Se um desses pontos não aparecer no texto, não invente — simplesmente não escreva "
                     "uma linha para ele. Termine com uma linha 'possivel_dor: ' resumindo, em uma "
                     "frase, qual dor ou necessidade de negócio os sinais encontrados sugerem.\n\n"
-                    f"<CONTEUDO_EXTERNO_NAO_CONFIAVEL>\n{intel.prompt_seguro.neutralizar(texto_site)}\n</CONTEUDO_EXTERNO_NAO_CONFIAVEL>"
+                    f"<CONTEUDO_EXTERNO_NAO_CONFIAVEL>\n{intel.prompt_seguro.neutralizar(_texto_para_prompt(paginas))}\n</CONTEUDO_EXTERNO_NAO_CONFIAVEL>"
                 )
             )
         )
@@ -393,13 +507,15 @@ def enriquecer(
             )
         )
         db.add_all(campos)
+        coleta.estado, coleta.avisos, coleta.concluida_em = "concluida_sem_ia", avisos, datetime.now(UTC)
+        coleta.erro = "Análise por IA indisponível no momento: a coleta foi salva e a análise ficou pendente."
         atividade_service.registrar(
             db, tenant_id, conta_id=conta.id, tipo="sistema",
             descricao="Site institucional coletado; análise por IA pendente (IA indisponível)", ator_id=ator_id,
         )
         auditoria_service.registrar(
             db, tenant_id, "conta_site_coletado_sem_ia", "conta", conta.id, ator_id,
-            {"paginas": len(campos) - 1}, conta_id=conta.id,
+            {"paginas": len(paginas), "coleta_id": coleta.id}, conta_id=conta.id,
         )
         db.commit()
         raise IAIndisponivel(
@@ -424,6 +540,7 @@ def enriquecer(
 
     if not conta.resumo_site or not conta.resumo_site.strip():
         conta.resumo_site = resposta.content
+    coleta.resumo, coleta.estado, coleta.avisos, coleta.concluida_em = resposta.content, "concluida", avisos, datetime.now(UTC)
 
     atividade_service.registrar(
         db, tenant_id, conta_id=conta.id, tipo="sistema", descricao="IA pesquisou o site institucional",
@@ -436,7 +553,7 @@ def enriquecer(
         "conta",
         conta.id,
         ator_id,
-        {"campos": len(campos)},
+        {"campos": len(campos), "coleta_id": coleta.id},
         conta_id=conta.id,
     )
     db.commit()
@@ -598,7 +715,7 @@ def mapear_decisores(
         db.flush()
 
         if sincronizar_com_tolerancia(
-            lambda: graph.upsert_decisor(tenant_id, decisor.id, conta.id, {"nome": decisor.nome, "cargo": decisor.cargo}),
+            lambda: graph.upsert_decisor(tenant_id, decisor.id, conta.id, {"nome": decisor.nome, "cargo": decisor.cargo}),  # noqa: B023 — roda na mesma iteração
             "decisor",
             decisor.id,
         ):

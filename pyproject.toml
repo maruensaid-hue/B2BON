@@ -39,7 +39,26 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
+    "ruff>=0.6",
 ]
+
+[tool.ruff]
+# Lint do backend (Python 3.12 no Docker; o código aceita 3.11+). Porta de qualidade do CI: `ruff check .`
+target-version = "py311"
+extend-exclude = [".claude", "frontend", "dev.db", "predator.db", "onda_a_demo.db"]
+
+[tool.ruff.lint]
+# Só o que aponta bug ou risco, não estilo: erros de sintaxe/pycodestyle graves (E4, E7, E9), pyflakes (F: nomes indefinidos,
+# imports e variáveis não usados), bugbear (B), erros do pylint (PLE), uso incorreto de async (ASYNC) e chamadas perigosas
+# do bandit (eval/exec, pickle, YAML inseguro, subprocess com shell).
+select = ["E4", "E7", "E9", "F", "B", "PLE", "ASYNC", "S102", "S307", "S301", "S506", "S602", "S604", "S605"]
+ignore = [
+    "B008",  # `Depends(...)` em argumento padrão é o padrão do FastAPI
+    "E741",  # nomes `l`/`O`/`I` curtos: estilo, sem risco de bug
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]  # `assert False` em teste: o pytest já reescreve e mostra a mensagem
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

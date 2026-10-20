@@ -45,7 +45,7 @@ def test_marcar_todas_lidas_via_api(client, criar_usuario_autenticado):
 
 
 def test_notificacoes_isoladas_por_tenant(client, criar_usuario_autenticado):
-    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+    criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
     client.post("/api/v1/rede-social/conexoes", json={"tenant_id_destino": TENANT_B})
 
     notificacoes_a = client.get("/api/v1/rede-social/notificacoes").json()

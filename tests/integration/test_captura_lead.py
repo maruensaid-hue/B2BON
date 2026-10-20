@@ -26,7 +26,7 @@ def _criar_usuario_logado(db_session, client, tenant_id: str = TENANT_ID) -> dic
     )
     db_session.add(usuario)
     db_session.commit()
-    resposta = client.post("/api/v1/auth/login", json={"email": usuario.email, "senha": "senha123"})
+    client.post("/api/v1/auth/login", json={"email": usuario.email, "senha": "senha123"})
     return {"Authorization": ""}
 
 

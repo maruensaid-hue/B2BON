@@ -5,8 +5,6 @@ C nunca chega ao prompt do LLM quando o tenant B pergunta ao agente do
 tenant A — nem por keyword idêntica, nem pelo Context Engine."""
 
 from app.contexts.intelligence import brain, context_engine
-from app.models.evento_aprendizado import EventoAprendizado
-from app.models.evento_dominio import EventoDominio
 from app.models.perfil_inteligencia import PerfilInteligencia
 
 TENANT_A = "tenant-teste"

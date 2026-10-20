@@ -2,7 +2,6 @@
 
 from app.models.conta import Conta
 from app.models.decisor import Decisor
-from app.models.estagio_funil import EstagioFunil
 from app.models.negocio import Negocio
 from app.models.usuario import Usuario
 from app.services import crm_service

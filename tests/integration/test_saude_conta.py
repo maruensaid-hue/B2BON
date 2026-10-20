@@ -77,7 +77,7 @@ def test_user_so_ve_contas_das_quais_e_o_vendedor(client, db_session, criar_usua
 
 
 def test_admin_ve_todas_as_contas_e_pode_filtrar_por_vendedor(client, db_session, criar_usuario_autenticado):
-    headers_vendedor = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-c@teste.com.br")
+    criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor-c@teste.com.br")
     headers_admin = criar_usuario_autenticado(TENANT_ID, papel="admin", email="gestor@teste.com.br")
     vendedor_id = _id_do_usuario(db_session, "vendedor-c@teste.com.br")
 

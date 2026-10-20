@@ -29,7 +29,7 @@ def test_contraparte_confirma_via_api(client, criar_usuario_autenticado):
 
 
 def test_terceiro_nao_pode_confirmar_via_api(client, criar_usuario_autenticado):
-    headers_b = criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
+    criar_usuario_autenticado(TENANT_B, papel="admin", email="admin@empresab.com.br")
     declarado = client.post(
         "/api/v1/rede-social/relacionamentos", json={"tenant_id_destino": TENANT_B, "tipo": "PARTNER_OF"}
     ).json()

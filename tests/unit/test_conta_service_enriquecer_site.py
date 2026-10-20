@@ -290,7 +290,7 @@ def test_ia_fora_do_ar_nao_perde_a_coleta_do_site(db_session):
     paginas = sorted(c.valor for c in campos if c.campo == "pagina_pesquisada")
     assert paginas == ["https://alphatech.com.br", "https://alphatech.com.br/sobre"]
     assert [(c.campo, c.valor) for c in campos if c.campo == "analise_ia"] == [("analise_ia", "pendente")]
-    assert not any(c.campo not in {"pagina_pesquisada", "analise_ia"} for c in campos)  # nada inventado pela IA
+    assert not any(c.campo not in {"pagina_pesquisada", "analise_ia", "dominio_verificado"} for c in campos)  # nada inventado pela IA
 
 
 def test_ia_fora_do_ar_com_dominio_descoberto_grava_o_dominio(db_session):

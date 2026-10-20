@@ -116,8 +116,17 @@ class ContratoEntrada(BaseModel):
 class IngestaoPncp(BaseModel):
     data_inicial: str = Field(pattern=r"^\d{8}$")
     data_final: str = Field(pattern=r"^\d{8}$")
-    modalidade: int | None = None
+    modalidade: int = Field(ge=1, le=19)  # o PNCP exige a modalidade (1..19)
     pagina: int = Field(default=1, ge=1)
+
+
+class ConfiguracaoColeta(BaseModel):
+    ativa: bool = False
+    modalidades: list[int] = Field(default_factory=list, max_length=19)
+    ufs: list[str] = Field(default_factory=list, max_length=27)
+    palavras_chave: list[str] = Field(default_factory=list, max_length=30)
+    janela_dias: int = Field(default=2, ge=1, le=7)
+    max_novas_por_execucao: int = Field(default=200, ge=1, le=1000)
 
 
 def _usuario_id(ator_id: str | None) -> int | None:
@@ -416,3 +425,39 @@ def ingerir_pncp(dados: IngestaoPncp, tenant_id: str = Depends(get_tenant_id), a
         raise RegraNegocioViolada("A ingestão do PNCP é experimental e não está habilitada neste ambiente.")
     externas = fonte.buscar(dados.data_inicial, dados.data_final, dados.modalidade, dados.pagina)
     return bids.licitacoes.ingerir(db, tenant_id, _usuario_id(ator_id), externas)
+
+
+# --- Coleta agendada do PNCP (sem IA): configuração, saúde e histórico ------------------------------------------------
+
+
+@router.get("/coleta/pncp/configuracao")
+def configuracao_coleta(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    return bids.coleta.configuracao_dict(bids.coleta.obter_configuracao(db, tenant_id))
+
+
+@router.put("/coleta/pncp/configuracao", dependencies=[Depends(exigir_papel("admin", "super_admin"))])
+def salvar_configuracao_coleta(dados: ConfiguracaoColeta, tenant_id: str = Depends(get_tenant_id),
+                               ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
+    return bids.coleta.configuracao_dict(bids.coleta.salvar_configuracao(db, tenant_id, ator_id, dados.model_dump()))
+
+
+@router.get("/coleta/pncp/saude")
+def saude_coleta(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> dict:
+    return bids.coleta.saude(db, tenant_id)
+
+
+@router.get("/coleta/pncp/execucoes")
+def execucoes_coleta(limite: int = 20, tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> list[dict]:
+    return bids.coleta.historico(db, tenant_id, limite)
+
+
+@router.post("/coleta/pncp/executar", dependencies=[Depends(exigir_papel("admin", "super_admin"))])
+def executar_coleta(tenant_id: str = Depends(get_tenant_id), fonte: bids.FontePncp = Depends(get_fonte_pncp),
+                    db: Session = Depends(get_db)) -> dict:
+    """Dispara a mesma coleta do agendador, agora (mesmas travas: uma por vez, janela e tetos)."""
+    if not settings.pncp_habilitado:
+        raise RegraNegocioViolada("A coleta do PNCP não está habilitada neste ambiente.")
+    execucao = bids.coleta.executar(db, tenant_id, fonte, "manual")
+    if execucao is None:
+        raise RegraNegocioViolada("Não há coleta para executar: configuração desativada ou outra execução em andamento.")
+    return bids.coleta.execucao_dict(execucao)

@@ -26,15 +26,14 @@ from app.models.perfil_empresa import PerfilEmpresa
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
 from app.models.sala_corporativa import SalaCorporativa
 from app.models.sinal_oportunidade import SinalOportunidade
-from app.models.tenant import Tenant
-from app.services import auditoria_service, conta_service
+from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 _STATUS_SINAL_IMUTAVEIS = {"convertido", "descartado"}
 
 _PALAVRAS_IGNORADAS = {
     "de", "da", "do", "das", "dos", "para", "com", "sem", "por", "que", "uma", "um",
-    "uns", "umas", "não", "nao", "mais", "menos", "the", "and", "for", "com", "seu", "sua",
+    "uns", "umas", "não", "nao", "mais", "menos", "the", "and", "for", "seu", "sua",
 }
 
 

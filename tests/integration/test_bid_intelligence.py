@@ -324,7 +324,7 @@ def test_normalizacao_pncp_preserva_fonte_e_link():
 
 
 def test_ingestao_pncp_desligada_por_padrao_e_idempotente_quando_ligada(client, monkeypatch):
-    corpo = {"data_inicial": "20260901", "data_final": "20260902"}
+    corpo = {"data_inicial": "20260901", "data_final": "20260902", "modalidade": 6}  # a modalidade é obrigatória no PNCP real
     assert client.post(f"{B}/ingestao/pncp", json=corpo).status_code == 409
 
     def responder(request):

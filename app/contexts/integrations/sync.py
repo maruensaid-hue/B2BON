@@ -92,7 +92,7 @@ def sincronizar(
     cursor = None
     try:
         while execucao.paginas < max_paginas:
-            pagina, tentativas = com_retry(lambda: listar(conexao.tenant_id, cursor=cursor, **kwargs), dormir=dormir)
+            pagina, tentativas = com_retry(lambda: listar(conexao.tenant_id, cursor=cursor, **kwargs), dormir=dormir)  # noqa: B023 — roda na mesma iteração
             execucao.tentativas += tentativas
             execucao.paginas += 1
             execucao.itens_lidos += len(pagina.items)
