@@ -17,7 +17,8 @@ from app.schemas.parceiro import (
     ChaveApiSchema,
     CriarChaveApiRequestSchema,
 )
-from app.services.errors import NaoEncontrado
+from app.core.ssrf import DestinoNaoPublico, validar_url_sem_dns
+from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 router = APIRouter(
     prefix="/integracoes",
@@ -73,6 +74,10 @@ def configurar_webhook(
 ) -> AssinaturaWebhookCriadaSchema:
     """Registra (ou substitui) a assinatura de webhook do Distribuidor —
     gera um segredo novo a cada chamada, mostrado uma vez só aqui."""
+    try:
+        validar_url_sem_dns(dados.url_callback)  # o destino é do Distribuidor: nada de rede interna (SSRF)
+    except DestinoNaoPublico as erro:
+        raise ValidacaoFalhou(f"URL de callback não permitida: {erro}") from erro
     segredo = secrets.token_urlsafe(32)
     assinatura = db.query(AssinaturaWebhookParceiro).filter_by(tenant_id=usuario.tenant_id).one_or_none()
     if assinatura is None:

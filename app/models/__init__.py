@@ -15,6 +15,7 @@ from app.models.cache_mercado_externo import CacheMercadoExterno
 from app.models.cadencia import Cadencia
 from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.campo_enriquecido import CampoEnriquecido
+from app.models.conteudo_pagina_site import ConteudoPaginaSite
 from app.models.comissao_representante import ComissaoRepresentante
 from app.models.conexao_empresa import ConexaoEmpresa
 from app.models.conexao_linkedin import ConexaoLinkedin
@@ -222,6 +223,7 @@ __all__ = [
     "RecebimentoGoverno",
     "TemplateDocumentoComercial",
     "CampoEnriquecido",
+    "ConteudoPaginaSite",
     "ContaFranquiaConsumo",
     "EnriquecimentoSemanalConsumo",
     "DescarteConta",

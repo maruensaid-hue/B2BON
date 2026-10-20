@@ -71,7 +71,7 @@ def test_buscar_conteudo_site_respeita_orcamento_de_tempo_para_paginas_extras():
 
     with (
         patch("app.integrations.site_fetcher.socket.getaddrinfo", return_value=_addrinfo_para("93.184.216.34")),
-        patch("app.integrations.site_fetcher.httpx.get", chamadas_get),
+        patch("app.core.ssrf._requisicao_fixada", chamadas_get),
         patch("app.integrations.site_fetcher.time.monotonic", side_effect=lambda: next(valores_tempo)),
     ):
         resultado = buscar_conteudo_site("publico.com.br")
@@ -96,7 +96,7 @@ def test_buscar_conteudo_site_bloqueia_redirect_para_ip_privado():
 
     with (
         patch("app.integrations.site_fetcher.socket.getaddrinfo", side_effect=_getaddrinfo),
-        patch("app.integrations.site_fetcher.httpx.get", return_value=resposta_redirect),
+        patch("app.core.ssrf._requisicao_fixada", return_value=resposta_redirect),
     ):
         with pytest.raises(HostNaoPublico):
             buscar_conteudo_site("publico.com.br")

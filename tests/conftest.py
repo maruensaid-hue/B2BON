@@ -548,3 +548,13 @@ def configurar_notificacao(client: TestClient):
         return resposta.json()
 
     return _configurar
+
+
+@pytest.fixture(autouse=True)
+def _disjuntor_ia_fechado():
+    """O disjuntor do gateway é estado de processo: nenhum teste herda o circuito aberto de outro."""
+    from app.contexts.intelligence.disjuntor import disjuntor_ia
+
+    disjuntor_ia.reiniciar()
+    yield
+    disjuntor_ia.reiniciar()

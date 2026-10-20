@@ -16,6 +16,7 @@ from app.models.atividade import Atividade
 from app.models.cadencia import Cadencia
 from app.models.campanha import CampanhaDestinatario
 from app.models.campo_enriquecido import CampoEnriquecido
+from app.models.conteudo_pagina_site import ConteudoPaginaSite
 from app.models.conta import Conta
 from app.models.conta_franquia_consumo import ContaFranquiaConsumo
 from app.models.conversa_qualificacao import ConversaQualificacao
@@ -671,6 +672,7 @@ def excluir(db: Session, tenant_id: str, ator_id: str | None, conta_id: int) -> 
         )
 
     db.query(CampoEnriquecido).filter_by(conta_id=conta.id).delete(synchronize_session=False)
+    db.query(ConteudoPaginaSite).filter_by(conta_id=conta.id).delete(synchronize_session=False)
     db.query(FilaEnriquecimentoConta).filter_by(tenant_id=tenant_id, conta_id=conta.id).delete(synchronize_session=False)
     db.query(InteracaoConta).filter_by(tenant_id=tenant_id, conta_id=conta.id).delete(synchronize_session=False)
     db.query(ContaFranquiaConsumo).filter_by(tenant_id=tenant_id, conta_id=conta.id).delete(synchronize_session=False)
@@ -719,6 +721,7 @@ def _excluir_contas_com_bloqueios(
         ]
 
         db.query(CampoEnriquecido).filter(CampoEnriquecido.conta_id.in_(ids_lote)).delete(synchronize_session=False)
+        db.query(ConteudoPaginaSite).filter(ConteudoPaginaSite.conta_id.in_(ids_lote)).delete(synchronize_session=False)
         db.query(FilaEnriquecimentoConta).filter(FilaEnriquecimentoConta.conta_id.in_(ids_lote)).delete(
             synchronize_session=False
         )

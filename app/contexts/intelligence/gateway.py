@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.contexts.finops import contract as finops
 from app.contexts.intelligence import prompt_seguro, registro, roteador
+from app.contexts.intelligence.disjuntor import disjuntor_ia
 from app.core.config import settings
 from app.core.observability import correlation_id_atual
 from app.core.rate_limit import LimitadorEmMemoria
@@ -47,7 +48,7 @@ from app.llm.schemas import LLMRequest, LLMResponse
 from app.models.creditos_ia import CacheRespostaIa
 from app.models.registro_uso_ia import RegistroUsoIa
 from app.services import llm_helpers
-from app.services.errors import LimiteDeTaxaExcedido, NaoEncontrado, RegraNegocioViolada
+from app.services.errors import IAIndisponivel, LimiteDeTaxaExcedido, NaoEncontrado, RegraNegocioViolada
 
 logger = logging.getLogger(__name__)
 
@@ -232,12 +233,12 @@ def gerar(db: Session, llm: LLMProvider, ctx: ContextoIA, requisicao: LLMRequest
             limitador_automatico.checar(f"ia-auto:{ctx.tenant_id}", settings.ai_limite_automatico_por_hora, 3600)
         except LimiteDeTaxaExcedido as erro:
             _registrar(db, ctx, feature, gatilho, modelo.classe.value, modelo.id, None, 0, "bloqueado", "limite automático por hora")
-            raise RegraNegocioViolada("Limite de uso automático de IA atingido nesta hora.") from erro
+            raise IAIndisponivel("Limite de uso automático de IA atingido nesta hora.") from erro
 
     motivo = finops.orcamentos.motivo_de_bloqueio(db, ctx.tenant_id, feature.modulo, feature.nome)
     if motivo is not None:
         _registrar(db, ctx, feature, gatilho, modelo.classe.value, modelo.id, None, 0, "bloqueado", motivo)
-        raise RegraNegocioViolada(f"IA indisponível: {motivo}.")
+        raise IAIndisponivel(f"IA indisponível: {motivo}.")
 
     try:
         execucao, implicita = _execucao(db, ctx, feature, gatilho)
@@ -275,14 +276,23 @@ def gerar(db: Session, llm: LLMProvider, ctx: ContextoIA, requisicao: LLMRequest
             return resposta
 
     inicio = time.monotonic()
+    if not disjuntor_ia.permite():
+        # Provedor com falhas seguidas: falha rápido, sem timeout, sem cobrar e sem martelar o serviço.
+        _registrar(db, ctx, feature, gatilho, modelo.classe.value, modelo.id, None, 0, "bloqueado", "disjuntor aberto", medicao)
+        if implicita:
+            finops.execucoes.liberar(db, execucao.id, "disjuntor aberto")
+        raise IAIndisponivel("A IA está temporariamente indisponível. Tente novamente em instantes.")
     try:
         resposta = llm_helpers.gerar(llm, requisicao)
     except Exception as erro:  # falha do provedor ou do sistema: o cliente não paga
+        if isinstance(erro, IAIndisponivel) and erro.falha_de_provedor:
+            disjuntor_ia.falha()
         _registrar(db, ctx, feature, gatilho, modelo.classe.value, modelo.id, None,
                    int((time.monotonic() - inicio) * 1000), "falha", str(erro.__cause__ or erro), medicao)
         if implicita:
             finops.execucoes.liberar(db, execucao.id, f"falha do provedor: {type(erro).__name__}")
         raise
+    disjuntor_ia.sucesso()
     _registrar(db, ctx, feature, gatilho, modelo.classe.value, modelo.id, resposta,
                int((time.monotonic() - inicio) * 1000), "sucesso", None, medicao)
     if implicita:

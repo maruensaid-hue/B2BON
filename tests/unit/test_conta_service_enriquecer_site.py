@@ -265,3 +265,107 @@ def test_enriquecer_com_timeout_da_mensagem_amigavel(db_session):
         )
 
     assert "fora do ar ou muito lento" in str(excinfo.value)
+
+
+class _IAForaDoAr(FakeLLMProvider):
+    def generate(self, request):
+        from app.llm.base import LLMFalhaDeProvedor
+
+        raise LLMFalhaDeProvedor("provedor fora do ar")
+
+
+def test_ia_fora_do_ar_nao_perde_a_coleta_do_site(db_session):
+    """AI-independent core: a coleta é determinística e fica gravada; só a análise por IA fica pendente."""
+    from app.models.campo_enriquecido import CampoEnriquecido
+    from app.services.errors import IAIndisponivel
+
+    conta = _criar_conta(db_session, dominio="alphatech.com.br")
+    site = _site_fetcher("=== https://alphatech.com.br ===\nInício\n\n=== https://alphatech.com.br/sobre ===\nSobre nós")
+
+    with pytest.raises(IAIndisponivel, match="coletado e salvo"):
+        conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, _IAForaDoAr(["x"]), site, FakeWebSearchProvider(), PLAN_LIMITS)
+
+    db_session.expire_all()
+    campos = db_session.query(CampoEnriquecido).filter_by(conta_id=conta.id).all()
+    paginas = sorted(c.valor for c in campos if c.campo == "pagina_pesquisada")
+    assert paginas == ["https://alphatech.com.br", "https://alphatech.com.br/sobre"]
+    assert [(c.campo, c.valor) for c in campos if c.campo == "analise_ia"] == [("analise_ia", "pendente")]
+    assert not any(c.campo not in {"pagina_pesquisada", "analise_ia"} for c in campos)  # nada inventado pela IA
+
+
+def test_ia_fora_do_ar_com_dominio_descoberto_grava_o_dominio(db_session):
+    from app.services.errors import IAIndisponivel
+
+    conta = _criar_conta(db_session, dominio=None)
+    web_search = FakeWebSearchProvider([ResultadoBusca(titulo="Alpha Tech", url="https://www.alphatech.com.br/", descricao="")])
+
+    with pytest.raises(IAIndisponivel):
+        conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, _IAForaDoAr(["x"]), _site_fetcher(), web_search, PLAN_LIMITS)
+
+    db_session.expire_all()
+    assert db_session.get(Conta, conta.id).dominio == "www.alphatech.com.br"
+
+
+def test_retentativa_apos_a_ia_voltar_completa_a_analise(db_session):
+    from app.models.campo_enriquecido import CampoEnriquecido
+    from app.services.errors import IAIndisponivel
+
+    conta = _criar_conta(db_session, dominio="alphatech.com.br")
+    with pytest.raises(IAIndisponivel):
+        conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, _IAForaDoAr(["x"]), _site_fetcher(), FakeWebSearchProvider(), PLAN_LIMITS)
+
+    conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["porte: media"]), _site_fetcher(), FakeWebSearchProvider(), PLAN_LIMITS)
+
+    db_session.expire_all()
+    assert db_session.query(CampoEnriquecido).filter_by(conta_id=conta.id, campo="porte", valor="media").count() == 1
+
+
+_SITE_DUAS_PAGINAS = "=== https://alphatech.com.br ===\nInício da home\n\n=== https://alphatech.com.br/sobre ===\nQuem somos\nLinha 2"
+
+
+def test_conteudo_das_paginas_e_guardado_com_ia_funcionando(db_session):
+    from app.models.conteudo_pagina_site import ConteudoPaginaSite
+
+    conta = _criar_conta(db_session, dominio="alphatech.com.br")
+
+    conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["porte: media"]), _site_fetcher(_SITE_DUAS_PAGINAS), FakeWebSearchProvider(), PLAN_LIMITS)
+
+    paginas = {p.url: p.conteudo for p in db_session.query(ConteudoPaginaSite).filter_by(conta_id=conta.id)}
+    assert paginas == {"https://alphatech.com.br": "Início da home", "https://alphatech.com.br/sobre": "Quem somos\nLinha 2"}
+
+
+def test_conteudo_das_paginas_e_guardado_mesmo_com_ia_fora_do_ar(db_session):
+    from app.models.conteudo_pagina_site import ConteudoPaginaSite
+    from app.services.errors import IAIndisponivel
+
+    conta = _criar_conta(db_session, dominio="alphatech.com.br")
+    with pytest.raises(IAIndisponivel):
+        conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, _IAForaDoAr(["x"]), _site_fetcher(_SITE_DUAS_PAGINAS), FakeWebSearchProvider(), PLAN_LIMITS)
+
+    db_session.expire_all()
+    paginas = db_session.query(ConteudoPaginaSite).filter_by(conta_id=conta.id).all()
+    assert {p.url for p in paginas} == {"https://alphatech.com.br", "https://alphatech.com.br/sobre"}
+    assert all(p.tenant_id == TENANT_ID and p.coletado_em is not None for p in paginas)
+
+
+def test_nova_coleta_atualiza_a_pagina_em_vez_de_acumular_versoes(db_session):
+    from app.models.conteudo_pagina_site import ConteudoPaginaSite
+
+    conta = _criar_conta(db_session, dominio="alphatech.com.br")
+    for texto in ("=== https://alphatech.com.br ===\nVersão 1", "=== https://alphatech.com.br ===\nVersão 2"):
+        conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, FakeLLMProvider(["porte: media"]), _site_fetcher(texto), FakeWebSearchProvider(), PLAN_LIMITS)
+
+    paginas = db_session.query(ConteudoPaginaSite).filter_by(conta_id=conta.id).all()
+    assert [p.conteudo for p in paginas] == ["Versão 2"]
+
+
+def test_excluir_conta_apaga_o_conteudo_das_paginas(db_session):
+    from app.models.conteudo_pagina_site import ConteudoPaginaSite
+
+    conta = _criar_conta(db_session, dominio="alphatech.com.br")
+    db_session.add(ConteudoPaginaSite(tenant_id=TENANT_ID, conta_id=conta.id, url="https://alphatech.com.br", conteudo="x"))
+    db_session.commit()
+
+    conta_service.excluir(db_session, TENANT_ID, None, conta.id)
+
+    assert db_session.query(ConteudoPaginaSite).filter_by(conta_id=conta.id).count() == 0

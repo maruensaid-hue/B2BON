@@ -42,7 +42,7 @@ def test_processar_pendentes_enriquece_site_e_marca_concluido(db_session):
         FakeAccountDataProvider(), FakeContactEnrichmentProvider(), FakeGraphClient(), PLAN_LIMITS,
     )
 
-    assert resultado == {"processados": 1, "concluidos": 1, "falhas": 0}
+    assert resultado == {"processados": 1, "concluidos": 1, "falhas": 0, "adiados": 0}
     item = db_session.query(FilaEnriquecimentoConta).filter_by(conta_id=conta.id).one()
     assert item.status == "concluido"
     assert item.processado_em is not None
@@ -62,7 +62,7 @@ def test_processar_pendentes_tolera_falha_sem_derrubar_outros_itens(db_session):
         FakeAccountDataProvider(), FakeContactEnrichmentProvider(), FakeGraphClient(), PLAN_LIMITS,
     )
 
-    assert resultado == {"processados": 2, "concluidos": 1, "falhas": 1}
+    assert resultado == {"processados": 2, "concluidos": 1, "falhas": 1, "adiados": 0}
     item_falha = db_session.query(FilaEnriquecimentoConta).filter_by(conta_id=conta_falha.id).one()
     item_ok = db_session.query(FilaEnriquecimentoConta).filter_by(conta_id=conta_ok.id).one()
     assert item_falha.status == "falhou"
@@ -85,3 +85,67 @@ def test_processar_pendentes_respeita_limite_por_execucao(db_session, monkeypatc
     assert resultado["processados"] == 1
     pendentes_restantes = db_session.query(FilaEnriquecimentoConta).filter_by(status="pendente").count()
     assert pendentes_restantes == 1
+
+
+class _IAForaDoAr(FakeLLMProvider):
+    def generate(self, request):
+        from app.llm.base import LLMFalhaDeProvedor
+
+        raise LLMFalhaDeProvedor("provedor fora do ar")
+
+
+def _processar(db_session, llm):
+    return enriquecimento_fila_service.processar_pendentes(
+        db_session, llm, _site_fetcher(), FakeWebSearchProvider(),
+        FakeAccountDataProvider(), FakeContactEnrichmentProvider(), FakeGraphClient(), PLAN_LIMITS,
+    )
+
+
+def test_ia_fora_do_ar_adia_a_conta_em_vez_de_perde_la(db_session):
+    from datetime import UTC, datetime
+
+    conta = _criar_conta(db_session, "Alpha Tech", dominio="alphatech.com.br")
+    enriquecimento_fila_service.enfileirar(db_session, TENANT_ID, [conta.id])
+
+    resultado = _processar(db_session, _IAForaDoAr(["x"]))
+
+    assert resultado == {"processados": 1, "concluidos": 0, "falhas": 0, "adiados": 1}
+    item = db_session.query(FilaEnriquecimentoConta).filter_by(conta_id=conta.id).one()
+    assert (item.status, item.tentativas) == ("pendente", 1)
+    assert item.proxima_tentativa_em > datetime.now(UTC).replace(tzinfo=None)
+    assert "análise por IA" in item.erro
+
+
+def test_item_adiado_nao_e_reprocessado_antes_da_hora_e_conclui_quando_a_ia_volta(db_session):
+    from datetime import UTC, datetime, timedelta
+
+    conta = _criar_conta(db_session, "Alpha Tech", dominio="alphatech.com.br")
+    enriquecimento_fila_service.enfileirar(db_session, TENANT_ID, [conta.id])
+    _processar(db_session, _IAForaDoAr(["x"]))
+
+    assert _processar(db_session, FakeLLMProvider(["porte: media"]))["processados"] == 0  # ainda no backoff
+
+    item = db_session.query(FilaEnriquecimentoConta).filter_by(conta_id=conta.id).one()
+    item.proxima_tentativa_em = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1)
+    db_session.commit()
+    resultado = _processar(db_session, FakeLLMProvider(["porte: media"]))
+
+    assert resultado["concluidos"] == 1
+    db_session.refresh(item)
+    assert item.status == "concluido"
+
+
+def test_ia_fora_do_ar_desiste_apos_o_limite_de_tentativas(db_session):
+    from datetime import UTC, datetime, timedelta
+
+    conta = _criar_conta(db_session, "Alpha Tech", dominio="alphatech.com.br")
+    enriquecimento_fila_service.enfileirar(db_session, TENANT_ID, [conta.id])
+    item = db_session.query(FilaEnriquecimentoConta).filter_by(conta_id=conta.id).one()
+
+    for _ in range(enriquecimento_fila_service._MAX_TENTATIVAS):
+        item.proxima_tentativa_em = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1)
+        db_session.commit()
+        _processar(db_session, _IAForaDoAr(["x"]))
+        db_session.refresh(item)
+
+    assert (item.status, item.tentativas) == ("falhou", enriquecimento_fila_service._MAX_TENTATIVAS)

@@ -20,6 +20,9 @@ class FilaEnriquecimentoConta(Base):
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenant.id"), index=True)
     conta_id: Mapped[int] = mapped_column(ForeignKey("conta.id"), index=True)
     status: Mapped[str] = mapped_column(String, default="pendente")  # pendente | concluido | falhou
+    # IA indisponível não é falha definitiva: a conta volta para a fila com espera crescente, até o limite de tentativas.
+    tentativas: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    proxima_tentativa_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     erro: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     processado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

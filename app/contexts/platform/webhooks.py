@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from app.contexts.shared import events
 from app.contexts.shared.canonical.base import DataClassification
 from app.core.config import settings
+from app.core.ssrf import DestinoNaoPublico, requisitar_publico, validar_url_sem_dns
 from app.models.assinatura_webhook_tenant import AssinaturaWebhookTenant
 from app.models.entrega_webhook import EntregaWebhook
 from app.services import auditoria_service
@@ -48,7 +49,12 @@ def _validar_url(url: str) -> str:
         raise ValidacaoFalhou("URL de webhook inválida.")
     if settings.e_ambiente_producao and partes.scheme != "https":
         raise ValidacaoFalhou("Em produção a URL de webhook precisa ser HTTPS.")
-    return url
+    try:
+        # O destino é escolhido pelo tenant: recusa localhost, rede interna, IP literal não público e credenciais na URL.
+        # A resolução de DNS (e o bloqueio de nomes que apontam para IP interno) acontece no envio.
+        return validar_url_sem_dns(url)
+    except DestinoNaoPublico as erro:
+        raise ValidacaoFalhou(f"URL de webhook não permitida: {erro}") from erro
 
 
 def criar_assinatura(db: Session, tenant_id: str, ator_id: str | None, url: str, eventos: list[str]) -> tuple[AssinaturaWebhookTenant, str]:
@@ -124,8 +130,10 @@ def assinar(segredo: str, corpo: bytes, timestamp: int) -> str:
 
 
 def _enviar_httpx(url: str, corpo: bytes, cabecalhos: dict[str, str]) -> int:
-    with httpx.Client(timeout=TIMEOUT_SEGUNDOS, follow_redirects=False) as cliente:
-        return cliente.post(url, content=corpo, headers=cabecalhos).status_code
+    """POST ao destino do tenant pelo caminho anti-SSRF: IP validado e usado na conexão, sem seguir redirecionamento,
+    resposta limitada (só o status interessa). Destino que resolve para rede interna levanta `DestinoNaoPublico`
+    (um `httpx.HTTPError`), tratado como falha de entrega com retentativa limitada."""
+    return requisitar_publico("POST", url, timeout=TIMEOUT_SEGUNDOS, max_bytes=65_536, headers=cabecalhos, content=corpo).status_code
 
 
 def despachar_entregas(db: Session, enviar: Enviar | None = None, agora: datetime | None = None) -> dict:

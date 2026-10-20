@@ -213,3 +213,26 @@ def test_sync_registra_falha_sem_derrubar(db_session):
         assert conexao.ultimo_erro == execucao.erro
     finally:
         registry.remover("instavel")
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://localhost/h", "https://127.0.0.1/h", "https://169.254.169.254/latest/meta-data", "https://10.0.0.5/h",
+     "https://100.64.0.1/h", "https://servidor.internal/h", "https://usuario:senha@c.exemplo/h", "file:///etc/passwd"],
+)
+def test_webhook_de_saida_recusa_destino_interno_ou_invalido(client, url) -> None:
+    """SSRF: a URL é escolhida pelo tenant. Nada de rede interna, metadata de nuvem ou credenciais embutidas."""
+    assert client.post("/api/v1/webhooks-saida", json={"url": url, "eventos": ["OpportunityCreated"]}).status_code == 422
+
+
+def test_envio_de_webhook_recusa_nome_que_resolve_para_ip_interno(monkeypatch) -> None:
+    import socket
+    from unittest.mock import patch
+
+    from app.core.ssrf import DestinoNaoPublico
+
+    with patch("app.core.ssrf.socket.getaddrinfo", return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.7", 443))]), \
+            patch("app.core.ssrf._requisicao_fixada") as rede:
+        with pytest.raises(DestinoNaoPublico):
+            webhooks._enviar_httpx("https://rebind.cliente.exemplo/h", b"{}", {})
+    rede.assert_not_called()

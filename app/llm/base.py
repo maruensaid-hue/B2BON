@@ -10,6 +10,11 @@ class LLMIndisponivel(Exception):
     RegraNegocioViolada (evita acoplar a porta de LLM ao domínio)."""
 
 
+class LLMFalhaDeProvedor(LLMIndisponivel):
+    """O provedor em si falhou (rede, timeout, limite de taxa, 5xx, autenticação, chave ausente). Diferente de uma
+    resposta vazia ou cortada, que significa que o provedor está de pé: só esta alimenta o disjuntor do gateway."""
+
+
 class LLMProvider(ABC):
     """Interface que qualquer provedor de LLM deve implementar.
 

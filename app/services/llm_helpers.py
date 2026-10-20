@@ -1,9 +1,9 @@
 import logging
 
 
-from app.llm.base import LLMIndisponivel, LLMProvider
+from app.llm.base import LLMFalhaDeProvedor, LLMIndisponivel, LLMProvider
 from app.llm.schemas import LLMRequest, LLMResponse
-from app.services.errors import RegraNegocioViolada
+from app.services.errors import IAIndisponivel
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,8 @@ def gerar(llm: LLMProvider, request: LLMRequest) -> LLMResponse:
     try:
         return llm.generate(request)
     except LLMIndisponivel as erro:
-        raise RegraNegocioViolada(
+        raise IAIndisponivel(
             f"Não foi possível gerar o texto com IA no momento ({erro}). "
-            "Tente novamente em instantes; se persistir, avise o administrador."
+            "Tente novamente em instantes; se persistir, avise o administrador.",
+            falha_de_provedor=isinstance(erro, LLMFalhaDeProvedor),
         ) from erro

@@ -1,7 +1,7 @@
 import anthropic
 
 from app.core.config import settings
-from app.llm.base import LLMIndisponivel, LLMProvider
+from app.llm.base import LLMFalhaDeProvedor, LLMIndisponivel, LLMProvider
 from app.llm.schemas import LLMRequest, LLMResponse
 
 
@@ -21,7 +21,7 @@ class ClaudeProvider(LLMProvider):
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         if not settings.anthropic_api_key:
-            raise LLMIndisponivel("ANTHROPIC_API_KEY não configurada no servidor.")
+            raise LLMFalhaDeProvedor("ANTHROPIC_API_KEY não configurada no servidor.")
         try:
             message = self._client.messages.create(
                 model=request.model or self._model,
@@ -31,7 +31,7 @@ class ClaudeProvider(LLMProvider):
                 messages=[{"role": "user", "content": request.prompt}],
             )
         except anthropic.AnthropicError as erro:
-            raise LLMIndisponivel(f"Falha ao chamar a IA: {erro}") from erro
+            raise LLMFalhaDeProvedor(f"Falha ao chamar a IA: {erro}") from erro
         except TypeError as erro:
             # Sem lock file, a versão da SDK instalada em produção pode
             # divergir da testada localmente (raio-X 2026-08-27: a camada
@@ -41,7 +41,7 @@ class ClaudeProvider(LLMProvider):
             # reinstalar) — sem isto, um `TypeError` de argumento
             # inesperado escapava cru até o handler genérico de 500 em vez
             # de virar o erro de negócio claro que já existe pra esse caso.
-            raise LLMIndisponivel(f"Falha ao chamar a IA (SDK incompatível): {erro}") from erro
+            raise LLMFalhaDeProvedor(f"Falha ao chamar a IA (SDK incompatível): {erro}") from erro
 
         # `message.content[0]` nem sempre é o texto final — em prompts mais
         # complexos (ex.: site institucional denso) o modelo pode pensar

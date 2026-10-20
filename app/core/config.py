@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # WhatsApp/e-mail, bot de reunião, cron) por tenant por hora — um
     # remetente externo não pode gerar custo ilimitado (risco S2).
     ai_limite_automatico_por_hora: int = 300
+    # Disjuntor do gateway: após N falhas seguidas do PROVEDOR, as chamadas falham rápido (sem gastar timeout nem
+    # reservar crédito) por esta pausa; depois uma chamada de teste decide se fecha. 0 desliga o disjuntor.
+    ai_disjuntor_falhas: int = 5
+    ai_disjuntor_pausa_segundos: int = 60
     # Câmbio USD→BRL: não é configuração de ambiente. Vem da tabela `cotacao_cambio` (D-075, OI-018),
     # informada no Admin → Parâmetros financeiros com fonte e vigência.
     # Fase 9: ingestão do PNCP (EXPERIMENTAL, não validada contra a API real).

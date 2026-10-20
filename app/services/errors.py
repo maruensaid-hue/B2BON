@@ -26,6 +26,18 @@ class LimiteDeTaxaExcedido(ErroServico):
     """Mapeado para 429 — proteção contra força bruta em rotas públicas de autenticação."""
 
 
+class IAIndisponivel(RegraNegocioViolada):
+    """A camada de IA não pode atender agora (provedor fora do ar, circuito aberto, orçamento ou teto automático).
+
+    Subclasse de `RegraNegocioViolada` (mesma resposta 409 com mensagem clara), mas distinguível: quem tem um núcleo
+    determinístico a preservar (ex.: a coleta do site) captura só esta exceção, grava o que já coletou e deixa a análise
+    para depois. `falha_de_provedor` é verdadeiro só quando o provedor falhou de fato (conta para o disjuntor)."""
+
+    def __init__(self, mensagem: str, falha_de_provedor: bool = False) -> None:
+        super().__init__(mensagem)
+        self.falha_de_provedor = falha_de_provedor
+
+
 class CreditosInsuficientes(RegraNegocioViolada):
     """Mapeado para 402 — sem AI Credits disponíveis para a operação (Fase 15)."""
 

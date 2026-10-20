@@ -1,10 +1,11 @@
-import ipaddress
 import re
-import socket
+import socket  # noqa: F401 — os testes substituem `socket.getaddrinfo` por este módulo
 import time
 from collections.abc import Callable
 
 import httpx
+
+from app.core.ssrf import DestinoNaoPublico, requisitar_publico, resolver_publico
 
 SiteFetcher = Callable[[str], str]
 
@@ -12,6 +13,9 @@ _MAX_PAGINAS = 8
 _MAX_CHARS_POR_PAGINA = 2500
 _MAX_REDIRECTS = 3
 _TIMEOUT_POR_REQUISICAO_SEGUNDOS = 5.0
+# Teto de corpo por página (decodificado): só ~2.500 caracteres viram texto, o resto serve para achar links da home.
+_MAX_BYTES_POR_PAGINA = 500_000
+_PORTAS_PERMITIDAS = (80, 443)
 
 # Orçamento de tempo pra tentar páginas além da home — sem isto, um site
 # grande (muitos links batendo nas palavras-chave, ex.: raio-X real numa
@@ -23,33 +27,14 @@ _TIMEOUT_POR_REQUISICAO_SEGUNDOS = 5.0
 _ORCAMENTO_PAGINAS_EXTRAS_SEGUNDOS = 15.0
 
 
-class HostNaoPublico(httpx.HTTPError):
-    """Domínio resolve para um IP privado/loopback/link-local/reservado —
-    bloqueado para evitar SSRF (o domínio vem de `Conta.dominio`, campo
-    editável por qualquer usuário autenticado do tenant)."""
+# Domínio resolve para um IP privado/loopback/link-local/CGNAT/reservado — bloqueado para evitar SSRF (o domínio vem
+# de `Conta.dominio`, campo editável por qualquer usuário autenticado do tenant). A regra mora em `app.core.ssrf`.
+HostNaoPublico = DestinoNaoPublico
 
 
 def _validar_host_publico(host: str) -> None:
-    """Resolve o host e recusa qualquer IP fora do espaço público roteável.
-    Chamada antes de cada requisição (inclusive em cada salto de redirect —
-    um domínio público pode redirecionar para um IP interno depois do
-    primeiro DNS lookup, então validar só uma vez não basta)."""
-    try:
-        enderecos = socket.getaddrinfo(host, None)
-    except socket.gaierror as erro:
-        raise HostNaoPublico(f"Não foi possível resolver o domínio: {host}") from erro
-
-    for *_, sockaddr in enderecos:
-        ip = ipaddress.ip_address(sockaddr[0])
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            raise HostNaoPublico(f"Domínio resolve para um IP não público ({ip}): {host}")
+    """Resolve o host e recusa qualquer IP fora do espaço público roteável (ver `app.core.ssrf.resolver_publico`)."""
+    resolver_publico(host)
 
 # Caminhos comuns onde empresas brasileiras costumam publicar conteúdo
 # relevante para pesquisa comercial — testados diretamente, sem depender de
@@ -77,23 +62,12 @@ _REGEX_LINKS_INTERNOS = re.compile(
 
 
 def _get_seguro(url: str) -> httpx.Response:
-    """`httpx.get` com validação de SSRF antes de cada requisição — inclusive
-    a cada salto de redirect, já que um domínio público pode redirecionar
-    para um IP interno depois do primeiro DNS lookup. `follow_redirects`
-    fica sempre desligado de propósito; os saltos são seguidos manualmente
-    aqui, cada um validado."""
-    for _ in range(_MAX_REDIRECTS + 1):
-        host = httpx.URL(url).host
-        _validar_host_publico(host)
-        resposta = httpx.get(url, timeout=_TIMEOUT_POR_REQUISICAO_SEGUNDOS, follow_redirects=False)
-        if resposta.is_redirect:
-            proxima = resposta.headers.get("location")
-            if not proxima:
-                return resposta
-            url = str(httpx.URL(url).join(proxima))
-            continue
-        return resposta
-    raise HostNaoPublico(f"Excedeu o limite de {_MAX_REDIRECTS} redirecionamentos: {url}")
+    """GET com as defesas de `app.core.ssrf` em cada salto: IP validado e usado na conexão (sem DNS rebinding),
+    só portas 80/443, teto de bytes por página e redirecionamentos seguidos manualmente e revalidados."""
+    return requisitar_publico(
+        "GET", url, timeout=_TIMEOUT_POR_REQUISICAO_SEGUNDOS, max_bytes=_MAX_BYTES_POR_PAGINA,
+        max_redirects=_MAX_REDIRECTS, portas=_PORTAS_PERMITIDAS,
+    )
 
 
 def _buscar_pagina(base_url: str, caminho: str) -> str | None:

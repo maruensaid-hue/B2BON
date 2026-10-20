@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from sqlalchemy.orm import Session
 
+from app.core.ssrf import requisitar_publico
 from app.models.assinatura_webhook_parceiro import AssinaturaWebhookParceiro
 from app.models.evento_webhook_parceiro import EventoWebhookParceiro
 from app.models.tenant import Tenant
@@ -84,7 +85,9 @@ def despachar_pendentes(db: Session) -> dict:
 
         corpo = evento.payload_json.encode()
         try:
-            resposta = httpx.post(
+            # Caminho anti-SSRF: destino resolvido e validado, conexão no IP validado, sem redirecionamento.
+            resposta = requisitar_publico(
+                "POST",
                 assinatura.url_callback,
                 content=corpo,
                 headers={
@@ -92,6 +95,7 @@ def despachar_pendentes(db: Session) -> dict:
                     "X-B2BON-Signature": _assinar(assinatura.segredo, corpo),
                 },
                 timeout=10,
+                max_bytes=65_536,
             )
             sucesso = 200 <= resposta.status_code < 300
         except httpx.HTTPError:

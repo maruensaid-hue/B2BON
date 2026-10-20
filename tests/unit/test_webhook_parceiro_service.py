@@ -12,6 +12,11 @@ from app.models.tenant import Tenant
 from app.services import webhook_parceiro_service
 
 
+def _como_requisicao(post):
+    """O despacho agora passa por `requisitar_publico` (anti-SSRF): adapta o dublê antigo de `httpx.post`."""
+    return lambda metodo, url, **k: post(url, **{nome: valor for nome, valor in k.items() if nome != "max_bytes"})
+
+
 def _criar_arvore(db_session, com_assinatura: bool = True) -> tuple[str, AssinaturaWebhookParceiro | None]:
     distribuidor = Tenant(id="distribuidor-wh", razao_social="Distribuidor WH", tipo="distribuidor")
     revendedor = Tenant(
@@ -64,7 +69,7 @@ def test_despachar_pendentes_sucesso_marca_entregue_e_assina_com_hmac(db_session
         capturado.update(url=url, content=content, headers=headers)
         return httpx.Response(200)
 
-    monkeypatch.setattr(httpx, "post", _post_falso)
+    monkeypatch.setattr(webhook_parceiro_service, "requisitar_publico", _como_requisicao(_post_falso))
 
     resultado = webhook_parceiro_service.despachar_pendentes(db_session)
 
@@ -81,7 +86,7 @@ def test_despachar_pendentes_falha_agenda_proxima_tentativa_com_backoff(db_sessi
     webhook_parceiro_service.enfileirar_evento(db_session, tenant_id, "tenant_provisionado", {})
     db_session.commit()
 
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: httpx.Response(500))
+    monkeypatch.setattr(webhook_parceiro_service, "requisitar_publico", _como_requisicao(lambda *a, **k: httpx.Response(500)))
 
     resultado = webhook_parceiro_service.despachar_pendentes(db_session)
 
@@ -101,7 +106,7 @@ def test_despachar_pendentes_erro_de_rede_tambem_conta_como_falha(db_session, mo
     def _post_com_erro(*args, **kwargs):
         raise httpx.ConnectError("recusado")
 
-    monkeypatch.setattr(httpx, "post", _post_com_erro)
+    monkeypatch.setattr(webhook_parceiro_service, "requisitar_publico", _como_requisicao(_post_com_erro))
 
     resultado = webhook_parceiro_service.despachar_pendentes(db_session)
 
@@ -116,7 +121,7 @@ def test_despachar_pendentes_desiste_apos_max_tentativas(db_session, monkeypatch
     db_session.add(evento)
     db_session.commit()
 
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: httpx.Response(500))
+    monkeypatch.setattr(webhook_parceiro_service, "requisitar_publico", _como_requisicao(lambda *a, **k: httpx.Response(500)))
 
     resultado = webhook_parceiro_service.despachar_pendentes(db_session)
 
@@ -136,7 +141,7 @@ def test_despachar_pendentes_ignora_evento_nao_devido_ainda(db_session, monkeypa
     db_session.commit()
 
     chamado = []
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: chamado.append(1) or httpx.Response(200))
+    monkeypatch.setattr(webhook_parceiro_service, "requisitar_publico", _como_requisicao(lambda *a, **k: chamado.append(1) or httpx.Response(200)))
 
     resultado = webhook_parceiro_service.despachar_pendentes(db_session)
 
@@ -152,9 +157,27 @@ def test_despachar_pendentes_assinatura_inativa_desiste_sem_tentar(db_session, m
     db_session.commit()
 
     chamado = []
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: chamado.append(1) or httpx.Response(200))
+    monkeypatch.setattr(webhook_parceiro_service, "requisitar_publico", _como_requisicao(lambda *a, **k: chamado.append(1) or httpx.Response(200)))
 
     resultado = webhook_parceiro_service.despachar_pendentes(db_session)
 
     assert resultado["desistencias"] == 1
     assert chamado == []
+
+
+def test_despachar_pendentes_destino_que_resolve_para_rede_interna_conta_como_falha(db_session) -> None:
+    """SSRF: o callback é escolhido pelo Distribuidor. Se o nome aponta para IP interno, nada é enviado e o evento é reagendado."""
+    import socket
+    from unittest.mock import patch
+
+    tenant_id, _ = _criar_arvore(db_session)
+    webhook_parceiro_service.enfileirar_evento(db_session, tenant_id, "pagamento_confirmado", {"tenant_id": tenant_id})
+    db_session.commit()
+
+    with patch("app.core.ssrf.socket.getaddrinfo", return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 443))]), \
+            patch("app.core.ssrf._requisicao_fixada") as rede:
+        resultado = webhook_parceiro_service.despachar_pendentes(db_session)
+
+    rede.assert_not_called()
+    assert resultado["entregues"] == 0
+    assert db_session.query(EventoWebhookParceiro).one().tentativas == 1

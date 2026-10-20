@@ -1,6 +1,7 @@
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.graph.client import Neo4jClient
@@ -12,6 +13,7 @@ from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.services import conta_service
+from app.services.errors import IAIndisponivel
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,10 @@ logger = logging.getLogger(__name__)
 # em vários disparos sucessivos (a cada 15 min), não tudo de uma vez;
 # evita um único disparo ficar preso demorado demais.
 _LIMITE_POR_EXECUCAO = 20
+# IA indisponível: espera crescente entre tentativas (15 min, 30 min, 1 h, 2 h) e no máximo 5 no total; esgotadas, a
+# conta fica `falhou` com o motivo, e o reenfileiramento manual continua possível.
+_BACKOFF_MINUTOS = (15, 30, 60, 120)
+_MAX_TENTATIVAS = 5
 
 
 def enfileirar(db: Session, tenant_id: str, conta_ids: list[int]) -> None:
@@ -43,9 +49,11 @@ def processar_pendentes(
     fila-enriquecimento`) — site + decisores por conta, tolerante a falha
     por item (uma empresa sem site descobrível não pode travar as
     outras)."""
+    agora = datetime.now(UTC).replace(tzinfo=None)
     itens = (
         db.query(FilaEnriquecimentoConta)
         .filter_by(status="pendente")
+        .filter(or_(FilaEnriquecimentoConta.proxima_tentativa_em.is_(None), FilaEnriquecimentoConta.proxima_tentativa_em <= agora))
         .order_by(FilaEnriquecimentoConta.id)
         .limit(_LIMITE_POR_EXECUCAO)
         .all()
@@ -53,6 +61,7 @@ def processar_pendentes(
 
     concluidos = 0
     falhas = 0
+    adiados = 0
     for item in itens:
         try:
             conta_service.enriquecer(
@@ -63,6 +72,18 @@ def processar_pendentes(
             )
             item.status = "concluido"
             concluidos += 1
+        except IAIndisponivel as erro:
+            # A coleta do site já foi gravada (conta_service.enriquecer); só a análise ficou pendente. Volta para a fila.
+            item.tentativas = (item.tentativas or 0) + 1
+            item.erro = str(erro)[:500]
+            if item.tentativas >= _MAX_TENTATIVAS:
+                logger.warning("Enriquecimento da conta %s desistiu após %s tentativas (IA indisponível)", item.conta_id, item.tentativas)
+                item.status = "falhou"
+                falhas += 1
+            else:
+                espera = _BACKOFF_MINUTOS[min(item.tentativas, len(_BACKOFF_MINUTOS)) - 1]
+                item.proxima_tentativa_em = agora + timedelta(minutes=espera)
+                adiados += 1
         except Exception as erro:
             logger.warning("Falha ao enriquecer conta %s da fila em lote", item.conta_id, exc_info=True)
             item.status = "falhou"
@@ -71,4 +92,4 @@ def processar_pendentes(
         item.processado_em = datetime.now(UTC)
 
     db.commit()
-    return {"processados": len(itens), "concluidos": concluidos, "falhas": falhas}
+    return {"processados": len(itens), "concluidos": concluidos, "falhas": falhas, "adiados": adiados}

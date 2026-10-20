@@ -1367,3 +1367,24 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
   `POST /sourcing/processos/{id}/participantes/{pid}/acesso` (link do fornecedor). **Fora desta decisão (continuam
   abertos ao `user`)**: cadastro/resultado de licitação e os recursos genéricos do procurement.
 - **Status**: ACEITA.
+
+## D-089 · 2026-10-20 · Auditoria V5.0: saída HTTP segura, coleta sem IA e disjuntor do gateway
+
+- **Contexto**: auditoria do estado real pedida pelo Master Prompt V5.0 (`AUDITORIA_ESTADO_ATUAL.md`). Achados verificados no código:
+  webhooks de saída do tenant e do parceiro sem proteção SSRF; crawler vulnerável a DNS rebinding, sem teto de corpo e sem bloquear
+  CGNAT; coleta do site descartada quando a IA falhava; fila de enriquecimento sem retentativa; gateway sem disjuntor.
+- **Decisão (implementada)**:
+  - `app/core/ssrf.py` é o único caminho para HTTP de saída a destino escolhido por usuário: só `http/https`, sem credenciais na URL,
+    host resolvido uma vez e todo IP precisa ser `is_global`, **conexão no IP validado** (Host/SNI originais), corpo cortado em
+    streaming, redirecionamento (só GET) revalidado a cada salto. Usado pelo crawler (portas 80/443, 500 KB/página), pelos webhooks de
+    saída e pelo webhook de parceiro; o cadastro dessas URLs recusa localhost, nomes internos, IP literal não público e credenciais.
+  - `enriquecer` grava a coleta (domínio descoberto, páginas, fonte, data) **antes** de exigir a IA; se a IA falha, grava
+    `analise_ia=pendente` e levanta `IAIndisponivel` (subclasse de `RegraNegocioViolada`, mesma resposta 409). A fila de enriquecimento
+    adia a conta (15/30/60/120 min, máx. 5 tentativas) em vez de marcá-la `falhou`. Migração `e5b7d9f1a3c5` (aditiva).
+  - Disjuntor no gateway (`AI_DISJUNTOR_FALHAS`=5, `AI_DISJUNTOR_PAUSA_SEGUNDOS`=60, 0 desliga): só falha **do provedor**
+    (`LLMFalhaDeProvedor`) conta; resposta vazia ou cortada não. Chamada barrada libera a reserva de créditos.
+- **Conteúdo das páginas (PO, 2026-10-20)**: guardado em `conteudo_pagina_site` (migração `f6c8e0a2b4d6`), uma linha por conta+URL,
+  substituída a cada nova coleta; removido na exclusão da conta e do tenant. Reanálise a partir dele: ainda não implementada.
+- **Não decidido (aguarda o PO)**: segundo provedor de IA/fallback (credenciais, privacidade, custo).
+- **Reversão**: `AI_DISJUNTOR_FALHAS=0` desliga o disjuntor; a migração tem `downgrade`.
+- **Status**: ACEITA. Implantação em produção depende de autorização (inclui aplicar a migração).

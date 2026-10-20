@@ -1,3 +1,5 @@
+import pytest
+
 from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
@@ -75,3 +77,12 @@ def test_desativar_webhook(client, db_session) -> None:
 
     assert resposta.status_code == 200
     assert resposta.json()["ativa"] is False
+
+
+@pytest.mark.parametrize("url", ["http://localhost/h", "https://169.254.169.254/x", "https://10.1.1.1/h", "https://u:s@exemplo.com.br/h"])
+def test_configurar_webhook_de_parceiro_recusa_destino_interno(client, db_session, url) -> None:
+    headers = _criar_admin(db_session, "distribuidor-ssrf", tipo="distribuidor")
+
+    resposta = client.put("/api/v1/integracoes/webhook", json={"url_callback": url}, headers=headers)
+
+    assert resposta.status_code == 422

@@ -255,7 +255,7 @@ def test_processar_fila_enriquecimento_sem_itens_pendentes(client, com_segredo_c
     resposta = client.post("/api/v1/cron/processar-fila-enriquecimento", headers={"X-Cron-Secret": SEGREDO})
 
     assert resposta.status_code == 200
-    assert resposta.json() == {"processados": 0, "concluidos": 0, "falhas": 0}
+    assert resposta.json() == {"processados": 0, "concluidos": 0, "falhas": 0, "adiados": 0}
 
 
 def test_processar_fila_enriquecimento_processa_conta_importada(client, com_segredo_cron, fake_llm, fake_web_search):
