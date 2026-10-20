@@ -1,6 +1,6 @@
 # Conclusão do Prompt V5.2.1 (2026-10-20)
 
-Estados: **Concluído e validado** · **Implementado, aguardando validação externa** · **Parcial** · **Bloqueado**. Nada foi publicado em produção. As mudanças estão em commits locais; o **push ao staging foi autorizado pelo PO mas bloqueado pelo harness** da sessão (classificado como deploy), então ainda não foi feito.
+Estados: **Concluído e validado** · **Implementado, aguardando validação externa** · **Parcial** · **Bloqueado**. Nada foi publicado em produção. Tudo foi enviado ao branch `staging` (autorizado pelo PO; `8254949..6da9b64`). A primeira tentativa de push foi barrada pelo harness da sessão e a segunda passou. **Staging ≠ produção:** o `master` não foi tocado; a promoção continua exigindo autorização explícita.
 
 ## A. Resumo executivo
 
@@ -50,7 +50,7 @@ Commits locais: `d25d861` (V5.2), `9d44d83` (F1-2), `77a05f2` (F3), `a464f89` (F
 
 ## H. Próximas ações (só o que depende de decisão ou acesso)
 
-1. **Liberar o push ao staging**: o harness bloqueou `git push origin <commit>:staging` mesmo com a autorização do PO; é preciso rodar o comando manualmente ou adicionar uma regra de permissão para `git push` ao `staging`.
+1. **Conferir o CI do staging**: ele valida o que só roda lá (PostgreSQL real com as migrações `c9f1`, `d1b3`, `e2c4`, `f3d5`, build da imagem Docker, testes de desempenho). Falha de CI deve ser tratada antes de qualquer promoção ao `master`.
 2. Definir UFs e palavras-chave do PNCP por tenant e ligar as chaves (item D).
 3. Decidir sobre os provedores de IA adicionais (credenciais, LGPD, custo).
 4. Confirmar nos painéis o plano e a fatura de Render, Neon, Sentry, SendGrid e Redis; esclarecer o "Sender".
