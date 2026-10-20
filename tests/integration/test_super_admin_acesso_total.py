@@ -71,6 +71,21 @@ def test_usuario_comum_nao_cria_contrato(client, criar_usuario_autenticado, rota
     assert client.post(rota, json={"objeto": "Licenças"}, headers=headers).status_code == 403
 
 
+def test_usuario_comum_nao_exclui_do_cofre_nem_gera_link_de_fornecedor(client, criar_usuario_autenticado):
+    headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="user-cofre@acesso-total.com.br")
+
+    assert client.delete("/api/v1/bids/cofre/1", headers=headers).status_code == 403
+    assert client.post("/api/v1/sourcing/processos/1/participantes/1/acesso", json={}, headers=headers).status_code == 403
+
+
+@pytest.mark.parametrize("papel", ["admin", "super_admin"])
+def test_gestor_passa_da_barreira_do_cofre_e_do_link(client, criar_usuario_autenticado, papel):
+    headers = criar_usuario_autenticado(TENANT_ID, papel=papel, email=f"{papel}-cofre@acesso-total.com.br")
+
+    assert client.delete("/api/v1/bids/cofre/999999", headers=headers).status_code != 403
+    assert client.post("/api/v1/sourcing/processos/999999/participantes/1/acesso", json={}, headers=headers).status_code != 403
+
+
 @pytest.mark.parametrize("papel", ["admin", "super_admin"])
 def test_gestor_passa_da_barreira_de_contrato(client, criar_usuario_autenticado, papel):
     """Admin e super_admin não são barrados pelo papel (a resposta pode ser outra, mas nunca 403 de permissão)."""

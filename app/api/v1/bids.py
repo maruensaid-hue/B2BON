@@ -362,7 +362,7 @@ async def adicionar_ao_cofre(
     return bids.cofre.como_dict(documento)
 
 
-@router.delete("/cofre/{documento_id}", status_code=204)
+@router.delete("/cofre/{documento_id}", status_code=204, dependencies=[Depends(exigir_papel("admin", "super_admin"))])
 def arquivar_do_cofre(documento_id: int, tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
                       db: Session = Depends(get_db)) -> None:
     documento = db.query(DocumentoCofre).filter_by(id=documento_id, tenant_id=tenant_id).one_or_none()

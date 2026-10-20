@@ -241,7 +241,8 @@ class RespostaEsclarecimento(BaseModel):
     resposta: str = Field(min_length=1, max_length=5000)
 
 
-@router.post("/processos/{processo_id}/participantes/{participante_id}/acesso")
+@router.post("/processos/{processo_id}/participantes/{participante_id}/acesso",
+             dependencies=[Depends(exigir_papel("admin", "super_admin"))])
 def gerar_acesso(processo_id: int, participante_id: int, dados: AcessoEntrada, tenant_id: str = Depends(get_tenant_id),
                  ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> dict:
     """O segredo aparece só nesta resposta; o link usa fragmento (`#`), que o navegador não envia ao servidor."""
