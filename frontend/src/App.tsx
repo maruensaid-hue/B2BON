@@ -84,6 +84,9 @@ const Prospeccao = lazy(() => import("@/pages/prospeccao/Prospeccao").then((m) =
 const RegrasAprendidas = lazy(() =>
   import("@/pages/regras-aprendidas/RegrasAprendidas").then((m) => ({ default: m.RegrasAprendidas })),
 );
+const CreditosEnriquecimento = lazy(() =>
+  import("@/pages/enriquecimento/CreditosEnriquecimento").then((m) => ({ default: m.CreditosEnriquecimento })),
+);
 const InteligenciaRede = lazy(() =>
   import("@/pages/inteligencia-rede/InteligenciaRede").then((m) => ({ default: m.InteligenciaRede })),
 );
@@ -421,6 +424,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <RegrasAprendidas />
+              </Suspense>
+            }
+          />
+          <Route
+            path="creditos-enriquecimento"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <CreditosEnriquecimento />
               </Suspense>
             }
           />

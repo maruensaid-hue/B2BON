@@ -62,6 +62,7 @@ const PREDATOR_NAV_ITEMS: NavItem[] = [
   { path: "/historico-coletas", label: "Histórico de Coletas", icon: "🗂️", descricao: "Pesquisas de site e indicadores" },
   { path: "/relatorio-entrega", label: "Relatório de Entrega", icon: "📊", descricao: "Taxas de entrega" },
   { path: "/regras-aprendidas", label: "Regras Aprendidas", icon: "🧠", descricao: "Regras de estilo" },
+  { path: "/creditos-enriquecimento", label: "Créditos de Enriquecimento", icon: "🔎", descricao: "Saldo e pesquisas de decisores" },
   { path: "/inteligencia-rede", label: "Sinais de Oportunidade", icon: "🧭", descricao: "Fit e matches" },
   { path: "/agente-corporativo", label: "Agente Corporativo", icon: "🤖", descricao: "IA responde perguntas" },
   { path: "/configuracao", label: "Configuração", icon: "⚙", descricao: "Oferta e canais" },

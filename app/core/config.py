@@ -231,6 +231,11 @@ class Settings(BaseSettings):
     # Apollo). Vazio usa StubContactEnrichmentProvider em dev/teste,
     # mapeando decisores só via QSA da Receita Federal.
     contact_enrichment_api_key: str = ""
+    # Governança de créditos de enriquecimento (pesquisa de decisores): só limites TÉCNICOS. Nenhum número comercial (franquia, custo por
+    # contato, teto por plano, orçamento global do provedor) tem valor padrão aqui — vêm de configuração administrativa e, ausente, bloqueiam.
+    enriquecimento_previa_validade_min: int = 15  # a prévia (estimativa) deixa de valer depois disso e precisa ser refeita
+    enriquecimento_item_enviado_stale_min: int = 10  # empresa "enviada" há mais que isso sem resposta vira "ambígua" (não é repetida)
+    enriquecimento_max_selecao_requisicao: int = 500  # teto de ids aceitos numa requisição (proteção de entrada, não regra de plano)
 
     # Brave Search API — descobre o site oficial de uma conta sem domínio
     # cadastrado (`conta_service.enriquecer`). Vazio usa StubWebSearchProvider

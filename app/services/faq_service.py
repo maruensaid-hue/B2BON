@@ -75,9 +75,13 @@ marcados "rede" podem ser usados para responder outras empresas.
 - PREDATOR (motor de prospecção B2B — agrupa os módulos pagos abaixo, exige licença ativa):
   - Prospecção: criar um ICP (perfil de cliente ideal — segmento, porte, região, CNAEs, UFs), gerar lista \
 de contas que batem com o ICP (busca na base da Receita Federal), enriquecer cada conta (pesquisa de site \
-via IA e mapeamento de decisores/contatos, com limite semanal em planos gratuitos/cortesia), ou importar \
+via IA e mapeamento de decisores pelo quadro societário (QSA) da Receita Federal), ou importar \
 uma Lista de Prospecção via planilha (evento, feira, etc., com filtro de cargo-alvo). Tem também "Clientes \
-Cadastrados" (leads avulsos, fora de ICP).
+Cadastrados" (leads avulsos, fora de ICP). Contatos de decisores de um provedor pago (e-mail/telefone) só \
+vêm de "Pesquisar decisores": você marca as empresas, escolhe quantos decisores por empresa (há um padrão e um \
+máximo no plano), revê a estimativa de créditos de enriquecimento (1 crédito = 1 contato revelado, uma conta \
+separada dos créditos de IA) e confirma. Gerar a lista do ICP nunca consome esses créditos; o painel fica em \
+"Créditos de Enriquecimento". Se o plano ainda não tem isso configurado, o assinante deve falar com o comercial.
   - Cadências: sequência de toques multicanal (e-mail, WhatsApp, LinkedIn) gerada por IA — criar cadência \
 (mínimo 5 toques, 2 canais, trava o ICP/Oferta usados na criação), selecionar contas (por ICP, Lista de \
 Prospecção ou Clientes Cadastrados), gerar mensagens, aprovar em Aprovações, e só depois ativar a cadência \

@@ -8,6 +8,7 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { Modal } from "@/components/ui/Modal";
 import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
+import { PesquisaDecisoresModal } from "@/pages/prospeccao/PesquisaDecisoresModal";
 import { TutorialProspeccao } from "@/pages/prospeccao/TutorialProspeccao";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -238,6 +239,7 @@ export function Prospeccao() {
   const [excluindoConta, setExcluindoConta] = useState(false);
 
   const [selecaoEnriquecimento, setSelecaoEnriquecimento] = useState<Set<number>>(new Set());
+  const [pesquisandoDecisores, setPesquisandoDecisores] = useState(false);
   const [enriquecendoEmLote, setEnriquecendoEmLote] = useState(false);
 
   const [modalExclusaoLeadsAberto, setModalExclusaoLeadsAberto] = useState(false);
@@ -907,11 +909,16 @@ export function Prospeccao() {
                 : "— Clientes Cadastrados"}
           </SectionLabel>
           {selecaoEnriquecimento.size > 0 && (
-            <Button size="sm" disabled={enriquecendoEmLote} onClick={confirmarEnriquecimentoSelecionadas}>
-              {enriquecendoEmLote
-                ? "Enfileirando..."
-                : `Enriquecer ${selecaoEnriquecimento.size} conta(s) selecionada(s)`}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" disabled={enriquecendoEmLote} onClick={confirmarEnriquecimentoSelecionadas}>
+                {enriquecendoEmLote
+                  ? "Enfileirando..."
+                  : `Enriquecer ${selecaoEnriquecimento.size} conta(s) selecionada(s)`}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPesquisandoDecisores(true)}>
+                Pesquisar decisores ({selecaoEnriquecimento.size})
+              </Button>
+            </div>
           )}
         </div>
         <table className="w-full border-collapse text-[12px]">
@@ -1267,6 +1274,17 @@ export function Prospeccao() {
             if (icpSelecionadoId !== null) carregarContas(icpSelecionadoId);
             if (listaSelecionadaId !== null) carregarContasDaLista(listaSelecionadaId);
             carregarLimiteEnriquecimento();
+          }}
+        />
+      )}
+
+      {pesquisandoDecisores && (
+        <PesquisaDecisoresModal
+          contaIds={Array.from(selecaoEnriquecimento)}
+          onClose={() => setPesquisandoDecisores(false)}
+          onConcluida={() => {
+            if (icpSelecionadoId !== null) carregarContas(icpSelecionadoId);
+            if (listaSelecionadaId !== null) carregarContasDaLista(listaSelecionadaId);
           }}
         />
       )}

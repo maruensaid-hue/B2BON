@@ -1460,3 +1460,14 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **RI (Fase 5)**: leitura de PDF em subprocesso isolado; indicadores só do que está escrito com moeda; sem OCR; arquivo não guardado; sem IA. Painel visual e busca automática do PDF no site de RI **não** feitos.
 - **IA (Fase 6)**: nenhum provedor adicional habilitado; complemento documental em `PROVEDORES_IA.md`.
 - **Status**: ACEITA; sem deploy. Push ao staging autorizado pelo PO, mas bloqueado pelo harness (ver relatório).
+
+
+## D-094 · 2026-10-21 · Governança de créditos de enriquecimento (pesquisa de decisores)
+
+- **Contabilidade separada** dos créditos de IA: tabelas próprias, unidade "1 crédito = 1 contato revelado" (convenção, sem preço), razão append-only (`enriquecimento_movimento`) com saldo/reservado derivados.
+- **Seleção explícita**: criar/atualizar/enriquecer ICP e a fila automática nunca chamam o provedor pago; só a pesquisa confirmada, sobre empresas escolhidas, o chama. Provedor pago fica fora de `mapear_decisores` e da fila.
+- **Fail-closed**: configuração de plano ausente/incompleta, saldo, limite do período, orçamento global do provedor ausente/esgotado ou provedor indisponível ⇒ nada chega ao provedor. Nenhum número comercial tem padrão no código.
+- **Prévia → confirmação**: estimativa em créditos (máximo), incertezas e alternativas que nunca mudam a escolha; confirmação ligada ao `selecao_hash` e revalidada por inteiro no servidor; reserva atômica e idempotente antes de qualquer chamada.
+- **Ambiguidade**: timeout/5xx/resposta ilegível não repetem nem liberam; reserva retida até reconciliação manual com o relatório do provedor. Sem retry automático.
+- **Execução em segundo plano** no processo da API (retomável). **Pendências comerciais** (valores por plano, orçamento global, custo por crédito, excedente) listadas em `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md`.
+- **Status**: ACEITA em branch local; sem deploy, sem migração aplicada em ambiente compartilhado, nenhuma ativação; orçamento global **não configurado** (chamadas ao provedor seguem bloqueadas).

@@ -67,6 +67,15 @@ from app.models.pesquisa_preco import PesquisaPreco
 from app.models.licitacao import Licitacao
 from app.models.licitacao_publica import EventoLicitacaoPublica, LicitacaoPublica
 from app.models.alerta_licitacao import AlertaLicitacao, EstadoAlertasLicitacao, RegraAlertaLicitacao
+from app.models.enriquecimento_creditos import (
+    EnriquecimentoCarteira,
+    EnriquecimentoConfigPlano,
+    EnriquecimentoMovimento,
+    EnriquecimentoOrcamentoGlobal,
+    PesquisaDecisores,
+    PesquisaDecisoresEmpresa,
+    PesquisaDecisoresTransicao,
+)
 from app.models.documento_ri import DocumentoRi, IndicadorRi
 from app.models.documento_licitacao import DocumentoLicitacao
 from app.models.requisito_licitacao import RequisitoLicitacao
@@ -200,6 +209,13 @@ __all__ = [
     "EventoLicitacaoPublica",
     "RegraAlertaLicitacao",
     "AlertaLicitacao",
+    "EnriquecimentoCarteira",
+    "EnriquecimentoConfigPlano",
+    "EnriquecimentoMovimento",
+    "EnriquecimentoOrcamentoGlobal",
+    "PesquisaDecisores",
+    "PesquisaDecisoresEmpresa",
+    "PesquisaDecisoresTransicao",
     "EstadoAlertasLicitacao",
     "DocumentoRi",
     "IndicadorRi",

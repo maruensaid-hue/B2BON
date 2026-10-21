@@ -16,6 +16,8 @@ class StubContactEnrichmentProvider(ContactEnrichmentProvider):
     """Retorna uma lista fixa e determinística de contatos fake — dev/teste,
     sem depender de fornecedor real nem gastar crédito de API."""
 
+    nome_provedor = "stub"
+
     def __init__(self) -> None:
         self.buscas: list[FiltroContatos] = []
 

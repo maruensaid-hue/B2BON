@@ -56,3 +56,13 @@ class ConfirmacaoNecessaria(RegraNegocioViolada):
 
 class OrcamentoIaExcedido(RegraNegocioViolada):
     """Mapeado para 409 — budget guard do tenant (hard stop) atingido."""
+
+
+class PesquisaBloqueada(RegraNegocioViolada):
+    """Mapeado para 409 com `codigo` estável e `bloqueios` — a pesquisa de decisores não pode seguir (configuração ausente, saldo, limite,
+    orçamento global…). O front mostra a mensagem e trata o código; nunca chega ao provedor."""
+
+    def __init__(self, mensagem: str, codigo: str, bloqueios: list[dict] | None = None) -> None:
+        super().__init__(mensagem)
+        self.codigo = codigo
+        self.bloqueios = bloqueios or []

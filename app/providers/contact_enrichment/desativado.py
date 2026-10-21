@@ -9,5 +9,8 @@ class ContactEnrichmentDesativadoProvider(ContactEnrichmentProvider):
     qualquer tenant. Sem fornecedor contratado, o mapeamento simplesmente
     cai pro QSA da Receita Federal, como já era a intenção documentada."""
 
+    nome_provedor = "desativado"
+    disponivel = False
+
     def buscar_contatos(self, filtro: FiltroContatos) -> list[ContatoCandidato]:
         return []

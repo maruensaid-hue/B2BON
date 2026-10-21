@@ -479,8 +479,13 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
             >
               Enriquecer (BrasilAPI)
             </Button>
-            <Button size="sm" disabled={carregando !== null} onClick={mapearDecisores}>
-              Mapear decisores
+            <Button
+              size="sm"
+              disabled={carregando !== null}
+              title="Sócios e administradores do CNPJ (Receita Federal), sem custo. Contatos de provedor pago: use “Pesquisar decisores” na lista de contas."
+              onClick={mapearDecisores}
+            >
+              Mapear decisores (QSA)
             </Button>
             <Button size="sm" disabled={carregando !== null} onClick={exportarPdf}>
               Exportar PDF

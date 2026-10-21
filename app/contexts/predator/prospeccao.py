@@ -8,6 +8,7 @@ Shared Kernel: a leitura e validação vêm de `app.contexts.shared.organization
 """
 
 import difflib
+import logging
 import re
 import unicodedata
 from datetime import UTC, datetime
@@ -39,6 +40,8 @@ from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.services import atividade_service, auditoria_service, descarte_service, enriquecimento_limite_service
 from app.services.errors import IAIndisponivel, NaoEncontrado, RegraNegocioViolada
+
+logger = logging.getLogger(__name__)
 
 
 def _score_aderencia(db: Session, tenant_id: str, icp: ICP, candidato: ContaCandidata) -> float:
@@ -730,8 +733,38 @@ def mapear_decisores(
     candidatos: list[DecisorCandidato | ContatoCandidato] = []
     if conta.cnpj:
         candidatos.extend(account_data.buscar_decisores(conta.cnpj))
-    candidatos.extend(contact_enrichment.buscar_contatos(FiltroContatos(**kwargs_filtro)))
+    if contact_enrichment.pago:
+        # Provedor com custo por contato revelado: só a pesquisa de decisores governada (seleção explícita, reserva de créditos e orçamento
+        # global — `app/contexts/enriquecimento`) o chama. Aqui, em disparo avulso ou automático (fila de enriquecimento), fica só o QSA.
+        logger.info("MAPEAR_DECISORES provedor pago ignorado fora da pesquisa governada conta=%s provedor=%s", conta.id, contact_enrichment.nome_provedor)
+    else:
+        candidatos.extend(contact_enrichment.buscar_contatos(FiltroContatos(**kwargs_filtro)))
 
+    novos = registrar_candidatos(db, tenant_id, conta, candidatos, graph)
+
+    atividade_service.registrar(
+        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao=f"IA mapeou {novos} decisor(es)",
+        ator_id=ator_id,
+    )
+    auditoria_service.registrar(
+        db,
+        tenant_id,
+        "decisores_mapeados",
+        "conta",
+        conta.id,
+        ator_id,
+        {"quantidade": novos},
+        conta_id=conta.id,
+    )
+    db.commit()
+    return decisores_da_conta(db, conta)
+
+
+def registrar_candidatos(
+    db: Session, tenant_id: str, conta: Conta, candidatos: list[DecisorCandidato | ContatoCandidato], graph: Neo4jClient
+) -> int:
+    """Funde candidatos (QSA e/ou provedor de contatos) nos decisores da conta, sem duplicar quem já existe (por nome normalizado).
+    Não faz commit: quem chama decide o limite da transação. Devolve quantos decisores novos foram criados."""
     existentes = {_normalizar_nome_decisor(d.nome): d for d in decisores_da_conta(db, conta)}
     novos = 0
     for candidato in candidatos:
@@ -770,20 +803,4 @@ def mapear_decisores(
             decisor.neo4j_node_id = str(decisor.id)
         existentes[chave] = decisor
         novos += 1
-
-    atividade_service.registrar(
-        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao=f"IA mapeou {novos} decisor(es)",
-        ator_id=ator_id,
-    )
-    auditoria_service.registrar(
-        db,
-        tenant_id,
-        "decisores_mapeados",
-        "conta",
-        conta.id,
-        ator_id,
-        {"quantidade": novos},
-        conta_id=conta.id,
-    )
-    db.commit()
-    return decisores_da_conta(db, conta)
+    return novos

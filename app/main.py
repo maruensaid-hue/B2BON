@@ -24,6 +24,7 @@ from app.services.errors import (
     NaoAutenticado,
     NaoAutorizado,
     NaoEncontrado,
+    PesquisaBloqueada,
     RegraNegocioViolada,
     ValidacaoFalhou,
 )
@@ -176,6 +177,11 @@ async def handle_nao_encontrado(request: Request, exc: NaoEncontrado) -> JSONRes
 @app.exception_handler(RegraNegocioViolada)
 async def handle_regra_negocio_violada(request: Request, exc: RegraNegocioViolada) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detalhe": str(exc)})
+
+
+@app.exception_handler(PesquisaBloqueada)
+async def handle_pesquisa_bloqueada(request: Request, exc: PesquisaBloqueada) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detalhe": str(exc), "codigo": exc.codigo, "bloqueios": exc.bloqueios})
 
 
 @app.exception_handler(CreditosInsuficientes)

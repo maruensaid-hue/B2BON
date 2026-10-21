@@ -1,0 +1,363 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
+import { api, mensagemErro } from "@/lib/api";
+
+interface Bloqueio {
+  codigo: string;
+  mensagem: string;
+}
+
+interface Ajuste {
+  tipo: "reduzir_profundidade" | "ampliar_abrangencia" | "reduzir_selecao";
+  decisores_por_empresa: number;
+  empresas_cobertas: number;
+}
+
+interface Estimativa {
+  creditos_maximos: number;
+  empresas_selecionadas: number;
+  empresas_a_consultar: number;
+  empresas_deduplicadas: number;
+  decisores_por_empresa: number;
+  origem_decisores: "padrao_plano" | "informado_usuario";
+  disponivel: number;
+  limite_periodo_restante: number | null;
+  limites: { decisores_por_empresa_max: number; itens_por_lote_max: number; limite_periodo_creditos: number | null };
+  viavel: boolean;
+  bloqueios: Bloqueio[];
+  ajustes_sugeridos: Ajuste[];
+  nota_ajustes: string;
+  incertezas: string[];
+}
+
+interface ItemPesquisa {
+  id: number;
+  conta_id: number;
+  conta_nome: string | null;
+  estado: string;
+  motivo: string | null;
+  decisores_solicitados: number;
+  decisores_retornados: number;
+  creditos_reservados: number;
+  creditos_consumidos: number;
+}
+
+interface Pesquisa {
+  id: string;
+  estado: string;
+  selecao_hash: string;
+  decisores_por_empresa: number;
+  total_maximo: number;
+  creditos_reservados: number;
+  creditos_consumidos: number;
+  requer_reconciliacao: boolean;
+  estimativa: Estimativa;
+  itens?: ItemPesquisa[];
+}
+
+interface PainelResumo {
+  plano: { disponivel: boolean; decisores_por_empresa_padrao?: number; decisores_por_empresa_max?: number; orientacao?: string | null };
+}
+
+const ROTULO_AJUSTE: Record<Ajuste["tipo"], string> = {
+  reduzir_profundidade: "Menos decisores por empresa, mesmas empresas",
+  ampliar_abrangencia: "Mais empresas com 1 decisor cada",
+  reduzir_selecao: "Mesmos decisores por empresa, menos empresas",
+};
+
+const ROTULO_ESTADO: Record<string, string> = {
+  criada: "Aguardando confirmação",
+  reservada: "Créditos reservados — consultando o provedor",
+  enviada: "Em andamento",
+  em_processamento: "Aguardando reconciliação do administrador",
+  concluida: "Concluída",
+  parcial: "Concluída com falhas em algumas empresas",
+  falha: "Falhou (nenhum crédito consumido)",
+  cancelada: "Cancelada",
+  reconciliada: "Concluída e reconciliada",
+};
+
+const TOM_ITEM: Record<string, "green" | "amber" | "red" | "muted" | "cyan"> = {
+  concluido: "green", sem_resultados: "muted", deduplicada: "muted", falha: "red", ambiguo: "amber", pendente: "cyan", enviado: "cyan", cancelado: "muted",
+};
+
+interface Props {
+  contaIds: number[];
+  onClose: () => void;
+  onConcluida?: () => void;
+}
+
+/** Pesquisa de decisores em provedor pago: o usuário escolhe quantos por empresa, REVÊ a estimativa e só então confirma. Nada é reservado nem
+ * consultado antes da confirmação, e o servidor revalida tudo (saldo, limites, orçamento) no clique em "Confirmar". */
+export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props) {
+  const [painel, setPainel] = useState<PainelResumo | null>(null);
+  const [valor, setValor] = useState("");
+  const [pesquisa, setPesquisa] = useState<Pesquisa | null>(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  // Uma chave por prévia: clicar duas vezes em "Confirmar" (ou repetir após timeout) reaproveita a mesma chave e nunca reserva em dobro.
+  const chave = useRef<string | null>(null);
+  const montado = useRef(true);
+
+  useEffect(() => {
+    montado.current = true;
+    api.get<PainelResumo>("/pesquisas-decisores/painel").then(setPainel).catch(() => setPainel(null));
+    return () => {
+      montado.current = false;
+    };
+  }, []);
+
+  // A consulta ao provedor roda em segundo plano no servidor; aqui só se acompanha o andamento até a pesquisa sair de "reservada/enviada".
+  const acompanhar = useCallback(async (id: string) => {
+    for (let tentativa = 0; tentativa < 150 && montado.current; tentativa++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      if (!montado.current) return;
+      try {
+        const atual = await api.get<Pesquisa>(`/pesquisas-decisores/${id}`);
+        setPesquisa(atual);
+        if (atual.estado !== "reservada" && atual.estado !== "enviada") return;
+      } catch {
+        /* servidor ocupado: tenta de novo no próximo ciclo */
+      }
+    }
+  }, []);
+
+  const plano = painel?.plano;
+  const liberado = plano?.disponivel !== false;
+
+  async function revisar() {
+    setCarregando(true);
+    setErro(null);
+    try {
+      const corpo: { conta_ids: number[]; decisores_por_empresa?: number } = { conta_ids: contaIds };
+      if (valor.trim() !== "") corpo.decisores_por_empresa = Number(valor);
+      const criada = await api.post<Pesquisa>("/pesquisas-decisores/previa", corpo);
+      chave.current = crypto.randomUUID();
+      setPesquisa(criada);
+    } catch (e) {
+      setErro(mensagemErro(e, "Não foi possível montar a estimativa."));
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function confirmar() {
+    if (!pesquisa || !chave.current) return;
+    setCarregando(true);
+    setErro(null);
+    try {
+      const resultado = await api.post<Pesquisa>(`/pesquisas-decisores/${pesquisa.id}/confirmar`, {
+        selecao_hash: pesquisa.selecao_hash,
+        idempotency_key: chave.current,
+      });
+      setPesquisa(resultado);
+      if (resultado.estado === "reservada" || resultado.estado === "enviada") await acompanhar(resultado.id);
+      onConcluida?.();
+    } catch (e) {
+      setErro(mensagemErro(e, "Não foi possível confirmar a pesquisa."));
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function retomar() {
+    if (!pesquisa) return;
+    setCarregando(true);
+    setErro(null);
+    try {
+      const retomada = await api.post<Pesquisa>(`/pesquisas-decisores/${pesquisa.id}/retomar`, {});
+      setPesquisa(retomada);
+      if (retomada.estado === "reservada" || retomada.estado === "enviada") await acompanhar(retomada.id);
+      onConcluida?.();
+    } catch (e) {
+      setErro(mensagemErro(e, "Não foi possível retomar a pesquisa."));
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function cancelar() {
+    if (!pesquisa) return onClose();
+    setCarregando(true);
+    try {
+      await api.post(`/pesquisas-decisores/${pesquisa.id}/cancelar`, {});
+    } catch {
+      /* a prévia expira sozinha */
+    } finally {
+      setCarregando(false);
+      onClose();
+    }
+  }
+
+  function aplicarSugestao(ajuste: Ajuste) {
+    // Só preenche o campo: a escolha do usuário nunca muda sozinha, e a nova estimativa precisa ser revista de novo.
+    setValor(String(ajuste.decisores_por_empresa));
+    setPesquisa(null);
+    chave.current = null;
+  }
+
+  const e = pesquisa?.estimativa;
+  const emRevisao = pesquisa?.estado === "criada";
+  const terminou = pesquisa !== null && !emRevisao;
+
+  return (
+    <Modal title="Pesquisar decisores" open onClose={onClose}>
+      <div className="space-y-3 text-[12px]">
+        {!pesquisa && (
+          <>
+            <p className="text-muted">
+              {contaIds.length} empresa(s) escolhida(s). Cada decisor revelado pelo provedor consome 1 crédito de enriquecimento (separado dos créditos de IA). Nada é
+              consultado antes de você revisar e confirmar.
+            </p>
+            {plano && !liberado && <p className="rounded-md bg-surf2 p-2 text-amber">{plano.orientacao ?? "A pesquisa de decisores não está liberada no seu plano."}</p>}
+            <div>
+              <label className="mb-1 block text-[10px] tracking-wide text-muted uppercase" htmlFor="decisores-por-empresa">
+                Decisores por empresa
+              </label>
+              <Input
+                id="decisores-por-empresa"
+                type="number"
+                min={1}
+                max={plano?.decisores_por_empresa_max ?? undefined}
+                value={valor}
+                placeholder={plano?.decisores_por_empresa_padrao ? `Padrão do plano: ${plano.decisores_por_empresa_padrao}` : "Padrão do plano"}
+                onChange={(ev) => setValor(ev.target.value)}
+              />
+              <p className="mt-1 text-[10.5px] text-muted">
+                {plano?.decisores_por_empresa_max ? `Máximo no seu plano: ${plano.decisores_por_empresa_max}. ` : ""}
+                Em branco, vale o padrão do plano. O valor nunca é alterado sem a sua confirmação.
+              </p>
+            </div>
+            {erro && <p className="text-red">{erro}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={onClose}>
+                Fechar
+              </Button>
+              <Button size="sm" disabled={carregando || !liberado} onClick={revisar}>
+                {carregando ? "Calculando..." : "Revisar estimativa"}
+              </Button>
+            </div>
+          </>
+        )}
+
+        {pesquisa && e && emRevisao && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Resumo rotulo="Empresas a consultar" valor={`${e.empresas_a_consultar} de ${e.empresas_selecionadas}`} />
+              <Resumo
+                rotulo="Decisores por empresa"
+                valor={`${e.decisores_por_empresa} (${e.origem_decisores === "padrao_plano" ? "padrão do plano" : "escolha sua"})`}
+              />
+              <Resumo rotulo="Créditos no máximo" valor={String(e.creditos_maximos)} destaque />
+              <Resumo rotulo="Saldo disponível" valor={String(e.disponivel)} />
+            </div>
+            {e.empresas_deduplicadas > 0 && <p className="text-muted">{e.empresas_deduplicadas} empresa(s) ficam fora da consulta (duplicadas ou decisores já obtidos).</p>}
+            {e.bloqueios.length > 0 && (
+              <div className="rounded-md bg-surf2 p-2">
+                <p className="mb-1 font-semibold text-red">Não é possível confirmar agora</p>
+                <ul className="list-disc space-y-0.5 pl-4">
+                  {e.bloqueios.map((b) => (
+                    <li key={b.codigo}>{b.mensagem}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {e.ajustes_sugeridos.length > 0 && (
+              <div className="rounded-md bg-surf2 p-2">
+                <p className="mb-1 font-semibold">Alternativas (você decide)</p>
+                <ul className="space-y-1">
+                  {e.ajustes_sugeridos.map((a) => (
+                    <li key={a.tipo} className="flex items-center justify-between gap-2">
+                      <span>
+                        {ROTULO_AJUSTE[a.tipo]}: {a.decisores_por_empresa} por empresa, até {a.empresas_cobertas} empresa(s)
+                      </span>
+                      {a.tipo !== "reduzir_selecao" && (
+                        <Button size="sm" variant="ghost" onClick={() => aplicarSugestao(a)}>
+                          Usar {a.decisores_por_empresa}
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-[10.5px] text-muted">{e.nota_ajustes}</p>
+              </div>
+            )}
+            <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-muted">
+              {e.incertezas.map((i) => (
+                <li key={i}>{i}</li>
+              ))}
+            </ul>
+            {erro && <p className="text-red">{erro}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" disabled={carregando} onClick={cancelar}>
+                Cancelar
+              </Button>
+              <Button variant="ghost" size="sm" disabled={carregando} onClick={() => setPesquisa(null)}>
+                Voltar
+              </Button>
+              <Button size="sm" disabled={carregando || !e.viavel} onClick={confirmar}>
+                {carregando ? "Pesquisando..." : `Confirmar e usar até ${e.creditos_maximos} crédito(s)`}
+              </Button>
+            </div>
+          </>
+        )}
+
+        {terminou && pesquisa && (
+          <>
+            <div className="flex items-center gap-2">
+              <Badge tone={pesquisa.estado === "concluida" || pesquisa.estado === "reconciliada" ? "green" : pesquisa.estado === "falha" ? "red" : "amber"}>
+                {ROTULO_ESTADO[pesquisa.estado] ?? pesquisa.estado}
+              </Badge>
+              <span className="text-muted">
+                {pesquisa.creditos_consumidos} crédito(s) consumido(s) de {pesquisa.creditos_reservados} reservado(s)
+              </span>
+            </div>
+            {pesquisa.requer_reconciliacao && (
+              <p className="rounded-md bg-surf2 p-2 text-amber">
+                Alguma empresa teve resultado incerto no provedor. Os créditos dela ficam retidos até um administrador conferir o uso informado pelo provedor. Nada é
+                repetido automaticamente.
+              </p>
+            )}
+            <table className="w-full border-collapse">
+              <tbody>
+                {(pesquisa.itens ?? []).map((i) => (
+                  <tr key={i.id} className="border-b border-border">
+                    <td className="p-1.5 font-semibold">{i.conta_nome ?? `#${i.conta_id}`}</td>
+                    <td className="p-1.5">
+                      <Badge tone={TOM_ITEM[i.estado] ?? "muted"}>{i.estado}</Badge>
+                    </td>
+                    <td className="p-1.5 text-right text-muted">{i.decisores_retornados} decisor(es)</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {erro && <p className="text-red">{erro}</p>}
+            <div className="flex justify-end gap-2">
+              {(pesquisa.estado === "enviada" || pesquisa.estado === "reservada") && (
+                <Button size="sm" disabled={carregando} onClick={retomar}>
+                  {carregando ? "Consultando..." : "Continuar as empresas pendentes"}
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={onClose}>
+                Fechar
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function Resumo({ rotulo, valor, destaque }: { rotulo: string; valor: string; destaque?: boolean }) {
+  return (
+    <div className="rounded-md bg-surf2 p-2">
+      <div className="text-[9.5px] tracking-wide text-muted uppercase">{rotulo}</div>
+      <div className={destaque ? "text-[15px] font-bold text-cyan" : "font-semibold"}>{valor}</div>
+    </div>
+  );
+}
