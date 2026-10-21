@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import (
     get_db,
     get_email_provider,
+    get_fiscal_provider,
     get_llm_provider,
     get_payment_provider,
     resolver_email_provider,
@@ -22,6 +23,7 @@ from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.decisor import Decisor
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.providers.fiscal.base import FiscalProvider
 from app.providers.payment.base import PaymentProvider
 from app.schemas.reputacao import RegistrarEventoReputacaoRequestSchema, SaudeCanalSchema
 from app.schemas.whatsapp import WebhookEmailRequestSchema, WebhookWhatsAppRequestSchema
@@ -304,6 +306,7 @@ def webhook_mercadopago(
     db: Session = Depends(get_db),
     payment_provider: PaymentProvider = Depends(get_payment_provider),
     email: EmailProvider = Depends(get_email_provider),
+    fiscal: FiscalProvider = Depends(get_fiscal_provider),
     x_signature: str | None = Header(None, alias="x-signature"),
     x_request_id: str | None = Header(None, alias="x-request-id"),
 ) -> dict:
@@ -322,5 +325,5 @@ def webhook_mercadopago(
     if payment_id:
         pagamento_licenca_service.confirmar_via_webhook(db, payment_provider, payment_id, email)
         finops.compras.confirmar_via_webhook(db, payment_provider, payment_id)  # top-up de AI Credits
-        enriquecimento.pacotes.confirmar_via_webhook(db, payment_provider, payment_id)  # pacote adicional de créditos de enriquecimento
+        enriquecimento.pacotes.confirmar_via_webhook(db, payment_provider, payment_id, fiscal=fiscal)  # pacote adicional de créditos de enriquecimento
     return {"recebido": True}

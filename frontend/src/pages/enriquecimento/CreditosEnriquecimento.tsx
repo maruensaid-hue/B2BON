@@ -8,8 +8,9 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { api, mensagemErro } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
+import { AdminCustoVendas } from "./AdminCustoVendas";
 import { AdminEnriquecimento } from "./AdminEnriquecimento";
-import { dataExpiracao } from "./formatos";
+import { custoCredito, dataExpiracao } from "./formatos";
 import { PacotesAdicionais } from "./PacotesAdicionais";
 
 interface Painel {
@@ -394,6 +395,8 @@ export function CreditosEnriquecimento() {
 
       {superAdmin && <AdminEnriquecimento />}
 
+      {superAdmin && <AdminCustoVendas />}
+
       {superAdmin && admin && (
         <Card>
           <SectionLabel>Administração — provedor Lusha (visível só ao super administrador)</SectionLabel>
@@ -409,9 +412,9 @@ export function CreditosEnriquecimento() {
 
           {admin.politica?.vigente ? (
             <dl className="mb-3 grid grid-cols-2 gap-2 text-[12px] lg:grid-cols-4">
-              <Item rotulo="Custo por crédito (aquisição)" valor={brl(admin.politica.custo_unitario_brl ?? "0")} />
+              <Item rotulo="Custo por crédito (contrato)" valor={custoCredito(admin.politica.custo_unitario_brl ?? "0")} />
               <Item rotulo="Markup" valor={`${Number(admin.politica.markup_percentual)}%`} />
-              <Item rotulo="Preço de venda por crédito" valor={`${brl(admin.politica.preco_unitario_brl ?? "0")} (≈ R$ ${admin.politica.preco_unitario_exibicao?.replace(".", ",")})`} />
+              <Item rotulo="Preço de venda por crédito" valor={`${custoCredito(admin.politica.preco_unitario_brl ?? "0")} (≈ R$ ${admin.politica.preco_unitario_exibicao?.replace(".", ",")})`} />
               <Item rotulo="Margem bruta s/ venda" valor={`${Number(admin.politica.margem_bruta_percentual)}%`} />
             </dl>
           ) : (

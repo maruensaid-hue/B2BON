@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytest
 
 from app.api.deps import get_contact_enrichment_provider
-from app.contexts.enriquecimento import conciliacao, config, execucao, ledger, painel, pesquisa, precos
+from app.contexts.enriquecimento import conciliacao, config, custo, execucao, ledger, painel, pesquisa, precos
 from app.contexts.enriquecimento.pesquisa import Solicitante
 from app.core.config import settings
 from app.main import app
@@ -106,10 +106,22 @@ def politica(db, *, busca=0, email=1, telefone=None, revelar_telefones=False, pa
         ator_id="1", tenant_auditoria=A, motivo="teste", tamanho_pagina_minimo=10, tamanho_pagina_maximo=100, aprovar=aprovar)
 
 
+def custo_contratual(db, provedor="lusha", *, validar=True, aprovar=True):
+    """Custo contratual (USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00) e, se pedido, a validação humana do contrato."""
+    linha = custo.definir_custo(db, provedor=provedor, custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="6.00", ator_id="1",
+                                tenant_auditoria=A, motivo="teste", aprovar=aprovar)
+    if aprovar and validar:
+        custo.validar_contrato(db, linha.id, checklist={i: True for i in custo.CHECKLIST_CONTRATO}, saldo_transferivel=False,
+                               evidencia="Contrato simulado nos testes (nenhum contrato real foi lido)", ator_id="1", tenant_auditoria=A)
+    return linha
+
+
 def cenario(db, *, franquia=10, itens=10, padrao=2, maximo=5, limite_periodo=None, orcamento=1000, periodicidade="mensal", com_politica=True,
-            limite_pesquisa=100_000, **kw_politica):
+            limite_pesquisa=100_000, contrato=True, **kw_politica):
     """Plano, política do provedor e orçamento global APROVADOS. Tarifas de teste: busca 0, e-mail 1 (só e-mail), página 10, fator 1 — então o teto de
     uma empresa é igual ao nº de decisores pedidos. Cada parâmetro pode ser desligado/alterado por teste."""
+    if contrato:
+        custo_contratual(db)
     config.definir_config(db, plano_id=plano_id(db), tenant_id=None, ator_id="1", tenant_auditoria=A, motivo="teste", aprovar=True, campos=dict(
         franquia_creditos=franquia, periodicidade=periodicidade, decisores_por_empresa_padrao=padrao, decisores_por_empresa_max=maximo,
         itens_por_lote_max=itens, limite_periodo_creditos=limite_periodo, limite_creditos_pesquisa=limite_pesquisa))
@@ -883,8 +895,8 @@ def test_orcamento_global_e_economia_da_cyberfort_so_aparecem_na_area_administra
     assert "orcamento_global" not in corpo_painel and not any(p in texto for p in ("custo_unitario", "markup", "margem", "custo_total"))
     visao = client.get(f"{ADMIN}/orcamento-global").json()
     assert visao["orcamento_global"]["limite"] == 1000
-    assert visao["politica"]["custo_unitario_brl"] == "0.67485000" and visao["politica"]["preco_unitario_brl"] == "1.34970000"
-    assert visao["politica"]["preco_unitario_exibicao"] == "1.35" and visao["politica"]["margem_bruta_percentual"] == "50.00000000"
+    assert visao["politica"]["custo_unitario_brl"] == "0.674850000000" and visao["politica"]["preco_unitario_brl"] == "1.349700000000"
+    assert visao["politica"]["preco_unitario_exibicao"] == "1.35" and visao["politica"]["margem_bruta_percentual"] == "50.000000000000"
     assert visao["lotes_compra"][0]["custo_total_brl"].startswith("269.94") and visao["lotes_compra"][0]["quantidade_creditos"] == 400
     comum = criar_usuario_autenticado(A, papel="admin", email="adm@x.com.br")
     for rota in (f"{ADMIN}/orcamento-global", f"{ADMIN}/politica", f"{ADMIN}/planos"):
@@ -966,14 +978,14 @@ def test_politica_valida_os_campos_e_exige_motivo(client, db_session):
 def test_api_de_politica_lote_e_aprovacao(client, db_session, prov_api):
     r = client.post(f"{ADMIN}/lotes-compra", json={"provedor": "lusha", "referencia": "APORTE-API-1", "quantidade_creditos": 400, "custo_total_brl": "269.94",
                                                    "comprado_em": "2026-10-21T00:00:00"})
-    assert r.status_code == 201 and r.json()["custo_unitario_brl"] == "0.67485000"
+    assert r.status_code == 201 and r.json()["custo_unitario_brl"] == "0.674850000000"
     assert client.post(f"{ADMIN}/lotes-compra", json={"provedor": "lusha", "referencia": "APORTE-API-2", "quantidade_creditos": 1, "custo_total_brl": "abc",
                                                       "comprado_em": "2026-10-21T00:00:00"}).status_code == 422
     corpo = {"provedor": "lusha", "creditos_busca_por_resultado": 1, "creditos_email": 1, "creditos_telefone": 5, "revelar_emails": True, "revelar_telefones": True,
              "tamanho_pagina_busca": 10, "creditos_cliente_por_credito_provedor": 1, "markup_percentual": "100", "metodo_custo": "lote_referencia",
              "lote_compra_id": r.json()["id"], "motivo": "tarifas conferidas em account/usage"}
     pendente = client.put(f"{ADMIN}/politica", json=corpo)
-    assert pendente.status_code == 200 and pendente.json()["aprovada"] is False and pendente.json()["preco_unitario_brl"] == "1.34970000"
+    assert pendente.status_code == 200 and pendente.json()["aprovada"] is False and pendente.json()["preco_unitario_brl"] == "1.349700000000"
     assert config.politica_vigente(db_session, "lusha")[0] is None
     aprovada = client.post(f"{ADMIN}/politica/{pendente.json()['id']}/aprovar")
     assert aprovada.status_code == 200 and aprovada.json()["aprovada"] is True and config.politica_vigente(db_session, "lusha")[0].utilizavel

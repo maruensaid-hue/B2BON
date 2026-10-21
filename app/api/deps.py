@@ -64,6 +64,8 @@ from app.providers.crm.base import CrmProvider
 from app.providers.crm.nucleo import NucleoCrmProvider
 from app.providers.email_validation.base import EmailVerificationProvider
 from app.providers.email_validation.stub import StubEmailVerificationProvider
+from app.providers.fiscal.base import FiscalProvider
+from app.providers.fiscal.desativado import FiscalDesativado
 from app.providers.payment.base import PaymentProvider
 from app.providers.payment.mercadopago import MercadoPagoProvider
 from app.providers.payment.stub import StubPaymentProvider
@@ -181,6 +183,12 @@ def get_email_provider() -> EmailProvider:
         # convite de empresa parecer enviado quando não saía nada.
         return EmailDesativadoProvider()
     return StubEmailProvider()
+
+
+def get_fiscal_provider() -> FiscalProvider:
+    """Nenhum emissor fiscal real está integrado: o único adaptador é o desativado (checkout de pacotes de enriquecimento fica bloqueado). Para habilitar,
+    implemente o adaptador do emissor escolhido pela empresa em `app/providers/fiscal/` e devolva-o aqui quando as credenciais existirem."""
+    return FiscalDesativado()
 
 
 def get_payment_provider() -> PaymentProvider:

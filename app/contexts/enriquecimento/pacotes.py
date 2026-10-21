@@ -9,8 +9,10 @@ Regras (matriz do PO, 2026-10-21):
   - total do pacote = créditos × preço unitário, em centavos pela regra do produto (`precos.centavos`, meio para cima); o catálogo só aceita preço
     total coerente com isso;
   - acima de 3.000 créditos (`CONTACT_SALES`) não tem preço nem checkout automático: só cotação comercial;
-  - sem a pesquisa de decisores liberada (plano, política do provedor e orçamento global aprovados) a compra é recusada: não se vende crédito que
-    não pode ser usado."""
+  - sem a pesquisa de decisores liberada (plano, política, custo/contrato e orçamento global aprovados) a compra é recusada: não se vende crédito que
+    não pode ser usado;
+  - sem emissão de nota fiscal funcionando (emissor configurado e dados fiscais do cliente) a compra também é recusada: não se vende o que não se
+    consegue faturar. O estorno de créditos é sempre manual (`estornos.py`); aviso de reembolso/chargeback do provedor de pagamento só sinaliza."""
 
 import logging
 from datetime import datetime
@@ -18,8 +20,9 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.contexts.enriquecimento import config, ledger, precos
-from app.models.enriquecimento_creditos import EnriquecimentoCompra, EnriquecimentoLoteCompra, EnriquecimentoPacote
+from app.contexts.enriquecimento import config, custo, ledger, precos, vendas
+from app.models.enriquecimento_creditos import EnriquecimentoCompra, EnriquecimentoPacote
+from app.providers.fiscal.base import FiscalProvider
 from app.providers.payment.base import PaymentProvider
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, PesquisaBloqueada, ValidacaoFalhou
@@ -30,6 +33,7 @@ PREFIXO_REFERENCIA = "enriquecimento:"
 STATUS_PACOTE = ("ATIVO", "CONTACT_SALES", "INATIVO")
 TOLERANCIA_VALOR = Decimal("0.01")
 _PENDENTES_DO_PROVEDOR = ("pending", "in_process", "authorized")  # o pagamento ainda pode ser aprovado: a compra continua PENDENTE
+_CONTESTACOES = ("refunded", "charged_back", "cancelled", "in_mediation")  # avisos do provedor de pagamento sobre compra já aprovada
 
 
 # ------------------------------------------------------------------------------------------------------------------------------- catálogo
@@ -122,23 +126,24 @@ def aprovar_pacote(db: Session, pacote_id: int, ator_id: str | None, tenant_audi
 
 
 def rentabilidade(db: Session, provedor: str) -> dict:
-    """Margem de cada pacote com o custo VIGENTE: o da política aprovada do provedor; sem política aprovada, o do lote de compra mais recente
-    (marcado como referência). Se a relação crédito do cliente × crédito do provedor ainda não foi aprovada, assume-se 1:1 e isso é informado
-    (`premissa_fator`). Recalculada a cada leitura: novo aporte ou nova política mudam o resultado sem tocar nos pacotes."""
+    """Margem de cada pacote com o custo CONTRATUAL vigente (USD 600 ÷ 6.800 créditos × câmbio de planejamento; ver `custo.py`). Sem custo contratual
+    aprovado, usa o custo da política aprovada; sem nenhum, não calcula. Se a relação crédito do cliente × crédito do provedor ainda não foi aprovada,
+    assume-se 1:1 e isso é informado (`premissa_fator`). Recalculada a cada leitura: um novo câmbio de planejamento ou contrato muda o resultado sem tocar
+    nos pacotes. É margem de PLANEJAMENTO sobre o custo nominal: o custo efetivo por crédito consumido (ociosidade, câmbio pago) está em `custo.custo_efetivo`."""
     politica, _ = config.politica_vigente(db, provedor)
+    contrato = custo.custo_vigente(db, provedor)
     custo_provedor, origem_custo, fator, premissa = None, None, None, False
-    if politica is not None and politica.custo_unitario_brl is not None:
-        custo_provedor, origem_custo = politica.custo_unitario_brl, f"politica_v{politica.versao}"
+    if politica is not None:
         fator = politica.creditos_cliente_por_credito_provedor
-    if custo_provedor is None:
-        lote = db.query(EnriquecimentoLoteCompra).filter_by(provedor=provedor).order_by(EnriquecimentoLoteCompra.comprado_em.desc(),
-                                                                                       EnriquecimentoLoteCompra.id.desc()).first()
-        if lote is not None:
-            custo_provedor, origem_custo = precos.dec(lote.custo_unitario_brl), f"lote_{lote.referencia}"
+    if contrato is not None:
+        custo_provedor, origem_custo = contrato.custo_unitario_brl, f"contrato_v{contrato.versao}"
+    elif politica is not None and politica.custo_unitario_brl is not None:
+        custo_provedor, origem_custo = politica.custo_unitario_brl, f"politica_v{politica.versao}"
     if fator is None:
         fator, premissa = 1, True
-    saida = {"provedor": provedor, "custo_unitario_provedor_brl": str(precos.exibir(custo_provedor, 5)) if custo_provedor is not None else None,
-             "origem_custo": origem_custo, "creditos_cliente_por_credito_provedor": fator, "premissa_fator": premissa, "pacotes": []}
+    saida = {"provedor": provedor, "custo_unitario_provedor_brl": str(precos.exibir(custo_provedor, 9)) if custo_provedor is not None else None,
+             "origem_custo": origem_custo, "cambio_planejamento_brl": str(contrato.cambio_planejamento_brl) if contrato is not None else None,
+             "creditos_cliente_por_credito_provedor": fator, "premissa_fator": premissa, "pacotes": []}
     for pacote in pacotes_vigentes(db):
         item = {"codigo": pacote.codigo, "creditos": pacote.quantidade_creditos, "status": pacote.status}
         if pacote.status == "ATIVO" and custo_provedor is not None:
@@ -168,8 +173,13 @@ def serializar_compra(compra: EnriquecimentoCompra) -> dict:
     }
 
 
+def motivos_de_compra(db: Session, tenant_id: str, provider, fiscal: FiscalProvider) -> list[dict]:
+    """Todos os motivos pelos quais a compra está indisponível agora: pesquisa de decisores (plano, política, contrato, orçamento) e emissão fiscal."""
+    return config.motivos_de_indisponibilidade(db, tenant_id, provider) + vendas.motivos_fiscais(db, tenant_id, fiscal)
+
+
 def iniciar_compra(db: Session, tenant_id: str, pacote_codigo: str, *, aceite_expiracao: bool, payment_provider: PaymentProvider, email_pagador: str,
-                   provider, ator_id: str | None, agora: datetime | None = None) -> EnriquecimentoCompra:
+                   provider, fiscal: FiscalProvider, ator_id: str | None, agora: datetime | None = None) -> EnriquecimentoCompra:
     """Pedido de compra com versão e preço congelados e checkout no Mercado Pago. Os créditos só entram pelo webhook assinado."""
     if not aceite_expiracao:
         raise ValidacaoFalhou("Confirme que está ciente de que os créditos adicionais expiram no fim do mês e não acumulam.")
@@ -178,9 +188,9 @@ def iniciar_compra(db: Session, tenant_id: str, pacote_codigo: str, *, aceite_ex
         raise NaoEncontrado("Pacote não encontrado.")
     if pacote.status != "ATIVO" or not pacote.quantidade_creditos or pacote.preco_total_brl is None or pacote.preco_unitario_brl is None:
         raise ValidacaoFalhou("Este pacote é negociado com o comercial: peça uma cotação.")
-    motivos = config.motivos_de_indisponibilidade(db, tenant_id, provider)
+    motivos = motivos_de_compra(db, tenant_id, provider, fiscal)
     if motivos:
-        # Não vende crédito que não pode ser usado: a pesquisa de decisores está indisponível por algum dos motivos abaixo.
+        # Não vende crédito que não pode ser usado nem venda que não se consegue faturar: algum dos motivos abaixo impede.
         raise PesquisaBloqueada("A compra de créditos de enriquecimento está indisponível agora: " + "; ".join(m["mensagem"] for m in motivos),
                                 motivos[0]["codigo"], motivos)
     agora = agora or config.agora_utc()
@@ -208,8 +218,19 @@ def listar_compras(db: Session, tenant_id: str, limite: int = 50) -> list[Enriqu
     return db.query(EnriquecimentoCompra).filter_by(tenant_id=tenant_id).order_by(EnriquecimentoCompra.id.desc()).limit(limite).all()
 
 
-def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagamento_id_externo: str, agora: datetime | None = None
-                          ) -> EnriquecimentoCompra | None:
+def _contestar(db: Session, compra: EnriquecimentoCompra, status_externo: str, agora: datetime) -> None:
+    """Aviso de reembolso/chargeback/cancelamento sobre compra APROVADA: só sinaliza (status, data, auditoria, log). Os créditos não são tocados."""
+    if compra.contestacao_status == status_externo:
+        return
+    compra.contestacao_status, compra.contestado_em = status_externo, agora
+    logger.error("ENRIQUECIMENTO_COMPRA_CONTESTADA compra=%s tenant=%s status=%s", compra.id, compra.tenant_id, status_externo)
+    auditoria_service.registrar(db, compra.tenant_id, "enriquecimento_compra_contestada", "enriquecimento_compra", compra.id, None,
+                                {"status_pagamento": status_externo, "creditos": compra.creditos, "acao": "sinalizada; estorno de créditos só manual"})
+    db.commit()
+
+
+def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagamento_id_externo: str, agora: datetime | None = None, *,
+                          fiscal: FiscalProvider | None = None) -> EnriquecimentoCompra | None:
     """Chamado depois da assinatura do webhook validada. Ignora pagamentos que não são de enriquecimento. Idempotente: webhook repetido não credita
     de novo (compra já decidida + `compra:<id>` no razão + `pagamento_id_externo` único). O valor pago precisa bater com o pedido (±1 centavo).
     A validade é o fim do mês da CONFIRMAÇÃO: quem paga na virada do mês recebe o mês inteiro em vez de um crédito que já nasceria vencido."""
@@ -218,6 +239,13 @@ def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagame
     if not referencia.startswith(PREFIXO_REFERENCIA) or not referencia.removeprefix(PREFIXO_REFERENCIA).isdigit():
         return None
     compra = db.get(EnriquecimentoCompra, int(referencia.removeprefix(PREFIXO_REFERENCIA)))
+    if compra is not None and compra.status == "APROVADA":
+        if detalhe.status in _CONTESTACOES and compra.pagamento_id_externo == detalhe.id_externo:
+            _contestar(db, compra, detalhe.status, agora or config.agora_utc())
+        elif fiscal is not None and compra.pagamento_id_externo == detalhe.id_externo:
+            nota = vendas.emitir_nota(db, compra.id, fiscal)  # reaviso do provedor: tenta de novo a nota que ficou pendente/com falha
+            logger.info("ENRIQUECIMENTO_NOTA_REAVISO compra=%s nota=%s", compra.id, nota.status)
+        return compra
     if compra is None or compra.status != "PENDENTE":
         return compra
     if detalhe.status in _PENDENTES_DO_PROVEDOR:
@@ -230,6 +258,10 @@ def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagame
         logger.error("ENRIQUECIMENTO_COMPRA_PAGAMENTO_REPETIDO compra=%s outra=%s pagamento=%s", compra.id, outra.id, detalhe.id_externo)
         return compra
     compra.pagamento_id_externo, compra.confirmado_em = detalhe.id_externo, agora
+    compra.status_pagamento_externo = detalhe.status
+    compra.valor_pago_brl = precos.centavos(detalhe.valor)
+    compra.taxa_pagamento_brl = precos.centavos(detalhe.taxas) if detalhe.taxas is not None else None
+    compra.valor_liquido_brl = precos.centavos(detalhe.valor_liquido) if detalhe.valor_liquido is not None else None
     if detalhe.status != "approved":
         compra.status = "REJEITADA"
     elif abs(precos.dec(detalhe.valor) - precos.dec(compra.preco_total_brl)) > TOLERANCIA_VALOR:
@@ -244,4 +276,6 @@ def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagame
                                 {"status": compra.status, "pagamento": detalhe.id_externo, "creditos": compra.creditos,
                                  "expira_em": compra.expira_em.isoformat() if compra.expira_em else None})
     db.commit()
+    if compra.status == "APROVADA" and fiscal is not None:
+        vendas.emitir_nota(db, compra.id, fiscal)  # nunca levanta: falha fiscal vira nota FALHA, o crédito já pago permanece
     return compra

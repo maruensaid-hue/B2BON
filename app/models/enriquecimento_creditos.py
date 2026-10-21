@@ -110,8 +110,8 @@ class EnriquecimentoLoteCompra(Base):
     provedor: Mapped[str] = mapped_column(String, index=True)
     referencia: Mapped[str] = mapped_column(String)
     quantidade_creditos: Mapped[int] = mapped_column(Integer)
-    custo_total_brl: Mapped[float] = mapped_column(Numeric(18, 8))
-    custo_unitario_brl: Mapped[float] = mapped_column(Numeric(18, 8))  # custo_total / quantidade, 8 casas (precisão interna)
+    custo_total_brl: Mapped[float] = mapped_column(Numeric(24, 12))
+    custo_unitario_brl: Mapped[float] = mapped_column(Numeric(24, 12))  # custo_total / quantidade, 12 casas (precisão interna)
     comprado_em: Mapped[datetime] = mapped_column(DateTime)
     observacao: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_por: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -139,10 +139,10 @@ class EnriquecimentoPoliticaProvedor(Base):
     tamanho_pagina_busca: Mapped[int | None] = mapped_column(Integer, nullable=True)
     creditos_cliente_por_credito_provedor: Mapped[int | None] = mapped_column(Integer, nullable=True)
     markup_percentual: Mapped[float | None] = mapped_column(Numeric(12, 4), nullable=True)
-    metodo_custo: Mapped[str | None] = mapped_column(String, nullable=True)  # lote_referencia | media_ponderada
+    metodo_custo: Mapped[str | None] = mapped_column(String, nullable=True)  # contrato_mensal | lote_referencia | media_ponderada
     lote_compra_id: Mapped[int | None] = mapped_column(ForeignKey("enriquecimento_lote_compra.id"), nullable=True, index=True)
-    custo_unitario_brl: Mapped[float | None] = mapped_column(Numeric(18, 8), nullable=True)
-    preco_unitario_brl: Mapped[float | None] = mapped_column(Numeric(18, 8), nullable=True)
+    custo_unitario_brl: Mapped[float | None] = mapped_column(Numeric(24, 12), nullable=True)
+    preco_unitario_brl: Mapped[float | None] = mapped_column(Numeric(24, 12), nullable=True)
     casas_exibicao: Mapped[int] = mapped_column(Integer, default=2)
     fonte_tarifas: Mapped[str | None] = mapped_column(String, nullable=True)  # manual | provedor_usage
     motivo: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -222,6 +222,118 @@ class EnriquecimentoCompra(Base):
     criado_por: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     confirmado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Conciliação da venda: o que o provedor de pagamento informou (taxas só quando ele as informa; nada é estimado).
+    valor_pago_brl: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    taxa_pagamento_brl: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    valor_liquido_brl: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    status_pagamento_externo: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Contestação (reembolso/chargeback/cancelamento) avisada pelo provedor de pagamento: só SINALIZA, nunca mexe no razão sozinha.
+    contestacao_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    contestado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class EnriquecimentoCustoProvedor(Base):
+    """Custo CONTRATUAL do provedor (versionado e aprovado): custo mensal em USD, créditos do ciclo e câmbio de PLANEJAMENTO. O custo unitário é derivado
+    (`custo_mensal_usd ÷ creditos_mensais × cambio`) e guardado como foto. O câmbio de planejamento serve à precificação; o valor contábil de cada
+    pagamento ao provedor é registrado em `EnriquecimentoPagamentoProvedor` com a taxa efetivamente aplicada.
+
+    `contrato_validado_*`: a validação das regras do contrato/API (ciclo, saldo, consumo, deduplicação, retries, resultados parciais, medição efetiva) é um
+    ato humano com evidência, separado da aprovação dos números. Sem ela a pesquisa no provedor pago fica bloqueada."""
+
+    __tablename__ = "enriquecimento_custo_provedor"
+    __table_args__ = (UniqueConstraint("provedor", "versao", name="uq_enriq_custo_provedor_versao"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provedor: Mapped[str] = mapped_column(String, index=True)
+    versao: Mapped[int] = mapped_column(Integer, default=1)
+    custo_mensal_usd: Mapped[float] = mapped_column(Numeric(18, 4))
+    creditos_anuais: Mapped[int] = mapped_column(Integer)
+    creditos_mensais: Mapped[int] = mapped_column(Integer)  # referência mensal equivalente = anuais ÷ 12
+    cambio_planejamento_brl: Mapped[float] = mapped_column(Numeric(12, 6))
+    custo_unitario_usd: Mapped[float] = mapped_column(Numeric(24, 12))
+    custo_unitario_brl: Mapped[float] = mapped_column(Numeric(24, 12))
+    custo_mensal_brl: Mapped[float] = mapped_column(Numeric(18, 2))
+    motivo: Mapped[str | None] = mapped_column(String, nullable=True)
+    criado_por: Mapped[str | None] = mapped_column(String, nullable=True)
+    aprovado_por: Mapped[str | None] = mapped_column(String, nullable=True)
+    aprovado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    valido_de: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    valido_ate: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    contrato_validado_por: Mapped[str | None] = mapped_column(String, nullable=True)
+    contrato_validado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    contrato_checklist: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    contrato_evidencia: Mapped[str | None] = mapped_column(String, nullable=True)
+    saldo_transferivel: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # o contrato permite levar saldo ao mês seguinte? (fato a registrar)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class EnriquecimentoPagamentoProvedor(Base):
+    """Pagamento efetivamente feito ao provedor (conciliação financeira): valor em USD, taxa de câmbio EFETIVAMENTE aplicada e encargos efetivamente
+    cobrados, informados por quem pagou. Append-only. Nada aqui é estimado: sem registro, o custo efetivo continua marcado como de planejamento."""
+
+    __tablename__ = "enriquecimento_pagamento_provedor"
+    __table_args__ = (UniqueConstraint("provedor", "referencia", name="uq_enriq_pagamento_provedor_referencia"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provedor: Mapped[str] = mapped_column(String, index=True)
+    referencia: Mapped[str] = mapped_column(String)
+    periodo: Mapped[str] = mapped_column(String, index=True)  # AAAA-MM do ciclo que o pagamento cobre
+    valor_usd: Mapped[float] = mapped_column(Numeric(18, 4))
+    taxa_cambio_efetiva: Mapped[float] = mapped_column(Numeric(12, 6))
+    encargos_brl: Mapped[float] = mapped_column(Numeric(18, 2), default=0)
+    valor_brl_total: Mapped[float] = mapped_column(Numeric(18, 2))  # valor_usd × taxa + encargos, em centavos
+    pago_em: Mapped[datetime] = mapped_column(DateTime)
+    observacao: Mapped[str | None] = mapped_column(String, nullable=True)
+    registrado_por: Mapped[str | None] = mapped_column(String, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class EnriquecimentoNotaFiscal(Base):
+    """Nota fiscal de uma compra de pacote (uma por compra). A emissão vai por uma porta (`FiscalProvider`); sem provedor fiscal configurado nada é
+    emitido nem simulado e o checkout permanece bloqueado. Status: PENDENTE, EMITIDA, FALHA."""
+
+    __tablename__ = "enriquecimento_nota_fiscal"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    compra_id: Mapped[int] = mapped_column(ForeignKey("enriquecimento_compra.id"), unique=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenant.id"), index=True)
+    status: Mapped[str] = mapped_column(String, default="PENDENTE")
+    provedor_fiscal: Mapped[str | None] = mapped_column(String, nullable=True)
+    numero: Mapped[str | None] = mapped_column(String, nullable=True)
+    chave_acesso: Mapped[str | None] = mapped_column(String, nullable=True)
+    referencia_externa: Mapped[str | None] = mapped_column(String, nullable=True)
+    url_documento: Mapped[str | None] = mapped_column(String, nullable=True)
+    valor_brl: Mapped[float] = mapped_column(Numeric(14, 2))
+    tentativas: Mapped[int] = mapped_column(Integer, default=0)
+    erro: Mapped[str | None] = mapped_column(String, nullable=True)
+    emitida_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class EnriquecimentoEstornoCompra(Base):
+    """Pedido MANUAL de estorno/chargeback/cancelamento/ajuste de uma compra. Fluxo: SOLICITADO → APROVADO → EXECUTADO (ou REJEITADO), com justificativa e
+    evidência. Nada é automático: o aviso de reembolso do provedor de pagamento só sinaliza. A execução é um lançamento compensatório no razão
+    (`ESTORNO_COMPRA`), limitado ao saldo adicional ainda não consumido e idempotente. A devolução do dinheiro ao cliente acontece fora daqui."""
+
+    __tablename__ = "enriquecimento_estorno_compra"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    compra_id: Mapped[int] = mapped_column(ForeignKey("enriquecimento_compra.id"), index=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenant.id"), index=True)
+    tipo: Mapped[str] = mapped_column(String)  # ESTORNO | CHARGEBACK | CANCELAMENTO | AJUSTE
+    creditos_solicitados: Mapped[int] = mapped_column(Integer)
+    justificativa: Mapped[str] = mapped_column(String)
+    evidencia: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="SOLICITADO")
+    solicitado_por: Mapped[str] = mapped_column(String)
+    solicitado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    decidido_por: Mapped[str | None] = mapped_column(String, nullable=True)
+    decidido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    motivo_decisao: Mapped[str | None] = mapped_column(String, nullable=True)
+    creditos_revertidos: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    creditos_ja_consumidos: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    movimento_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class PesquisaDecisores(Base):
@@ -306,7 +418,7 @@ class EnriquecimentoMovimento(Base):
     """Razão imutável de créditos de enriquecimento. `delta_saldo` mexe no saldo; `delta_reservado` mexe na parte retida por pesquisa em curso.
     Disponível = Σ delta_saldo − Σ delta_reservado.
 
-    Tipos: CONCESSAO, RENOVACAO, COMPRA (pacote adicional), RESERVA, CONSUMO, LIBERACAO, ESTORNO, EXPIRACAO, AJUSTE, RECONCILIACAO, USO (uso de fonte sem custo, deltas zero)."""
+    Tipos: CONCESSAO, RENOVACAO, COMPRA (pacote adicional), ESTORNO_COMPRA (reversão manual de pacote), RESERVA, CONSUMO, LIBERACAO, ESTORNO, EXPIRACAO, AJUSTE, RECONCILIACAO, USO (uso de fonte sem custo, deltas zero)."""
 
     __tablename__ = "enriquecimento_movimento"
     __table_args__ = (UniqueConstraint("tenant_id", "idempotency_key", name="uq_enriq_movimento_idempotencia"),)
@@ -319,10 +431,10 @@ class EnriquecimentoMovimento(Base):
     disponivel_apos: Mapped[int] = mapped_column(Integer, default=0)
     provedor_delta_reservado: Mapped[int] = mapped_column(Integer, default=0)  # créditos do provedor retidos (+) ou liberados (-)
     provedor_delta_consumido: Mapped[int] = mapped_column(Integer, default=0)  # créditos do provedor consumidos (medidos) no lançamento
-    custo_unitario_brl: Mapped[float | None] = mapped_column(Numeric(18, 8), nullable=True)  # custo de aquisição por crédito do provedor
-    preco_unitario_brl: Mapped[float | None] = mapped_column(Numeric(18, 8), nullable=True)  # valor de venda por crédito do provedor
-    custo_total_brl: Mapped[float | None] = mapped_column(Numeric(18, 8), nullable=True)
-    valor_venda_brl: Mapped[float | None] = mapped_column(Numeric(18, 8), nullable=True)
+    custo_unitario_brl: Mapped[float | None] = mapped_column(Numeric(24, 12), nullable=True)  # custo de aquisição por crédito do provedor
+    preco_unitario_brl: Mapped[float | None] = mapped_column(Numeric(24, 12), nullable=True)  # valor de venda por crédito do provedor
+    custo_total_brl: Mapped[float | None] = mapped_column(Numeric(24, 12), nullable=True)
+    valor_venda_brl: Mapped[float | None] = mapped_column(Numeric(24, 12), nullable=True)
     politica_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     fonte: Mapped[str | None] = mapped_column(String, nullable=True, index=True)  # receita_qsa | brasilapi | lusha (uso por fonte)
     provedor: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
@@ -341,6 +453,6 @@ def _bloquear_alteracao(_mapper, _connection, alvo) -> None:
     raise RuntimeError(f"{type(alvo).__name__} é append-only: corrija com um novo lançamento, nunca alterando ou apagando o existente.")
 
 
-for _modelo in (EnriquecimentoMovimento, PesquisaDecisoresTransicao, EnriquecimentoLoteCompra):
+for _modelo in (EnriquecimentoMovimento, PesquisaDecisoresTransicao, EnriquecimentoLoteCompra, EnriquecimentoPagamentoProvedor):
     event.listen(_modelo, "before_update", _bloquear_alteracao)
     event.listen(_modelo, "before_delete", _bloquear_alteracao)

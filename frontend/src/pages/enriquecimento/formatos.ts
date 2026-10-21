@@ -8,3 +8,15 @@ export function dataExpiracao(valor: string): string {
 export function reais(valor: string | null): string {
   return valor === null ? "—" : `R$ ${Number(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+export function custoCredito(valor: string): string {
+  return `R$ ${Number(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 9 })}`;
+}
+
+export function percentual(valor: string): string {
+  return `${Number(valor).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+}
+
+export function dataHora(valor: string): string {
+  return new Date(valor.endsWith("Z") ? valor : `${valor}Z`).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}

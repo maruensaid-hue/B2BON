@@ -27,7 +27,7 @@ from app.services.errors import NaoEncontrado, PesquisaBloqueada, ValidacaoFalho
 
 PERIODICIDADES = ("mensal", "unica")
 MODOS = ("franquia_fixa", "poc_autorizada")
-METODOS_CUSTO = ("lote_referencia", "media_ponderada")
+METODOS_CUSTO = ("contrato_mensal", "lote_referencia", "media_ponderada")
 # O que falta para a configuração liberar a pesquisa, por modo. No modo `franquia_fixa` (planos pagos, Teste gratuito, condição de tenant Enterprise e
 # autorização de POC): franquia, periodicidade, teto de decisores por empresa e teto de créditos por pesquisa. O padrão de decisores e o limite de empresas
 # por pesquisa são opcionais (sem padrão o usuário escolhe; sem limite de empresas, só o teto de créditos limita o lote). No `poc_autorizada` (linha do
@@ -269,6 +269,9 @@ def definir_orcamento_global(db: Session, *, provedor: str, limite_creditos: int
     if not motivo or not motivo.strip():
         raise ValidacaoFalhou("Informe o motivo da alteração do orçamento global.")
     limite = _int_nao_negativo("limite_creditos", limite_creditos)
+    from app.contexts.enriquecimento import custo  # import tardio: custo importa este módulo
+
+    custo.exigir_limite_dentro_da_capacidade(db, provedor, limite)
     if isinstance(alerta_percentual, bool) or not isinstance(alerta_percentual, int) or not 1 <= alerta_percentual <= 100:
         raise ValidacaoFalhou("alerta_percentual deve ser um inteiro entre 1 e 100.")
     anteriores = (
@@ -299,6 +302,9 @@ def aprovar_orcamento_global(db: Session, orcamento_id: int, ator_id: str | None
         raise NaoEncontrado("Orçamento não encontrado.")
     if linha.limite_creditos is None:
         raise ValidacaoFalhou("Orçamento sem limite definido não pode ser aprovado.")
+    from app.contexts.enriquecimento import custo  # import tardio: custo importa este módulo
+
+    custo.exigir_limite_dentro_da_capacidade(db, linha.provedor, linha.limite_creditos)
     irmas = db.query(EnriquecimentoOrcamentoGlobal).filter(EnriquecimentoOrcamentoGlobal.provedor == linha.provedor).all()
     anterior = next((o for o in irmas if o.aprovado_em is not None and o.valido_ate is None), None)
     _aprovar_linha(db, linha, irmas, ator_id, tenant_auditoria, "enriquecimento_orcamento_global_aprovado", "enriquecimento_orcamento_global",
@@ -427,7 +433,8 @@ def definir_politica(db: Session, *, provedor: str, creditos_busca_por_resultado
                      tamanho_pagina_minimo: int | None = None, tamanho_pagina_maximo: int | None = None,
                      aprovar: bool = False) -> EnriquecimentoPoliticaProvedor:
     """Nova versão (PENDENTE de aprovação) da política do provedor. O custo unitário e o preço de venda são calculados AQUI e gravados como
-    foto: `lote_referencia` usa o custo do lote informado; `media_ponderada` usa a média de todos os lotes registrados até agora."""
+    foto: `contrato_mensal` usa o custo unitário (de planejamento) do contrato vigente; `lote_referencia` usa o custo do lote informado;
+    `media_ponderada` usa a média de todos os lotes registrados até agora (os dois últimos são métodos legados para aportes avulsos)."""
     if not motivo or not motivo.strip():
         raise ValidacaoFalhou("Informe o motivo.")
     for nome, valor in (("creditos_busca_por_resultado", creditos_busca_por_resultado), ("creditos_email", creditos_email),
@@ -450,7 +457,15 @@ def definir_politica(db: Session, *, provedor: str, creditos_busca_por_resultado
         raise ValidacaoFalhou("casas_exibicao deve estar entre 0 e 6.")
     if metodo_custo not in METODOS_CUSTO:
         raise ValidacaoFalhou(f"metodo_custo deve ser um de: {', '.join(METODOS_CUSTO)}.")
-    if metodo_custo == "lote_referencia":
+    if metodo_custo == "contrato_mensal":
+        from app.contexts.enriquecimento import custo  # import tardio: custo importa este módulo
+
+        contrato = custo.custo_vigente(db, provedor)
+        if contrato is None:
+            raise ValidacaoFalhou("Configure e aprove o custo contratual do provedor antes de publicar a política com o método contrato_mensal.")
+        custo_unitario = contrato.custo_unitario_brl
+        lote_compra_id = None
+    elif metodo_custo == "lote_referencia":
         lote = db.get(EnriquecimentoLoteCompra, lote_compra_id) if lote_compra_id else None
         if lote is None or lote.provedor != provedor:
             raise ValidacaoFalhou("Informe um lote de compra deste provedor como referência de custo.")
@@ -513,6 +528,8 @@ _MENSAGENS = {
     "politica_provedor_nao_configurada": "A política do provedor de contatos (tarifas e preço) ainda não foi configurada. Fale com o administrador.",
     "politica_provedor_pendente_aprovacao": "A política do provedor de contatos aguarda aprovação. Fale com o administrador.",
     "politica_provedor_incompleta": "A política do provedor de contatos está incompleta. Fale com o administrador.",
+    "custo_provedor_nao_configurado": "O custo contratual do provedor de contatos ainda não foi configurado e aprovado. Fale com o administrador.",
+    "contrato_provedor_nao_validado": "As regras do contrato/API do provedor de contatos ainda não foram validadas por um administrador. Fale com o administrador.",
     "orcamento_global_nao_configurado": "As chamadas ao provedor estão bloqueadas até o administrador configurar e aprovar o orçamento global.",
     "orcamento_global_pendente_aprovacao": "O orçamento global do provedor aguarda aprovação. Fale com o administrador.",
 }
@@ -520,6 +537,18 @@ _MENSAGENS = {
 
 def mensagem(codigo: str) -> str:
     return _MENSAGENS[codigo]
+
+
+def motivo_de_contrato_indisponivel(db: Session, provedor: str) -> str | None:
+    """Para provedor PAGO: o custo contratual precisa estar aprovado e o contrato/API validado por um humano. None = liberado."""
+    from app.contexts.enriquecimento import custo  # import tardio: custo importa este módulo
+
+    contrato = custo.custo_vigente(db, provedor)
+    if contrato is None:
+        return "custo_provedor_nao_configurado"
+    if not contrato.contrato_validado:
+        return "contrato_provedor_nao_validado"
+    return None
 
 
 def exigir_configuracao(db: Session, tenant_id: str, provider) -> tuple[ConfigResolvida, PoliticaResolvida]:
@@ -539,6 +568,10 @@ def exigir_configuracao(db: Session, tenant_id: str, provider) -> tuple[ConfigRe
     if not politica.utilizavel:
         texto = f"{mensagem('politica_provedor_incompleta')} (faltando: {', '.join(politica.faltando)})"
         raise PesquisaBloqueada(texto, "politica_provedor_incompleta", [{"codigo": "politica_provedor_incompleta", "mensagem": texto}])
+    if provider.pago:
+        motivo = motivo_de_contrato_indisponivel(db, provider.nome_provedor)
+        if motivo is not None:
+            raise PesquisaBloqueada(mensagem(motivo), motivo, [{"codigo": motivo, "mensagem": mensagem(motivo)}])
     return config, politica
 
 
@@ -559,6 +592,9 @@ def motivos_de_indisponibilidade(db: Session, tenant_id: str, provider) -> list[
     elif not politica.utilizavel:
         motivos.append("politica_provedor_incompleta")
     if provider.pago:
+        motivo_contrato = motivo_de_contrato_indisponivel(db, provider.nome_provedor)
+        if motivo_contrato is not None:
+            motivos.append(motivo_contrato)
         orcamento = orcamento_vigente(db, provider.nome_provedor)
         if not orcamento.configurado:
             motivos.append("orcamento_global_pendente_aprovacao" if orcamento.pendente_aprovacao else "orcamento_global_nao_configurado")

@@ -1,13 +1,13 @@
 """Aritmética financeira do enriquecimento: custo de aquisição, markup, preço de venda, margem e arredondamento.
 
-Tudo em `Decimal`. A precisão interna é de 8 casas (`PRECISAO_INTERNA`) e o único arredondamento aplicado ao guardar um valor por crédito é
+Tudo em `Decimal`. A precisão interna é de 12 casas (`PRECISAO_INTERNA`; o custo contratual é uma dízima: USD 600 ÷ 6.800 × câmbio) e o único arredondamento aplicado ao guardar um valor por crédito é
 esse, em meio-par (`ROUND_HALF_EVEN`), para o custo unitário de um lote. O consumo por pesquisa no razão guarda o valor com a precisão interna.
 O valor COBRADO de um pacote (créditos × preço unitário) é arredondado para centavos, meio para cima (`centavos`), a regra financeira do produto.
 Fora isso, só a **exibição** arredonda (padrão: 2 casas, meio para cima), conforme o valor de apresentação informado (≈ R$ 1,35)."""
 
 from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal
 
-PRECISAO_INTERNA = Decimal("0.00000001")
+PRECISAO_INTERNA = Decimal("0.000000000001")
 CEM = Decimal(100)
 
 
@@ -16,8 +16,11 @@ def dec(valor) -> Decimal:
     return valor if isinstance(valor, Decimal) else Decimal(str(valor))
 
 
-def _interna(valor: Decimal) -> Decimal:
+def interna(valor: Decimal) -> Decimal:
     return valor.quantize(PRECISAO_INTERNA, rounding=ROUND_HALF_EVEN)
+
+
+_interna = interna
 
 
 def custo_unitario(custo_total, quantidade: int) -> Decimal:

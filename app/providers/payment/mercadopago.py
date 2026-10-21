@@ -64,4 +64,25 @@ class MercadoPagoProvider(PaymentProvider):
             referencia_externa=dados.get("external_reference"),
             status=dados["status"],
             valor=float(dados["transaction_amount"]),
+            taxas=_taxas(dados),
+            valor_liquido=_liquido(dados),
         )
+
+
+def _taxas(dados: dict) -> float | None:
+    """Soma as tarifas que o próprio Mercado Pago informa (`fee_details`) e que ficam com o recebedor; sem a lista, não há valor (nunca se estima)."""
+    detalhes = dados.get("fee_details")
+    if not isinstance(detalhes, list) or not detalhes:
+        return None
+    try:
+        return round(sum(float(item.get("amount") or 0) for item in detalhes if item.get("fee_payer", "collector") == "collector"), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _liquido(dados: dict) -> float | None:
+    bruto = (dados.get("transaction_details") or {}).get("net_received_amount")
+    try:
+        return round(float(bruto), 2) if bruto is not None else None
+    except (TypeError, ValueError):
+        return None

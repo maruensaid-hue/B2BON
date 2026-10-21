@@ -12,8 +12,8 @@ from decimal import Decimal
 
 import pytest
 
-from app.api.deps import get_contact_enrichment_provider, get_payment_provider
-from app.contexts.enriquecimento import config, ledger, matriz, pacotes, poc, precos, renovacao
+from app.api.deps import get_contact_enrichment_provider, get_fiscal_provider, get_payment_provider
+from app.contexts.enriquecimento import config, custo, ledger, matriz, pacotes, poc, precos, renovacao
 from app.contexts.enriquecimento.matriz_dados import PACOTES, PLANOS
 from app.core.config import settings
 from app.main import app
@@ -21,6 +21,7 @@ from app.models.conta import Conta
 from app.models.creditos_ia import ExecucaoIa
 from app.models.enriquecimento_creditos import EnriquecimentoCompra, EnriquecimentoMovimento, PesquisaDecisores
 from app.models.plano import Plano
+from app.providers.fiscal.stub import StubFiscalProvider
 from app.providers.payment.stub import StubPaymentProvider
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.services.errors import NaoAutorizado, PesquisaBloqueada, ValidacaoFalhou
@@ -38,7 +39,6 @@ from tests.integration.test_pesquisa_decisores_governanca import (
     eu,
     invariantes,
     plano_id,
-    politica,
     preparar_tenant_b,
     previa,
     rodar,
@@ -46,6 +46,7 @@ from tests.integration.test_pesquisa_decisores_governanca import (
 )
 
 AGORA = datetime(2026, 10, 15, 15, 0)  # 12:00 em Brasília
+FISCAL = StubFiscalProvider()
 
 
 @pytest.fixture()
@@ -67,10 +68,19 @@ def catalogo(db):
                                ordem=ordem, ator_id="1", tenant_auditoria=A, motivo="catálogo de teste", aprovar=True)
 
 
+def dados_fiscais(db, tenant_id, cnpj="11222333000181"):
+    from app.models.tenant import Tenant
+
+    tenant = db.get(Tenant, tenant_id)
+    tenant.cnpj = cnpj
+    db.commit()
+
+
 def liberar_lusha(db, linha="Starter"):
     """Plano com a franquia da matriz + política e orçamento aprovados: a pesquisa (e a compra de créditos) fica liberada."""
     cenario(db, padrao=None)
     aplicar_linha(db, linha)
+    dados_fiscais(db, A)
 
 
 def pagar(db, pagamento: StubPaymentProvider, compra, valor=None, status="approved", agora=AGORA):
@@ -258,7 +268,7 @@ def test_compra_exige_aceite_da_expiracao_e_pacote_negociado_nao_tem_checkout(cl
     liberar_lusha(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
-    base = dict(payment_provider=pagamento, email_pagador="a@b.com", provider=prov, ator_id="1", agora=AGORA)
+    base = dict(payment_provider=pagamento, email_pagador="a@b.com", provider=prov, fiscal=FISCAL, ator_id="1", agora=AGORA)
     with pytest.raises(ValidacaoFalhou, match="expiram no fim do mês"):
         pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=False, **base)
     with pytest.raises(ValidacaoFalhou, match="negociado com o comercial"):
@@ -270,7 +280,7 @@ def test_compra_e_bloqueada_enquanto_a_pesquisa_lusha_esta_indisponivel(client, 
     catalogo(db_session)  # sem plano, política nem orçamento aprovados
     pagamento = StubPaymentProvider()
     erro = pytest.raises(PesquisaBloqueada, pacotes.iniciar_compra, db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento,
-                         email_pagador="a@b.com", provider=ProvedorPago(), ator_id="1", agora=AGORA)
+                         email_pagador="a@b.com", provider=ProvedorPago(), fiscal=FISCAL, ator_id="1", agora=AGORA)
     assert erro.value.bloqueios and pagamento._preferencias == {} and db_session.query(EnriquecimentoCompra).count() == 0
 
 
@@ -280,7 +290,7 @@ def test_compra_aprovada_pelo_webhook_vira_saldo_adicional_separado_que_nao_muda
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     cfg_antes, _ = config.config_vigente(db_session, A)
     ledger.preparar(db_session, A, cfg_antes, AGORA)
-    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_660", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov,
+    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_660", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, fiscal=FISCAL,
                                     ator_id="1", agora=AGORA)
     assert compra.status == "PENDENTE" and compra.url_checkout.startswith("https://checkout.stub.local/")
     assert (compra.creditos, Decimal(str(compra.preco_total_brl)), compra.expira_em_previsto) == (660, Decimal("844.80"), datetime(2026, 11, 1, 3, 0))
@@ -305,7 +315,7 @@ def test_webhook_repetido_valor_divergente_e_pagamento_pendente_nao_creditam_err
     liberar_lusha(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
-    base = dict(aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, ator_id="1", agora=AGORA)
+    base = dict(aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, fiscal=FISCAL, ator_id="1", agora=AGORA)
 
     c1 = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", **base)
     pagamento_id, _ = pagar(db_session, pagamento, c1)
@@ -343,7 +353,7 @@ def test_credito_comprado_vence_no_fim_do_mes_junto_com_a_franquia_sem_acumular(
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     cfg, _ = config.config_vigente(db_session, A)
     ledger.preparar(db_session, A, cfg, AGORA)
-    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov,
+    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, fiscal=FISCAL,
                                     ator_id="1", agora=AGORA)
     pagar(db_session, pagamento, compra)
     ledger.travar_carteira(db_session, A)
@@ -364,30 +374,35 @@ def test_compra_confirmada_na_virada_do_mes_vale_ate_o_fim_do_mes_da_confirmacao
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     ultimo_minuto = datetime(2026, 11, 1, 2, 58)
-    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov,
+    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, fiscal=FISCAL,
                                     ator_id="1", agora=ultimo_minuto)
     _, confirmada = pagar(db_session, pagamento, compra, agora=datetime(2026, 11, 1, 3, 30))
     assert confirmada.expira_em_previsto == datetime(2026, 11, 1, 3, 0) and confirmada.expira_em == datetime(2026, 12, 1, 3, 0)
     assert ledger.composicao(db_session, A, datetime(2026, 11, 1, 3, 30))["adicional_restante"] == 400
 
 
-def test_rentabilidade_dos_pacotes_com_o_custo_do_lote_e_depois_com_a_politica(client, db_session):
+def test_rentabilidade_usa_o_custo_contratual_e_ignora_a_compra_pontual_de_400_creditos(client, db_session):
     catalogo(db_session)
-    from tests.integration.test_pesquisa_decisores_governanca import lote
+    from tests.integration.test_pesquisa_decisores_governanca import custo_contratual, lote
 
-    lote(db_session)  # R$ 269,94 / 400 créditos = R$ 0,67485
-    antes = pacotes.rentabilidade(db_session, "lusha")
-    assert antes["origem_custo"].startswith("lote_") and antes["premissa_fator"] is True
-    margens = {p["codigo"]: p["margem_bruta_percentual"] for p in antes["pacotes"] if p["status"] == "ATIVO"}
-    assert margens == {"ENRIQ_400": "50.0", "ENRIQ_660": "47.3", "ENRIQ_1200": "44.2", "ENRIQ_3000": "37.5"}
-    assert [p for p in antes["pacotes"] if p["status"] == "CONTACT_SALES"][0].keys() == {"codigo", "creditos", "status"}  # sem preço, sem margem
-    p400 = next(p for p in antes["pacotes"] if p["codigo"] == "ENRIQ_400")
-    assert (p400["custo_total_brl"], p400["lucro_bruto_brl"], p400["markup_percentual"]) == ("269.94", "270.06", "100.0")
-    # novo aporte mais barato → política nova aprovada → a rentabilidade é recalculada sem tocar nos pacotes
-    politica(db_session, markup="100")
+    lote(db_session)  # a compra pontual R$ 269,94 / 400 existe como linha, mas NÃO pode participar de custo, preço, margem nem configuração
+    sem_contrato = pacotes.rentabilidade(db_session, "lusha")
+    assert sem_contrato["origem_custo"] is None and all("margem_bruta_percentual" not in p for p in sem_contrato["pacotes"])
+    custo_contratual(db_session, validar=False)  # aprovado; a validação do contrato não muda a conta
+    r = pacotes.rentabilidade(db_session, "lusha")
+    assert r["origem_custo"] == "contrato_v1" and r["custo_unitario_provedor_brl"] == "0.529411765" and Decimal(r["cambio_planejamento_brl"]) == Decimal("6")
+    ativos = {p["codigo"]: p for p in r["pacotes"] if p["status"] == "ATIVO"}
+    assert {c: p["markup_percentual"] for c, p in ativos.items()} == {"ENRIQ_400": "155.0", "ENRIQ_660": "141.8", "ENRIQ_1200": "128.6", "ENRIQ_3000": "104.0"}
+    assert {c: p["margem_bruta_percentual"] for c, p in ativos.items()} == {"ENRIQ_400": "60.8", "ENRIQ_660": "58.6", "ENRIQ_1200": "56.2", "ENRIQ_3000": "51.0"}
+    assert (ativos["ENRIQ_400"]["custo_total_brl"], ativos["ENRIQ_400"]["lucro_bruto_brl"]) == ("211.76", "328.24")  # 400 × R$ 0,529411765
+    assert [p for p in r["pacotes"] if p["status"] == "CONTACT_SALES"][0].keys() == {"codigo", "creditos", "status"}
+    # um câmbio de planejamento diferente (nova versão aprovada) recalcula sem tocar nos pacotes
+    nova = custo.definir_custo(db_session, provedor="lusha", custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="5.00", ator_id="1",
+                               tenant_auditoria=A, motivo="câmbio de planejamento 5,00", aprovar=True)
+    assert nova.versao == 2
     depois = pacotes.rentabilidade(db_session, "lusha")
-    assert depois["origem_custo"].startswith("politica_v") and depois["premissa_fator"] is False
-    assert depois["custo_unitario_provedor_brl"] == antes["custo_unitario_provedor_brl"]
+    assert depois["origem_custo"] == "contrato_v2" and depois["custo_unitario_provedor_brl"] == "0.441176471"
+    assert next(p for p in depois["pacotes"] if p["codigo"] == "ENRIQ_400")["margem_bruta_percentual"] == "67.3"
 
 
 # ============================================================ POC ====================================================================
@@ -561,6 +576,7 @@ def test_rotas_de_pacotes_e_compras_para_o_tenant(client, db_session, prov_api):
     catalogo(db_session)
     pagamento = StubPaymentProvider()
     app.dependency_overrides[get_payment_provider] = lambda: pagamento
+    app.dependency_overrides[get_fiscal_provider] = lambda: FISCAL
     vitrine = client.get(f"{URL}/pacotes").json()
     assert vitrine["compra_disponivel"] is True and len(vitrine["pacotes"]) == 5 and vitrine["expira_em_previsto"]
     sem_aceite = client.post(f"{URL}/compras", json={"pacote": "ENRIQ_400", "aceite_expiracao": False})
@@ -592,6 +608,7 @@ def test_webhook_assinado_do_mercado_pago_credita_a_compra_e_assinatura_invalida
     catalogo(db_session)
     pagamento = StubPaymentProvider()
     app.dependency_overrides[get_payment_provider] = lambda: pagamento
+    app.dependency_overrides[get_fiscal_provider] = lambda: FISCAL
     compra = client.post(f"{URL}/compras", json={"pacote": "ENRIQ_400", "aceite_expiracao": True}).json()
     pagamento_id = pagamento.aprovar(db_session.get(EnriquecimentoCompra, compra["id"]).preferencia_id_externo)
     segredo = "segredo-webhook-mp-teste"
@@ -615,8 +632,9 @@ def test_compras_e_saldo_de_um_tenant_nao_aparecem_para_outro(client, db_session
     liberar_lusha(db_session, "Starter")
     catalogo(db_session)
     preparar_tenant_b(db_session)  # B tem licença no mesmo plano (mesma franquia), mas carteira e compras próprias
+    dados_fiscais(db_session, B, "99888777000166")
     pagamento = StubPaymentProvider()
-    base = dict(aceite_expiracao=True, payment_provider=pagamento, email_pagador="x@x.com", provider=prov_api, agora=AGORA)
+    base = dict(aceite_expiracao=True, payment_provider=pagamento, email_pagador="x@x.com", provider=prov_api, fiscal=FISCAL, agora=AGORA)
     compra_a = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", ator_id="1", **base)
     pagar(db_session, pagamento, compra_a)
     assert pacotes.listar_compras(db_session, B) == [] and ledger.saldo(db_session, B) == 0
@@ -659,7 +677,7 @@ def test_rotas_administrativas_exigem_super_admin_e_registram_auditoria(client, 
     assert client.post(f"{ADMIN}/pacotes/{pacote.json()['id']}/aprovar").status_code == 200
     assert [p["codigo"] for p in client.get(f"{URL}/pacotes").json()["pacotes"]] == ["ENRIQ_400"]
     rent = client.get(f"{ADMIN}/pacotes/rentabilidade").json()
-    assert rent["pacotes"][0]["margem_bruta_percentual"] == "50.0"
+    assert rent["pacotes"][0]["margem_bruta_percentual"] == "60.8" and rent["origem_custo"] == "contrato_v1"
     teto = client.post(f"{ADMIN}/poc/teto", json={"empresas": 10}).json()
     assert teto["creditos_cliente_teto"] == 10
     eventos = {a["evento"] for a in client.get(f"{ADMIN}/auditoria").json()}

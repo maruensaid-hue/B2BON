@@ -8,16 +8,18 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_papel, get_contact_enrichment_provider, get_db
-from app.contexts.enriquecimento.contract import conciliacao, config, execucao, ledger, matriz, pacotes, painel, poc
+from app.api.deps import exigir_papel, get_contact_enrichment_provider, get_db, get_fiscal_provider
+from app.contexts.enriquecimento.contract import conciliacao, config, custo, estornos, execucao, ledger, matriz, pacotes, painel, poc, vendas
 from app.models.enriquecimento_creditos import (
     EnriquecimentoCompra,
+    EnriquecimentoCustoProvedor,
     EnriquecimentoConfigPlano,
     EnriquecimentoPacote,
     EnriquecimentoPoliticaProvedor,
 )
 from app.models.usuario import Usuario
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
+from app.providers.fiscal.base import FiscalProvider
 from app.services.errors import ValidacaoFalhou
 
 router = APIRouter(prefix="/admin/enriquecimento", tags=["admin"])
@@ -41,6 +43,53 @@ class ConfigRequest(BaseModel):
     limite_empresas_periodo: int | None = Field(default=None, ge=0)
     limite_contatos_periodo: int | None = Field(default=None, ge=0)
     motivo: str = Field(min_length=3, max_length=300)
+
+
+class CustoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provedor: str = Field(default="lusha", min_length=2, max_length=50)
+    custo_mensal_usd: str = Field(min_length=1, max_length=20, description="Decimal em texto, ex.: 600")
+    creditos_anuais: int = Field(gt=0)
+    cambio_planejamento_brl: str = Field(min_length=1, max_length=20, description="Câmbio de PLANEJAMENTO (precificação), decimal em texto, ex.: 6.00")
+    motivo: str = Field(min_length=3, max_length=300)
+
+
+class ValidarContratoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    checklist: dict[str, bool]
+    saldo_transferivel: bool = Field(description="O contrato permite levar saldo ao mês seguinte? (fato a registrar, sim ou não)")
+    evidencia: str = Field(min_length=10, max_length=500)
+
+
+class PagamentoProvedorRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provedor: str = Field(default="lusha", min_length=2, max_length=50)
+    referencia: str = Field(min_length=3, max_length=120)
+    periodo: str = Field(pattern=r"^\d{4}-\d{2}$")
+    valor_usd: str = Field(min_length=1, max_length=20)
+    taxa_cambio_efetiva: str = Field(min_length=1, max_length=20, description="Taxa EFETIVAMENTE aplicada no pagamento")
+    encargos_brl: str = Field(default="0", max_length=20, description="Encargos efetivamente cobrados, em reais (nunca estimados)")
+    pago_em: datetime
+    observacao: str | None = Field(default=None, max_length=300)
+
+
+class EstornoSolicitacaoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tipo: str
+    creditos: int = Field(gt=0)
+    justificativa: str = Field(min_length=10, max_length=500)
+    evidencia: str = Field(min_length=5, max_length=500)
+
+
+class EstornoDecisaoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    aprovar: bool
+    motivo: str = Field(min_length=5, max_length=300)
 
 
 class MatrizRequest(BaseModel):
@@ -246,7 +295,7 @@ def aprovar_pacote(pacote_id: int, admin: Usuario = Depends(exigir_papel("super_
 
 @router.get("/pacotes/rentabilidade", dependencies=[_super])
 def rentabilidade_dos_pacotes(provedor: str = "lusha", db: Session = Depends(get_db)) -> dict:
-    """Margem de cada pacote com o custo vigente (política aprovada ou, na falta dela, o lote de compra mais recente). Recalculada a cada leitura."""
+    """Margem de cada pacote com o custo CONTRATUAL vigente (USD 600 ÷ 6.800 créditos × câmbio de planejamento). Recalculada a cada leitura."""
     return pacotes.rentabilidade(db, provedor)
 
 
@@ -256,7 +305,98 @@ def listar_compras(tenant_id: str | None = None, limite: int = 100, db: Session 
     if tenant_id:
         consulta = consulta.filter(EnriquecimentoCompra.tenant_id == tenant_id)
     return [{**pacotes.serializar_compra(c), "tenant_id": c.tenant_id}
-            for c in consulta.order_by(EnriquecimentoCompra.id.desc()).limit(max(1, min(limite, 500))).all()]
+            for c in consulta.order_by(EnriquecimentoCompra.id.desc()).limit(max(1, min(limite, 500))).all()]  # com nota e conciliação: GET /vendas
+
+
+# --------------------------------------------------------------------------------------------------------------- custo contratual do provedor
+
+
+def _linha_custo(c: EnriquecimentoCustoProvedor) -> dict:
+    return {"id": c.id, "provedor": c.provedor, "versao": c.versao, "custo_mensal_usd": str(c.custo_mensal_usd), "creditos_anuais": c.creditos_anuais,
+            "creditos_mensais": c.creditos_mensais, "cambio_planejamento_brl": str(c.cambio_planejamento_brl),
+            "custo_unitario_usd": str(c.custo_unitario_usd), "custo_unitario_brl": str(c.custo_unitario_brl), "custo_mensal_brl": str(c.custo_mensal_brl),
+            "aprovada": c.aprovado_em is not None, "aprovado_por": c.aprovado_por, "vigente": c.aprovado_em is not None and c.valido_ate is None,
+            "contrato_validado": c.contrato_validado_em is not None, "contrato_validado_por": c.contrato_validado_por,
+            "contrato_validado_em": c.contrato_validado_em, "contrato_evidencia": c.contrato_evidencia, "saldo_transferivel": c.saldo_transferivel,
+            "motivo": c.motivo}
+
+
+@router.get("/custo", dependencies=[_super])
+def listar_custos(provedor: str = "lusha", db: Session = Depends(get_db)) -> dict:
+    """Versões do custo contratual do provedor, o checklist de validação do contrato e o custo efetivo por crédito consumido no mês."""
+    linhas = db.query(EnriquecimentoCustoProvedor).filter_by(provedor=provedor).order_by(EnriquecimentoCustoProvedor.versao.desc()).all()
+    return {"versoes": [_linha_custo(c) for c in linhas], "checklist_contrato": [{"item": i, "descricao": custo.ROTULO_CHECKLIST[i]} for i in custo.CHECKLIST_CONTRATO],
+            "efetivo_no_mes": custo.custo_efetivo(db, provedor, config.periodo_de(config.agora_utc()))}
+
+
+@router.put("/custo")
+def definir_custo(dados: CustoRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
+    """Nova versão PENDENTE do custo contratual (os derivados são calculados no servidor). Só vale depois de aprovada e o contrato, validado."""
+    nova = custo.definir_custo(db, provedor=dados.provedor, custo_mensal_usd=dados.custo_mensal_usd, creditos_anuais=dados.creditos_anuais,
+                               cambio_planejamento_brl=dados.cambio_planejamento_brl, ator_id=str(admin.id), tenant_auditoria=admin.tenant_id, motivo=dados.motivo)
+    return _linha_custo(nova)
+
+
+@router.post("/custo/{custo_id}/aprovar")
+def aprovar_custo(custo_id: int, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
+    return _linha_custo(custo.aprovar_custo(db, custo_id, str(admin.id), admin.tenant_id))
+
+
+@router.post("/custo/{custo_id}/validar-contrato")
+def validar_contrato(custo_id: int, dados: ValidarContratoRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
+    """Registra que um humano conferiu as regras do contrato/API do provedor (todos os itens do checklist + evidência). Sem isso a pesquisa paga fica bloqueada."""
+    return _linha_custo(custo.validar_contrato(db, custo_id, checklist=dados.checklist, saldo_transferivel=dados.saldo_transferivel, evidencia=dados.evidencia,
+                                               ator_id=str(admin.id), tenant_auditoria=admin.tenant_id))
+
+
+@router.get("/custo/efetivo", dependencies=[_super])
+def custo_efetivo(provedor: str = "lusha", periodo: str | None = None, db: Session = Depends(get_db)) -> dict:
+    return custo.custo_efetivo(db, provedor, periodo or config.periodo_de(config.agora_utc()))
+
+
+@router.post("/pagamentos-provedor", status_code=201)
+def registrar_pagamento_provedor(dados: PagamentoProvedorRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
+    """Pagamento efetivo ao provedor (USD, taxa de câmbio efetivamente aplicada e encargos efetivamente cobrados). Base do custo contábil do ciclo."""
+    p = custo.registrar_pagamento(db, provedor=dados.provedor, referencia=dados.referencia, periodo=dados.periodo, valor_usd=dados.valor_usd,
+                                  taxa_cambio_efetiva=dados.taxa_cambio_efetiva, encargos_brl=dados.encargos_brl, pago_em=dados.pago_em,
+                                  observacao=dados.observacao, ator_id=str(admin.id), tenant_auditoria=admin.tenant_id)
+    return {"id": p.id, "referencia": p.referencia, "periodo": p.periodo, "valor_usd": str(p.valor_usd), "taxa_cambio_efetiva": str(p.taxa_cambio_efetiva),
+            "encargos_brl": str(p.encargos_brl), "valor_brl_total": str(p.valor_brl_total)}
+
+
+# --------------------------------------------------------------------------------------------- vendas, nota fiscal, conciliação e estorno manual
+
+
+@router.get("/vendas", dependencies=[_super])
+def vendas_e_conciliacao(tenant_id: str | None = None, limite: int = 100, db: Session = Depends(get_db)) -> dict:
+    """Vendas de pacotes com a nota fiscal e a situação de conciliação de cada uma, mais o resumo (bruto, tarifas e líquido informados pelo provedor de pagamento)."""
+    return {"resumo": vendas.resumo_conciliacao(db), "vendas": vendas.listar_vendas(db, tenant_id, limite)}
+
+
+@router.post("/compras/{compra_id}/emitir-nota")
+def emitir_nota(compra_id: int, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db),
+                fiscal: FiscalProvider = Depends(get_fiscal_provider)) -> dict:
+    """Emite (ou reemite, se falhou) a nota da compra pelo emissor configurado. Sem emissor configurado a nota fica com falha, nunca simulada."""
+    nota = vendas.emitir_nota(db, compra_id, fiscal, ator_id=str(admin.id))
+    return {"compra_id": compra_id, "status": nota.status, "numero": nota.numero, "erro": nota.erro, "tentativas": nota.tentativas}
+
+
+@router.get("/estornos", dependencies=[_super])
+def listar_estornos(status: str | None = None, db: Session = Depends(get_db)) -> list[dict]:
+    return estornos.listar(db, status)
+
+
+@router.post("/compras/{compra_id}/estornos", status_code=201)
+def solicitar_estorno(compra_id: int, dados: EstornoSolicitacaoRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
+    """Pedido MANUAL de estorno/chargeback/cancelamento/ajuste de créditos de um pacote. Nada é revertido até a decisão de OUTRO administrador."""
+    return estornos.serializar(estornos.solicitar(db, compra_id, tipo=dados.tipo, creditos=dados.creditos, justificativa=dados.justificativa,
+                                                  evidencia=dados.evidencia, ator_id=str(admin.id), tenant_auditoria=admin.tenant_id))
+
+
+@router.post("/estornos/{estorno_id}/decidir")
+def decidir_estorno(estorno_id: int, dados: EstornoDecisaoRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
+    """Aprova (e executa, com lançamento compensatório no razão) ou rejeita. Quem solicitou não decide. Idempotente."""
+    return estornos.serializar(estornos.decidir(db, estorno_id, aprovar=dados.aprovar, motivo=dados.motivo, ator_id=str(admin.id), tenant_auditoria=admin.tenant_id))
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------- POC

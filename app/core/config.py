@@ -236,6 +236,7 @@ class Settings(BaseSettings):
     enriquecimento_previa_validade_min: int = 15  # a prévia (estimativa) deixa de valer depois disso e precisa ser refeita
     enriquecimento_item_enviado_stale_min: int = 10  # empresa "enviada" há mais que isso sem resposta vira "ambígua" (não é repetida)
     enriquecimento_max_selecao_requisicao: int = 500  # teto de ids aceitos numa requisição (proteção de entrada, não regra de plano)
+    enriquecimento_estorno_exige_segundo_aprovador: bool = True  # estorno/chargeback de pacote: quem solicita não aprova (quatro olhos)
 
     # Brave Search API — descobre o site oficial de uma conta sem domínio
     # cadastrado (`conta_service.enriquecer`). Vazio usa StubWebSearchProvider

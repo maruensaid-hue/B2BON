@@ -35,6 +35,9 @@ interface Compra {
   expira_em: string | null;
   url_checkout: string | null;
   criado_em: string;
+  situacao: string | null;
+  situacao_rotulo: string | null;
+  nota: { status: string; numero: string | null } | null;
 }
 
 const TOM_COMPRA: Record<string, "green" | "amber" | "red" | "muted"> = { APROVADA: "green", PENDENTE: "amber", REJEITADA: "red" };
@@ -82,7 +85,7 @@ export function PacotesAdicionais({ onComprado }: { onComprado?: () => void }) {
       </p>
       {bloqueada && (
         <div className="mb-2 rounded-md bg-surf2 p-2 text-[12px] text-amber">
-          <p className="font-semibold">A compra está indisponível agora, porque a pesquisa de decisores não pode ser usada:</p>
+          <p className="font-semibold">A compra está indisponível agora:</p>
           <ul className="list-disc pl-4">
             {(catalogo.motivos ?? []).map((m) => (
               <li key={m.codigo}>{m.mensagem}</li>
@@ -126,6 +129,7 @@ export function PacotesAdicionais({ onComprado }: { onComprado?: () => void }) {
               <th className="p-1.5 text-right">Valor</th>
               <th className="p-1.5 text-left">Situação</th>
               <th className="p-1.5 text-left">Vence em</th>
+              <th className="p-1.5 text-left">Nota fiscal</th>
             </tr>
           </thead>
           <tbody>
@@ -138,6 +142,7 @@ export function PacotesAdicionais({ onComprado }: { onComprado?: () => void }) {
                   <Badge tone={TOM_COMPRA[c.status] ?? "muted"}>{c.status === "PENDENTE" ? "aguardando pagamento" : c.status.toLowerCase()}</Badge>
                 </td>
                 <td className="p-1.5 text-muted">{dataExpiracao(c.expira_em ?? c.expira_em_previsto)}</td>
+                <td className="p-1.5 text-muted">{c.status !== "APROVADA" ? "—" : c.nota?.status === "EMITIDA" ? `NF ${c.nota.numero}` : "em emissão"}</td>
               </tr>
             ))}
           </tbody>

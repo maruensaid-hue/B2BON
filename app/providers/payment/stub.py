@@ -25,13 +25,14 @@ class StubPaymentProvider(PaymentProvider):
         }
         return PreferenciaCriada(id_externo=id_externo, url_checkout=f"https://checkout.stub.local/{id_externo}")
 
-    def aprovar(self, id_externo_preferencia: str) -> str:
-        """Só para teste — não faz parte da porta `PaymentProvider`."""
+    def aprovar(self, id_externo_preferencia: str, taxas: float | None = None, valor_liquido: float | None = None) -> str:
+        """Só para teste — não faz parte da porta `PaymentProvider`. `taxas`/`valor_liquido` simulam o que o provedor informa (opcional)."""
         self._contador += 1
         pagamento_id = f"stub-pay-{self._contador}"
         preferencia = self._preferencias[id_externo_preferencia]
         preferencia["status"] = "approved"
         preferencia["pagamento_id"] = pagamento_id
+        preferencia["taxas"], preferencia["valor_liquido"] = taxas, valor_liquido
         return pagamento_id
 
     def buscar_pagamento(self, pagamento_id_externo: str) -> DetalhePagamento:
@@ -42,5 +43,7 @@ class StubPaymentProvider(PaymentProvider):
                     referencia_externa=preferencia["referencia_externa"],
                     status=preferencia["status"],
                     valor=preferencia["valor"],
+                    taxas=preferencia.get("taxas"),
+                    valor_liquido=preferencia.get("valor_liquido"),
                 )
         raise NaoEncontrado(f"Pagamento {pagamento_id_externo} não encontrado no stub")

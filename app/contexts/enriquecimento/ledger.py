@@ -20,7 +20,7 @@ from app.models.enriquecimento_creditos import EnriquecimentoCarteira, Enriqueci
 from app.services import auditoria_service
 from app.services.errors import ValidacaoFalhou
 
-TIPOS = ("CONCESSAO", "RENOVACAO", "COMPRA", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO", "USO")
+TIPOS = ("CONCESSAO", "RENOVACAO", "COMPRA", "ESTORNO_COMPRA", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO", "USO")
 TIPOS_CONSUMO = ("CONSUMO", "ESTORNO")  # consumo líquido = consumos − estornos
 
 
@@ -166,13 +166,21 @@ def expirar_vencidos(db: Session, tenant_id: str, agora: datetime | None = None)
                          EnriquecimentoMovimento.tipo.in_(TIPOS_CONSUMO), EnriquecimentoMovimento.criado_em >= inicio_do_mes(validade - timedelta(microseconds=1)),
                          EnriquecimentoMovimento.criado_em < validade)
         pool = max(consumo, 0)
+        # Estorno manual de pacote (ESTORNO_COMPRA) reduz o que aquele vencimento ainda tinha de crédito comprado a expirar.
+        estornado = -_soma(db, EnriquecimentoMovimento.delta_saldo, EnriquecimentoMovimento.tenant_id == tenant_id,
+                           EnriquecimentoMovimento.tipo == "ESTORNO_COMPRA", EnriquecimentoMovimento.expira_em == validade)
         for concessao in grupo:
-            usado = min(concessao.delta_saldo, pool)
+            efetivo = concessao.delta_saldo
+            if concessao.origem == "compra" and estornado > 0:
+                tirar = min(estornado, efetivo)
+                efetivo -= tirar
+                estornado -= tirar
+            usado = min(efetivo, pool)
             pool -= usado
             chave = f"expiracao:{concessao.id}"
             if db.query(EnriquecimentoMovimento.id).filter_by(tenant_id=tenant_id, idempotency_key=chave).first() is not None:
                 continue
-            a_expirar = max(0, min(concessao.delta_saldo - usado, disponivel(db, tenant_id)))
+            a_expirar = max(0, min(efetivo - usado, disponivel(db, tenant_id)))
             if a_expirar > 0:
                 travar_carteira(db, tenant_id)
                 lancar(db, tenant_id, "EXPIRACAO", delta_saldo=-a_expirar, origem=concessao.origem, idempotency_key=chave, agora=agora,
@@ -192,7 +200,9 @@ def composicao(db: Session, tenant_id: str, agora: datetime | None = None) -> di
                      EnriquecimentoMovimento.tipo.in_(("CONCESSAO", "RENOVACAO", "COMPRA")), EnriquecimentoMovimento.expira_em > agora,
                      EnriquecimentoMovimento.criado_em >= inicio)
 
-    franquia, compras = _vigente("franquia"), _vigente("compra")
+    estornos = -_soma(db, EnriquecimentoMovimento.delta_saldo, EnriquecimentoMovimento.tenant_id == tenant_id,
+                      EnriquecimentoMovimento.tipo == "ESTORNO_COMPRA", EnriquecimentoMovimento.expira_em > agora)
+    franquia, compras = _vigente("franquia"), _vigente("compra") - estornos
     consumo = max(0, consumo_liquido(db, tenant_id, periodo_de(agora)))
     franquia_restante = max(0, franquia - consumo)
     adicional_restante = max(0, compras - max(0, consumo - franquia))

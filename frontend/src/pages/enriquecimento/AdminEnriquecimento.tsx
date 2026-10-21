@@ -6,7 +6,7 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { api, mensagemErro } from "@/lib/api";
 
-import { reais } from "./formatos";
+import { custoCredito, percentual, reais } from "./formatos";
 
 interface LinhaMatriz {
   matriz: string;
@@ -56,6 +56,7 @@ interface PacoteLinha {
 interface Rentabilidade {
   custo_unitario_provedor_brl: string | null;
   origem_custo: string | null;
+  cambio_planejamento_brl: string | null;
   creditos_cliente_por_credito_provedor: number;
   premissa_fator: boolean;
   pacotes: { codigo: string; creditos: number | null; status: string; preco_total_brl?: string; custo_total_brl?: string; lucro_bruto_brl?: string; markup_percentual?: string; margem_bruta_percentual?: string }[];
@@ -108,14 +109,6 @@ function numero(valor: string): number | null {
   return valor.trim() === "" ? null : Number(valor);
 }
 
-function percentual(valor: string): string {
-  return `${Number(valor).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
-}
-
-function custoCredito(valor: string): string {
-  return `R$ ${Number(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 5 })}`;
-}
-
 function dataCurta(valor: string): string {
   return new Date(valor.endsWith("Z") ? valor : `${valor}Z`).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
@@ -133,7 +126,6 @@ export function AdminEnriquecimento() {
   const [auditoria, setAuditoria] = useState<Auditoria[]>([]);
   const [aviso, setAviso] = useState<string | null>(null);
   const [form, setForm] = useState(CONFIG_VAZIA);
-  const [lote, setLote] = useState({ referencia: "", quantidade: "", custo: "", data: "" });
   const [poc, setPoc] = useState({ empresas: "", decisores: "1", tenant: "", motivo: "" });
   const [teto, setTeto] = useState<Teto | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -194,21 +186,6 @@ export function AdminEnriquecimento() {
       const nova = await api.put<ConfigLinha>("/admin/enriquecimento/config", corpo);
       setForm(CONFIG_VAZIA);
       return `Versão ${nova.versao} criada e PENDENTE de aprovação${nova.faltando.length ? ` (faltando: ${nova.faltando.join(", ")})` : ""}.`;
-    });
-  }
-
-  function registrarLote(evento: FormEvent) {
-    evento.preventDefault();
-    executar(async () => {
-      await api.post("/admin/enriquecimento/lotes-compra", {
-        provedor: "lusha",
-        referencia: lote.referencia,
-        quantidade_creditos: Number(lote.quantidade),
-        custo_total_brl: lote.custo.replace(",", "."),
-        comprado_em: new Date(lote.data || Date.now()).toISOString(),
-      });
-      setLote({ referencia: "", quantidade: "", custo: "", data: "" });
-      return "Lote registrado. Um novo aporte nunca sobrescreve os anteriores; o preço só muda com uma nova política aprovada.";
     });
   }
 
@@ -371,7 +348,7 @@ export function AdminEnriquecimento() {
       {rentabilidade && (
         <>
           <p className="mb-1 text-[11px] text-muted">
-            Custo por crédito do provedor: {rentabilidade.custo_unitario_provedor_brl ? custoCredito(rentabilidade.custo_unitario_provedor_brl) : "indefinido"} ({rentabilidade.origem_custo ?? "sem custo registrado"}).
+            Custo nominal por crédito do provedor: {rentabilidade.custo_unitario_provedor_brl ? custoCredito(rentabilidade.custo_unitario_provedor_brl) : "indefinido"} ({rentabilidade.origem_custo ?? "sem custo contratual aprovado"}, câmbio de planejamento {rentabilidade.cambio_planejamento_brl ? reais(rentabilidade.cambio_planejamento_brl) : "—"}).
             {rentabilidade.premissa_fator ? " Relação crédito do cliente × provedor ainda não aprovada: calculado 1:1." : ""} Recalculado a cada leitura.
           </p>
           <table className="mb-2 w-full border-collapse text-[12px]">
@@ -410,17 +387,6 @@ export function AdminEnriquecimento() {
         </div>
       ))}
       <p className="mb-3 text-[11px] text-muted">Pacotes novos ou reajustes são criados pela API administrativa (PUT /admin/enriquecimento/pacotes) e nascem pendentes; o pedido em andamento mantém o preço congelado.</p>
-
-      <h3 className="mb-1 text-[12px] font-semibold">Lote de compra de créditos do provedor</h3>
-      <form onSubmit={registrarLote} className="mb-3 flex flex-wrap items-end gap-2">
-        <Input label="Referência" value={lote.referencia} onChange={(ev) => setLote({ ...lote, referencia: ev.target.value })} placeholder="ex.: APORTE-LUSHA-2026-11" />
-        <Input label="Créditos" type="number" min={1} value={lote.quantidade} onChange={(ev) => setLote({ ...lote, quantidade: ev.target.value })} />
-        <Input label="Custo total (R$)" value={lote.custo} onChange={(ev) => setLote({ ...lote, custo: ev.target.value })} placeholder="269,94" />
-        <Input label="Data da compra" type="date" value={lote.data} onChange={(ev) => setLote({ ...lote, data: ev.target.value })} />
-        <Button size="sm" type="submit" disabled={ocupado || !lote.referencia || !lote.quantidade || !lote.custo}>
-          Registrar lote
-        </Button>
-      </form>
 
       <h3 className="mb-1 text-[12px] font-semibold">POC: teto calculado e autorização</h3>
       <form onSubmit={calcularTeto} className="mb-1 flex flex-wrap items-end gap-2">

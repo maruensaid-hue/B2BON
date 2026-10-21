@@ -39,12 +39,21 @@ def test_valor_de_cobranca_nao_e_arredondado_para_centavos():
 def test_nenhum_calculo_passa_por_float():
     assert precos.dec(0.1) == Decimal("0.1")  # via str: o float 0.1 binário não contamina
     soma = sum((precos.valor(1, "0.1") for _ in range(10)), Decimal(0))
-    assert soma == Decimal("1.00000000")  # em float seria 0.9999999999999999
+    assert soma == Decimal("1.000000000000")  # em float seria 0.9999999999999999
 
 
-def test_custo_de_lote_que_nao_divide_exato_usa_8_casas_meio_par():
-    assert precos.custo_unitario(Decimal("100"), 3) == Decimal("33.33333333")
-    assert precos.custo_unitario(Decimal("200"), 3) == Decimal("66.66666667")
+def test_custo_que_nao_divide_exato_usa_12_casas_meio_par():
+    assert precos.custo_unitario(Decimal("100"), 3) == Decimal("33.333333333333")
+    assert precos.custo_unitario(Decimal("200"), 3) == Decimal("66.666666666667")
+
+
+def test_custo_contratual_da_lusha_e_uma_dizima_guardada_em_12_casas():
+    """USD 600 ÷ 6.800 créditos = USD 0,088235294; × câmbio de planejamento R$ 6,00 = R$ 0,529411765 por crédito (9 casas na exibição)."""
+    usd = precos.interna(Decimal(600) / Decimal(6800))
+    brl = precos.interna(Decimal(600) * Decimal(6) / Decimal(6800))
+    assert usd == Decimal("0.088235294118") and brl == Decimal("0.529411764706")
+    assert precos.exibir(usd, 9) == Decimal("0.088235294") and precos.exibir(brl, 9) == Decimal("0.529411765")
+    assert precos.centavos(Decimal(600) * Decimal(6)) == Decimal("3600.00")
 
 
 def test_media_ponderada_dos_lotes():

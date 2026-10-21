@@ -13,6 +13,9 @@ class DetalhePagamento(BaseModel):
     referencia_externa: str | None
     status: str  # approved | pending | rejected | ... (vocabulário do provedor)
     valor: float
+    # Só quando o provedor informa (nunca estimados): tarifas cobradas do recebedor e valor líquido recebido.
+    taxas: float | None = None
+    valor_liquido: float | None = None
 
 
 class PaymentProvider(ABC):

@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.contexts.enriquecimento import conciliacao, ledger, precos
+from app.contexts.enriquecimento import conciliacao, custo, ledger, precos, vendas
 from app.contexts.enriquecimento.config import (
     CAMPOS_OBRIGATORIOS_POR_MODO,
     agora_utc,
@@ -205,11 +205,18 @@ def visao_administrativa(db: Session, provedor: str, agora: datetime | None = No
         "orcamentos": db.query(EnriquecimentoOrcamentoGlobal).filter(EnriquecimentoOrcamentoGlobal.provedor == provedor,
                                                                      EnriquecimentoOrcamentoGlobal.aprovado_em.is_(None)).count(),
     }
+    contrato = custo.custo_vigente(db, provedor)
     resultado_mes = ledger.resultado_financeiro(db, provedor, periodo_de(agora))
     resultado_total = ledger.resultado_financeiro(db, provedor)
     return {
         "orcamento_global": ledger.situacao_global(db, provedor, agora),
         "orcamento_pendente_aprovacao": orcamento_vigente(db, provedor).pendente_aprovacao,
+        # Custo contratual (USD, câmbio de planejamento, créditos do ciclo), validação do contrato e custo efetivo por crédito consumido.
+        "custo_contratual": custo.custo_efetivo(db, provedor, periodo_de(agora)),
+        "contrato_validado": bool(contrato and contrato.contrato_validado),
+        "orcamento_global_usd_equivalente": (str(precos.exibir(precos.dec(ledger.situacao_global(db, provedor, agora)["limite"]) * contrato.custo_unitario_usd, 2))
+                                             if contrato and ledger.situacao_global(db, provedor, agora)["limite"] is not None else None),
+        "conciliacao_vendas": vendas.resumo_conciliacao(db),
         "politica": _politica_admin(db, provedor),
         "resultado_financeiro": {
             "mes": {k: (str(v) if v is not None else None) for k, v in resultado_mes.items()},

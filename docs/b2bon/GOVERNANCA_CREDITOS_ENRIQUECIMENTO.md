@@ -1,6 +1,6 @@
 # Governança de créditos, pesquisas e enriquecimento (pesquisa de decisores via Lusha)
 
-Estado (2026-10-21, v3 — matriz de franquias e pacotes adicionais, §19): **implementado e testado; destino é o staging; nada promovido.** A pesquisa de decisores via Lusha **permanece bloqueada** em qualquer ambiente até existirem (1) configuração de enriquecimento **aprovada** para o plano do cliente, (2) política do provedor (tarifas e preço) **aprovada** e (3) orçamento global do provedor **aprovado**. Nenhum valor comercial foi inventado para destravar nada. Os fluxos de QSA da Receita e de Brasil API **não dependem** dessa configuração e continuam funcionando.
+Estado (2026-10-21, v4 — custo contratual, venda com nota fiscal e estorno manual, §20; v3 — matriz e pacotes, §19): **implementado e testado; destino é o staging; nada promovido.** A pesquisa de decisores via Lusha **permanece bloqueada** em qualquer ambiente até existirem (1) configuração de enriquecimento **aprovada** para o plano do cliente, (2) política do provedor (tarifas e preço) **aprovada** e (3) orçamento global do provedor **aprovado**. Nenhum valor comercial foi inventado para destravar nada. Os fluxos de QSA da Receita e de Brasil API **não dependem** dessa configuração e continuam funcionando.
 
 ## 0. Condições para sair do staging (status real)
 
@@ -17,6 +17,9 @@ Estado (2026-10-21, v3 — matriz de franquias e pacotes adicionais, §19): **im
 | 9 | Impacto operacional da configuração ausente claro | **Atendida** (§15) |
 | 10 | Commit e envio ao staging, sem master | Ver relatório de entrega |
 | 11 | (v3) Matriz, pacotes, POC e Enterprise implementados e testados; Teste gratuito com 3 decisores | **Atendida** (§19) |
+| 12 | (v4) Custo contratual USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00; compra pontual de R$ 269,94 desconsiderada | **Atendida** (§20.1) |
+| 13 | (v4) Validação das regras do contrato/API do provedor | **NÃO atendida, de propósito.** É ato humano com evidência; a plataforma não lê o contrato. Lusha segue bloqueada (§20.2) |
+| 14 | (v4) Emissão de nota fiscal e conciliação da venda | **Fluxo implementado e testado; emissor real AUSENTE.** Não existe provedor fiscal integrado: checkout de pacotes bloqueado (§20.5) |
 
 ## 1. Auditoria (antes de qualquer alteração)
 
@@ -79,13 +82,12 @@ Fontes: [FAQ da API](https://docs.lusha.com/faq/api), [como os créditos são co
 * Ambas as respostas trazem `billing.creditsCharged` (consumo real). 402 = créditos insuficientes (nada processado); 429 = limite de taxa.
 * O sistema **não presume** créditos por contato: reserva um **teto** calculado com as tarifas aprovadas (`tamanho_pagina × c_busca + decisores × (c_email + c_telefone)` por empresa) e **debita o `creditsCharged` medido**. Resposta sem medição = desfecho ambíguo (não se cobra estimativa). `waterfallEnabled` é enviado `false`.
 
-## 7. Custo de aquisição, markup, preço e arredondamento
+## 7. Custo, markup, preço e arredondamento
 
-Aporte de referência (informado pelo PO): **R$ 269,94 por 400 créditos Lusha** → custo unitário **R$ 0,67485**; markup aprovado **100%** → preço **R$ 1,3497** por crédito Lusha (≈ **R$ 1,35** na apresentação); margem bruta sobre a venda **50%**.
+**Base econômica vigente (v4, informada pelo PO; ver §20.1):** USD 600/mês, 81.600 créditos/ano (6.800/mês), câmbio de planejamento R$ 6,00 ⇒ **R$ 0,529411765 por crédito** (USD 0,088235294) e R$ 3.600,00/mês. **A compra pontual de 400 créditos por R$ 269,94 foi desconsiderada** (a migração `b5d7f9a1c3e5` remove o lote semeado, se nenhuma política o referenciar) e não participa de custo, preço, margem nem configuração.
 
-* Registrado como **lote de compra** (`enriquecimento_lote_compra`: provedor, referência, quantidade, custo total, custo unitário, data, observação), inserido pela migração como histórico. **Não libera nada.** Novos aportes = novos lotes; nada é sobrescrito.
-* O preço vigente vem da **política aprovada** (foto do custo e do preço na publicação). Um novo lote **não** muda o preço sozinho: é preciso publicar e aprovar uma nova política. `lote_referencia` usa o custo do lote escolhido; `media_ponderada` usa Σ custo ÷ Σ quantidade de todos os lotes na publicação. **A regra de qual método usar é decisão do PO** (a política exige escolher; não há padrão).
-* **Precisão:** `Decimal` em todo cálculo; 8 casas internas (meio-par) só para guardar o custo unitário de um lote. O valor de cobrança (créditos × preço unitário) fica **sem arredondar para centavos** no razão. Só a **exibição** arredonda (2 casas, meio para cima). **v3:** o valor **cobrado** de um pacote é `créditos × preço unitário` em **centavos, meio para cima** (`precos.centavos`, a mesma regra de comissões e tributos do produto), conferido contra o total informado; o consumo por pesquisa no razão continua na precisão interna.
+* A política do provedor (`metodo_custo = contrato_mensal`, o método recomendado) tira o custo unitário do custo contratual vigente e guarda uma **foto** dele; um novo câmbio ou contrato só muda o preço com nova política aprovada. `lote_referencia` e `media_ponderada` continuam existindo na API como métodos legados para aportes avulsos, mas nenhum dado de lote alimenta a rentabilidade.
+* **Precisão:** `Decimal` em todo cálculo; **12 casas** internas (meio-par) para custo e preço por crédito (o custo contratual é uma dízima); exibição em 9 casas para o custo unitário e 2 para valores em reais (meio para cima). O valor **cobrado** de um pacote é `créditos × preço unitário` em **centavos, meio para cima** (`precos.centavos`, regra do produto), conferido contra o total informado; o consumo por pesquisa no razão fica na precisão interna.
 * No razão de cada consumo ficam separados: créditos do provedor medidos, créditos do cliente debitados, custo unitário e total, preço unitário e valor de venda. A margem é derivada. Custo, markup e margem **só aparecem para super_admin**.
 
 ## 8. Decisores por empresa
@@ -134,7 +136,7 @@ Execução em segundo plano após a confirmação (o front acompanha por GET): e
 
 ## 14. Migração e recuperação
 
-`alembic/versions/a4c6e8b0d2f4` (head anterior `f3d5a7c9e1b4`): **só cria 12 tabelas novas** (as 10 da governança + `enriquecimento_pacote` e `enriquecimento_compra`); nenhuma linha existente é tocada; nenhum saldo é inventado. Linhas inseridas, todas informadas pelo PO: o lote de compra (histórico de custo), os 5 pacotes adicionais (aprovados) e a franquia dos planos da matriz que já existem por nome (hoje "Teste"). Testado: upgrade sobre dados anteriores (legado e carteira de IA intactos), downgrade (remove só as 12 tabelas) e novo upgrade. O CI do staging roda `alembic upgrade head` em PostgreSQL limpo e a concorrência da reserva em PostgreSQL real.
+`alembic/versions/a4c6e8b0d2f4` (head anterior `f3d5a7c9e1b4`) e, depois dela, `b5d7f9a1c3e5` (v4, §20.7): **só cria 12 tabelas novas** (as 10 da governança + `enriquecimento_pacote` e `enriquecimento_compra`); nenhuma linha existente é tocada; nenhum saldo é inventado. Linhas inseridas, todas informadas pelo PO: o lote de compra (histórico de custo), os 5 pacotes adicionais (aprovados) e a franquia dos planos da matriz que já existem por nome (hoje "Teste"). Testado: upgrade sobre dados anteriores (legado e carteira de IA intactos), downgrade (remove só as 12 tabelas) e novo upgrade. O CI do staging roda `alembic upgrade head` em PostgreSQL limpo e a concorrência da reserva em PostgreSQL real.
 
 Recuperação: downgrade apaga o razão — **copie `enriquecimento_movimento` e `enriquecimento_lote_compra` antes** em ambiente com uso. Em incidente de dados: o razão é reconstruível a partir de `pesquisa_decisores_transicao` + backup do Neon (PITR). Pesquisa travada: estados e ids do provedor ficam por empresa; ambígua ⇒ reconciliar; `enviada` com pendentes ⇒ "retomar". Lusha bloqueada durante migrações enquanto as configurações obrigatórias não forem aprovadas.
 
@@ -147,11 +149,11 @@ Logger `b2bon.enriquecimento`: `ENRIQUECIMENTO_PREVIA`, `_RESERVA`, `_EXECUCAO`,
 ## 16. Pendências comerciais e de aprovação (nada foi presumido)
 
 1. **Configuração por plano** (franquia, periodicidade, decisores padrão/máximo, empresas por pesquisa, teto no período) para POC, Free Trial, Starter, Professional, Business, Corporate e Enterprise — **bloqueia a Lusha para cada plano até ser criada e aprovada**.
-2. **Política do provedor**: conferir as tarifas (busca por resultado — taxa não publicada nas páginas dos endpoints —, e-mail, telefone), escolher `revelar_emails`/`revelar_telefones`, `tamanho_pagina_busca` e `creditos_cliente_por_credito_provedor` (a proposta natural é 1, mas não foi aprovada), e aprovar o markup de 100% (informado) e o método de custo.
-3. **Orçamento global mensal** da Lusha (em créditos do provedor) e percentual de alerta.
-4. **Regra de arredondamento da cobrança** ao cliente (hoje: sem arredondar; só a exibição arredonda).
-5. **Regra de ponderação de lotes** quando houver mais de um (hoje a política escolhe `lote_referencia` ou `media_ponderada` explicitamente).
-6. ~~Compra de créditos pelo cliente~~ — **implementada na v3** (§19.3). Segue pendente: estorno/chargeback de compra já paga e consumida (hoje é ajuste/estorno administrativo manual), nota fiscal e conciliação financeira da venda, e compra automática recorrente.
+2. **Validação do contrato/API da Lusha (v4, §20.2)**, **política do provedor** e demais itens abaixo. Política: conferir as tarifas (busca por resultado — taxa não publicada nas páginas dos endpoints —, e-mail, telefone), escolher `revelar_emails`/`revelar_telefones`, `tamanho_pagina_busca` e `creditos_cliente_por_credito_provedor` (a proposta natural é 1, mas não foi aprovada), e aprovar o markup de 100% (informado) e o método de custo.
+3. ~~Orçamento global mensal~~ — semeado em 6.800 créditos/mês (capacidade equivalente a USD 600) pelo PO e aprovado; o percentual de alerta é 80% (alterável).
+4. ~~Regra de arredondamento da cobrança~~ — centavos, meio para cima (v3).
+5. ~~Ponderação de lotes~~ — substituída pelo custo contratual mensal (v4); lotes são legado.
+6. ~~Compra de créditos pelo cliente~~ — **implementada na v3** (§19.3); ~~estorno/chargeback~~ (manual, v4 §20.6) e ~~nota fiscal/conciliação~~ (fluxo v4 §20.5) implementados. Segue pendente: **um emissor fiscal real** (escolha da empresa, credenciais e adaptador) e a compra automática recorrente.
 7. Faturamento consolidado (tenant filho sem licença própria): hoje ficaria bloqueado.
 8. Cron de conciliação com o provedor (hoje acionada pelo administrador).
 
@@ -210,7 +212,7 @@ Limitam **somente** a pesquisa de decisores via Lusha. **Não** limitam: tamanho
 
 ### 19.4 Custo, markup e margem (recalculados)
 
-`pacotes.rentabilidade` (`GET /admin/enriquecimento/pacotes/rentabilidade`, só super_admin) calcula, com o custo **vigente** (política aprovada; sem política, o lote de compra mais recente — marcado como referência), custo, lucro bruto, markup e margem por pacote, **a cada leitura**: novo aporte = novo lote e/ou nova política mudam o resultado sem tocar nos pacotes. Com R$ 269,94/400 (R$ 0,67485) e relação 1:1: **50,0% / 47,3% / 44,2% / 37,5%** (testado). A relação crédito do cliente × crédito do provedor ainda não foi aprovada; sem ela assume-se 1:1 e a tela avisa (`premissa_fator`). Custo de aquisição, uso medido, créditos do cliente, preço, markup, margem, estornos e reconciliações continuam em campos separados (§2).
+`pacotes.rentabilidade` (`GET /admin/enriquecimento/pacotes/rentabilidade`, só super_admin) calcula, com o custo **contratual** vigente (§20.1; sem ele, o da política aprovada), custo, lucro bruto, markup e margem por pacote, **a cada leitura**. Com R$ 0,529411765 por crédito e relação 1:1: markups de **155% / 142% / 129% / 104%** e margens de **60,8% / 58,6% / 56,2% / 51,0%** sobre o custo nominal de planejamento (testado). (A versão v3 usava o lote pontual de R$ 269,94, desconsiderado.) A relação crédito do cliente × crédito do provedor ainda não foi aprovada; sem ela assume-se 1:1 e a tela avisa (`premissa_fator`). Custo de aquisição, uso medido, créditos do cliente, preço, markup, margem, estornos e reconciliações continuam em campos separados (§2).
 
 ### 19.5 POC e Enterprise
 
@@ -223,7 +225,7 @@ Seletor (1 até o máximo do plano). Sem padrão no plano, a escolha é **obriga
 
 ### 19.7 Bloqueio da Lusha (inalterado)
 
-Em qualquer ambiente, sem **configuração aprovada do plano**, **política do provedor aprovada** e **orçamento global aprovado e com capacidade**, o backend bloqueia antes de reservar e antes de chamar. Aplicar a matriz **não** libera a Lusha: faltam política e orçamento (§16). A compra de pacotes também fica bloqueada nesse estado. QSA e site não dependem disso.
+Em qualquer ambiente, sem **configuração aprovada do plano**, **política do provedor aprovada**, **custo contratual aprovado com o contrato validado** e **orçamento global aprovado e com capacidade**, o backend bloqueia antes de reservar e antes de chamar (v4: §20.2). Aplicar a matriz **não** libera a Lusha. A compra de pacotes também fica bloqueada nesse estado e, na v4, enquanto não houver emissão fiscal funcionando. QSA e site não dependem disso.
 
 ### 19.8 Telas, rotas e auditoria
 
@@ -235,3 +237,39 @@ Em qualquer ambiente, sem **configuração aprovada do plano**, **política do p
 ### 19.9 Testes da v3
 
 `tests/integration/test_enriquecimento_matriz_pacotes.py` (48 testes): limites por plano (inclui Teste = 3 e a substituição de configuração antiga com 5), concessão mensal idempotente na virada do mês de Brasília, expiração sem acúmulo e consumo parcial, rotina mensal, catálogo e preços exatos, validação de pacote, versão pendente × aprovada, compra (aceite, bloqueio sem Lusha, webhook, repetição, valor divergente, pendente, rejeitada, outras categorias, virada do mês), saldo separado que não muda limites, rentabilidade 50,0/47,3/44,2/37,5, POC (sem autorização, teto, autorização pendente, 1 decisor), Enterprise (limites por período), ICP de 2.000 empresas, site fora da franquia Lusha e com limite próprio, rota pública, painel, webhook assinado do Mercado Pago, permissões de admin e isolamento de tenant. Atualizados `test_migracao_enriquecimento.py` (12 tabelas e dados do PO), `test_pesquisa_decisores_governanca.py` (limite por pesquisa obrigatório) e `test_rotas_publicas_aprovadas.py`.
+
+## 20. Custo contratual, validação do contrato, venda com nota fiscal e estorno manual (v4, 2026-10-21)
+
+### 20.1 Base econômica e custo efetivo
+
+Informada pelo PO (nada estimado): **USD 600/mês**; **81.600 créditos/ano** ⇒ referência mensal de **6.800** (anuais ÷ 12, exigido inteiro); custo unitário nominal **USD 0,088235294**; **câmbio de planejamento R$ 6,00** ⇒ **R$ 0,529411765** por crédito e **R$ 3.600,00/mês**. Tabela `enriquecimento_custo_provedor` (versionada e aprovada; `custo.py`). O câmbio de planejamento serve à **precificação**; o custo **contábil** é o pagamento efetivo: `POST /admin/enriquecimento/pagamentos-provedor` registra USD pago, **taxa de câmbio efetivamente aplicada** e **encargos efetivamente cobrados** (informados por quem pagou; sem encargo informado, nenhum é presumido; append-only). Nenhum imposto, encargo ou câmbio real é inventado.
+
+Como o custo mensal é fixo, `custo.custo_efetivo` (e o painel do super admin) informa por ciclo: créditos consumidos (medidos), **ociosos** (que expiram — o contrato pode ou não permitir transferir saldo; isso é um fato a registrar na validação, não uma premissa), % de ociosidade e **custo mensal efetivo ÷ créditos realmente consumidos** (pagamentos efetivos quando existirem; senão o de planejamento, com aviso).
+
+### 20.2 Validação do contrato (ato humano) e bloqueio
+
+A aprovação dos números não valida o contrato. `POST /admin/enriquecimento/custo/{id}/validar-contrato` exige **todos** os itens do checklist (ciclo, consumo por ação, deduplicação, regra em novas tentativas, resultados parciais, medição efetiva), o fato `saldo_transferivel` (sim/não) e a **evidência** (documento/cláusula/comunicação). A plataforma **não lê o contrato**: sem essa validação a pesquisa em provedor pago responde `contrato_provedor_nao_validado`; sem custo aprovado, `custo_provedor_nao_configurado`. Uma **nova versão** do custo precisa ser validada de novo. O **orçamento global** nunca passa da capacidade do contrato (`6.800` créditos/mês ≈ USD 600): definir acima ou aprovar um contrato menor que o orçamento vigente é recusado.
+
+Estado entregue: custo e orçamento **semeados e aprovados** com a base do PO; contrato **NÃO validado**; política do provedor (tarifas de busca/e-mail/telefone, fator, markup) **ainda sem aprovação**. Logo a **Lusha continua bloqueada**.
+
+### 20.3 Preços dos pacotes sobre o novo custo
+
+Os preços definidos pela CyberFort (R$ 1,35 / 1,28 / 1,21 / 1,08 por crédito; totais R$ 540,00 / 844,80 / 1.452,00 / 3.240,00; acima de 3.000 sob negociação) **não mudam**. Sobre o custo nominal de planejamento (R$ 0,529411765) os markups são ≈ **155% / 142% / 129% / 104%** (antes de outros custos) — conferidos nos testes.
+
+### 20.4 Reserva global
+
+O orçamento global continua contando **consumo medido + reservas pendentes** sob trava (orçamento → carteira), impedindo estouro por concorrência (teste de concorrência em PostgreSQL no CI).
+
+### 20.5 Venda, nota fiscal e conciliação
+
+Auditoria: **não existe emissor fiscal integrado** (OI-025). Foi criada a porta `FiscalProvider` (`app/providers/fiscal`): contrato `DadosNota → NotaEmitida`, idempotente por venda, **sem cálculo de tributos** (o emissor aplica as regras da empresa). O único adaptador de produção é `FiscalDesativado` (`disponivel=False`): nada é emitido e **nada é simulado**; o **checkout de pacotes permanece bloqueado** (`fiscal_nao_configurado`) e também por `dados_fiscais_incompletos` (cliente sem CNPJ/razão social). Para habilitar: escolher o emissor, obter credenciais e implementar o adaptador em `app/providers/fiscal/`, devolvendo-o em `get_fiscal_provider`.
+
+Com emissor, a nota é emitida após o pagamento aprovado (tabela `enriquecimento_nota_fiscal`, uma por compra). **Falha fiscal não desfaz o crédito já pago**: a nota fica `FALHA` com o motivo e pode ser reemitida (rota do super admin ou novo aviso do provedor de pagamento); reemitir uma nota já emitida não chama o emissor de novo. A venda registra pedido, pacote, pagamento (valor pago, **tarifas e líquido só quando o provedor de pagamento os informa — nunca estimados**), créditos concedidos, nota e contestação. A **situação de conciliação é derivada** desses fatos: aguardando pagamento · pagamento rejeitado · pago sem nota · nota com falha · divergente · contestada · estornada · **conciliada**. Painéis: tenant (histórico com situação e nota) e super admin (`GET /admin/enriquecimento/vendas`: resumo bruto/tarifas/líquido e linhas).
+
+### 20.6 Contestação e estorno manual
+
+Aviso de **reembolso, chargeback ou cancelamento** do provedor de pagamento sobre compra já aprovada **só sinaliza** (`contestacao_status`, auditoria, log de erro); **não** altera o razão. O estorno de créditos é um **fluxo manual**: o super admin **solicita** (tipo, créditos, justificativa ≥ 10 caracteres e evidência) e **outro** super admin decide (quatro olhos; `ENRIQUECIMENTO_ESTORNO_EXIGE_SEGUNDO_APROVADOR=false` desliga de propósito para equipes de um só administrador). Aprovado, executa um **lançamento compensatório** `ESTORNO_COMPRA` no razão (o crédito original nunca é apagado), limitado ao saldo adicional **ainda não consumido nem vencido**; o que já foi gasto não volta e fica em `creditos_ja_consumidos`. Idempotente (`estorno-compra:<id>`): repetir a decisão, retry ou callback repetido não debitam de novo; o vencimento do mês seguinte considera o estorno (sem expiração em dobro). Devolver o dinheiro ao cliente acontece fora da plataforma.
+
+### 20.7 Migração, testes e recuperação
+
+`b5d7f9a1c3e5` (sobre `a4c6e8b0d2f4`, que já pode estar aplicada no staging; por isso a correção é uma migração nova, não edição da antiga): amplia custos/preços para 12 casas; cria `enriquecimento_custo_provedor`, `enriquecimento_pagamento_provedor`, `enriquecimento_nota_fiscal`, `enriquecimento_estorno_compra`; acrescenta colunas nulas em `enriquecimento_compra`; semeia o custo (aprovado, contrato não validado) e o orçamento de 6.800 (só se não houver orçamento do provedor); remove o lote desconsiderado se nenhuma política o referenciar. Downgrade remove as tabelas e colunas e volta a precisão, **sem recriar o lote**; notas, pagamentos ao provedor e estornos são histórico financeiro — copie antes de reverter em ambiente com uso. Testes: `tests/integration/test_enriquecimento_custo_vendas.py` (39), mais ajustes em `test_enriquecimento_matriz_pacotes.py`, `test_pesquisa_decisores_governanca.py`, `test_migracao_enriquecimento.py` (inclui lote referenciado preservado) e `test_enriquecimento_concorrencia_pg.py`. Provedores de pagamento, fiscal e Lusha sempre simulados.
