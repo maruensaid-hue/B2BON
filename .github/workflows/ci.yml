@@ -73,6 +73,11 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
           B2BON_TESTE_PG_MIGRACAO_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
+          # Com banco PostgreSQL o app se considera em produção (app/main.py) e recusa subir com segredos padrão: valores exclusivos e
+          # descartáveis de CI, sem acesso a nenhum ambiente real. O Redis não é consultado por estes testes.
+          SECRET_KEY: ci-descartavel-secret-key-0123456789abcdef
+          JWT_SECRET_KEY: ci-descartavel-jwt-secret-key-0123456789abcdef-xyz
+          REDIS_URL: redis://localhost:6379/0
           CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: pytest -q tests/test_migracoes_v5.py
       # Governança de créditos de enriquecimento: reserva concorrente de verdade (SELECT ... FOR UPDATE), que o SQLite da suíte não exerce.
@@ -80,6 +85,11 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
           B2BON_TESTE_PG_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
+          # Com banco PostgreSQL o app se considera em produção (app/main.py) e recusa subir com segredos padrão: valores exclusivos e
+          # descartáveis de CI, sem acesso a nenhum ambiente real. O Redis não é consultado por estes testes.
+          SECRET_KEY: ci-descartavel-secret-key-0123456789abcdef
+          JWT_SECRET_KEY: ci-descartavel-jwt-secret-key-0123456789abcdef-xyz
+          REDIS_URL: redis://localhost:6379/0
           CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: pytest -q tests/integration/test_enriquecimento_concorrencia_pg.py
 
