@@ -29,14 +29,17 @@ pytestmark = pytest.mark.skipif(not URL, reason="B2BON_TESTE_PG_URL não definid
 
 
 class _Provedor(ContactEnrichmentProvider):
-    nome_provedor = "lusha-teste-pg"
     pago = True
+
+    def __init__(self) -> None:
+        # Nome exclusivo por teste: o Postgres do CI persiste entre os testes, e reservas/orçamento de um provedor não podem vazar para outro cenário.
+        self.nome_provedor = f"lusha-teste-pg-{uuid.uuid4().hex[:8]}"
 
     def buscar_contatos(self, filtro):  # nunca usado: o teste só reserva
         raise AssertionError("não deve chamar o provedor")
 
 
-def _preparar(Sessao, *, franquia: int, orcamento: int | None = None, tenants: int = 1):
+def _preparar(Sessao, provedor, *, franquia: int, orcamento: int | None = None, tenants: int = 1):
     sufixo = uuid.uuid4().hex[:8]
     ids = [f"pg-enriq-{sufixo}-{i}" for i in range(tenants)]
     with Sessao() as db:
@@ -51,15 +54,15 @@ def _preparar(Sessao, *, franquia: int, orcamento: int | None = None, tenants: i
         config.definir_config(db, plano_id=plano.id, tenant_id=None, ator_id="1", tenant_auditoria=ids[0], motivo="teste pg", aprovar=True, campos=dict(
             franquia_creditos=franquia, periodicidade="mensal", decisores_por_empresa_padrao=2, decisores_por_empresa_max=2, itens_por_lote_max=5,
             limite_creditos_pesquisa=100_000))
-        lote = config.registrar_lote_compra(db, provedor=_Provedor.nome_provedor, referencia=f"LOTE-{sufixo}", quantidade_creditos=400,
+        lote = config.registrar_lote_compra(db, provedor=provedor.nome_provedor, referencia=f"LOTE-{sufixo}", quantidade_creditos=400,
                                             custo_total_brl=Decimal("269.94"), comprado_em=datetime(2026, 10, 21), ator_id="1", tenant_auditoria=ids[0])
         config.definir_politica(
-            db, provedor=_Provedor.nome_provedor, creditos_busca_por_resultado=0, creditos_email=1, creditos_telefone=None, revelar_emails=True,
+            db, provedor=provedor.nome_provedor, creditos_busca_por_resultado=0, creditos_email=1, creditos_telefone=None, revelar_emails=True,
             revelar_telefones=False, tamanho_pagina_busca=10, creditos_cliente_por_credito_provedor=1, markup_percentual=Decimal("100"),
             metodo_custo="lote_referencia", lote_compra_id=lote.id, casas_exibicao=2, fonte_tarifas="manual", ator_id="1", tenant_auditoria=ids[0],
             motivo="teste pg", aprovar=True)
         if orcamento is not None:
-            config.definir_orcamento_global(db, provedor=_Provedor.nome_provedor, limite_creditos=orcamento, alerta_percentual=80, ator_id="1",
+            config.definir_orcamento_global(db, provedor=provedor.nome_provedor, limite_creditos=orcamento, alerta_percentual=80, ator_id="1",
                                             tenant_auditoria=ids[0], motivo="teste pg", aprovar=True)
     return ids
 
@@ -103,8 +106,8 @@ def _confirmar_em_paralelo(Sessao, itens, provedor):
 def test_duas_confirmacoes_simultaneas_so_uma_reserva_passa_no_saldo_do_tenant():
     engine = create_engine(URL, pool_size=6)
     Sessao = sessionmaker(bind=engine)
-    (tenant,) = _preparar(Sessao, franquia=4, orcamento=1000)
     provedor = _Provedor()
+    (tenant,) = _preparar(Sessao, provedor, franquia=4, orcamento=1000)
     p1, p2 = _previa(Sessao, tenant, provedor), _previa(Sessao, tenant, provedor)  # cada uma precisa de 4
 
     resultados = _confirmar_em_paralelo(Sessao, [(tenant, p1, f"chave-{uuid.uuid4().hex}"), (tenant, p2, f"chave-{uuid.uuid4().hex}")], provedor)
@@ -118,8 +121,8 @@ def test_duas_confirmacoes_simultaneas_so_uma_reserva_passa_no_saldo_do_tenant()
 def test_mesma_chave_em_duas_confirmacoes_simultaneas_reserva_uma_unica_vez():
     engine = create_engine(URL, pool_size=6)
     Sessao = sessionmaker(bind=engine)
-    (tenant,) = _preparar(Sessao, franquia=20, orcamento=1000)
     provedor = _Provedor()
+    (tenant,) = _preparar(Sessao, provedor, franquia=20, orcamento=1000)
     p = _previa(Sessao, tenant, provedor)
 
     resultados = _confirmar_em_paralelo(Sessao, [(tenant, p, "chave-compartilhada-1"), (tenant, p, "chave-compartilhada-1")], provedor)
@@ -133,8 +136,8 @@ def test_mesma_chave_em_duas_confirmacoes_simultaneas_reserva_uma_unica_vez():
 def test_orcamento_global_so_comporta_uma_pesquisa_de_tenants_diferentes():
     engine = create_engine(URL, pool_size=6)
     Sessao = sessionmaker(bind=engine)
-    a, b = _preparar(Sessao, franquia=10, orcamento=5, tenants=2)
     provedor = _Provedor()
+    a, b = _preparar(Sessao, provedor, franquia=10, orcamento=5, tenants=2)
     pa, pb = _previa(Sessao, a, provedor), _previa(Sessao, b, provedor)  # 4 cada; global 5
 
     resultados = _confirmar_em_paralelo(Sessao, [(a, pa, f"chave-{uuid.uuid4().hex}"), (b, pb, f"chave-{uuid.uuid4().hex}")], provedor)
