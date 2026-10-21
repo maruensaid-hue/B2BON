@@ -106,12 +106,13 @@ def politica(db, *, busca=0, email=1, telefone=None, revelar_telefones=False, pa
         ator_id="1", tenant_auditoria=A, motivo="teste", tamanho_pagina_minimo=10, tamanho_pagina_maximo=100, aprovar=aprovar)
 
 
-def cenario(db, *, franquia=10, itens=10, padrao=2, maximo=5, limite_periodo=None, orcamento=1000, periodicidade="mensal", com_politica=True, **kw_politica):
+def cenario(db, *, franquia=10, itens=10, padrao=2, maximo=5, limite_periodo=None, orcamento=1000, periodicidade="mensal", com_politica=True,
+            limite_pesquisa=100_000, **kw_politica):
     """Plano, política do provedor e orçamento global APROVADOS. Tarifas de teste: busca 0, e-mail 1 (só e-mail), página 10, fator 1 — então o teto de
     uma empresa é igual ao nº de decisores pedidos. Cada parâmetro pode ser desligado/alterado por teste."""
     config.definir_config(db, plano_id=plano_id(db), tenant_id=None, ator_id="1", tenant_auditoria=A, motivo="teste", aprovar=True, campos=dict(
         franquia_creditos=franquia, periodicidade=periodicidade, decisores_por_empresa_padrao=padrao, decisores_por_empresa_max=maximo,
-        itens_por_lote_max=itens, limite_periodo_creditos=limite_periodo))
+        itens_por_lote_max=itens, limite_periodo_creditos=limite_periodo, limite_creditos_pesquisa=limite_pesquisa))
     if com_politica:
         politica(db, **kw_politica)
     if orcamento is not None:
@@ -217,7 +218,7 @@ def test_aprovar_libera_e_uma_nova_versao_pendente_nao_derruba_a_aprovada(client
     cenario(db_session, franquia=10)
     nova = config.definir_config(db_session, plano_id=plano_id(db_session), tenant_id=None, ator_id="1", tenant_auditoria=A, motivo="mais franquia",
                                  campos=dict(franquia_creditos=99, periodicidade="mensal", decisores_por_empresa_padrao=2, decisores_por_empresa_max=5,
-                                             itens_por_lote_max=10))
+                                             itens_por_lote_max=10, limite_creditos_pesquisa=100_000))
     vigente, _ = config.config_vigente(db_session, A)
     assert vigente.franquia_creditos == 10 and vigente.versao == 1  # a pendente ainda não vale
     config.aprovar_config(db_session, nova.id, "1", A)
@@ -252,11 +253,13 @@ def test_validacao_da_configuracao_recusa_valores_incoerentes(client, db_session
 def test_configuracao_e_versionada_e_a_do_tenant_prevalece_sobre_a_do_plano(client, db_session):
     cenario(db_session, franquia=10, maximo=5)
     config.definir_config(db_session, plano_id=plano_id(db_session), tenant_id=None, ator_id="1", tenant_auditoria=A, motivo="v2", aprovar=True, campos=dict(
-        franquia_creditos=20, periodicidade="mensal", decisores_por_empresa_padrao=2, decisores_por_empresa_max=5, itens_por_lote_max=10))
+        franquia_creditos=20, periodicidade="mensal", decisores_por_empresa_padrao=2, decisores_por_empresa_max=5, itens_por_lote_max=10,
+        limite_creditos_pesquisa=100_000))
     vigente, _ = config.config_vigente(db_session, A)
     assert vigente.versao == 2 and vigente.franquia_creditos == 20 and vigente.origem == "plano"
     config.definir_config(db_session, plano_id=None, tenant_id=A, ator_id="1", tenant_auditoria=A, motivo="contrato Corporate", aprovar=True, campos=dict(
-        franquia_creditos=500, periodicidade="mensal", decisores_por_empresa_padrao=3, decisores_por_empresa_max=10, itens_por_lote_max=50))
+        franquia_creditos=500, periodicidade="mensal", decisores_por_empresa_padrao=3, decisores_por_empresa_max=10, itens_por_lote_max=50,
+        limite_creditos_pesquisa=100_000))
     do_tenant, _ = config.config_vigente(db_session, A)
     assert do_tenant.origem == "tenant" and do_tenant.franquia_creditos == 500
     with pytest.raises(ValidacaoFalhou):
@@ -509,7 +512,8 @@ def test_mudanca_de_configuracao_depois_da_previa_exige_nova_previa(client, db_s
     prov, solic = ProvedorPago(), eu(db_session)
     p = previa(db_session, solic, contas(db_session, 1), prov)
     config.definir_config(db_session, plano_id=plano_id(db_session), tenant_id=None, ator_id="1", tenant_auditoria=A, motivo="v2", aprovar=True, campos=dict(
-        franquia_creditos=10, periodicidade="mensal", decisores_por_empresa_padrao=2, decisores_por_empresa_max=5, itens_por_lote_max=10))
+        franquia_creditos=10, periodicidade="mensal", decisores_por_empresa_padrao=2, decisores_por_empresa_max=5, itens_por_lote_max=10,
+        limite_creditos_pesquisa=100_000))
     esperar_bloqueio("estimativa_desatualizada", lambda: confirmar(db_session, solic, p, prov))
     assert ledger.reservado(db_session, A) == 0
     assert db_session.get(PesquisaDecisores, p.id).estado == "criada"  # continua revisável (a recusa deixa rastro, não destrói a prévia)
@@ -1187,7 +1191,8 @@ def test_painel_do_tenant_mostra_franquia_saldos_fontes_pesquisas_e_estimado_vs_
     rodar(db_session, fake_graph, eu(db_session), contas(db_session, 1), ProvedorPago([ok(1)]))
     d = client.get(f"{URL}/painel").json()
     assert d["plano"]["franquia_creditos"] == 10 and d["plano"]["disponivel"] is True and d["lusha"] == {"disponivel": True, "motivos": []}
-    assert d["creditos"] == {"disponivel": 9, "reservado": 0, "saldo": 9, "consumido_no_periodo": 1, "expirado_no_periodo": 0, "concedido_no_periodo": 10}
+    assert d["creditos"] == {"disponivel": 9, "reservado": 0, "saldo": 9, "consumido_no_periodo": 1, "expirado_no_periodo": 0, "concedido_no_periodo": 10,
+                            "comprado_no_periodo": 0}
     assert d["pesquisas_por_estado"] == {"concluida": 1} and d["estimado_vs_reconciliado"] == {"estimado_maximo": 2, "consumido": 1}
     assert "AI Credits" in d["categorias"]["ia"] and set(d["uso_por_fonte"]) <= {"receita_qsa", "brasilapi", "lusha"}
     extrato = client.get(f"{URL}/movimentacoes", params={"tipo": "CONSUMO"}).json()

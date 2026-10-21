@@ -1470,3 +1470,12 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Fail-closed e aprovação**: plano, política do provedor e orçamento global só valem depois de **aprovados**; qualquer ausência/pendência bloqueia no backend antes da reserva e da chamada. Nenhum número comercial tem padrão.
 - **Ambiguidade e conciliação**: timeout/5xx/medição ausente retêm a reserva até reconciliar; conciliação com o uso informado pelo provedor (`GET /v3/account/usage`) alerta divergência sem ajustar sozinha. Razão append-only.
 - **Status**: ACEITA no staging; Lusha **bloqueada** até haver configuração aprovada por plano, política e orçamento global (pendências em `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md` §16). Sem promoção a master.
+
+
+## D-095 · 2026-10-21 · Matriz de franquias e pacotes adicionais de enriquecimento
+
+- **Matriz do PO** (POC, Teste gratuito 30/30/3, Starter 30/30/5, Professional 60/60/10, Business 120/120/20, Corporate 180/180/30, Enterprise por administrador): franquia mensal = limite de créditos por pesquisa; decisores por empresa por pesquisa; vencimento no fim do mês de Brasília, sem acúmulo; concessão idempotente por ciclo. Dados em um só módulo (`matriz_dados.py`), aplicados como **versões aprovadas e auditadas**; `matriz.aplicar` é idempotente, **não cria nem adivinha planos** (casamento por nome ou mapeamento explícito do administrador).
+- **Pacotes adicionais** (400/660/1.200/3.000 por R$ 540,00/844,80/1.452,00/3.240,00; acima de 3.000 sob negociação, sem checkout): saldo separado da franquia, não aumenta limites, expira no fim do mês, **data informada e aceita antes da compra**, crédito só pelo webhook assinado, valor em centavos (meio para cima), compra bloqueada enquanto a pesquisa não puder ser usada.
+- **Margem recalculada** a cada leitura com o custo vigente (política aprovada ou último lote): 50,0/47,3/44,2/37,5% com R$ 269,94/400; custos e preços continuam configuráveis, versionados e auditados.
+- **POC** sem número inventado (teto calculado pelas tarifas aprovadas, autorização por tenant pendente até aprovar); **Enterprise** com limites por período. Escopo: só a pesquisa Lusha é limitada; ICP, QSA e análise de sites não.
+- **Status**: ACEITA no staging; Lusha **continua bloqueada** (faltam política do provedor e orçamento global aprovados e os planos Starter/Professional/Business/Corporate/POC no banco). Sem promoção a master. Detalhes em `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md` §19.

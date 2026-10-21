@@ -1,9 +1,12 @@
 """Governança de créditos de enriquecimento (pesquisa de decisores): configuração versionada e aprovada, razão append-only, pesquisa, orçamento
 global, política do provedor (tarifas, custo, markup, preço), lotes de compra e leituras de uso do provedor.
 
-Só cria tabelas novas: nenhuma linha existente é tocada e nenhum saldo é inventado. A única linha inserida é o lote de compra informado pelo
-PO (R$ 269,94 por 400 créditos Lusha), como histórico de custo; ele NÃO libera nada: sem plano, política e orçamento global aprovados a pesquisa
-de decisores continua bloqueada.
+Só cria tabelas novas: nenhuma linha existente é tocada e nenhum saldo é inventado. Linhas inseridas, todas informadas pelo PO:
+  - o lote de compra de R$ 269,94 por 400 créditos Lusha, como histórico de custo;
+  - os pacotes adicionais (400/660/1.200/3.000 créditos e "acima de 3.000" sob negociação), aprovados;
+  - a franquia de cada plano da matriz que JÁ EXISTE na tabela `plano` (por nome), aprovada pelo PO. Plano que não existe não é criado (exigiria
+    preço); rodar `matriz.aplicar` depois cobre os que surgirem.
+Nada disso libera a pesquisa de decisores na Lusha: sem a política do provedor e o orçamento global aprovados ela continua bloqueada.
 
 Downgrade: remove as tabelas e, com elas, configuração, razão, pesquisas, lotes e leituras de uso de enriquecimento. Os decisores já gravados
 e os créditos/lotes de IA não são tocados. O razão e os lotes são histórico financeiro: faça cópia antes de reverter em ambiente com uso.
@@ -17,6 +20,8 @@ from decimal import Decimal
 
 import sqlalchemy as sa
 from alembic import op
+
+from app.contexts.enriquecimento.matriz_dados import APROVADOR_MATRIZ, MOTIVO_MATRIZ, MOTIVO_PACOTES, PACOTES, PLANOS
 
 revision = "a4c6e8b0d2f4"
 down_revision = "f3d5a7c9e1b4"
@@ -43,6 +48,11 @@ def upgrade() -> None:
         sa.Column("decisores_por_empresa_max", sa.Integer(), nullable=True),
         sa.Column("itens_por_lote_max", sa.Integer(), nullable=True),
         sa.Column("limite_periodo_creditos", sa.Integer(), nullable=True),
+        sa.Column("modo", sa.String(), nullable=False, server_default="franquia_fixa"),
+        sa.Column("limite_creditos_pesquisa", sa.Integer(), nullable=True),
+        sa.Column("limite_pesquisas_periodo", sa.Integer(), nullable=True),
+        sa.Column("limite_empresas_periodo", sa.Integer(), nullable=True),
+        sa.Column("limite_contatos_periodo", sa.Integer(), nullable=True),
         sa.Column("motivo", sa.String(), nullable=True),
         sa.Column("criado_por", sa.String(), nullable=True),
         sa.Column("aprovado_por", sa.String(), nullable=True),
@@ -133,6 +143,50 @@ def upgrade() -> None:
     )
     op.create_index("ix_enriquecimento_uso_provedor_provedor", "enriquecimento_uso_provedor", ["provedor"])
     op.create_index("ix_enriquecimento_uso_provedor_lido_em", "enriquecimento_uso_provedor", ["lido_em"])
+    op.create_table(
+        "enriquecimento_pacote",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("codigo", sa.String(), nullable=False),
+        sa.Column("versao", sa.Integer(), nullable=False, server_default="1"),
+        sa.Column("nome", sa.String(), nullable=False),
+        sa.Column("quantidade_creditos", sa.Integer(), nullable=True),
+        sa.Column("preco_unitario_brl", sa.Numeric(14, 4), nullable=True),
+        sa.Column("preco_total_brl", sa.Numeric(14, 2), nullable=True),
+        sa.Column("status", sa.String(), nullable=False, server_default="ATIVO"),
+        sa.Column("ordem", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("motivo", sa.String(), nullable=True),
+        sa.Column("criado_por", sa.String(), nullable=True),
+        sa.Column("aprovado_por", sa.String(), nullable=True),
+        sa.Column("aprovado_em", sa.DateTime(), nullable=True),
+        sa.Column("valido_de", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column("valido_ate", sa.DateTime(), nullable=True),
+        sa.Column("criado_em", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.UniqueConstraint("codigo", "versao", name="uq_enriq_pacote_versao"),
+    )
+    op.create_index("ix_enriquecimento_pacote_codigo", "enriquecimento_pacote", ["codigo"])
+    op.create_table(
+        "enriquecimento_compra",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("tenant_id", sa.String(), sa.ForeignKey("tenant.id"), nullable=False),
+        sa.Column("pacote_id", sa.Integer(), sa.ForeignKey("enriquecimento_pacote.id"), nullable=False),
+        sa.Column("pacote_codigo", sa.String(), nullable=False),
+        sa.Column("pacote_versao", sa.Integer(), nullable=False),
+        sa.Column("creditos", sa.Integer(), nullable=False),
+        sa.Column("preco_unitario_brl", sa.Numeric(14, 4), nullable=False),
+        sa.Column("preco_total_brl", sa.Numeric(14, 2), nullable=False),
+        sa.Column("expira_em_previsto", sa.DateTime(), nullable=False),
+        sa.Column("status", sa.String(), nullable=False, server_default="PENDENTE"),
+        sa.Column("preferencia_id_externo", sa.String(), nullable=True),
+        sa.Column("url_checkout", sa.String(), nullable=True),
+        sa.Column("pagamento_id_externo", sa.String(), nullable=True, unique=True),
+        sa.Column("movimento_id", sa.Integer(), nullable=True),
+        sa.Column("expira_em", sa.DateTime(), nullable=True),
+        sa.Column("criado_por", sa.String(), nullable=True),
+        sa.Column("criado_em", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column("confirmado_em", sa.DateTime(), nullable=True),
+    )
+    op.create_index("ix_enriquecimento_compra_tenant_id", "enriquecimento_compra", ["tenant_id"])
+    op.create_index("ix_enriquecimento_compra_pacote_id", "enriquecimento_compra", ["pacote_id"])
     op.create_table(
         "pesquisa_decisores",
         sa.Column("id", sa.String(), primary_key=True),
@@ -253,9 +307,53 @@ def upgrade() -> None:
         "observacao": "Aporte informado pelo PO; a data é a do registro (a data exata da compra não foi informada).", "criado_por": "migracao",
     }])
 
+    agora = datetime(2026, 10, 21)
+    pacotes = sa.table(
+        "enriquecimento_pacote",
+        sa.column("codigo", sa.String), sa.column("versao", sa.Integer), sa.column("nome", sa.String), sa.column("quantidade_creditos", sa.Integer),
+        sa.column("preco_unitario_brl", sa.Numeric), sa.column("preco_total_brl", sa.Numeric), sa.column("status", sa.String),
+        sa.column("ordem", sa.Integer), sa.column("motivo", sa.String), sa.column("criado_por", sa.String), sa.column("aprovado_por", sa.String),
+        sa.column("aprovado_em", sa.DateTime), sa.column("valido_de", sa.DateTime),
+    )
+    op.bulk_insert(pacotes, [{
+        "codigo": codigo, "versao": 1, "nome": nome, "quantidade_creditos": creditos,
+        "preco_unitario_brl": Decimal(unitario) if unitario is not None else None,
+        "preco_total_brl": Decimal(total) if total is not None else None,
+        "status": status, "ordem": ordem, "motivo": MOTIVO_PACOTES, "criado_por": "migracao", "aprovado_por": APROVADOR_MATRIZ,
+        "aprovado_em": agora, "valido_de": agora,
+    } for codigo, nome, creditos, unitario, total, status, ordem in PACOTES])
+
+    # Franquia de cada plano da matriz que já existe (por nome ou apelido). Plano ausente não é criado.
+    conexao = op.get_bind()
+    configs = sa.table(
+        "enriquecimento_config_plano",
+        sa.column("plano_id", sa.Integer), sa.column("versao", sa.Integer), sa.column("modo", sa.String), sa.column("franquia_creditos", sa.Integer),
+        sa.column("periodicidade", sa.String), sa.column("decisores_por_empresa_max", sa.Integer), sa.column("limite_creditos_pesquisa", sa.Integer),
+        sa.column("motivo", sa.String), sa.column("criado_por", sa.String), sa.column("aprovado_por", sa.String), sa.column("aprovado_em", sa.DateTime),
+        sa.column("valido_de", sa.DateTime),
+    )
+    plano = sa.table("plano", sa.column("id", sa.Integer), sa.column("nome", sa.String))
+    for spec in PLANOS.values():
+        if spec["config"] is None:
+            continue
+        linha = None
+        for nome in spec["aliases"]:
+            linha = conexao.execute(sa.select(plano.c.id).where(plano.c.nome == nome)).first()
+            if linha is not None:
+                break
+        if linha is None:
+            continue
+        cfg = spec["config"]
+        op.bulk_insert(configs, [{
+            "plano_id": linha[0], "versao": 1, "modo": cfg["modo"], "franquia_creditos": cfg.get("franquia_creditos"),
+            "periodicidade": cfg.get("periodicidade"), "decisores_por_empresa_max": cfg.get("decisores_por_empresa_max"),
+            "limite_creditos_pesquisa": cfg.get("limite_creditos_pesquisa"), "motivo": MOTIVO_MATRIZ, "criado_por": "migracao",
+            "aprovado_por": APROVADOR_MATRIZ, "aprovado_em": agora, "valido_de": agora,
+        }])
+
 
 def downgrade() -> None:
     for tabela in ("enriquecimento_movimento", "pesquisa_decisores_transicao", "pesquisa_decisores_empresa", "pesquisa_decisores",
-                   "enriquecimento_uso_provedor", "enriquecimento_politica_provedor", "enriquecimento_lote_compra",
+                   "enriquecimento_compra", "enriquecimento_pacote", "enriquecimento_uso_provedor", "enriquecimento_politica_provedor", "enriquecimento_lote_compra",
                    "enriquecimento_orcamento_global", "enriquecimento_config_plano", "enriquecimento_carteira"):
         op.drop_table(tabela)

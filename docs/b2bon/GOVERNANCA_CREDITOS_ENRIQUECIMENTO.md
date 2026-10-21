@@ -1,6 +1,6 @@
 # Governança de créditos, pesquisas e enriquecimento (pesquisa de decisores via Lusha)
 
-Estado (2026-10-21): **implementado, testado e enviado ao staging; nada promovido.** A pesquisa de decisores via Lusha **permanece bloqueada** em qualquer ambiente até existirem (1) configuração de enriquecimento **aprovada** para o plano do cliente, (2) política do provedor (tarifas e preço) **aprovada** e (3) orçamento global do provedor **aprovado**. Nenhum valor comercial foi inventado para destravar nada. Os fluxos de QSA da Receita e de Brasil API **não dependem** dessa configuração e continuam funcionando.
+Estado (2026-10-21, v3 — matriz de franquias e pacotes adicionais, §19): **implementado e testado; destino é o staging; nada promovido.** A pesquisa de decisores via Lusha **permanece bloqueada** em qualquer ambiente até existirem (1) configuração de enriquecimento **aprovada** para o plano do cliente, (2) política do provedor (tarifas e preço) **aprovada** e (3) orçamento global do provedor **aprovado**. Nenhum valor comercial foi inventado para destravar nada. Os fluxos de QSA da Receita e de Brasil API **não dependem** dessa configuração e continuam funcionando.
 
 ## 0. Condições para sair do staging (status real)
 
@@ -10,12 +10,13 @@ Estado (2026-10-21): **implementado, testado e enviado ao staging; nada promovid
 | 2 | Esses fluxos não chamam Lusha nem a usam como fallback | **Atendida** (QSA vazio = lista vazia; teste de AST proíbe `buscar_contatos(` fora dos adaptadores) |
 | 3 | Lusha bloqueada no backend sem configuração aprovada do plano | **Atendida** (`plano_sem_configuracao`, `plano_config_pendente_aprovacao`, `config_incompleta`, `sem_plano_ativo`) |
 | 4 | Lusha bloqueada sem orçamento global aprovado e com capacidade | **Atendida** (`orcamento_global_nao_configurado`, `…_pendente_aprovacao`, `…_esgotado`) |
-| 5 | Configurações de enriquecimento por plano definidas e aprovadas | **NÃO atendida, de propósito.** Nenhum valor por plano foi informado; nada foi pré-carregado. Lusha segue bloqueada. Ver §16 |
+| 5 | Configurações de enriquecimento por plano definidas e aprovadas | **Parcial (v3).** A matriz do PO foi carregada (§19) e aprovada em nome dele, mas só nas linhas cujo plano **existe no banco com o mesmo nome**: hoje, "Teste". Starter/Professional/Business/Corporate/POC/Enterprise não existem como planos avulsos (os planos do banco são "PREDATOR Starter" etc.): o administrador liga cada linha ao plano certo (`matriz/aplicar` com `mapeamento`). Nada é adivinhado. Lusha segue bloqueada também pela política e pelo orçamento global. Ver §16 |
 | 6 | Seleção explícita de empresas e confirmação do usuário | **Atendida** (API só aceita `conta_ids`; confirmação ligada ao `selecao_hash`) |
 | 7 | Custo-base, markup, contabilização e conciliação documentados e implementados, sem presumir crédito por contato | **Implementada.** Tarifas por ação vêm de política aprovada; consumo debitado é o medido pelo provedor. Regra de arredondamento **de cobrança** e política de ponderação de lotes aguardam aprovação (§7) |
 | 8 | Migrações, testes, documentação, observabilidade e recuperação revisados | **Atendida** localmente; PostgreSQL real roda no CI do staging (§14) |
 | 9 | Impacto operacional da configuração ausente claro | **Atendida** (§15) |
 | 10 | Commit e envio ao staging, sem master | Ver relatório de entrega |
+| 11 | (v3) Matriz, pacotes, POC e Enterprise implementados e testados; Teste gratuito com 3 decisores | **Atendida** (§19) |
 
 ## 1. Auditoria (antes de qualquer alteração)
 
@@ -84,7 +85,7 @@ Aporte de referência (informado pelo PO): **R$ 269,94 por 400 créditos Lusha**
 
 * Registrado como **lote de compra** (`enriquecimento_lote_compra`: provedor, referência, quantidade, custo total, custo unitário, data, observação), inserido pela migração como histórico. **Não libera nada.** Novos aportes = novos lotes; nada é sobrescrito.
 * O preço vigente vem da **política aprovada** (foto do custo e do preço na publicação). Um novo lote **não** muda o preço sozinho: é preciso publicar e aprovar uma nova política. `lote_referencia` usa o custo do lote escolhido; `media_ponderada` usa Σ custo ÷ Σ quantidade de todos os lotes na publicação. **A regra de qual método usar é decisão do PO** (a política exige escolher; não há padrão).
-* **Precisão:** `Decimal` em todo cálculo; 8 casas internas (meio-par) só para guardar o custo unitário de um lote. O valor de cobrança (créditos × preço unitário) fica **sem arredondar para centavos** no razão. Só a **exibição** arredonda (2 casas, meio para cima). **A regra de arredondamento da cobrança ainda não foi aprovada** (pendência §16).
+* **Precisão:** `Decimal` em todo cálculo; 8 casas internas (meio-par) só para guardar o custo unitário de um lote. O valor de cobrança (créditos × preço unitário) fica **sem arredondar para centavos** no razão. Só a **exibição** arredonda (2 casas, meio para cima). **v3:** o valor **cobrado** de um pacote é `créditos × preço unitário` em **centavos, meio para cima** (`precos.centavos`, a mesma regra de comissões e tributos do produto), conferido contra o total informado; o consumo por pesquisa no razão continua na precisão interna.
 * No razão de cada consumo ficam separados: créditos do provedor medidos, créditos do cliente debitados, custo unitário e total, preço unitário e valor de venda. A margem é derivada. Custo, markup e margem **só aparecem para super_admin**.
 
 ## 8. Decisores por empresa
@@ -133,7 +134,7 @@ Execução em segundo plano após a confirmação (o front acompanha por GET): e
 
 ## 14. Migração e recuperação
 
-`alembic/versions/a4c6e8b0d2f4` (head anterior `f3d5a7c9e1b4`): **só cria 10 tabelas novas**; nenhuma linha existente é tocada; nenhum saldo, plano, política ou orçamento é inventado; a única linha inserida é o lote de compra informado (histórico de custo). Testado: upgrade sobre dados anteriores (legado e carteira de IA intactos), downgrade (remove só as 10 tabelas) e novo upgrade. O CI do staging roda `alembic upgrade head` em PostgreSQL limpo e a concorrência da reserva em PostgreSQL real.
+`alembic/versions/a4c6e8b0d2f4` (head anterior `f3d5a7c9e1b4`): **só cria 12 tabelas novas** (as 10 da governança + `enriquecimento_pacote` e `enriquecimento_compra`); nenhuma linha existente é tocada; nenhum saldo é inventado. Linhas inseridas, todas informadas pelo PO: o lote de compra (histórico de custo), os 5 pacotes adicionais (aprovados) e a franquia dos planos da matriz que já existem por nome (hoje "Teste"). Testado: upgrade sobre dados anteriores (legado e carteira de IA intactos), downgrade (remove só as 12 tabelas) e novo upgrade. O CI do staging roda `alembic upgrade head` em PostgreSQL limpo e a concorrência da reserva em PostgreSQL real.
 
 Recuperação: downgrade apaga o razão — **copie `enriquecimento_movimento` e `enriquecimento_lote_compra` antes** em ambiente com uso. Em incidente de dados: o razão é reconstruível a partir de `pesquisa_decisores_transicao` + backup do Neon (PITR). Pesquisa travada: estados e ids do provedor ficam por empresa; ambígua ⇒ reconciliar; `enviada` com pendentes ⇒ "retomar". Lusha bloqueada durante migrações enquanto as configurações obrigatórias não forem aprovadas.
 
@@ -150,7 +151,7 @@ Logger `b2bon.enriquecimento`: `ENRIQUECIMENTO_PREVIA`, `_RESERVA`, `_EXECUCAO`,
 3. **Orçamento global mensal** da Lusha (em créditos do provedor) e percentual de alerta.
 4. **Regra de arredondamento da cobrança** ao cliente (hoje: sem arredondar; só a exibição arredonda).
 5. **Regra de ponderação de lotes** quando houver mais de um (hoje a política escolhe `lote_referencia` ou `media_ponderada` explicitamente).
-6. **Regra de excedente / compra de créditos pelo cliente**: não implementada; sem saldo, a pesquisa é bloqueada.
+6. ~~Compra de créditos pelo cliente~~ — **implementada na v3** (§19.3). Segue pendente: estorno/chargeback de compra já paga e consumida (hoje é ajuste/estorno administrativo manual), nota fiscal e conciliação financeira da venda, e compra automática recorrente.
 7. Faturamento consolidado (tenant filho sem licença própria): hoje ficaria bloqueado.
 8. Cron de conciliação com o provedor (hoje acionada pelo administrador).
 
@@ -161,8 +162,76 @@ Logger `b2bon.enriquecimento`: `ENRIQUECIMENTO_PREVIA`, `_RESERVA`, `_EXECUCAO`,
 * Consumo medido acima do reservado deixa o saldo do cliente negativo até regularização (política: não esconder o consumo real).
 * SQLite (testes) não trava linhas: a atomicidade `FOR UPDATE` só é exercida em PostgreSQL (CI).
 * A taxa da etapa de busca não está nas páginas dos endpoints da Lusha: deve vir de `account/usage` ou do contrato antes de aprovar a política.
-* Sem painel de detalhe de pesquisas antigas nem tela de administração de planos/política/lotes: feitos pela API administrativa.
+* Sem painel de detalhe de pesquisas antigas. Política do provedor e orçamento global seguem pela API/tela de orçamento; v3 trouxe telas para matriz, configuração por plano/tenant, pacotes, lotes, POC, compras e auditoria (§19.8).
 
 ## 18. Testes
 
 `tests/unit/test_enriquecimento_precos.py`, `tests/unit/test_lusha_governado.py`, `tests/test_migracao_enriquecimento.py`, `tests/integration/test_pesquisa_decisores_governanca.py`, `tests/integration/test_enriquecimento_concorrencia_pg.py` (PostgreSQL, CI) e as reescritas dos testes de `mapear_decisores`/fila/listas. Cobrem: configuração e política ausentes/incompletas/pendentes/aprovadas/versionadas; seleção explícita e rejeição do ICP inteiro; padrão e limites de decisores; estimativa com tarifas reais, categorias e incertezas; alternativas sem alterar a escolha; hash/versão/expiração; reserva atômica; chamada só depois da reserva; idempotência; consumo **medido** (e-mail+telefone, busca sem resultado cobrada, falha após busca, medição ausente, acima do reservado, fator do cliente ≠ 1); custo, markup, preço, margem e precisão decimal; lotes append-only e preço que só muda com nova política aprovada; falhas certa/parcial/ambígua/exceção/envio antigo/pausa/retomada/cancelamento; reconciliação por pesquisa e com o provedor (divergência, sem consulta, sem vazar detalhe); deduplicação; período e orçamento global (somando tenants, só no admin, versionado e aprovado); razão append-only; franquia mensal/única/expiração; separação IA × enriquecimento; QSA sem nenhuma configuração; uso por fonte; isolamento de tenant e permissões; painel e motivos de indisponibilidade; migração com dados anteriores, downgrade e novo upgrade. Provedor sempre simulado: nenhuma chamada real, nenhum orçamento real.
+
+## 19. Matriz de franquias, pacotes adicionais, POC e Enterprise (v3, 2026-10-21)
+
+Fonte: prompt do PO em 2026-10-21. Os números vivem em **um único lugar** (`app/contexts/enriquecimento/matriz_dados.py`), lido pela migração, por `matriz.aplicar` e pela página pública; depois de aplicados viram **linhas versionadas e auditadas** (`aprovado_por = po:matriz-2026-10-21`), e qualquer mudança futura passa por nova versão aprovada.
+
+### 19.1 Matriz (franquia mensal = limite de créditos por pesquisa)
+
+| Linha | Franquia mensal | Créditos por pesquisa | Decisores por empresa (máx.) |
+|---|---|---|---|
+| POC | sem franquia fixa; **autorização por operação** (§19.5) | teto calculado | **1** |
+| Teste gratuito | 30 | 30 | **3** |
+| Starter | 30 | 30 | 5 |
+| Professional | 60 | 60 | 10 |
+| Business | 120 | 120 | 20 |
+| Corporate | 180 | 180 | 30 |
+| Enterprise | configurável por administrador, por tenant: créditos, empresas, contatos e pesquisas **por período** | idem | idem |
+
+* O limite de decisores é **por empresa, por pesquisa**. O teto de créditos por pesquisa (`limite_creditos_pesquisa`) é validado no servidor na prévia **e** na confirmação (`limite_por_pesquisa`, que vem antes de `saldo_insuficiente` na lista de bloqueios). A matriz **não define padrão** de decisores: o usuário escolhe (§19.6); itens por lote ficam sem limite fixo (só o teto de créditos limita o lote).
+* **Teste gratuito = 3.** Não existia valor "5" no repositório (a restrição anterior era a contagem semanal de chamadas, `limite_enriquecimento_contatos_semanal`, outro conceito). Se um ambiente tiver configuração anterior com padrão acima do teto da matriz, `matriz.aplicar` **remove o padrão** (e informa em `ajustes`); o teto da matriz nunca é relaxado.
+* **Concessão mensal idempotente**: chave `franquia:AAAA-MM`; reprocessar no mesmo ciclo não duplica. O mês é o **mês-calendário de Brasília** (UTC−3): 31/10 23:59 (BRT) ainda é outubro; 01/11 00:00 (BRT) renova. A rotina `POST /cron/creditos-ia` chama `renovacao.renovar_todos` (concede e expira por tenant, isolando falhas); o painel faz o mesmo sob demanda. Franquia e pacote **vencem no fim do mês e não acumulam**: ao virar o mês o que sobrou vira `EXPIRACAO` (o consumo do mês é abatido primeiro; franquia antes do adicional) e entra a nova franquia.
+* **Casamento matriz → plano**: por nome exato/apelido (`Teste gratuito` ↔ plano `Teste`). No banco os planos de produto se chamam "PREDATOR Starter/Professional/Enterprise", "CRM …", "MAP …": ligar "Starter" a um deles é decisão comercial e é feita explicitamente (`POST /admin/enriquecimento/matriz/aplicar` com `mapeamento`). Business e Corporate **não existem** como planos hoje; plano não é criado (exigiria preço). `GET /admin/enriquecimento/matriz` mostra a situação de cada linha.
+
+### 19.2 Escopo: o que as franquias limitam e o que não limitam
+
+Limitam **somente** a pesquisa de decisores via Lusha. **Não** limitam: tamanho do ICP (testado com 2.000 empresas), criação/consulta do ICP, geração de listas, "Mapear decisores" e fila (QSA da Receita), Brasil API. A **análise de sites** não consome franquia Lusha (razão de enriquecimento intacto) e usa a franquia de IA (workload `website_analysis`) e o próprio limite semanal do plano. A Lusha nunca é chamada para o ICP inteiro: só para empresas **selecionadas explicitamente** (`conta_ids`; campos extras como `icp_id`/`todas` dão 422).
+
+### 19.3 Pacotes adicionais
+
+| Pacote | Créditos | Preço unitário | Total (exato) |
+|---|---|---|---|
+| `ENRIQ_400` | 400 | R$ 1,35 | R$ 540,00 |
+| `ENRIQ_660` | 660 | R$ 1,28 | R$ 844,80 |
+| `ENRIQ_1200` | 1.200 | R$ 1,21 | R$ 1.452,00 |
+| `ENRIQ_3000` | 3.000 | R$ 1,08 | R$ 3.240,00 |
+| `ENRIQ_ACIMA_3000` | acima de 3.000 | — | **sob negociação**: sem preço, sem checkout automático |
+
+* Catálogo **versionado e aprovado** (`enriquecimento_pacote`): reajuste cria versão **pendente**; a versão aprovada continua valendo até a aprovação; o pedido **congela versão e preço**. `definir_pacote` recusa total ≠ créditos × unitário (centavos) e preço em pacote sob negociação.
+* Saldo adicional **separado da franquia** (`origem=compra` no razão, tipo `COMPRA`), **não aumenta nenhum limite do plano** (decisores por empresa e créditos por pesquisa — teste prova que 660 créditos extras não liberam uma pesquisa de 35 créditos num plano de 30) e **expira no fim do mês**.
+* **Data de expiração informada antes da compra**: o catálogo traz `expira_em_previsto`; a tela mostra "se comprados agora, vencem em DD/MM/AAAA" e a compra **exige** `aceite_expiracao` (sem ele: 422, nada criado). O pedido guarda a data informada.
+* Compra: só admin/super_admin; recusada se a pesquisa de decisores estiver indisponível (**não se vende crédito que não pode ser usado**) com os motivos; checkout pelo Mercado Pago existente (referência `enriquecimento:<id>`, valor em centavos). **O crédito só entra pelo webhook assinado** (a volta do navegador não credita). Idempotente (status do pedido, `pagamento_id_externo` único e `compra:<id>` no razão); valor pago ≠ pedido (±R$ 0,01) ⇒ `REJEITADA` e log de erro; pagamento `pending/in_process` ⇒ continua `PENDENTE` até o próximo aviso. A validade é o fim do mês **da confirmação** (quem paga na virada do mês recebe o mês inteiro, não um crédito que nasceria vencido).
+
+### 19.4 Custo, markup e margem (recalculados)
+
+`pacotes.rentabilidade` (`GET /admin/enriquecimento/pacotes/rentabilidade`, só super_admin) calcula, com o custo **vigente** (política aprovada; sem política, o lote de compra mais recente — marcado como referência), custo, lucro bruto, markup e margem por pacote, **a cada leitura**: novo aporte = novo lote e/ou nova política mudam o resultado sem tocar nos pacotes. Com R$ 269,94/400 (R$ 0,67485) e relação 1:1: **50,0% / 47,3% / 44,2% / 37,5%** (testado). A relação crédito do cliente × crédito do provedor ainda não foi aprovada; sem ela assume-se 1:1 e a tela avisa (`premissa_fator`). Custo de aquisição, uso medido, créditos do cliente, preço, markup, margem, estornos e reconciliações continuam em campos separados (§2).
+
+### 19.5 POC e Enterprise
+
+* **POC** (`modo=poc_autorizada`, 1 decisor): sem franquia fixa e sem número inventado. `POST /admin/enriquecimento/poc/teto` calcula o teto da operação só com a **política aprovada** (empresas × (busca + decisores × revelação) × fator); sem política aprovada não há teto. `POST …/poc/autorizar` cria a **configuração do tenant PENDENTE** (franquia `unica` = teto, 1 decisor, empresas = lote); só depois de aprovada a operação é liberada. Enquanto isso o plano POC responde `poc_sem_autorizacao`. Uma nova operação de POC no mesmo tenant não ganha franquia sozinha (a concessão `unica` é idempotente): crédito extra é ajuste administrativo com motivo.
+* **Enterprise**: configuração do **tenant** (versionada, validada, aprovada, auditada) com `limite_pesquisas_periodo`, `limite_empresas_periodo`, `limite_contatos_periodo` (por mês de Brasília) além de franquia e `limite_periodo_creditos`. Contam só pesquisas confirmadas (prévia e cancelada não contam, nem a própria pesquisa em confirmação); excedente ⇒ `limite_*_periodo`.
+
+### 19.6 Decisores por empresa na tela
+
+Seletor (1 até o máximo do plano). Sem padrão no plano, a escolha é **obrigatória** (o botão de revisar fica desabilitado e o servidor recusa "Informe quantos decisores…"); no POC (máx. 1) já vem selecionado 1. A escolha nunca é alterada em silêncio; as alternativas (profundidade × abrangência) só preenchem o campo se o usuário clicar. A revisão mostra empresas, decisores por empresa, total, saldo, limite por pesquisa, uso no mês (quando há limites por período), alternativas e incertezas; o backend revalida tudo na confirmação.
+
+### 19.7 Bloqueio da Lusha (inalterado)
+
+Em qualquer ambiente, sem **configuração aprovada do plano**, **política do provedor aprovada** e **orçamento global aprovado e com capacidade**, o backend bloqueia antes de reservar e antes de chamar. Aplicar a matriz **não** libera a Lusha: faltam política e orçamento (§16). A compra de pacotes também fica bloqueada nesse estado. QSA e site não dependem disso.
+
+### 19.8 Telas, rotas e auditoria
+
+* Tenant: painel (`/creditos-enriquecimento`) com **franquia × adicional, validade**, limites do plano, uso no mês, compra de pacotes (aceite de expiração, histórico) e extrato com `COMPRA`; modal de pesquisa com seletor e limites.
+* Site: seção "Créditos de enriquecimento" em `/planos` (rota pública `GET /planos/enriquecimento`: matriz e catálogo; **sem** mensalidade, custo ou margem).
+* Super admin: matriz (situação e aplicar com mapeamento), configuração por plano/tenant (criar pendente/aprovar), pacotes e rentabilidade, lotes de compra, POC (teto/autorizar), compras de todos os tenants, **auditoria** (`GET /admin/enriquecimento/auditoria`: eventos `enriquecimento_*`), além do orçamento global e conciliação já existentes.
+* Eventos novos: `enriquecimento_pacote_definido/aprovado`, `enriquecimento_compra_iniciada/confirmada` (além dos de configuração, política, orçamento, lote, ajuste, estorno).
+
+### 19.9 Testes da v3
+
+`tests/integration/test_enriquecimento_matriz_pacotes.py` (48 testes): limites por plano (inclui Teste = 3 e a substituição de configuração antiga com 5), concessão mensal idempotente na virada do mês de Brasília, expiração sem acúmulo e consumo parcial, rotina mensal, catálogo e preços exatos, validação de pacote, versão pendente × aprovada, compra (aceite, bloqueio sem Lusha, webhook, repetição, valor divergente, pendente, rejeitada, outras categorias, virada do mês), saldo separado que não muda limites, rentabilidade 50,0/47,3/44,2/37,5, POC (sem autorização, teto, autorização pendente, 1 decisor), Enterprise (limites por período), ICP de 2.000 empresas, site fora da franquia Lusha e com limite próprio, rota pública, painel, webhook assinado do Mercado Pago, permissões de admin e isolamento de tenant. Atualizados `test_migracao_enriquecimento.py` (12 tabelas e dados do PO), `test_pesquisa_decisores_governanca.py` (limite por pesquisa obrigatório) e `test_rotas_publicas_aprovadas.py`.

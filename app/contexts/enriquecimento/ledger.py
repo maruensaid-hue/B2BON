@@ -15,12 +15,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.contexts.enriquecimento import precos
-from app.contexts.enriquecimento.config import ConfigResolvida, agora_utc, orcamento_vigente, periodo_de
+from app.contexts.enriquecimento.config import ConfigResolvida, agora_utc, fim_do_mes, inicio_do_mes, orcamento_vigente, periodo_de
 from app.models.enriquecimento_creditos import EnriquecimentoCarteira, EnriquecimentoMovimento, EnriquecimentoOrcamentoGlobal
 from app.services import auditoria_service
 from app.services.errors import ValidacaoFalhou
 
-TIPOS = ("CONCESSAO", "RENOVACAO", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO", "USO")
+TIPOS = ("CONCESSAO", "RENOVACAO", "COMPRA", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO", "USO")
 TIPOS_CONSUMO = ("CONSUMO", "ESTORNO")  # consumo líquido = consumos − estornos
 
 
@@ -125,10 +125,6 @@ def lancar(db: Session, tenant_id: str, tipo: str, *, delta_saldo: int = 0, delt
     return movimento
 
 
-def _fim_do_mes(agora: datetime) -> datetime:
-    return (agora.replace(day=1) + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-
 def garantir_franquia(db: Session, tenant_id: str, config: ConfigResolvida, agora: datetime | None = None) -> EnriquecimentoMovimento | None:
     """Concede a franquia do período corrente, uma única vez (idempotente). `mensal` renova todo mês e vence no fim dele (sem rollover);
     `unica` (POC / Free Trial) é concedida uma vez na vida do tenant. Config sem franquia ou sem periodicidade não concede nada."""
@@ -136,7 +132,7 @@ def garantir_franquia(db: Session, tenant_id: str, config: ConfigResolvida, agor
         return None
     agora = agora or agora_utc()
     if config.periodicidade == "mensal":
-        chave, expira = f"franquia:{periodo_de(agora)}", _fim_do_mes(agora)
+        chave, expira = f"franquia:{periodo_de(agora)}", fim_do_mes(agora)
     else:
         chave, expira = "franquia:unica", None
     travar_carteira(db, tenant_id)
@@ -147,29 +143,70 @@ def garantir_franquia(db: Session, tenant_id: str, config: ConfigResolvida, agor
                   idempotency_key=chave, agora=agora)
 
 
+ORIGENS_COM_VALIDADE = ("franquia", "compra")
+
+
 def expirar_vencidos(db: Session, tenant_id: str, agora: datetime | None = None) -> int:
-    """Franquias mensais vencidas: o que não foi consumido na janela delas e não está retido por pesquisa vira EXPIRACAO. A aproximação é
-    deliberada e favorável ao cliente: o consumo da janela é abatido da franquia primeiro (ela vence antes de qualquer outro crédito)."""
+    """Franquia mensal e créditos comprados vencem no fim do mês (não acumulam). O que não foi consumido na janela e não está retido por pesquisa
+    vira EXPIRACAO. O consumo da janela é abatido primeiro da franquia e depois das compras (por ordem de concessão), ou seja, o que vence antes sai
+    primeiro: aproximação favorável ao cliente. Ajustes administrativos e a autorização de POC (`unica`) não têm validade e não expiram aqui."""
     agora = agora or agora_utc()
     vencidas = db.query(EnriquecimentoMovimento).filter(
-        EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.origem == "franquia",
+        EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.origem.in_(ORIGENS_COM_VALIDADE),
+        EnriquecimentoMovimento.tipo.in_(("CONCESSAO", "RENOVACAO", "COMPRA")),
         EnriquecimentoMovimento.expira_em.isnot(None), EnriquecimentoMovimento.expira_em <= agora,
-    ).all()
-    total = 0
+    ).order_by(EnriquecimentoMovimento.criado_em, EnriquecimentoMovimento.id).all()
+    por_validade: dict[datetime, list[EnriquecimentoMovimento]] = {}
     for concessao in vencidas:
-        chave = f"expiracao:{concessao.id}"
-        if db.query(EnriquecimentoMovimento.id).filter_by(tenant_id=tenant_id, idempotency_key=chave).first() is not None:
-            continue
-        consumido = -_soma(db, EnriquecimentoMovimento.delta_saldo, EnriquecimentoMovimento.tenant_id == tenant_id,
-                           EnriquecimentoMovimento.tipo.in_(TIPOS_CONSUMO), EnriquecimentoMovimento.criado_em >= concessao.criado_em,
-                           EnriquecimentoMovimento.criado_em < concessao.expira_em)
-        a_expirar = max(0, min(concessao.delta_saldo - max(consumido, 0), disponivel(db, tenant_id)))
-        if a_expirar > 0:
-            travar_carteira(db, tenant_id)
-            lancar(db, tenant_id, "EXPIRACAO", delta_saldo=-a_expirar, origem="franquia", idempotency_key=chave, agora=agora,
-                   motivo=f"Franquia {concessao.periodo} vencida sem uso")
-            total += a_expirar
+        por_validade.setdefault(concessao.expira_em, []).append(concessao)
+    total = 0
+    for validade, grupo in por_validade.items():
+        grupo.sort(key=lambda c: (c.origem != "franquia", c.criado_em, c.id))  # franquia primeiro, depois as compras
+        consumo = -_soma(db, EnriquecimentoMovimento.delta_saldo, EnriquecimentoMovimento.tenant_id == tenant_id,
+                         EnriquecimentoMovimento.tipo.in_(TIPOS_CONSUMO), EnriquecimentoMovimento.criado_em >= inicio_do_mes(validade - timedelta(microseconds=1)),
+                         EnriquecimentoMovimento.criado_em < validade)
+        pool = max(consumo, 0)
+        for concessao in grupo:
+            usado = min(concessao.delta_saldo, pool)
+            pool -= usado
+            chave = f"expiracao:{concessao.id}"
+            if db.query(EnriquecimentoMovimento.id).filter_by(tenant_id=tenant_id, idempotency_key=chave).first() is not None:
+                continue
+            a_expirar = max(0, min(concessao.delta_saldo - usado, disponivel(db, tenant_id)))
+            if a_expirar > 0:
+                travar_carteira(db, tenant_id)
+                lancar(db, tenant_id, "EXPIRACAO", delta_saldo=-a_expirar, origem=concessao.origem, idempotency_key=chave, agora=agora,
+                       motivo=f"{'Franquia' if concessao.origem == 'franquia' else 'Pacote adicional'} {concessao.periodo} vencido(a) sem uso")
+                total += a_expirar
     return total
+
+
+def composicao(db: Session, tenant_id: str, agora: datetime | None = None) -> dict:
+    """Saldo por origem, para o painel: franquia do mês, créditos comprados (adicionais) e outros (ajuste, autorização de POC). Franquia e compras
+    do mês vigente; o consumo do mês é abatido primeiro da franquia. É uma distribuição derivada do razão, não um segundo saldo."""
+    agora = agora or agora_utc()
+    inicio = inicio_do_mes(agora)
+
+    def _vigente(origem: str) -> int:
+        return _soma(db, EnriquecimentoMovimento.delta_saldo, EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.origem == origem,
+                     EnriquecimentoMovimento.tipo.in_(("CONCESSAO", "RENOVACAO", "COMPRA")), EnriquecimentoMovimento.expira_em > agora,
+                     EnriquecimentoMovimento.criado_em >= inicio)
+
+    franquia, compras = _vigente("franquia"), _vigente("compra")
+    consumo = max(0, consumo_liquido(db, tenant_id, periodo_de(agora)))
+    franquia_restante = max(0, franquia - consumo)
+    adicional_restante = max(0, compras - max(0, consumo - franquia))
+    total = saldo(db, tenant_id)
+    return {"franquia_restante": franquia_restante, "adicional_restante": adicional_restante,
+            "outros": total - franquia_restante - adicional_restante, "saldo": total}
+
+
+def conceder_compra(db: Session, tenant_id: str, compra_id: int, quantidade: int, expira_em: datetime, pacote_codigo: str, agora: datetime | None = None
+                    ) -> EnriquecimentoMovimento:
+    """Crédito de pacote adicional pago (idempotente por `compra:<id>`), com validade no fim do mês. Separado da franquia (`origem=compra`)."""
+    travar_carteira(db, tenant_id)
+    return lancar(db, tenant_id, "COMPRA", delta_saldo=quantidade, origem="compra", expira_em=expira_em, idempotency_key=f"compra:{compra_id}",
+                  motivo=f"Pacote {pacote_codigo}", agora=agora)
 
 
 def preparar(db: Session, tenant_id: str, config: ConfigResolvida | None, agora: datetime | None = None) -> None:

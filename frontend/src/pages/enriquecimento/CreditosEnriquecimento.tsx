@@ -8,6 +8,10 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { api, mensagemErro } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
+import { AdminEnriquecimento } from "./AdminEnriquecimento";
+import { dataExpiracao } from "./formatos";
+import { PacotesAdicionais } from "./PacotesAdicionais";
+
 interface Painel {
   periodo: string;
   plano: {
@@ -15,17 +19,33 @@ interface Painel {
     origem?: string;
     versao?: number;
     faltando?: string[];
+    modo?: string;
     franquia_creditos?: number | null;
     periodicidade?: string | null;
     decisores_por_empresa_padrao?: number | null;
     decisores_por_empresa_max?: number | null;
     itens_por_lote_max?: number | null;
     limite_periodo_creditos?: number | null;
+    limite_creditos_pesquisa?: number | null;
+    limite_pesquisas_periodo?: number | null;
+    limite_empresas_periodo?: number | null;
+    limite_contatos_periodo?: number | null;
     orientacao?: string | null;
   };
   lusha: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
   categorias: { ia: string; enriquecimento: string };
-  creditos: { disponivel: number; reservado: number; saldo: number; consumido_no_periodo: number; expirado_no_periodo: number; concedido_no_periodo: number };
+  creditos: {
+    disponivel: number;
+    reservado: number;
+    saldo: number;
+    consumido_no_periodo: number;
+    expirado_no_periodo: number;
+    concedido_no_periodo: number;
+    comprado_no_periodo: number;
+  };
+  composicao: { franquia_restante: number; adicional_restante: number; outros: number; saldo: number; expira_em: string; acumula: boolean };
+  uso_no_periodo: { pesquisas: number; empresas: number; contatos: number };
+  compra_adicional: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
   uso_por_fonte: Record<string, number>;
   pesquisas_por_estado: Record<string, number>;
   estimado_vs_reconciliado: { estimado_maximo: number; consumido: number };
@@ -89,7 +109,7 @@ interface VisaoAdmin {
   pendentes_reconciliacao: { pesquisa_id: string; tenant_id: string; estado: string; empresas_ambiguas: number; creditos_provedor_reservados: number }[];
 }
 
-const TIPOS = ["", "CONCESSAO", "RENOVACAO", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO", "USO"];
+const TIPOS = ["", "CONCESSAO", "RENOVACAO", "COMPRA", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO", "USO"];
 const ROTULO_FONTE: Record<string, string> = { receita_qsa: "QSA da Receita", brasilapi: "Brasil API", lusha: "Lusha" };
 
 const NIVEL_TOM: Record<string, "green" | "amber" | "red" | "muted"> = { ok: "green", alerta: "amber", esgotado: "red", nao_configurado: "red" };
@@ -240,13 +260,38 @@ export function CreditosEnriquecimento() {
       </div>
 
       <Card>
+        <SectionLabel>Saldo e validade</SectionLabel>
+        <dl className="grid grid-cols-2 gap-2 text-[12px] lg:grid-cols-4">
+          <Item rotulo="Franquia do mês (restante)" valor={String(painel.composicao.franquia_restante)} />
+          <Item rotulo="Créditos adicionais (restante)" valor={String(painel.composicao.adicional_restante)} />
+          {painel.composicao.outros !== 0 && <Item rotulo="Autorização / ajuste" valor={String(painel.composicao.outros)} />}
+          <Item rotulo="Vencem em" valor={dataExpiracao(painel.composicao.expira_em)} />
+        </dl>
+        <p className="mt-1 text-[11px] text-muted">
+          A franquia e os créditos adicionais vencem no fim do mês e não acumulam. O saldo adicional não aumenta os limites do plano. Comprados no mês, os adicionais são
+          somados ao saldo; ao consumir, a franquia é usada primeiro.
+        </p>
+      </Card>
+
+      <Card>
         <SectionLabel>Seu plano</SectionLabel>
         {p.disponivel ? (
           <dl className="grid grid-cols-2 gap-2 text-[12px] lg:grid-cols-4">
-            <Item rotulo="Franquia" valor={`${p.franquia_creditos ?? "—"} (${p.periodicidade === "unica" ? "única" : "mensal"})`} />
-            <Item rotulo="Decisores por empresa" valor={`padrão ${p.decisores_por_empresa_padrao}, máx. ${p.decisores_por_empresa_max}`} />
-            <Item rotulo="Empresas por pesquisa" valor={`até ${p.itens_por_lote_max}`} />
+            {p.modo === "poc_autorizada" ? (
+              <Item rotulo="Franquia" valor="POC: sem franquia fixa" />
+            ) : (
+              <Item rotulo="Franquia" valor={`${p.franquia_creditos ?? "—"} (${p.periodicidade === "unica" ? "única" : "mensal"})`} />
+            )}
+            <Item rotulo="Créditos por pesquisa" valor={p.limite_creditos_pesquisa == null ? "—" : `até ${p.limite_creditos_pesquisa}`} />
+            <Item
+              rotulo="Decisores por empresa"
+              valor={p.decisores_por_empresa_padrao ? `padrão ${p.decisores_por_empresa_padrao}, máx. ${p.decisores_por_empresa_max}` : `você escolhe, máx. ${p.decisores_por_empresa_max}`}
+            />
+            <Item rotulo="Empresas por pesquisa" valor={p.itens_por_lote_max == null ? "sem limite fixo" : `até ${p.itens_por_lote_max}`} />
             <Item rotulo="Limite no período" valor={p.limite_periodo_creditos == null ? "sem teto extra" : String(p.limite_periodo_creditos)} />
+            {p.limite_pesquisas_periodo != null && <Item rotulo="Pesquisas no mês" valor={`${painel.uso_no_periodo.pesquisas} de ${p.limite_pesquisas_periodo}`} />}
+            {p.limite_empresas_periodo != null && <Item rotulo="Empresas no mês" valor={`${painel.uso_no_periodo.empresas} de ${p.limite_empresas_periodo}`} />}
+            {p.limite_contatos_periodo != null && <Item rotulo="Contatos no mês" valor={`${painel.uso_no_periodo.contatos} de ${p.limite_contatos_periodo}`} />}
           </dl>
         ) : (
           <p className="text-[12px] text-amber">
@@ -294,6 +339,8 @@ export function CreditosEnriquecimento() {
           </tbody>
         </table>
       </Card>
+
+      {gestor && <PacotesAdicionais />}
 
       {gestor && (
         <Card>
@@ -344,6 +391,8 @@ export function CreditosEnriquecimento() {
           </div>
         </Card>
       )}
+
+      {superAdmin && <AdminEnriquecimento />}
 
       {superAdmin && admin && (
         <Card>

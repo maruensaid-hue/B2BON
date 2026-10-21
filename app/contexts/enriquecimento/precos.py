@@ -1,9 +1,9 @@
 """Aritmética financeira do enriquecimento: custo de aquisição, markup, preço de venda, margem e arredondamento.
 
-Tudo em `Decimal`. A precisão interna é de 8 casas (`PRECISAO_INTERNA`) e o único arredondamento aplicado ao guardar um valor é esse, em
-meio-par (`ROUND_HALF_EVEN`), para o custo unitário de um lote. Valores de cobrança (créditos × preço unitário) NÃO são arredondados para
-centavos: a regra financeira de arredondamento da cobrança ainda não foi aprovada, então o razão guarda o valor com a precisão interna.
-Só a **exibição** arredonda (padrão: 2 casas, meio para cima), conforme o valor de apresentação informado (≈ R$ 1,35)."""
+Tudo em `Decimal`. A precisão interna é de 8 casas (`PRECISAO_INTERNA`) e o único arredondamento aplicado ao guardar um valor por crédito é
+esse, em meio-par (`ROUND_HALF_EVEN`), para o custo unitário de um lote. O consumo por pesquisa no razão guarda o valor com a precisão interna.
+O valor COBRADO de um pacote (créditos × preço unitário) é arredondado para centavos, meio para cima (`centavos`), a regra financeira do produto.
+Fora isso, só a **exibição** arredonda (padrão: 2 casas, meio para cima), conforme o valor de apresentação informado (≈ R$ 1,35)."""
 
 from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal
 
@@ -62,3 +62,20 @@ def margem_sobre_venda(venda, custo) -> Decimal:
     if venda == 0:
         raise ValueError("venda zero")
     return _interna((venda - dec(custo)) / venda * CEM)
+
+
+CENTAVO = Decimal("0.01")
+
+
+def centavos(valor_brl) -> Decimal:
+    """Regra financeira do produto para valor COBRADO em reais: centavos, meio para cima (a mesma de comissões e tributos). É o que vale para o total
+    de um pacote e para o valor enviado ao checkout. Valores internos por crédito seguem na precisão interna."""
+    return dec(valor_brl).quantize(CENTAVO, rounding=ROUND_HALF_UP)
+
+
+def markup_percentual(preco, custo) -> Decimal:
+    """Markup realizado sobre o custo: (preço ÷ custo − 1) × 100."""
+    custo = dec(custo)
+    if custo == 0:
+        raise ValueError("custo zero")
+    return _interna((dec(preco) / custo - 1) * CEM)

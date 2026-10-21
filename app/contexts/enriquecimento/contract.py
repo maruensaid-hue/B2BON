@@ -2,7 +2,8 @@
 
 Separado do FinOps de IA: nenhuma carteira, lote ou movimento é compartilhado entre as duas categorias."""
 
-from app.contexts.enriquecimento import conciliacao, config, execucao, ledger, painel, pesquisa, precos
+from app.contexts.enriquecimento import conciliacao, config, execucao, ledger, matriz, matriz_dados, pacotes, painel, pesquisa, poc, precos, renovacao
 from app.contexts.enriquecimento.pesquisa import Solicitante
 
-__all__ = ["Solicitante", "conciliacao", "config", "execucao", "ledger", "painel", "pesquisa", "precos"]
+__all__ = ["Solicitante", "conciliacao", "config", "execucao", "ledger", "matriz", "matriz_dados", "pacotes", "painel", "pesquisa", "poc", "precos",
+           "renovacao"]

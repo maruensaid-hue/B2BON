@@ -78,10 +78,14 @@ de contas que batem com o ICP (busca na base da Receita Federal), enriquecer cad
 via IA e mapeamento de decisores pelo quadro societário (QSA) da Receita Federal), ou importar \
 uma Lista de Prospecção via planilha (evento, feira, etc., com filtro de cargo-alvo). Tem também "Clientes \
 Cadastrados" (leads avulsos, fora de ICP). Contatos de decisores de um provedor pago (e-mail/telefone) só \
-vêm de "Pesquisar decisores": você marca as empresas, escolhe quantos decisores por empresa (há um padrão e um \
-máximo no plano), revê a estimativa de créditos de enriquecimento (1 crédito = 1 contato revelado, uma conta \
-separada dos créditos de IA) e confirma. Gerar a lista do ICP nunca consome esses créditos; o painel fica em \
-"Créditos de Enriquecimento". Se o plano ainda não tem isso configurado, o assinante deve falar com o comercial.
+vêm de "Pesquisar decisores": você marca as empresas, escolhe quantos decisores por empresa (até o máximo do \
+plano, por empresa e por pesquisa), revê a estimativa de créditos de enriquecimento (um teto: o que se cobra é o consumo \
+informado pelo provedor, que pode ser menor; uma conta separada dos créditos de IA) e confirma. Cada plano tem uma \
+franquia mensal de créditos de enriquecimento, que também é o limite de créditos de uma pesquisa; o que sobra vence no \
+fim do mês e não acumula. Créditos adicionais (pacotes) são um saldo à parte, vencem no fim do mês e não aumentam os \
+limites do plano; o administrador compra em "Créditos de Enriquecimento" e a data de vencimento aparece antes da \
+compra. Gerar a lista do ICP, mapear decisores pelo QSA e analisar sites nunca consomem esses créditos. Se o plano \
+ainda não tem isso configurado, o assinante deve falar com o comercial.
   - Cadências: sequência de toques multicanal (e-mail, WhatsApp, LinkedIn) gerada por IA — criar cadência \
 (mínimo 5 toques, 2 canais, trava o ICP/Oferta usados na criação), selecionar contas (por ICP, Lista de \
 Prospecção ou Clientes Cadastrados), gerar mensagens, aprovar em Aprovações, e só depois ativar a cadência \

@@ -59,8 +59,16 @@ class EnriquecimentoConfigPlano(Base):
     periodicidade: Mapped[str | None] = mapped_column(String, nullable=True)  # mensal | unica (POC / Free Trial)
     decisores_por_empresa_padrao: Mapped[int | None] = mapped_column(Integer, nullable=True)
     decisores_por_empresa_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    itens_por_lote_max: Mapped[int | None] = mapped_column(Integer, nullable=True)  # empresas por pesquisa
+    itens_por_lote_max: Mapped[int | None] = mapped_column(Integer, nullable=True)  # empresas por pesquisa (opcional)
     limite_periodo_creditos: Mapped[int | None] = mapped_column(Integer, nullable=True)  # teto extra de consumo+reserva no mês (opcional)
+    # "franquia_fixa": franquia mensal/única definida aqui. "poc_autorizada" (só no plano POC): sem franquia fixa; cada operação exige uma
+    # autorização aprovada por tenant (configuração do tenant, `periodicidade=unica`), calculada com as tarifas confirmadas.
+    modo: Mapped[str] = mapped_column(String, default="franquia_fixa", server_default="franquia_fixa")
+    limite_creditos_pesquisa: Mapped[int | None] = mapped_column(Integer, nullable=True)  # teto de créditos de UMA pesquisa
+    # Limites por período (mês) — usados sobretudo pelo Enterprise, configurado por administrador. Nulo = sem esse limite.
+    limite_pesquisas_periodo: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    limite_empresas_periodo: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    limite_contatos_periodo: Mapped[int | None] = mapped_column(Integer, nullable=True)  # decisores pedidos no período
     motivo: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_por: Mapped[str | None] = mapped_column(String, nullable=True)
     aprovado_por: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -164,6 +172,58 @@ class EnriquecimentoUsoProvedor(Base):
     divergencia: Mapped[int | None] = mapped_column(Integer, nullable=True)  # delta_provedor - delta_razao (None = sem leitura anterior)
 
 
+class EnriquecimentoPacote(Base):
+    """Pacote de créditos de enriquecimento para compra adicional (versionado e aprovado). Os créditos comprados formam saldo adicional, separado
+    da franquia, e expiram no fim do mês (não acumulam). Não alteram os limites do plano (decisores por empresa, créditos por pesquisa).
+    `status=CONTACT_SALES` (acima de 3.000 créditos): sem preço e sem checkout automático, só cotação comercial."""
+
+    __tablename__ = "enriquecimento_pacote"
+    __table_args__ = (UniqueConstraint("codigo", "versao", name="uq_enriq_pacote_versao"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    codigo: Mapped[str] = mapped_column(String, index=True)
+    versao: Mapped[int] = mapped_column(Integer, default=1)
+    nome: Mapped[str] = mapped_column(String)
+    quantidade_creditos: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    preco_unitario_brl: Mapped[float | None] = mapped_column(Numeric(14, 4), nullable=True)
+    preco_total_brl: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    status: Mapped[str] = mapped_column(String, default="ATIVO")  # ATIVO | CONTACT_SALES | INATIVO
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    motivo: Mapped[str | None] = mapped_column(String, nullable=True)
+    criado_por: Mapped[str | None] = mapped_column(String, nullable=True)
+    aprovado_por: Mapped[str | None] = mapped_column(String, nullable=True)
+    aprovado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    valido_de: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    valido_ate: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class EnriquecimentoCompra(Base):
+    """Pedido de compra de um pacote (versão e preço congelados). Os créditos só entram quando o pagamento é confirmado pelo webhook assinado
+    (idempotente por `pagamento_id_externo` e por `compra:<id>` no razão); a volta do navegador não credita nada."""
+
+    __tablename__ = "enriquecimento_compra"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenant.id"), index=True)
+    pacote_id: Mapped[int] = mapped_column(ForeignKey("enriquecimento_pacote.id"), index=True)
+    pacote_codigo: Mapped[str] = mapped_column(String)
+    pacote_versao: Mapped[int] = mapped_column(Integer)
+    creditos: Mapped[int] = mapped_column(Integer)
+    preco_unitario_brl: Mapped[float] = mapped_column(Numeric(14, 4))
+    preco_total_brl: Mapped[float] = mapped_column(Numeric(14, 2))
+    expira_em_previsto: Mapped[datetime] = mapped_column(DateTime)  # fim do mês no momento do pedido, informado antes da compra
+    status: Mapped[str] = mapped_column(String, default="PENDENTE")  # PENDENTE | APROVADA | REJEITADA
+    preferencia_id_externo: Mapped[str | None] = mapped_column(String, nullable=True)
+    url_checkout: Mapped[str | None] = mapped_column(String, nullable=True)
+    pagamento_id_externo: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    movimento_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # lançamento COMPRA no razão
+    expira_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # a validade real, definida na confirmação
+    criado_por: Mapped[str | None] = mapped_column(String, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    confirmado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class PesquisaDecisores(Base):
     """Uma pesquisa de decisores sobre um conjunto EXPLÍCITO de empresas. Nasce numa prévia (estado `criada`, com estimativa) e só avança
     quando o usuário confirma essa mesma prévia (`selecao_hash`). Estados: criada, validada, reservada, enviada, em_processamento,
@@ -246,7 +306,7 @@ class EnriquecimentoMovimento(Base):
     """Razão imutável de créditos de enriquecimento. `delta_saldo` mexe no saldo; `delta_reservado` mexe na parte retida por pesquisa em curso.
     Disponível = Σ delta_saldo − Σ delta_reservado.
 
-    Tipos: CONCESSAO, RENOVACAO, RESERVA, CONSUMO, LIBERACAO, ESTORNO, EXPIRACAO, AJUSTE, RECONCILIACAO, USO (uso de fonte sem custo, deltas zero)."""
+    Tipos: CONCESSAO, RENOVACAO, COMPRA (pacote adicional), RESERVA, CONSUMO, LIBERACAO, ESTORNO, EXPIRACAO, AJUSTE, RECONCILIACAO, USO (uso de fonte sem custo, deltas zero)."""
 
     __tablename__ = "enriquecimento_movimento"
     __table_args__ = (UniqueConstraint("tenant_id", "idempotency_key", name="uq_enriq_movimento_idempotencia"),)

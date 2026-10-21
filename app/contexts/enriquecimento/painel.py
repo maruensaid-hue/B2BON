@@ -9,14 +9,16 @@ from sqlalchemy.orm import Session
 
 from app.contexts.enriquecimento import conciliacao, ledger, precos
 from app.contexts.enriquecimento.config import (
+    CAMPOS_OBRIGATORIOS_POR_MODO,
     agora_utc,
     config_vigente,
+    fim_do_mes,
     motivos_de_indisponibilidade,
     orcamento_vigente,
     periodo_de,
     politica_vigente,
 )
-from app.contexts.enriquecimento.pesquisa import Solicitante, itens_de
+from app.contexts.enriquecimento.pesquisa import Solicitante, itens_de, uso_do_periodo
 from app.models.conta import Conta
 from app.models.enriquecimento_creditos import (
     EnriquecimentoConfigPlano,
@@ -28,6 +30,7 @@ from app.models.enriquecimento_creditos import (
     PesquisaDecisoresEmpresa,
     PesquisaDecisoresTransicao,
 )
+from app.models.auditoria import AuditLog
 from app.models.plano import Plano
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 
@@ -68,7 +71,9 @@ def _resumo_config(config, motivo: str | None) -> dict:
         "disponivel": config.utilizavel, "origem": config.origem, "versao": config.versao, "faltando": list(config.faltando),
         "franquia_creditos": config.franquia_creditos, "periodicidade": config.periodicidade,
         "decisores_por_empresa_padrao": config.decisores_por_empresa_padrao, "decisores_por_empresa_max": config.decisores_por_empresa_max,
-        "itens_por_lote_max": config.itens_por_lote_max, "limite_periodo_creditos": config.limite_periodo_creditos,
+        "itens_por_lote_max": config.itens_por_lote_max, "limite_periodo_creditos": config.limite_periodo_creditos, "modo": config.modo,
+        "limite_creditos_pesquisa": config.limite_creditos_pesquisa, "limite_pesquisas_periodo": config.limite_pesquisas_periodo,
+        "limite_empresas_periodo": config.limite_empresas_periodo, "limite_contatos_periodo": config.limite_contatos_periodo,
         "orientacao": None if config.utilizavel else "Configuração incompleta: fale com o comercial.",
     }
 
@@ -121,7 +126,13 @@ def painel_tenant(db: Session, solicitante: Solicitante, provider: ContactEnrich
             "consumido_no_periodo": consumido_periodo,
             "expirado_no_periodo": -_soma_tipo("EXPIRACAO", EnriquecimentoMovimento.delta_saldo),
             "concedido_no_periodo": _soma_tipo("CONCESSAO", EnriquecimentoMovimento.delta_saldo) + _soma_tipo("RENOVACAO", EnriquecimentoMovimento.delta_saldo),
+            "comprado_no_periodo": _soma_tipo("COMPRA", EnriquecimentoMovimento.delta_saldo),
         },
+        # Franquia do mês e saldo adicional (pacotes comprados) são grandezas separadas; ambas vencem no fim do mês de Brasília e não acumulam.
+        # O adicional NÃO aumenta nenhum limite do plano (decisores por empresa, créditos por pesquisa).
+        "composicao": {**ledger.composicao(db, tenant_id, agora), "expira_em": fim_do_mes(agora).isoformat(), "acumula": False},
+        "uso_no_periodo": uso_do_periodo(db, tenant_id, agora),
+        "compra_adicional": {"disponivel": not motivos, "motivos": motivos},
         "uso_por_fonte": ledger.uso_por_fonte(db, tenant_id, periodo),
         "pesquisas_por_estado": por_estado,
         "estimado_vs_reconciliado": {"estimado_maximo": int(estimado), "consumido": int(consumido_pesquisas)},
@@ -230,7 +241,19 @@ def planos_status(db: Session) -> list[dict]:
             "plano_id": plano.id, "plano": plano.nome,
             "situacao": "aprovada" if aprovada else ("pendente_aprovacao" if pendente else "sem_configuracao"),
             "versao_aprovada": aprovada.versao if aprovada else None, "versao_pendente": pendente.versao if pendente else None,
-            "faltando": [campo for campo in ("franquia_creditos", "periodicidade", "decisores_por_empresa_padrao", "decisores_por_empresa_max",
-                                             "itens_por_lote_max") if aprovada is not None and getattr(aprovada, campo) is None],
+            "modo": aprovada.modo if aprovada else None,
+            "faltando": [campo for campo in CAMPOS_OBRIGATORIOS_POR_MODO[(aprovada.modo or "franquia_fixa")]
+                         if aprovada is not None and getattr(aprovada, campo) is None] if aprovada is not None else [],
         })
     return saida
+
+
+def auditoria_administrativa(db: Session, *, tenant_id: str | None = None, prefixo: str = "enriquecimento_", limite: int = 100, offset: int = 0) -> list[dict]:
+    """Trilha de auditoria dos eventos de enriquecimento (configuração, pacotes, orçamento, política, lotes, ajustes, compras...), mais recente
+    primeiro. Cruza tenants: só super_admin. `detalhes` já nasce sem segredos (nenhuma credencial passa por esses eventos)."""
+    consulta = db.query(AuditLog).filter(AuditLog.evento_tipo.like(f"{prefixo}%"))
+    if tenant_id:
+        consulta = consulta.filter(AuditLog.tenant_id == tenant_id)
+    linhas = consulta.order_by(AuditLog.id.desc()).offset(max(0, offset)).limit(max(1, min(limite, 500))).all()
+    return [{"id": a.id, "tenant_id": a.tenant_id, "evento": a.evento_tipo, "entidade": a.entidade_tipo, "entidade_id": a.entidade_id,
+             "ator_id": a.ator_id, "detalhes": a.detalhes, "criado_em": a.criado_em} for a in linhas]

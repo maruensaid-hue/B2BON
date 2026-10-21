@@ -39,6 +39,7 @@ APROVADAS = {
     ("GET", "/api/v1/opt-out/campanha/{token}"): "token_na_url_ou_cabecalho",
     ("GET", "/api/v1/opt-out/email/{token}"): "token_na_url_ou_cabecalho",
     ("GET", "/api/v1/planos"): "catalogo_publico",
+    ("GET", "/api/v1/planos/enriquecimento"): "catalogo_publico",
     ("GET", "/api/v1/portal-fornecedor"): "token_na_url_ou_cabecalho",
     ("POST", "/api/v1/portal-fornecedor/declinar"): "token_na_url_ou_cabecalho",
     ("POST", "/api/v1/portal-fornecedor/perguntas"): "token_na_url_ou_cabecalho",

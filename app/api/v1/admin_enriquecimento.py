@@ -9,8 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_contact_enrichment_provider, get_db
-from app.contexts.enriquecimento.contract import conciliacao, config, execucao, ledger, painel
-from app.models.enriquecimento_creditos import EnriquecimentoConfigPlano, EnriquecimentoPoliticaProvedor
+from app.contexts.enriquecimento.contract import conciliacao, config, execucao, ledger, matriz, pacotes, painel, poc
+from app.models.enriquecimento_creditos import (
+    EnriquecimentoCompra,
+    EnriquecimentoConfigPlano,
+    EnriquecimentoPacote,
+    EnriquecimentoPoliticaProvedor,
+)
 from app.models.usuario import Usuario
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.services.errors import ValidacaoFalhou
@@ -30,6 +35,43 @@ class ConfigRequest(BaseModel):
     decisores_por_empresa_max: int | None = Field(default=None, ge=1)
     itens_por_lote_max: int | None = Field(default=None, ge=1)
     limite_periodo_creditos: int | None = Field(default=None, ge=0)
+    modo: str | None = Field(default=None, description="franquia_fixa (padrão) | poc_autorizada")
+    limite_creditos_pesquisa: int | None = Field(default=None, ge=1)
+    limite_pesquisas_periodo: int | None = Field(default=None, ge=0)
+    limite_empresas_periodo: int | None = Field(default=None, ge=0)
+    limite_contatos_periodo: int | None = Field(default=None, ge=0)
+    motivo: str = Field(min_length=3, max_length=300)
+
+
+class MatrizRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mapeamento: dict[str, int] = Field(default_factory=dict, description="Linha da matriz (ex.: Starter) → id do plano que a recebe")
+
+
+class PacoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    codigo: str = Field(min_length=3, max_length=60)
+    nome: str = Field(min_length=2, max_length=100)
+    quantidade_creditos: int | None = Field(default=None, gt=0)
+    preco_unitario_brl: str | None = Field(default=None, max_length=30, description="Decimal em texto, ex.: 1.35")
+    preco_total_brl: str | None = Field(default=None, max_length=30, description="Decimal em texto; deve ser créditos × unitário em centavos")
+    status: str = "ATIVO"
+    ordem: int = 0
+    motivo: str = Field(min_length=3, max_length=300)
+
+
+class PocTetoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provedor: str = Field(default="lusha", min_length=2, max_length=50)
+    empresas: int = Field(gt=0)
+    decisores_por_empresa: int = Field(default=1, ge=1)
+
+
+class PocAutorizacaoRequest(PocTetoRequest):
+    tenant_id: str = Field(min_length=1, max_length=100)
     motivo: str = Field(min_length=3, max_length=300)
 
 
@@ -107,9 +149,11 @@ def _linha_config(c: EnriquecimentoConfigPlano) -> dict:
     return {"id": c.id, "plano_id": c.plano_id, "tenant_id": c.tenant_id, "versao": c.versao, "franquia_creditos": c.franquia_creditos,
             "periodicidade": c.periodicidade, "decisores_por_empresa_padrao": c.decisores_por_empresa_padrao,
             "decisores_por_empresa_max": c.decisores_por_empresa_max, "itens_por_lote_max": c.itens_por_lote_max,
-            "limite_periodo_creditos": c.limite_periodo_creditos, "valido_de": c.valido_de, "valido_ate": c.valido_ate, "motivo": c.motivo,
+            "limite_periodo_creditos": c.limite_periodo_creditos, "modo": c.modo, "limite_creditos_pesquisa": c.limite_creditos_pesquisa,
+            "limite_pesquisas_periodo": c.limite_pesquisas_periodo, "limite_empresas_periodo": c.limite_empresas_periodo,
+            "limite_contatos_periodo": c.limite_contatos_periodo, "valido_de": c.valido_de, "valido_ate": c.valido_ate, "motivo": c.motivo,
             "aprovada": c.aprovado_em is not None, "aprovado_por": c.aprovado_por, "aprovado_em": c.aprovado_em,
-            "faltando": [campo for campo in config.CAMPOS_OBRIGATORIOS if getattr(c, campo) is None]}
+            "faltando": [campo for campo in config.CAMPOS_OBRIGATORIOS_POR_MODO[c.modo or "franquia_fixa"] if getattr(c, campo) is None]}
 
 
 def _linha_politica(p: EnriquecimentoPoliticaProvedor) -> dict:
@@ -153,6 +197,91 @@ def definir_configuracao(dados: ConfigRequest, admin: Usuario = Depends(exigir_p
 @router.post("/config/{config_id}/aprovar")
 def aprovar_configuracao(config_id: int, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
     return _linha_config(config.aprovar_config(db, config_id, str(admin.id), admin.tenant_id))
+
+
+# ------------------------------------------------------------------------------------------------------------------- matriz de franquias
+
+
+@router.get("/matriz", dependencies=[_super])
+def situacao_da_matriz(db: Session = Depends(get_db)) -> list[dict]:
+    """Cada linha da matriz comercial (POC, Teste, Starter, Professional, Business, Corporate, Enterprise): existe plano correspondente? A configuração
+    aprovada bate com a matriz? Nada é adivinhado: linha sem plano de mesmo nome aparece como `plano_inexistente` até o administrador mapear."""
+    return matriz.status(db)
+
+
+@router.post("/matriz/aplicar")
+def aplicar_matriz(dados: MatrizRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
+    """Aplica a matriz aprovada pelo PO aos planos que existem (por nome exato ou pelo `mapeamento` informado). Idempotente e versionada: quem já
+    bate não ganha versão nova. Plano ausente não é criado."""
+    return matriz.aplicar(db, ator_id=str(admin.id), tenant_auditoria=admin.tenant_id, mapeamento=dados.mapeamento or None)
+
+
+# ------------------------------------------------------------------------------------------------------------------- pacotes adicionais
+
+
+@router.get("/pacotes", dependencies=[_super])
+def listar_pacotes(db: Session = Depends(get_db)) -> list[dict]:
+    """Todas as versões de pacote (aprovadas e pendentes)."""
+    return [{"id": p.id, "codigo": p.codigo, "versao": p.versao, "nome": p.nome, "creditos": p.quantidade_creditos, "status": p.status,
+             "preco_unitario_brl": str(p.preco_unitario_brl) if p.preco_unitario_brl is not None else None,
+             "preco_total_brl": str(p.preco_total_brl) if p.preco_total_brl is not None else None, "ordem": p.ordem,
+             "aprovado": p.aprovado_em is not None, "aprovado_por": p.aprovado_por, "valido_ate": p.valido_ate, "motivo": p.motivo}
+            for p in db.query(EnriquecimentoPacote).order_by(EnriquecimentoPacote.ordem, EnriquecimentoPacote.codigo, EnriquecimentoPacote.versao.desc()).all()]
+
+
+@router.put("/pacotes")
+def definir_pacote(dados: PacoteRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
+    """Nova versão PENDENTE de um pacote (preço nunca é editado no lugar). Total divergente de créditos × unitário é recusado."""
+    novo = pacotes.definir_pacote(db, codigo=dados.codigo, nome=dados.nome, quantidade_creditos=dados.quantidade_creditos,
+                                  preco_unitario_brl=dados.preco_unitario_brl, preco_total_brl=dados.preco_total_brl, status=dados.status,
+                                  ordem=dados.ordem, ator_id=str(admin.id), tenant_auditoria=admin.tenant_id, motivo=dados.motivo)
+    return {"id": novo.id, "codigo": novo.codigo, "versao": novo.versao, "status": novo.status, "pendente_aprovacao": True}
+
+
+@router.post("/pacotes/{pacote_id}/aprovar")
+def aprovar_pacote(pacote_id: int, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
+    aprovado = pacotes.aprovar_pacote(db, pacote_id, str(admin.id), admin.tenant_id)
+    return {"id": aprovado.id, "codigo": aprovado.codigo, "versao": aprovado.versao, "status": aprovado.status, "aprovado": True}
+
+
+@router.get("/pacotes/rentabilidade", dependencies=[_super])
+def rentabilidade_dos_pacotes(provedor: str = "lusha", db: Session = Depends(get_db)) -> dict:
+    """Margem de cada pacote com o custo vigente (política aprovada ou, na falta dela, o lote de compra mais recente). Recalculada a cada leitura."""
+    return pacotes.rentabilidade(db, provedor)
+
+
+@router.get("/compras", dependencies=[_super])
+def listar_compras(tenant_id: str | None = None, limite: int = 100, db: Session = Depends(get_db)) -> list[dict]:
+    consulta = db.query(EnriquecimentoCompra)
+    if tenant_id:
+        consulta = consulta.filter(EnriquecimentoCompra.tenant_id == tenant_id)
+    return [{**pacotes.serializar_compra(c), "tenant_id": c.tenant_id}
+            for c in consulta.order_by(EnriquecimentoCompra.id.desc()).limit(max(1, min(limite, 500))).all()]
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------- POC
+
+
+@router.post("/poc/teto", dependencies=[_super])
+def calcular_teto_poc(dados: PocTetoRequest, db: Session = Depends(get_db)) -> dict:
+    """Teto de créditos de uma operação de POC, calculado só com as tarifas confirmadas (política aprovada). Não grava nada."""
+    return poc.calcular_teto(db, dados.provedor, dados.empresas, dados.decisores_por_empresa)
+
+
+@router.post("/poc/autorizar")
+def autorizar_poc(dados: PocAutorizacaoRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
+    """Cria a autorização (configuração do tenant, PENDENTE de aprovação) da operação de POC com o teto calculado."""
+    return poc.autorizar(db, dados.tenant_id, provedor=dados.provedor, empresas=dados.empresas, decisores_por_empresa=dados.decisores_por_empresa,
+                         ator_id=str(admin.id), tenant_auditoria=admin.tenant_id, motivo=dados.motivo)
+
+
+# ------------------------------------------------------------------------------------------------------------------------------- auditoria
+
+
+@router.get("/auditoria", dependencies=[_super])
+def auditoria(tenant_id: str | None = None, limite: int = 100, offset: int = 0, db: Session = Depends(get_db)) -> list[dict]:
+    """Trilha de auditoria de enriquecimento: configuração, matriz, pacotes, política, orçamento, lotes, ajustes, estornos, compras."""
+    return painel.auditoria_administrativa(db, tenant_id=tenant_id, limite=limite, offset=offset)
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------- provedor

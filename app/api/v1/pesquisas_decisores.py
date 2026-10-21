@@ -16,14 +16,16 @@ from app.api.deps import (
     get_contact_enrichment_provider,
     get_db,
     get_graph_client,
+    get_payment_provider,
     get_sessao_factory,
     get_usuario_atual,
     limitar_ia_por_tenant,
 )
-from app.contexts.enriquecimento.contract import Solicitante, execucao, painel, pesquisa
+from app.contexts.enriquecimento.contract import Solicitante, config, execucao, pacotes, painel, pesquisa
 from app.graph.client import Neo4jClient
 from app.models.usuario import Usuario
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
+from app.providers.payment.base import PaymentProvider
 from app.services.errors import NaoAutorizado
 
 router = APIRouter(prefix="/pesquisas-decisores", tags=["pesquisas-decisores"])
@@ -44,6 +46,13 @@ class ConfirmarRequest(BaseModel):
 
     selecao_hash: str = Field(min_length=16, max_length=128)
     idempotency_key: str = Field(min_length=8, max_length=100)
+
+
+class CompraRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pacote: str = Field(min_length=3, max_length=60)
+    aceite_expiracao: bool = Field(description="Ciência de que os créditos adicionais expiram no fim do mês e não acumulam")
 
 
 def _solicitante(usuario: Usuario) -> Solicitante:
@@ -100,6 +109,34 @@ def movimentacoes(tipo: str | None = None, pesquisa_id: str | None = None, desde
     if not _solicitante(usuario).gestor:
         raise NaoAutorizado("O extrato de créditos é restrito a administradores.")
     return painel.listar_movimentacoes(db, usuario.tenant_id, tipo=tipo, pesquisa_id=pesquisa_id, desde=desde, ate=ate, limite=limite, offset=offset)
+
+
+@router.get("/pacotes")
+def pacotes_adicionais(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db),
+                       provider: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider)) -> dict:
+    """Pacotes de créditos adicionais, a data em que expiram se comprados agora e se a compra está disponível para este tenant (e por que não)."""
+    motivos = config.motivos_de_indisponibilidade(db, usuario.tenant_id, provider)
+    return {**pacotes.catalogo(db), "compra_disponivel": not motivos, "motivos": motivos}
+
+
+@router.get("/compras")
+def minhas_compras(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> list[dict]:
+    if not _solicitante(usuario).gestor:
+        raise NaoAutorizado("O histórico de compras de créditos é restrito a administradores.")
+    return [pacotes.serializar_compra(c) for c in pacotes.listar_compras(db, usuario.tenant_id)]
+
+
+@router.post("/compras", status_code=201, dependencies=[Depends(limitar_ia_por_tenant(10, 300))])
+def comprar_pacote(dados: CompraRequest, usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db),
+                   provider: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider),
+                   pagamento: PaymentProvider = Depends(get_payment_provider)) -> dict:
+    """Pedido de compra de um pacote adicional (só administradores). O crédito entra quando o pagamento é confirmado pelo webhook assinado, nunca
+    pela volta do navegador. Recusa o pedido sem o aceite de expiração, para pacote sob negociação ou com a pesquisa de decisores indisponível."""
+    if not _solicitante(usuario).gestor:
+        raise NaoAutorizado("A compra de créditos é restrita a administradores.")
+    compra = pacotes.iniciar_compra(db, usuario.tenant_id, dados.pacote, aceite_expiracao=dados.aceite_expiracao, payment_provider=pagamento,
+                                    email_pagador=usuario.email, provider=provider, ator_id=str(usuario.id))
+    return pacotes.serializar_compra(compra)
 
 
 @router.get("/{pesquisa_id}")

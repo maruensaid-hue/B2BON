@@ -1,5 +1,13 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Créditos de enriquecimento: franquias por plano e pacotes adicionais (2026-10-21, D-094 e D-095)
+
+- Pesquisa de decisores pela Lusha agora é uma operação à parte: você escolhe as empresas, revisa a estimativa e confirma. "Mapear decisores" e a fila automática trazem só o QSA da Receita.
+- Cada plano tem uma franquia mensal de créditos de enriquecimento (Teste gratuito 30, Starter 30, Professional 60, Business 120, Corporate 180; POC e Enterprise sob autorização/contrato). A franquia também é o limite de créditos de cada pesquisa. Decisores por empresa: Teste gratuito até 3, Starter 5, Professional 10, Business 20, Corporate 30. O que não for usado vence no fim do mês.
+- Créditos adicionais: pacotes de 400, 660, 1.200 e 3.000 créditos (R$ 540,00, R$ 844,80, R$ 1.452,00 e R$ 3.240,00); acima de 3.000, sob negociação. O saldo adicional fica separado da franquia, não aumenta os limites do plano e vence no fim do mês — a data aparece antes da compra e você confirma que está ciente.
+- A tela de créditos mostra franquia e saldo adicional separados, validade, limites do plano e uso no mês. A página de planos mostra as franquias e os pacotes.
+- A pesquisa de decisores na Lusha continua bloqueada até a política do provedor e o orçamento global serem aprovados.
+
 ## Integração com Salesforce, HubSpot, Pipedrive e RD Station CRM (2026-10-04, D-087)
 
 - Conectar com 1 clique (Salesforce, HubSpot e Pipedrive): o admin autoriza no próprio CRM e volta para a B2B ON, sem copiar token. RD Station CRM continua pelo token da instância.

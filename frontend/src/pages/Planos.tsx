@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { CatalogoProdutos } from "@/components/CatalogoProdutos";
 import { LinhasComerciais } from "@/components/LinhasComerciais";
 import { SecaoAiCredits } from "@/components/SecaoAiCredits";
+import { SecaoEnriquecimento } from "@/components/SecaoEnriquecimento";
 
 interface Modulo {
   nome: string;
@@ -382,6 +383,8 @@ export function Planos() {
         </div>
 
         <SecaoAiCredits />
+
+        <SecaoEnriquecimento />
 
         <CatalogoProdutos />
 

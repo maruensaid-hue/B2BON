@@ -22,6 +22,7 @@ from app.api.deps import (
 )
 from app.api.v1.bids import get_fonte_pncp
 from app.contexts.bids import contract as bids_contract
+from app.contexts.enriquecimento import contract as enriquecimento
 from app.contexts.finops import contract as finops
 from app.contexts.governo import contract as governo
 from app.contexts.integrations import contract as integracoes
@@ -340,12 +341,14 @@ def creditos_ia(tarefas: BackgroundTasks, db: Session = Depends(get_db), sessao_
     pool anual dos períodos Government que começaram, encerra os que
     terminaram e marca os avisos de renovação. D-076: grava a PTAX de
     fechamento do Banco Central dos últimos dias úteis. D-082: apaga os
-    ambientes de demonstração expirados."""
+    ambientes de demonstração expirados. Renova a franquia mensal de enriquecimento e expira o saldo
+    vencido (franquia e pacotes adicionais) de cada tenant, de forma idempotente."""
     governo_resultado = governo.contratos.rotina(db)
     ptax = finops.cambio.sincronizar_ptax(db)  # D-076: PTAX de fechamento do Banco Central (OI-018)
     demonstracoes = demo_sessao.purgar_expiradas(db, limite=50)
     tarefas.add_task(demo_sessao.reabastecer, sessao_factory)  # D-085: mantém a reserva de demonstrações cheia
-    return {**finops.creditos_ia_rotina(db), "governo": governo_resultado, "ptax": ptax, "demonstracoes_apagadas": demonstracoes}
+    return {**finops.creditos_ia_rotina(db), "governo": governo_resultado, "ptax": ptax, "demonstracoes_apagadas": demonstracoes,
+            "enriquecimento": enriquecimento.renovacao.renovar_todos(db)}
 
 
 @router.post("/integracoes-crm", dependencies=[Depends(_exigir_segredo_cron)])

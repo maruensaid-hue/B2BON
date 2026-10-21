@@ -9,7 +9,7 @@ Regras:
 """
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -26,21 +26,51 @@ from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, PesquisaBloqueada, ValidacaoFalhou
 
 PERIODICIDADES = ("mensal", "unica")
+MODOS = ("franquia_fixa", "poc_autorizada")
 METODOS_CUSTO = ("lote_referencia", "media_ponderada")
-CAMPOS_OBRIGATORIOS = (
-    "franquia_creditos", "periodicidade", "decisores_por_empresa_padrao", "decisores_por_empresa_max", "itens_por_lote_max",
-)
+# O que falta para a configuração liberar a pesquisa, por modo. No modo `franquia_fixa` (planos pagos, Teste gratuito, condição de tenant Enterprise e
+# autorização de POC): franquia, periodicidade, teto de decisores por empresa e teto de créditos por pesquisa. O padrão de decisores e o limite de empresas
+# por pesquisa são opcionais (sem padrão o usuário escolhe; sem limite de empresas, só o teto de créditos limita o lote). No `poc_autorizada` (linha do
+# plano POC) só o teto de decisores por empresa: o resto vem da autorização aprovada de cada operação.
+CAMPOS_OBRIGATORIOS_POR_MODO = {
+    "franquia_fixa": ("franquia_creditos", "periodicidade", "decisores_por_empresa_max", "limite_creditos_pesquisa"),
+    "poc_autorizada": ("decisores_por_empresa_max",),
+}
+CAMPOS_OBRIGATORIOS = CAMPOS_OBRIGATORIOS_POR_MODO["franquia_fixa"]
 CAMPOS_NUMERICOS = (
     "franquia_creditos", "decisores_por_empresa_padrao", "decisores_por_empresa_max", "itens_por_lote_max", "limite_periodo_creditos",
+    "limite_creditos_pesquisa", "limite_pesquisas_periodo", "limite_empresas_periodo", "limite_contatos_periodo",
 )
+
+# O mês de franquia, de limite, de orçamento e de expiração é o mês-calendário de Brasília (UTC−3, sem horário de verão desde 2019). Os instantes
+# continuam guardados em UTC; só a virada do mês é no fuso do produto, para "fim do mês" ser mesmo o fim do mês do cliente.
+BRT = timezone(timedelta(hours=-3))
 
 
 def agora_utc() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _em_brasilia(momento: datetime) -> datetime:
+    return momento.replace(tzinfo=UTC).astimezone(BRT)
+
+
 def periodo_de(momento: datetime) -> str:
-    return momento.strftime("%Y-%m")
+    """Mês-calendário (AAAA-MM) de Brasília de um instante em UTC naive."""
+    return _em_brasilia(momento).strftime("%Y-%m")
+
+
+def inicio_do_mes(momento: datetime) -> datetime:
+    """Primeiro instante (UTC naive) do mês de Brasília de `momento`."""
+    local = _em_brasilia(momento).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return local.astimezone(UTC).replace(tzinfo=None)
+
+
+def fim_do_mes(momento: datetime) -> datetime:
+    """Instante (UTC naive) em que o mês de Brasília de `momento` acaba = início do mês seguinte. É a validade de franquia e de créditos comprados."""
+    local = _em_brasilia(momento).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    proximo = (local + timedelta(days=32)).replace(day=1)
+    return proximo.astimezone(UTC).replace(tzinfo=None)
 
 
 def _int_nao_negativo(nome: str, valor) -> int | None:
@@ -82,6 +112,11 @@ class ConfigResolvida:
     decisores_por_empresa_max: int | None
     itens_por_lote_max: int | None
     limite_periodo_creditos: int | None
+    limite_creditos_pesquisa: int | None = None
+    limite_pesquisas_periodo: int | None = None
+    limite_empresas_periodo: int | None = None
+    limite_contatos_periodo: int | None = None
+    modo: str = "franquia_fixa"
     faltando: tuple[str, ...] = field(default_factory=tuple)
 
     @property
@@ -96,7 +131,11 @@ def validar_campos(campos: dict) -> dict:
     if periodicidade is not None and periodicidade not in PERIODICIDADES:
         raise ValidacaoFalhou(f"periodicidade deve ser uma de: {', '.join(PERIODICIDADES)}.")
     limpos["periodicidade"] = periodicidade
-    for nome in ("decisores_por_empresa_padrao", "decisores_por_empresa_max", "itens_por_lote_max"):
+    modo = campos.get("modo") or "franquia_fixa"
+    if modo not in MODOS:
+        raise ValidacaoFalhou(f"modo deve ser um de: {', '.join(MODOS)}.")
+    limpos["modo"] = modo
+    for nome in ("decisores_por_empresa_padrao", "decisores_por_empresa_max", "itens_por_lote_max", "limite_creditos_pesquisa"):
         if limpos[nome] is not None and limpos[nome] < 1:
             raise ValidacaoFalhou(f"{nome} deve ser no mínimo 1.")
     padrao, maximo = limpos["decisores_por_empresa_padrao"], limpos["decisores_por_empresa_max"]
@@ -106,14 +145,17 @@ def validar_campos(campos: dict) -> dict:
 
 
 def _faltando(linha: EnriquecimentoConfigPlano) -> tuple[str, ...]:
-    return tuple(c for c in CAMPOS_OBRIGATORIOS if getattr(linha, c) is None)
+    return tuple(c for c in CAMPOS_OBRIGATORIOS_POR_MODO[linha.modo or "franquia_fixa"] if getattr(linha, c) is None)
 
 
 def _resolvida(linha: EnriquecimentoConfigPlano, origem: str) -> ConfigResolvida:
     return ConfigResolvida(
         origem=origem, id=linha.id, versao=linha.versao, franquia_creditos=linha.franquia_creditos, periodicidade=linha.periodicidade,
         decisores_por_empresa_padrao=linha.decisores_por_empresa_padrao, decisores_por_empresa_max=linha.decisores_por_empresa_max,
-        itens_por_lote_max=linha.itens_por_lote_max, limite_periodo_creditos=linha.limite_periodo_creditos, faltando=_faltando(linha),
+        itens_por_lote_max=linha.itens_por_lote_max, limite_periodo_creditos=linha.limite_periodo_creditos,
+        limite_creditos_pesquisa=linha.limite_creditos_pesquisa, limite_pesquisas_periodo=linha.limite_pesquisas_periodo,
+        limite_empresas_periodo=linha.limite_empresas_periodo, limite_contatos_periodo=linha.limite_contatos_periodo,
+        modo=linha.modo or "franquia_fixa", faltando=_faltando(linha),
     )
 
 
@@ -129,6 +171,11 @@ def _vigente_aprovada(db: Session, filtro) -> tuple[EnriquecimentoConfigPlano | 
     return aprovada, any(c.aprovado_em is None for c in linhas)
 
 
+def config_aprovada_do_plano(db: Session, plano_id: int) -> EnriquecimentoConfigPlano | None:
+    """Linha aprovada e vigente do PLANO (sem olhar condição de tenant)."""
+    return _vigente_aprovada(db, EnriquecimentoConfigPlano.plano_id == plano_id)[0]
+
+
 def config_vigente(db: Session, tenant_id: str) -> tuple[ConfigResolvida | None, str | None]:
     """(config, None) quando há versão APROVADA vigente; (None, motivo) quando não há. Motivos: sem_plano_ativo, plano_sem_configuracao,
     plano_config_pendente_aprovacao. A condição contratual do tenant, se aprovada, prevalece sobre a do plano. Config incompleta é devolvida
@@ -141,6 +188,8 @@ def config_vigente(db: Session, tenant_id: str) -> tuple[ConfigResolvida | None,
         return None, "sem_plano_ativo"
     do_plano, plano_pendente = _vigente_aprovada(db, EnriquecimentoConfigPlano.plano_id == plano_id)
     if do_plano is not None:
+        if (do_plano.modo or "franquia_fixa") == "poc_autorizada":
+            return None, "poc_sem_autorizacao"  # POC: sem franquia fixa; só opera com autorização aprovada da operação (configuração do tenant)
         return _resolvida(do_plano, "plano"), None
     return None, "plano_config_pendente_aprovacao" if (plano_pendente or tenant_pendente) else "plano_sem_configuracao"
 
@@ -458,6 +507,8 @@ _MENSAGENS = {
     "sem_plano_ativo": "O seu tenant não tem plano ativo. Regularize a licença ou fale com o comercial para liberar a pesquisa de decisores.",
     "plano_sem_configuracao": "O seu plano ainda não tem a pesquisa de decisores configurada. Fale com o comercial para liberar.",
     "plano_config_pendente_aprovacao": "A configuração da pesquisa de decisores do seu plano aguarda aprovação. Fale com o comercial.",
+    "poc_sem_autorizacao": "A POC não tem franquia fixa: cada operação exige uma autorização aprovada, com orçamento calculado pelas tarifas confirmadas. "
+                           "Fale com o comercial para autorizar a sua operação.",
     "config_incompleta": "A configuração da pesquisa de decisores do seu plano está incompleta. Fale com o comercial para concluir.",
     "politica_provedor_nao_configurada": "A política do provedor de contatos (tarifas e preço) ainda não foi configurada. Fale com o administrador.",
     "politica_provedor_pendente_aprovacao": "A política do provedor de contatos aguarda aprovação. Fale com o administrador.",

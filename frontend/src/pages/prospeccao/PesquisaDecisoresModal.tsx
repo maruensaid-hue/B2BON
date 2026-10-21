@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { api, mensagemErro } from "@/lib/api";
 
@@ -40,7 +40,16 @@ interface Estimativa {
   origem_decisores: "padrao_plano" | "informado_usuario";
   disponivel: number;
   limite_periodo_restante: number | null;
-  limites: { decisores_por_empresa_max: number; itens_por_lote_max: number; limite_periodo_creditos: number | null };
+  limites: {
+    decisores_por_empresa_max: number;
+    itens_por_lote_max: number | null;
+    limite_periodo_creditos: number | null;
+    limite_creditos_pesquisa: number | null;
+    limite_pesquisas_periodo: number | null;
+    limite_empresas_periodo: number | null;
+    limite_contatos_periodo: number | null;
+  };
+  uso_no_periodo: { pesquisas: number; empresas: number; contatos: number };
   viavel: boolean;
   bloqueios: Bloqueio[];
   ajustes_sugeridos: Ajuste[];
@@ -77,8 +86,16 @@ interface Pesquisa {
 }
 
 interface PainelResumo {
-  plano: { disponivel: boolean; decisores_por_empresa_padrao?: number; decisores_por_empresa_max?: number; orientacao?: string | null };
+  plano: {
+    disponivel: boolean;
+    modo?: string;
+    decisores_por_empresa_padrao?: number | null;
+    decisores_por_empresa_max?: number | null;
+    limite_creditos_pesquisa?: number | null;
+    orientacao?: string | null;
+  };
   lusha: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
+  composicao?: { franquia_restante: number; adicional_restante: number; expira_em: string };
 }
 
 const ROTULO_AJUSTE: Record<Ajuste["tipo"], string> = {
@@ -123,7 +140,14 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
 
   useEffect(() => {
     montado.current = true;
-    api.get<PainelResumo>("/pesquisas-decisores/painel").then(setPainel).catch(() => setPainel(null));
+    api
+      .get<PainelResumo>("/pesquisas-decisores/painel")
+      .then((p) => {
+        setPainel(p);
+        // Plano com teto de 1 decisor (ex.: POC): o único valor possível já vem escolhido.
+        if (p.plano.decisores_por_empresa_max === 1) setValor("1");
+      })
+      .catch(() => setPainel(null));
     return () => {
       montado.current = false;
     };
@@ -147,6 +171,9 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
   const plano = painel?.plano;
   const lusha = painel?.lusha;
   const liberado = lusha === undefined ? plano?.disponivel !== false : lusha.disponivel;
+  // Sem padrão no plano, o número de decisores é escolha obrigatória do usuário (nunca é assumido em silêncio).
+  const semPadrao = plano !== undefined && !plano.decisores_por_empresa_padrao;
+  const opcoes = Array.from({ length: Math.min(plano?.decisores_por_empresa_max ?? 10, 50) }, (_, i) => i + 1);
 
   async function revisar() {
     setCarregando(true);
@@ -248,26 +275,27 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
               <label className="mb-1 block text-[10px] tracking-wide text-muted uppercase" htmlFor="decisores-por-empresa">
                 Decisores por empresa
               </label>
-              <Input
-                id="decisores-por-empresa"
-                type="number"
-                min={1}
-                max={plano?.decisores_por_empresa_max ?? undefined}
-                value={valor}
-                placeholder={plano?.decisores_por_empresa_padrao ? `Padrão do plano: ${plano.decisores_por_empresa_padrao}` : "Padrão do plano"}
-                onChange={(ev) => setValor(ev.target.value)}
-              />
+              <Select id="decisores-por-empresa" value={valor} onChange={(ev) => setValor(ev.target.value)}>
+                <option value="">{semPadrao ? "Escolha quantos decisores por empresa..." : `Padrão do plano (${plano?.decisores_por_empresa_padrao})`}</option>
+                {opcoes.map((n) => (
+                  <option key={n} value={String(n)}>
+                    {n} {n === 1 ? "decisor" : "decisores"} por empresa
+                  </option>
+                ))}
+              </Select>
               <p className="mt-1 text-[10.5px] text-muted">
-                {plano?.decisores_por_empresa_max ? `Máximo no seu plano: ${plano.decisores_por_empresa_max}. ` : ""}
-                Em branco, vale o padrão do plano. O valor nunca é alterado sem a sua confirmação.
+                {plano?.decisores_por_empresa_max ? `Máximo no seu plano: ${plano.decisores_por_empresa_max} por empresa, em cada pesquisa. ` : ""}
+                {plano?.limite_creditos_pesquisa ? `Limite desta pesquisa: ${plano.limite_creditos_pesquisa} crédito(s). ` : ""}
+                Mais decisores por empresa gasta mais créditos e cobre menos empresas; a escolha nunca é alterada sem a sua confirmação.
               </p>
+              {plano?.modo === "poc_autorizada" && <p className="mt-1 text-[10.5px] text-muted">POC: 1 decisor por empresa, dentro do orçamento autorizado para a sua operação.</p>}
             </div>
             {erro && <p className="text-red">{erro}</p>}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={onClose}>
                 Fechar
               </Button>
-              <Button size="sm" disabled={carregando || !liberado} onClick={revisar}>
+              <Button size="sm" disabled={carregando || !liberado || (semPadrao && valor === "")} onClick={revisar}>
                 {carregando ? "Calculando..." : "Revisar estimativa"}
               </Button>
             </div>
@@ -284,6 +312,8 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
               />
               <Resumo rotulo="Créditos de enriquecimento (teto)" valor={String(e.creditos_maximos)} destaque />
               <Resumo rotulo="Saldo disponível" valor={String(e.disponivel)} />
+              {e.limites.limite_creditos_pesquisa !== null && <Resumo rotulo="Limite por pesquisa" valor={`${e.limites.limite_creditos_pesquisa} crédito(s)`} />}
+              <Resumo rotulo="Máx. de decisores por empresa" valor={String(e.limites.decisores_por_empresa_max)} />
               <Resumo rotulo="Valor máximo estimado" valor={`R$ ${e.valor_maximo_brl.replace(".", ",")}`} />
               <Resumo rotulo="Decisores pedidos" valor={String(e.decisores_solicitados)} />
             </div>
@@ -293,6 +323,13 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
               <p>IA: {e.por_categoria.ia.creditos} (esta operação não usa IA) · QSA da Receita e Brasil API: sem consumo de crédito</p>
               <p>Preço por crédito do provedor ≈ R$ {e.preco_credito_provedor_brl.replace(".", ",")} (valor de apresentação). O que se cobra é o consumo medido pelo provedor, que pode ser menor.</p>
             </div>
+            {(e.limites.limite_pesquisas_periodo !== null || e.limites.limite_empresas_periodo !== null || e.limites.limite_contatos_periodo !== null) && (
+              <p className="text-[11px] text-muted">
+                Uso no mês: {e.uso_no_periodo.pesquisas} pesquisa(s){e.limites.limite_pesquisas_periodo !== null ? ` de ${e.limites.limite_pesquisas_periodo}` : ""} ·{" "}
+                {e.uso_no_periodo.empresas} empresa(s){e.limites.limite_empresas_periodo !== null ? ` de ${e.limites.limite_empresas_periodo}` : ""} ·{" "}
+                {e.uso_no_periodo.contatos} contato(s){e.limites.limite_contatos_periodo !== null ? ` de ${e.limites.limite_contatos_periodo}` : ""}
+              </p>
+            )}
             {e.empresas_deduplicadas > 0 && <p className="text-muted">{e.empresas_deduplicadas} empresa(s) ficam fora da consulta (duplicadas ou decisores já obtidos).</p>}
             {e.bloqueios.length > 0 && (
               <div className="rounded-md bg-surf2 p-2">
@@ -302,6 +339,11 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
                     <li key={b.codigo}>{b.mensagem}</li>
                   ))}
                 </ul>
+                {e.bloqueios.some((b) => b.codigo === "saldo_insuficiente") && !e.bloqueios.some((b) => b.codigo === "limite_por_pesquisa") && (
+                  <p className="mt-1 text-[11px] text-muted">
+                    Faltou saldo: veja os <a className="text-cyan underline" href="/creditos-enriquecimento">pacotes de créditos adicionais</a> (valem até o fim do mês e não aumentam o limite por pesquisa).
+                  </p>
+                )}
               </div>
             )}
             {e.ajustes_sugeridos.length > 0 && (

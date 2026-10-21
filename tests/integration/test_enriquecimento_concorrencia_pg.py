@@ -49,7 +49,8 @@ def _preparar(Sessao, *, franquia: int, orcamento: int | None = None, tenants: i
             db.add(Licenca(tenant_id=tenant, plano_id=plano.id, status="ativa"))
         db.commit()
         config.definir_config(db, plano_id=plano.id, tenant_id=None, ator_id="1", tenant_auditoria=ids[0], motivo="teste pg", aprovar=True, campos=dict(
-            franquia_creditos=franquia, periodicidade="mensal", decisores_por_empresa_padrao=2, decisores_por_empresa_max=2, itens_por_lote_max=5))
+            franquia_creditos=franquia, periodicidade="mensal", decisores_por_empresa_padrao=2, decisores_por_empresa_max=2, itens_por_lote_max=5,
+            limite_creditos_pesquisa=100_000))
         lote = config.registrar_lote_compra(db, provedor=_Provedor.nome_provedor, referencia=f"LOTE-{sufixo}", quantidade_creditos=400,
                                             custo_total_brl=Decimal("269.94"), comprado_em=datetime(2026, 10, 21), ator_id="1", tenant_auditoria=ids[0])
         config.definir_politica(

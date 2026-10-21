@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_ator_id, get_db
+from app.contexts.enriquecimento.contract import matriz, pacotes
 from app.schemas.plano import AtualizarPlanoRequestSchema, CriarPlanoRequestSchema, PlanoSchema
 from app.services import tenant_service
 
@@ -14,6 +15,22 @@ def listar_planos(apenas_self_service: bool = False, db: Session = Depends(get_d
     `apenas_self_service=True` (usado pela tela de cadastro público)
     esconde planos como "Teste", só concedíveis por convite gratuito."""
     return tenant_service.listar_planos(db, apenas_self_service)
+
+
+@router.get("/enriquecimento")
+def franquias_de_enriquecimento(db: Session = Depends(get_db)) -> dict:
+    """Pública (site): franquias mensais de enriquecimento por plano, limites por pesquisa e por empresa e pacotes adicionais. Só dado de plataforma
+    (a matriz aprovada e o catálogo vigente), nunca de cliente nem de custo/margem. Vale só para a pesquisa de decisores por provedor pago; ICP e
+    análise de sites têm regras próprias."""
+    return {
+        "planos": matriz.vitrine(), **pacotes.catalogo(db),
+        "observacoes": [
+            "A franquia mensal é o máximo de créditos por pesquisa e vence no fim do mês: o que não for usado não acumula.",
+            "O limite de decisores vale por empresa, em cada pesquisa.",
+            "Créditos adicionais ficam em saldo separado, não aumentam os limites do plano e também vencem no fim do mês.",
+            "Não há limite de tamanho do ICP: os limites valem só para a pesquisa de decisores no provedor pago.",
+        ],
+    }
 
 
 @router.post("", response_model=PlanoSchema, status_code=201, dependencies=[Depends(exigir_papel("super_admin"))])
