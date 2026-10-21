@@ -276,7 +276,7 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
         raise ValidacaoFalhou("Identificadores de empresa inválidos.")
     ids_unicos = list(dict.fromkeys(conta_ids))
 
-    config, politica = exigir_configuracao(db, tenant_id, provider)
+    config, politica = exigir_configuracao(db, tenant_id, provider, sincronizar=True)
     if decisores_por_empresa is None:
         if config.decisores_por_empresa_padrao is None:
             raise ValidacaoFalhou("Informe quantos decisores por empresa você quer pesquisar: o seu plano não define um valor padrão.")

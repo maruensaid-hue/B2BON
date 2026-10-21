@@ -142,7 +142,7 @@ export function PacotesAdicionais({ onComprado }: { onComprado?: () => void }) {
                   <Badge tone={TOM_COMPRA[c.status] ?? "muted"}>{c.status === "PENDENTE" ? "aguardando pagamento" : c.status.toLowerCase()}</Badge>
                 </td>
                 <td className="p-1.5 text-muted">{dataExpiracao(c.expira_em ?? c.expira_em_previsto)}</td>
-                <td className="p-1.5 text-muted">{c.status !== "APROVADA" ? "—" : c.nota?.status === "EMITIDA" ? `NF ${c.nota.numero}` : "em emissão"}</td>
+                <td className="p-1.5 text-muted">{c.status !== "APROVADA" ? "—" : c.nota?.status === "EMITIDA" ? `NF ${c.nota.numero}` : "nota a emitir"}</td>
               </tr>
             ))}
           </tbody>

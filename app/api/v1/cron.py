@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import (
     get_account_data_provider,
     get_brasilapi_client,
+    get_contact_enrichment_provider,
     get_db,
     get_sessao_factory,
     get_email_provider,
@@ -38,6 +39,7 @@ from app.llm.base import LLMProvider
 from app.models.tenant import Tenant
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.channels.email.base import EmailProvider
+from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.email_validation.base import EmailVerificationProvider
 from app.providers.payout.base import PayoutProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
@@ -334,7 +336,8 @@ def processar_eventos(db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/creditos-ia", dependencies=[Depends(_exigir_segredo_cron)])
-def creditos_ia(tarefas: BackgroundTasks, db: Session = Depends(get_db), sessao_factory=Depends(get_sessao_factory)) -> dict:
+def creditos_ia(tarefas: BackgroundTasks, db: Session = Depends(get_db), sessao_factory=Depends(get_sessao_factory),
+                contatos: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider)) -> dict:
     """Fase 15 — roda de hora em hora: expira lotes vencidos, concede a
     franquia do mês, libera reservas órfãs, registra alertas de uso
     (80/95/100%), anomalias de consumo e alertas de margem. D-072: concede o
@@ -342,13 +345,14 @@ def creditos_ia(tarefas: BackgroundTasks, db: Session = Depends(get_db), sessao_
     terminaram e marca os avisos de renovação. D-076: grava a PTAX de
     fechamento do Banco Central dos últimos dias úteis. D-082: apaga os
     ambientes de demonstração expirados. Renova a franquia mensal de enriquecimento e expira o saldo
-    vencido (franquia e pacotes adicionais) de cada tenant, de forma idempotente."""
+    vencido (franquia e pacotes adicionais) de cada tenant, de forma idempotente. Com provedor de contatos pago configurado, alinha a política às tarifas
+    que ele informa e concilia o uso com o razão (no máximo a cada 6 h)."""
     governo_resultado = governo.contratos.rotina(db)
     ptax = finops.cambio.sincronizar_ptax(db)  # D-076: PTAX de fechamento do Banco Central (OI-018)
     demonstracoes = demo_sessao.purgar_expiradas(db, limite=50)
     tarefas.add_task(demo_sessao.reabastecer, sessao_factory)  # D-085: mantém a reserva de demonstrações cheia
     return {**finops.creditos_ia_rotina(db), "governo": governo_resultado, "ptax": ptax, "demonstracoes_apagadas": demonstracoes,
-            "enriquecimento": enriquecimento.renovacao.renovar_todos(db)}
+            "enriquecimento": enriquecimento.renovacao.renovar_todos(db), "enriquecimento_provedor": enriquecimento.conciliacao.rotina(db, contatos)}
 
 
 @router.post("/integracoes-crm", dependencies=[Depends(_exigir_segredo_cron)])

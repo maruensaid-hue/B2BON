@@ -1,10 +1,10 @@
 # CHANGELOG — IMPLEMENTATION
 
-## Créditos de enriquecimento: custo do provedor, nota fiscal e estorno manual (2026-10-21, D-096)
+## Créditos de enriquecimento: custo do provedor, nota fiscal e estorno manual (2026-10-21, D-096 e D-097)
 
-- Custo da Lusha no sistema: USD 600/mês, 81.600 créditos/ano e câmbio de planejamento de R$ 6,00. O administrador registra os pagamentos reais ao provedor (dólar, câmbio efetivo e encargos) e vê o custo por crédito de fato consumido.
-- A pesquisa de decisores na Lusha só é liberada depois que um administrador valida o contrato do provedor com evidência.
-- A compra de pacotes de créditos fica indisponível até existir emissão de nota fiscal funcionando; cada venda passa a mostrar nota e situação de conciliação.
+- Custo da Lusha no sistema: USD 600/mês, 81.600 créditos/ano e câmbio de planejamento de R$ 6,00. O administrador registra os pagamentos reais ao provedor (dólar, câmbio efetivo e encargos) e vê o custo por crédito de fato consumido e a ociosidade.
+- As tarifas da pesquisa de decisores passam a vir da própria Lusha e a política é atualizada automaticamente; o consumo é o medido pela Lusha e é conciliado com o uso que ela informa. Não há mais etapa de aprovação ou validação manual.
+- A compra de pacotes de créditos funciona como a de créditos de IA. A nota fiscal aparece como "a emitir" até haver emissor fiscal; cada venda mostra a situação da conciliação.
 - Estorno de créditos é sempre manual, com justificativa e aprovação de outro administrador; avisos de reembolso ou chargeback do provedor de pagamento apenas marcam a venda como contestada.
 
 ## Créditos de enriquecimento: franquias por plano e pacotes adicionais (2026-10-21, D-094 e D-095)

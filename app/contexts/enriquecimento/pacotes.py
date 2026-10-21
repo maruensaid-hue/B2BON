@@ -11,8 +11,9 @@ Regras (matriz do PO, 2026-10-21):
   - acima de 3.000 créditos (`CONTACT_SALES`) não tem preço nem checkout automático: só cotação comercial;
   - sem a pesquisa de decisores liberada (plano, política, custo/contrato e orçamento global aprovados) a compra é recusada: não se vende crédito que
     não pode ser usado;
-  - sem emissão de nota fiscal funcionando (emissor configurado e dados fiscais do cliente) a compra também é recusada: não se vende o que não se
-    consegue faturar. O estorno de créditos é sempre manual (`estornos.py`); aviso de reembolso/chargeback do provedor de pagamento só sinaliza."""
+  - a venda segue o mesmo modelo da compra de créditos de IA (checkout, webhook assinado, crédito idempotente) e NÃO é bloqueada pela nota fiscal: a nota é
+    emitida quando houver emissor e, até lá, aparece como "a emitir" (`vendas.py`). O estorno de créditos é sempre manual (`estornos.py`); aviso de
+    reembolso/chargeback do provedor de pagamento só sinaliza."""
 
 import logging
 from datetime import datetime
@@ -173,13 +174,13 @@ def serializar_compra(compra: EnriquecimentoCompra) -> dict:
     }
 
 
-def motivos_de_compra(db: Session, tenant_id: str, provider, fiscal: FiscalProvider) -> list[dict]:
-    """Todos os motivos pelos quais a compra está indisponível agora: pesquisa de decisores (plano, política, contrato, orçamento) e emissão fiscal."""
-    return config.motivos_de_indisponibilidade(db, tenant_id, provider) + vendas.motivos_fiscais(db, tenant_id, fiscal)
+def motivos_de_compra(db: Session, tenant_id: str, provider) -> list[dict]:
+    """Motivos pelos quais a compra está indisponível agora: a pesquisa de decisores não pode ser usada (plano, política, custo, orçamento global)."""
+    return config.motivos_de_indisponibilidade(db, tenant_id, provider)
 
 
 def iniciar_compra(db: Session, tenant_id: str, pacote_codigo: str, *, aceite_expiracao: bool, payment_provider: PaymentProvider, email_pagador: str,
-                   provider, fiscal: FiscalProvider, ator_id: str | None, agora: datetime | None = None) -> EnriquecimentoCompra:
+                   provider, ator_id: str | None, agora: datetime | None = None) -> EnriquecimentoCompra:
     """Pedido de compra com versão e preço congelados e checkout no Mercado Pago. Os créditos só entram pelo webhook assinado."""
     if not aceite_expiracao:
         raise ValidacaoFalhou("Confirme que está ciente de que os créditos adicionais expiram no fim do mês e não acumulam.")
@@ -188,9 +189,9 @@ def iniciar_compra(db: Session, tenant_id: str, pacote_codigo: str, *, aceite_ex
         raise NaoEncontrado("Pacote não encontrado.")
     if pacote.status != "ATIVO" or not pacote.quantidade_creditos or pacote.preco_total_brl is None or pacote.preco_unitario_brl is None:
         raise ValidacaoFalhou("Este pacote é negociado com o comercial: peça uma cotação.")
-    motivos = motivos_de_compra(db, tenant_id, provider, fiscal)
+    motivos = motivos_de_compra(db, tenant_id, provider)
     if motivos:
-        # Não vende crédito que não pode ser usado nem venda que não se consegue faturar: algum dos motivos abaixo impede.
+        # Não vende crédito que não pode ser usado: algum dos motivos abaixo impede o uso da pesquisa.
         raise PesquisaBloqueada("A compra de créditos de enriquecimento está indisponível agora: " + "; ".join(m["mensagem"] for m in motivos),
                                 motivos[0]["codigo"], motivos)
     agora = agora or config.agora_utc()

@@ -1,7 +1,7 @@
 """Migração da governança de créditos de enriquecimento (a4c6e8b0d2f4): só tabelas novas, nenhum dado existente tocado, nenhum saldo inventado.
 Únicos dados inseridos, todos informados pelo PO: o lote de compra, os pacotes adicionais e a franquia dos planos da matriz que existem no banco
 (só o "Teste"; Starter/Professional não existem como planos avulsos, são "PREDATOR Starter" etc., e não são adivinhados), mais a base econômica Lusha
-(USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00, contrato NÃO validado) e o orçamento global de 6.800 créditos/mês. A compra pontual de
+(USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00) e o orçamento global de 6.800 créditos/mês. A compra pontual de
 R$ 269,94 por 400 créditos é removida. Downgrade devolve o banco ao estado anterior sem perder o legado."""
 
 import os
@@ -62,12 +62,13 @@ def test_migracao_preserva_o_legado_nao_inventa_configuracao_e_registra_so_o_lot
             # A compra pontual de 400 créditos por R$ 269,94 foi desconsiderada pelo PO: semeada pela migração anterior e removida pela seguinte.
             assert _contagem(engine, "enriquecimento_lote_compra") == 0
             custo = conexao.execute(sa.text("SELECT provedor, versao, custo_mensal_usd, creditos_anuais, creditos_mensais, cambio_planejamento_brl, custo_unitario_usd, "
-                                            "custo_unitario_brl, custo_mensal_brl, aprovado_por, contrato_validado_em FROM enriquecimento_custo_provedor")).fetchall()
+                                            "custo_unitario_brl, custo_mensal_brl, aprovado_por FROM enriquecimento_custo_provedor")).fetchall()
             assert len(custo) == 1 and custo[0][:2] == ("lusha", 1) and custo[0][3:5] == (81600, 6800) and custo[0][9] == "po:custo-lusha-2026-10-21"
             assert Decimal(str(custo[0][2])) == Decimal(600) and Decimal(str(custo[0][5])) == Decimal(6) and Decimal(str(custo[0][8])) == Decimal(3600)
             assert Decimal(str(custo[0][6])).quantize(Decimal("0.000000001")) == Decimal("0.088235294")
             assert Decimal(str(custo[0][7])).quantize(Decimal("0.000000001")) == Decimal("0.529411765")
-            assert custo[0][10] is None  # contrato NÃO validado: a validação é ato humano; a pesquisa Lusha continua bloqueada
+            colunas = {c["name"] for c in sa.inspect(engine).get_columns("enriquecimento_custo_provedor")}
+            assert not {"contrato_validado_em", "contrato_checklist", "saldo_transferivel"} & colunas  # não há etapa de validação de contrato
             orcamento = conexao.execute(sa.text("SELECT provedor, versao, limite_creditos, alerta_percentual, aprovado_por FROM enriquecimento_orcamento_global")).fetchall()
             assert orcamento == [("lusha", 1, 6800, 80, "po:custo-lusha-2026-10-21")]  # capacidade equivalente ao teto de USD 600
     finally:

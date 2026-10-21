@@ -106,14 +106,10 @@ def politica(db, *, busca=0, email=1, telefone=None, revelar_telefones=False, pa
         ator_id="1", tenant_auditoria=A, motivo="teste", tamanho_pagina_minimo=10, tamanho_pagina_maximo=100, aprovar=aprovar)
 
 
-def custo_contratual(db, provedor="lusha", *, validar=True, aprovar=True):
-    """Custo contratual (USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00) e, se pedido, a validação humana do contrato."""
-    linha = custo.definir_custo(db, provedor=provedor, custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="6.00", ator_id="1",
-                                tenant_auditoria=A, motivo="teste", aprovar=aprovar)
-    if aprovar and validar:
-        custo.validar_contrato(db, linha.id, checklist={i: True for i in custo.CHECKLIST_CONTRATO}, saldo_transferivel=False,
-                               evidencia="Contrato simulado nos testes (nenhum contrato real foi lido)", ator_id="1", tenant_auditoria=A)
-    return linha
+def custo_contratual(db, provedor="lusha", *, aprovar=True):
+    """Custo contratual (USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00): decisão comercial já aprovada pelo PO."""
+    return custo.definir_custo(db, provedor=provedor, custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="6.00", ator_id="1",
+                               tenant_auditoria=A, motivo="teste", aprovar=aprovar)
 
 
 def cenario(db, *, franquia=10, itens=10, padrao=2, maximo=5, limite_periodo=None, orcamento=1000, periodicidade="mensal", com_politica=True,

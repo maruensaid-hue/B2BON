@@ -55,14 +55,6 @@ class CustoRequest(BaseModel):
     motivo: str = Field(min_length=3, max_length=300)
 
 
-class ValidarContratoRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    checklist: dict[str, bool]
-    saldo_transferivel: bool = Field(description="O contrato permite levar saldo ao mês seguinte? (fato a registrar, sim ou não)")
-    evidencia: str = Field(min_length=10, max_length=500)
-
-
 class PagamentoProvedorRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -316,22 +308,19 @@ def _linha_custo(c: EnriquecimentoCustoProvedor) -> dict:
             "creditos_mensais": c.creditos_mensais, "cambio_planejamento_brl": str(c.cambio_planejamento_brl),
             "custo_unitario_usd": str(c.custo_unitario_usd), "custo_unitario_brl": str(c.custo_unitario_brl), "custo_mensal_brl": str(c.custo_mensal_brl),
             "aprovada": c.aprovado_em is not None, "aprovado_por": c.aprovado_por, "vigente": c.aprovado_em is not None and c.valido_ate is None,
-            "contrato_validado": c.contrato_validado_em is not None, "contrato_validado_por": c.contrato_validado_por,
-            "contrato_validado_em": c.contrato_validado_em, "contrato_evidencia": c.contrato_evidencia, "saldo_transferivel": c.saldo_transferivel,
             "motivo": c.motivo}
 
 
 @router.get("/custo", dependencies=[_super])
 def listar_custos(provedor: str = "lusha", db: Session = Depends(get_db)) -> dict:
-    """Versões do custo contratual do provedor, o checklist de validação do contrato e o custo efetivo por crédito consumido no mês."""
+    """Versões do custo contratual do provedor e o custo efetivo por crédito consumido no mês."""
     linhas = db.query(EnriquecimentoCustoProvedor).filter_by(provedor=provedor).order_by(EnriquecimentoCustoProvedor.versao.desc()).all()
-    return {"versoes": [_linha_custo(c) for c in linhas], "checklist_contrato": [{"item": i, "descricao": custo.ROTULO_CHECKLIST[i]} for i in custo.CHECKLIST_CONTRATO],
-            "efetivo_no_mes": custo.custo_efetivo(db, provedor, config.periodo_de(config.agora_utc()))}
+    return {"versoes": [_linha_custo(c) for c in linhas], "efetivo_no_mes": custo.custo_efetivo(db, provedor, config.periodo_de(config.agora_utc()))}
 
 
 @router.put("/custo")
 def definir_custo(dados: CustoRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
-    """Nova versão PENDENTE do custo contratual (os derivados são calculados no servidor). Só vale depois de aprovada e o contrato, validado."""
+    """Nova versão PENDENTE do custo contratual (os derivados são calculados no servidor). Só vale depois de aprovada."""
     nova = custo.definir_custo(db, provedor=dados.provedor, custo_mensal_usd=dados.custo_mensal_usd, creditos_anuais=dados.creditos_anuais,
                                cambio_planejamento_brl=dados.cambio_planejamento_brl, ator_id=str(admin.id), tenant_auditoria=admin.tenant_id, motivo=dados.motivo)
     return _linha_custo(nova)
@@ -340,13 +329,6 @@ def definir_custo(dados: CustoRequest, admin: Usuario = Depends(exigir_papel("su
 @router.post("/custo/{custo_id}/aprovar")
 def aprovar_custo(custo_id: int, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
     return _linha_custo(custo.aprovar_custo(db, custo_id, str(admin.id), admin.tenant_id))
-
-
-@router.post("/custo/{custo_id}/validar-contrato")
-def validar_contrato(custo_id: int, dados: ValidarContratoRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
-    """Registra que um humano conferiu as regras do contrato/API do provedor (todos os itens do checklist + evidência). Sem isso a pesquisa paga fica bloqueada."""
-    return _linha_custo(custo.validar_contrato(db, custo_id, checklist=dados.checklist, saldo_transferivel=dados.saldo_transferivel, evidencia=dados.evidencia,
-                                               ator_id=str(admin.id), tenant_auditoria=admin.tenant_id))
 
 
 @router.get("/custo/efetivo", dependencies=[_super])
@@ -503,6 +485,16 @@ def tarifas_do_provedor(provedor: str, provider: ContactEnrichmentProvider = Dep
     if provider.nome_provedor != provedor:
         raise ValidacaoFalhou("O provedor configurado neste ambiente é outro.")
     return conciliacao.tarifas_do_provedor(provider)
+
+
+@router.post("/provedores/{provedor}/sincronizar-politica")
+def sincronizar_politica(provedor: str, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db),
+                         provider: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider)) -> dict:
+    """Publica (e já aprova) a política do provedor a partir das tarifas que ele próprio informa (`pricing` de `GET /v3/account/usage`), do custo contratual
+    e do menor pacote ativo. Idempotente. Sem a tarifa da busca ou do e-mail (ou com fração) o retorno é um bloqueio técnico descrito, sem inventar valor."""
+    if provider.nome_provedor != provedor:
+        raise ValidacaoFalhou("O provedor configurado neste ambiente é outro.")
+    return conciliacao.sincronizar_politica(db, provider, ator_id=str(admin.id), tenant_auditoria=admin.tenant_id)
 
 
 @router.post("/provedores/{provedor}/conciliar")

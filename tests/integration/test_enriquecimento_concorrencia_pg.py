@@ -61,10 +61,8 @@ def _preparar(Sessao, provedor, *, franquia: int, orcamento: int | None = None, 
             revelar_telefones=False, tamanho_pagina_busca=10, creditos_cliente_por_credito_provedor=1, markup_percentual=Decimal("100"),
             metodo_custo="lote_referencia", lote_compra_id=lote.id, casas_exibicao=2, fonte_tarifas="manual", ator_id="1", tenant_auditoria=ids[0],
             motivo="teste pg", aprovar=True)
-        contrato = custo.definir_custo(db, provedor=provedor.nome_provedor, custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="6.00",
+        custo.definir_custo(db, provedor=provedor.nome_provedor, custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="6.00",
                                        ator_id="1", tenant_auditoria=ids[0], motivo="teste pg", aprovar=True)
-        custo.validar_contrato(db, contrato.id, checklist={i: True for i in custo.CHECKLIST_CONTRATO}, saldo_transferivel=False,
-                               evidencia="Contrato simulado no teste de concorrência", ator_id="1", tenant_auditoria=ids[0])
         if orcamento is not None:
             config.definir_orcamento_global(db, provedor=provedor.nome_provedor, limite_creditos=orcamento, alerta_percentual=80, ator_id="1",
                                             tenant_auditoria=ids[0], motivo="teste pg", aprovar=True)

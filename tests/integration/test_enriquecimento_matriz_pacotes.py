@@ -268,7 +268,7 @@ def test_compra_exige_aceite_da_expiracao_e_pacote_negociado_nao_tem_checkout(cl
     liberar_lusha(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
-    base = dict(payment_provider=pagamento, email_pagador="a@b.com", provider=prov, fiscal=FISCAL, ator_id="1", agora=AGORA)
+    base = dict(payment_provider=pagamento, email_pagador="a@b.com", provider=prov, ator_id="1", agora=AGORA)
     with pytest.raises(ValidacaoFalhou, match="expiram no fim do mês"):
         pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=False, **base)
     with pytest.raises(ValidacaoFalhou, match="negociado com o comercial"):
@@ -280,7 +280,7 @@ def test_compra_e_bloqueada_enquanto_a_pesquisa_lusha_esta_indisponivel(client, 
     catalogo(db_session)  # sem plano, política nem orçamento aprovados
     pagamento = StubPaymentProvider()
     erro = pytest.raises(PesquisaBloqueada, pacotes.iniciar_compra, db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento,
-                         email_pagador="a@b.com", provider=ProvedorPago(), fiscal=FISCAL, ator_id="1", agora=AGORA)
+                         email_pagador="a@b.com", provider=ProvedorPago(), ator_id="1", agora=AGORA)
     assert erro.value.bloqueios and pagamento._preferencias == {} and db_session.query(EnriquecimentoCompra).count() == 0
 
 
@@ -290,7 +290,7 @@ def test_compra_aprovada_pelo_webhook_vira_saldo_adicional_separado_que_nao_muda
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     cfg_antes, _ = config.config_vigente(db_session, A)
     ledger.preparar(db_session, A, cfg_antes, AGORA)
-    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_660", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, fiscal=FISCAL,
+    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_660", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov,
                                     ator_id="1", agora=AGORA)
     assert compra.status == "PENDENTE" and compra.url_checkout.startswith("https://checkout.stub.local/")
     assert (compra.creditos, Decimal(str(compra.preco_total_brl)), compra.expira_em_previsto) == (660, Decimal("844.80"), datetime(2026, 11, 1, 3, 0))
@@ -315,7 +315,7 @@ def test_webhook_repetido_valor_divergente_e_pagamento_pendente_nao_creditam_err
     liberar_lusha(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
-    base = dict(aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, fiscal=FISCAL, ator_id="1", agora=AGORA)
+    base = dict(aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, ator_id="1", agora=AGORA)
 
     c1 = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", **base)
     pagamento_id, _ = pagar(db_session, pagamento, c1)
@@ -353,7 +353,7 @@ def test_credito_comprado_vence_no_fim_do_mes_junto_com_a_franquia_sem_acumular(
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     cfg, _ = config.config_vigente(db_session, A)
     ledger.preparar(db_session, A, cfg, AGORA)
-    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, fiscal=FISCAL,
+    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov,
                                     ator_id="1", agora=AGORA)
     pagar(db_session, pagamento, compra)
     ledger.travar_carteira(db_session, A)
@@ -374,7 +374,7 @@ def test_compra_confirmada_na_virada_do_mes_vale_ate_o_fim_do_mes_da_confirmacao
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     ultimo_minuto = datetime(2026, 11, 1, 2, 58)
-    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, fiscal=FISCAL,
+    compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov,
                                     ator_id="1", agora=ultimo_minuto)
     _, confirmada = pagar(db_session, pagamento, compra, agora=datetime(2026, 11, 1, 3, 30))
     assert confirmada.expira_em_previsto == datetime(2026, 11, 1, 3, 0) and confirmada.expira_em == datetime(2026, 12, 1, 3, 0)
@@ -388,7 +388,7 @@ def test_rentabilidade_usa_o_custo_contratual_e_ignora_a_compra_pontual_de_400_c
     lote(db_session)  # a compra pontual R$ 269,94 / 400 existe como linha, mas NÃO pode participar de custo, preço, margem nem configuração
     sem_contrato = pacotes.rentabilidade(db_session, "lusha")
     assert sem_contrato["origem_custo"] is None and all("margem_bruta_percentual" not in p for p in sem_contrato["pacotes"])
-    custo_contratual(db_session, validar=False)  # aprovado; a validação do contrato não muda a conta
+    custo_contratual(db_session)  # aprovado; a validação do contrato não muda a conta
     r = pacotes.rentabilidade(db_session, "lusha")
     assert r["origem_custo"] == "contrato_v1" and r["custo_unitario_provedor_brl"] == "0.529411765" and Decimal(r["cambio_planejamento_brl"]) == Decimal("6")
     ativos = {p["codigo"]: p for p in r["pacotes"] if p["status"] == "ATIVO"}
@@ -634,7 +634,7 @@ def test_compras_e_saldo_de_um_tenant_nao_aparecem_para_outro(client, db_session
     preparar_tenant_b(db_session)  # B tem licença no mesmo plano (mesma franquia), mas carteira e compras próprias
     dados_fiscais(db_session, B, "99888777000166")
     pagamento = StubPaymentProvider()
-    base = dict(aceite_expiracao=True, payment_provider=pagamento, email_pagador="x@x.com", provider=prov_api, fiscal=FISCAL, agora=AGORA)
+    base = dict(aceite_expiracao=True, payment_provider=pagamento, email_pagador="x@x.com", provider=prov_api, agora=AGORA)
     compra_a = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", ator_id="1", **base)
     pagar(db_session, pagamento, compra_a)
     assert pacotes.listar_compras(db_session, B) == [] and ledger.saldo(db_session, B) == 0

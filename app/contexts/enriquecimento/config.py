@@ -8,6 +8,7 @@ Regras:
 * Toda criação e toda aprovação são auditadas com motivo e responsável.
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
@@ -24,6 +25,8 @@ from app.models.enriquecimento_creditos import (
 from app.models.licenca import Licenca
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, PesquisaBloqueada, ValidacaoFalhou
+
+logger = logging.getLogger("b2bon.enriquecimento")
 
 PERIODICIDADES = ("mensal", "unica")
 MODOS = ("franquia_fixa", "poc_autorizada")
@@ -525,11 +528,11 @@ _MENSAGENS = {
     "poc_sem_autorizacao": "A POC não tem franquia fixa: cada operação exige uma autorização aprovada, com orçamento calculado pelas tarifas confirmadas. "
                            "Fale com o comercial para autorizar a sua operação.",
     "config_incompleta": "A configuração da pesquisa de decisores do seu plano está incompleta. Fale com o comercial para concluir.",
-    "politica_provedor_nao_configurada": "A política do provedor de contatos (tarifas e preço) ainda não foi configurada. Fale com o administrador.",
+    "politica_provedor_nao_configurada": "A política do provedor de contatos é publicada automaticamente a partir das tarifas que o próprio provedor informa, e ainda "
+                                       "não foi possível obtê-las (credencial do provedor ou resposta dele). Fale com o administrador.",
     "politica_provedor_pendente_aprovacao": "A política do provedor de contatos aguarda aprovação. Fale com o administrador.",
     "politica_provedor_incompleta": "A política do provedor de contatos está incompleta. Fale com o administrador.",
     "custo_provedor_nao_configurado": "O custo contratual do provedor de contatos ainda não foi configurado e aprovado. Fale com o administrador.",
-    "contrato_provedor_nao_validado": "As regras do contrato/API do provedor de contatos ainda não foram validadas por um administrador. Fale com o administrador.",
     "orcamento_global_nao_configurado": "As chamadas ao provedor estão bloqueadas até o administrador configurar e aprovar o orçamento global.",
     "orcamento_global_pendente_aprovacao": "O orçamento global do provedor aguarda aprovação. Fale com o administrador.",
 }
@@ -540,19 +543,32 @@ def mensagem(codigo: str) -> str:
 
 
 def motivo_de_contrato_indisponivel(db: Session, provedor: str) -> str | None:
-    """Para provedor PAGO: o custo contratual precisa estar aprovado e o contrato/API validado por um humano. None = liberado."""
+    """Para provedor PAGO: o custo contratual (decisão comercial já aprovada) precisa estar cadastrado. None = liberado."""
     from app.contexts.enriquecimento import custo  # import tardio: custo importa este módulo
 
-    contrato = custo.custo_vigente(db, provedor)
-    if contrato is None:
-        return "custo_provedor_nao_configurado"
-    if not contrato.contrato_validado:
-        return "contrato_provedor_nao_validado"
+    return None if custo.custo_vigente(db, provedor) is not None else "custo_provedor_nao_configurado"
+
+
+def _sincronizar_politica_se_faltar(db: Session, provider) -> str | None:
+    """Provedor pago sem política utilizável: tenta publicá-la a partir das tarifas que o próprio provedor informa (sem pedir aprovação a ninguém). Devolve o
+    motivo técnico da falha, se houver. Só é chamada na ESTIMATIVA (antes de qualquer reserva)."""
+    from app.contexts.enriquecimento import conciliacao  # import tardio: conciliacao importa este módulo
+
+    try:
+        conciliacao.sincronizar_politica(db, provider)
+    except (PesquisaBloqueada, ValidacaoFalhou) as erro:
+        db.rollback()
+        return str(erro)
+    except Exception:  # noqa: BLE001 - nunca derruba a estimativa por falha de integração
+        db.rollback()
+        logger.exception("ENRIQUECIMENTO_SINCRONIZACAO_POLITICA_EXCECAO provedor=%s", provider.nome_provedor)
+        return "falha inesperada ao consultar as tarifas do provedor"
     return None
 
 
-def exigir_configuracao(db: Session, tenant_id: str, provider) -> tuple[ConfigResolvida, PoliticaResolvida]:
-    """Configuração do plano e política do provedor, aprovadas e completas, ou `PesquisaBloqueada` com o motivo. Não olha saldo nem orçamento."""
+def exigir_configuracao(db: Session, tenant_id: str, provider, *, sincronizar: bool = False) -> tuple[ConfigResolvida, PoliticaResolvida]:
+    """Configuração do plano e política do provedor, aprovadas e completas, ou `PesquisaBloqueada` com o motivo. Não olha saldo nem orçamento. Com
+    `sincronizar=True` (estimativa), um provedor pago sem política tenta publicá-la a partir das tarifas que ele próprio informa."""
     if not provider.disponivel:
         raise PesquisaBloqueada(mensagem("provedor_indisponivel"), "provedor_indisponivel",
                                 [{"codigo": "provedor_indisponivel", "mensagem": mensagem("provedor_indisponivel")}])
@@ -563,6 +579,12 @@ def exigir_configuracao(db: Session, tenant_id: str, provider) -> tuple[ConfigRe
         texto = f"{mensagem('config_incompleta')} (faltando: {', '.join(config.faltando)})"
         raise PesquisaBloqueada(texto, "config_incompleta", [{"codigo": "config_incompleta", "mensagem": texto}])
     politica, motivo = politica_vigente(db, provider.nome_provedor)
+    if sincronizar and provider.pago and (politica is None or not politica.utilizavel):
+        detalhe = _sincronizar_politica_se_faltar(db, provider)
+        politica, motivo = politica_vigente(db, provider.nome_provedor)
+        if detalhe and (politica is None or not politica.utilizavel):
+            texto = f"{mensagem(motivo) if politica is None else mensagem('politica_provedor_incompleta')} ({detalhe})"
+            raise PesquisaBloqueada(texto, motivo if politica is None else "politica_provedor_incompleta", [{"codigo": "politica_provedor_indisponivel_tecnico", "mensagem": texto}])
     if politica is None:
         raise PesquisaBloqueada(mensagem(motivo), motivo, [{"codigo": motivo, "mensagem": mensagem(motivo)}])
     if not politica.utilizavel:

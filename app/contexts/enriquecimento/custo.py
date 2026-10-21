@@ -8,8 +8,9 @@ efetivamente cobrados). Nenhum imposto, encargo ou câmbio real é inventado.
 Como o custo mensal é fixo, o custo POR CRÉDITO CONSUMIDO sobe com a ociosidade: `custo_efetivo` informa créditos consumidos, ociosos (que expiram no fim
 do ciclo) e `custo mensal efetivo ÷ créditos realmente consumidos`.
 
-A **validação do contrato** (ciclo, saldo, consumo, deduplicação, retries, resultados parciais, medição efetiva) é um ato humano com evidência, separado
-da aprovação dos números: sem ela a pesquisa no provedor pago permanece bloqueada. O sistema não tem como ler o contrato e não finge que o fez."""
+Estes números são decisões comerciais já aprovadas pelo PO: não dependem de nova aprovação nem de "validação de contrato". O que o sistema confere sozinho,
+com os dados que a própria Lusha devolve, é a **medição** (`billing.creditsCharged` de cada resposta), a **conciliação** com `GET /v3/account/usage` e a
+capacidade (créditos totais informados pelo provedor × créditos anuais do contrato)."""
 
 import logging
 from dataclasses import dataclass
@@ -25,25 +26,6 @@ from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 logger = logging.getLogger("b2bon.enriquecimento")
 
-# Cada item precisa ser confirmado (True) por quem valida, com a evidência (contrato, e-mail do fornecedor, documentação oficial) no texto.
-CHECKLIST_CONTRATO = (
-    "ciclo_mensal_confirmado",
-    "consumo_por_credito_confirmado",
-    "deduplicacao_confirmada",
-    "retries_nao_cobrados_ou_regra_confirmada",
-    "resultados_parciais_confirmados",
-    "medicao_efetiva_confirmada",
-)
-ROTULO_CHECKLIST = {
-    "ciclo_mensal_confirmado": "ciclo de cobrança/validade dos créditos confirmado",
-    "consumo_por_credito_confirmado": "consumo por ação (busca, e-mail, telefone) confirmado",
-    "deduplicacao_confirmada": "regra de deduplicação/recobrança do mesmo contato confirmada",
-    "retries_nao_cobrados_ou_regra_confirmada": "regra de cobrança em novas tentativas confirmada",
-    "resultados_parciais_confirmados": "cobrança de resultados parciais confirmada",
-    "medicao_efetiva_confirmada": "medição efetiva do consumo (resposta/uso do provedor) confirmada",
-}
-
-
 @dataclass(frozen=True)
 class CustoResolvido:
     id: int
@@ -56,8 +38,6 @@ class CustoResolvido:
     custo_unitario_usd: Decimal
     custo_unitario_brl: Decimal
     custo_mensal_brl: Decimal
-    contrato_validado: bool
-    saldo_transferivel: bool | None
 
 
 def _resolvido(linha: EnriquecimentoCustoProvedor) -> CustoResolvido:
@@ -66,7 +46,6 @@ def _resolvido(linha: EnriquecimentoCustoProvedor) -> CustoResolvido:
         creditos_anuais=linha.creditos_anuais, creditos_mensais=linha.creditos_mensais,
         cambio_planejamento_brl=precos.dec(linha.cambio_planejamento_brl), custo_unitario_usd=precos.dec(linha.custo_unitario_usd),
         custo_unitario_brl=precos.dec(linha.custo_unitario_brl), custo_mensal_brl=precos.dec(linha.custo_mensal_brl),
-        contrato_validado=linha.contrato_validado_em is not None, saldo_transferivel=linha.saldo_transferivel,
     )
 
 
@@ -144,35 +123,8 @@ def aprovar_custo(db: Session, custo_id: int, ator_id: str | None, tenant_audito
         raise ValidacaoFalhou(f"O orçamento global vigente ({orcamento.limite_creditos} créditos/mês) excede a capacidade desta versão do contrato "
                               f"({linha.creditos_mensais}). Reduza o orçamento antes.")
     irmas = db.query(EnriquecimentoCustoProvedor).filter_by(provedor=linha.provedor).all()
-    # A validação do contrato pertence à versão: uma versão nova de custo precisa ser validada de novo.
     config._aprovar_linha(db, linha, irmas, ator_id, tenant_auditoria, "enriquecimento_custo_aprovado", "enriquecimento_custo_provedor",
                           {"provedor": linha.provedor, "custo_unitario_brl": str(linha.custo_unitario_brl)})
-    return linha
-
-
-def validar_contrato(db: Session, custo_id: int, *, checklist: dict, saldo_transferivel, evidencia: str, ator_id: str | None, tenant_auditoria: str
-                     ) -> EnriquecimentoCustoProvedor:
-    """Registra que um humano conferiu as regras do contrato/API do provedor. Só a versão APROVADA e vigente; todos os itens do checklist precisam ser
-    `True`; a evidência (onde está escrito) é obrigatória; `saldo_transferivel` registra o fato (sim/não), não presume."""
-    linha = db.get(EnriquecimentoCustoProvedor, custo_id)
-    if linha is None:
-        raise NaoEncontrado("Custo do provedor não encontrado.")
-    if linha.aprovado_em is None or linha.valido_ate is not None:
-        raise ValidacaoFalhou("Só a versão aprovada e vigente do custo pode ter o contrato validado.")
-    faltam = [item for item in CHECKLIST_CONTRATO if checklist.get(item) is not True]
-    if faltam:
-        raise ValidacaoFalhou("Contrato não validado: confirme " + "; ".join(ROTULO_CHECKLIST[i] for i in faltam) + ".")
-    if not isinstance(saldo_transferivel, bool):
-        raise ValidacaoFalhou("Informe se o contrato permite transferir saldo entre meses (sim ou não).")
-    if not evidencia or len(evidencia.strip()) < 10:
-        raise ValidacaoFalhou("Informe a evidência (documento, cláusula ou comunicação do provedor) em pelo menos 10 caracteres.")
-    linha.contrato_validado_por, linha.contrato_validado_em = ator_id or "sistema", config.agora_utc()
-    linha.contrato_checklist = {item: True for item in CHECKLIST_CONTRATO}
-    linha.contrato_evidencia, linha.saldo_transferivel = evidencia.strip(), saldo_transferivel
-    auditoria_service.registrar(db, tenant_auditoria, "enriquecimento_contrato_validado", "enriquecimento_custo_provedor", linha.id, ator_id,
-                                {"provedor": linha.provedor, "versao": linha.versao, "saldo_transferivel": saldo_transferivel,
-                                 "evidencia": linha.contrato_evidencia})
-    db.commit()
     return linha
 
 
@@ -216,7 +168,7 @@ def custo_efetivo(db: Session, provedor: str, periodo: str) -> dict:
     ociosos = max(0, custo.creditos_mensais - consumidos)
     por_credito = precos.interna(base / Decimal(consumidos)) if consumidos > 0 else None
     return {
-        "provedor": provedor, "periodo": periodo, "configurado": True, "contrato_validado": custo.contrato_validado,
+        "provedor": provedor, "periodo": periodo, "configurado": True,
         "custo_mensal_planejamento_brl": str(custo.custo_mensal_brl), "custo_mensal_efetivo_brl": str(efetivo) if efetivo is not None else None,
         "base_do_calculo": "pagamentos_efetivos" if efetivo is not None else "planejamento",
         "custo_unitario_nominal_brl": str(custo.custo_unitario_brl), "custo_unitario_nominal_usd": str(custo.custo_unitario_usd),
@@ -224,7 +176,6 @@ def custo_efetivo(db: Session, provedor: str, periodo: str) -> dict:
         "creditos_consumidos": consumidos, "creditos_ociosos": ociosos,
         "ociosidade_percentual": str(precos.exibir(Decimal(ociosos) * 100 / Decimal(custo.creditos_mensais), 1)),
         "custo_efetivo_por_credito_consumido_brl": str(por_credito) if por_credito is not None else None,
-        "saldo_transferivel": custo.saldo_transferivel,
         "pagamentos": [{"referencia": p.referencia, "valor_usd": str(p.valor_usd), "taxa_cambio_efetiva": str(p.taxa_cambio_efetiva),
                         "encargos_brl": str(p.encargos_brl), "valor_brl_total": str(p.valor_brl_total), "pago_em": p.pago_em} for p in pagamentos],
         "aviso": None if efetivo is not None else "Sem pagamento registrado neste período: o custo mensal é o de planejamento (câmbio de planejamento), não o contábil.",

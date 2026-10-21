@@ -21,10 +21,6 @@ interface VersaoCusto {
   custo_mensal_brl: string;
   aprovada: boolean;
   vigente: boolean;
-  contrato_validado: boolean;
-  contrato_validado_por: string | null;
-  contrato_evidencia: string | null;
-  saldo_transferivel: boolean | null;
 }
 
 interface Efetivo {
@@ -42,7 +38,6 @@ interface Efetivo {
 
 interface DadosCusto {
   versoes: VersaoCusto[];
-  checklist_contrato: { item: string; descricao: string }[];
   efetivo_no_mes: Efetivo;
 }
 
@@ -60,11 +55,22 @@ interface Venda {
   nota: { status: string; numero: string | null; erro: string | null; tentativas: number } | null;
   situacao: string;
   situacao_rotulo: string;
+  situacao_fiscal: string;
+  situacao_fiscal_rotulo: string;
+  credito_confere: boolean;
   criado_em: string;
 }
 
 interface DadosVendas {
-  resumo: { por_situacao: Record<string, number>; vendas_aprovadas: number; bruto_brl: string; taxas_informadas_brl: string; liquido_informado_brl: string };
+  resumo: {
+    por_situacao: Record<string, number>;
+    por_situacao_fiscal: Record<string, number>;
+    vendas_aprovadas: number;
+    bruto_brl: string;
+    taxas_informadas_brl: string;
+    liquido_informado_brl: string;
+    creditos_que_nao_conferem: number[];
+  };
   vendas: Venda[];
 }
 
@@ -83,9 +89,9 @@ interface Estorno {
 }
 
 const TOM_SITUACAO: Record<string, "green" | "amber" | "red" | "muted"> = {
-  conciliada: "green", aguardando_pagamento: "muted", pagamento_rejeitado: "muted", pago_sem_nota: "amber", nota_com_falha: "red", divergente: "red",
-  contestada: "red", estornada: "muted",
+  conciliada: "green", aguardando_pagamento: "muted", pagamento_rejeitado: "muted", divergente: "red", contestada: "red", estornada: "muted",
 };
+const TOM_FISCAL: Record<string, "green" | "amber" | "red" | "muted"> = { emitida: "green", pendente: "amber", sem_emissor: "amber", falha: "red", nao_aplicavel: "muted" };
 const TOM_ESTORNO: Record<string, "green" | "amber" | "red" | "muted"> = { SOLICITADO: "amber", EXECUTADO: "green", REJEITADO: "muted", APROVADO: "amber" };
 const CAMPOS_PAGAMENTO_VAZIO = { referencia: "", periodo: "", valor_usd: "", taxa: "", encargos: "", pago_em: "" };
 
@@ -99,9 +105,6 @@ export function AdminCustoVendas() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [novoCusto, setNovoCusto] = useState({ usd: "", anuais: "", cambio: "", motivo: "" });
-  const [marcados, setMarcados] = useState<Record<string, boolean>>({});
-  const [saldoTransferivel, setSaldoTransferivel] = useState<"" | "sim" | "nao">("");
-  const [evidencia, setEvidencia] = useState("");
   const [pagamento, setPagamento] = useState(CAMPOS_PAGAMENTO_VAZIO);
   const [estornoDe, setEstornoDe] = useState<Venda | null>(null);
   const [pedido, setPedido] = useState({ tipo: "ESTORNO", creditos: "", justificativa: "", evidencia: "" });
@@ -129,7 +132,6 @@ export function AdminCustoVendas() {
 
   const vigente = custo?.versoes.find((v) => v.vigente);
   const pendentes = custo?.versoes.filter((v) => !v.aprovada) ?? [];
-  const checklistCompleto = custo !== null && custo.checklist_contrato.every((c) => marcados[c.item]);
   const abertos = estornos.filter((e) => e.status === "SOLICITADO");
 
   function salvarCusto(evento: FormEvent) {
@@ -143,14 +145,14 @@ export function AdminCustoVendas() {
     });
   }
 
-  function validar() {
-    if (!vigente) return;
+  function sincronizarTarifas() {
     executar(async () => {
-      await api.post(`/admin/enriquecimento/custo/${vigente.id}/validar-contrato`, {
-        checklist: marcados, saldo_transferivel: saldoTransferivel === "sim", evidencia,
-      });
-      setEvidencia("");
-      return "Contrato validado (auditado). A pesquisa Lusha só é liberada se política e orçamento global também estiverem aprovados.";
+      const r = await api.post<{ alterada: boolean; versao: number; tarifas: { busca: number; email: number; telefone: number | null } }>(
+        "/admin/enriquecimento/provedores/lusha/sincronizar-politica", {},
+      );
+      return r.alterada
+        ? `Política v${r.versao} publicada a partir das tarifas que a Lusha informa (busca ${r.tarifas.busca}, e-mail ${r.tarifas.email}${r.tarifas.telefone !== null ? `, telefone ${r.tarifas.telefone}` : ""} crédito(s) por unidade).`
+        : "A política vigente já corresponde às tarifas informadas pela Lusha.";
     });
   }
 
@@ -185,7 +187,7 @@ export function AdminCustoVendas() {
       <SectionLabel>Custo do provedor, vendas e estornos (super administrador)</SectionLabel>
       {aviso && <p className="mb-2 rounded-md bg-surf2 p-2 text-[12px] text-muted">{aviso}</p>}
 
-      <h3 className="mb-1 text-[12px] font-semibold">Custo contratual e validação do contrato</h3>
+      <h3 className="mb-1 text-[12px] font-semibold">Custo contratual e tarifas do provedor</h3>
       {vigente ? (
         <dl className="mb-2 grid grid-cols-2 gap-2 text-[12px] lg:grid-cols-4">
           <Item rotulo="Custo mensal" valor={`USD ${Number(vigente.custo_mensal_usd).toLocaleString("pt-BR")}`} />
@@ -194,11 +196,9 @@ export function AdminCustoVendas() {
           <Item rotulo="Custo nominal por crédito" valor={custoCredito(vigente.custo_unitario_brl)} />
           <Item rotulo="Custo mensal (planejamento)" valor={reais(vigente.custo_mensal_brl)} />
           <Item rotulo="Versão" valor={`v${vigente.versao}`} />
-          <Item rotulo="Contrato" valor={vigente.contrato_validado ? `validado por ${vigente.contrato_validado_por}` : "NÃO validado (pesquisa bloqueada)"} />
-          <Item rotulo="Saldo entre meses" valor={vigente.saldo_transferivel === null ? "não informado" : vigente.saldo_transferivel ? "transferível" : "não transferível"} />
         </dl>
       ) : (
-        <p className="mb-2 text-[12px] text-amber">Nenhum custo contratual aprovado: a pesquisa Lusha permanece bloqueada.</p>
+        <p className="mb-2 text-[12px] text-amber">Nenhum custo contratual cadastrado: a pesquisa Lusha permanece bloqueada.</p>
       )}
       {ef?.configurado && (
         <p className="mb-2 text-[12px] text-muted">
@@ -220,31 +220,15 @@ export function AdminCustoVendas() {
           </Button>
         </div>
       ))}
-      {vigente && !vigente.contrato_validado && custo && (
-        <div className="mb-3 rounded-md bg-surf2 p-2.5 text-[12px]">
-          <p className="mb-1 font-semibold">Validar o contrato/API do provedor (ato humano, com evidência)</p>
-          <p className="mb-1 text-muted">A plataforma não lê o contrato. Confirme cada item só depois de conferir o documento do provedor.</p>
-          {custo.checklist_contrato.map((c) => (
-            <label key={c.item} className="flex items-start gap-2">
-              <input type="checkbox" className="mt-0.5" checked={!!marcados[c.item]} onChange={(ev) => setMarcados({ ...marcados, [c.item]: ev.target.checked })} />
-              <span>{c.descricao}</span>
-            </label>
-          ))}
-          <div className="mt-2 flex flex-wrap items-end gap-2">
-            <Select aria-label="O contrato permite transferir saldo entre meses?" value={saldoTransferivel} onChange={(ev) => setSaldoTransferivel(ev.target.value as "" | "sim" | "nao")}>
-              <option value="">Saldo entre meses: escolha...</option>
-              <option value="nao">Não é transferível</option>
-              <option value="sim">É transferível</option>
-            </Select>
-            <div className="min-w-64 flex-1">
-              <Input label="Evidência (documento, cláusula, comunicação)" value={evidencia} onChange={(ev) => setEvidencia(ev.target.value)} />
-            </div>
-            <Button size="sm" disabled={ocupado || !checklistCompleto || saldoTransferivel === "" || evidencia.trim().length < 10} onClick={validar}>
-              Validar contrato
-            </Button>
-          </div>
-        </div>
-      )}
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px]">
+        <Button size="sm" variant="ghost" disabled={ocupado} onClick={sincronizarTarifas}>
+          Sincronizar tarifas com a Lusha
+        </Button>
+        <span className="text-muted">
+          Lê as tarifas por ação que a própria Lusha informa (busca, e-mail, telefone) e publica a política. Roda sozinha no agendador; sem a tarifa da busca ou do e-mail o
+          motivo técnico aparece aqui.
+        </span>
+      </div>
       <form onSubmit={salvarCusto} className="mb-3 flex flex-wrap items-end gap-2">
         <Input label="Custo mensal (USD)" value={novoCusto.usd} onChange={(ev) => setNovoCusto({ ...novoCusto, usd: ev.target.value })} placeholder="600" />
         <Input label="Créditos por ano" type="number" min={12} value={novoCusto.anuais} onChange={(ev) => setNovoCusto({ ...novoCusto, anuais: ev.target.value })} placeholder="81600" />
@@ -275,6 +259,9 @@ export function AdminCustoVendas() {
           <p className="mb-1 text-[12px] text-muted">
             {vendas.resumo.vendas_aprovadas} venda(s) aprovada(s): bruto {reais(vendas.resumo.bruto_brl)} · tarifas informadas pelo provedor de pagamento {reais(vendas.resumo.taxas_informadas_brl)} · líquido
             informado {reais(vendas.resumo.liquido_informado_brl)}.
+            {vendas.resumo.creditos_que_nao_conferem.length > 0 && (
+              <span className="text-red"> Atenção: o crédito lançado no razão não confere com o pedido nas compras {vendas.resumo.creditos_que_nao_conferem.join(", ")}.</span>
+            )}
           </p>
           <div className="mb-3 max-h-72 overflow-auto">
             <table className="w-full border-collapse text-[12px]">
@@ -288,10 +275,13 @@ export function AdminCustoVendas() {
                     <td className="p-1.5">
                       <Badge tone={TOM_SITUACAO[v.situacao] ?? "muted"}>{v.situacao_rotulo}</Badge>
                     </td>
-                    <td className="p-1.5 text-muted">{v.nota ? (v.nota.status === "EMITIDA" ? `NF ${v.nota.numero}` : `nota: ${v.nota.status.toLowerCase()}${v.nota.erro ? ` (${v.nota.erro})` : ""}`) : "sem nota"}</td>
+                    <td className="p-1.5">
+                      <Badge tone={TOM_FISCAL[v.situacao_fiscal] ?? "muted"}>{v.nota?.status === "EMITIDA" ? `NF ${v.nota.numero}` : v.situacao_fiscal_rotulo}</Badge>
+                      {v.nota?.erro ? <span className="ml-1 text-muted">({v.nota.erro})</span> : null}
+                    </td>
                     <td className="p-1.5 text-right whitespace-nowrap">
-                      {(v.situacao === "pago_sem_nota" || v.situacao === "nota_com_falha") && (
-                        <Button size="sm" variant="ghost" disabled={ocupado} onClick={() => executar(async () => { const r = await api.post<{ status: string; erro: string | null }>(`/admin/enriquecimento/compras/${v.compra_id}/emitir-nota`, {}); return r.status === "EMITIDA" ? "Nota emitida." : `A nota não foi emitida: ${r.erro ?? "sem detalhe"}.`; })}>
+                      {(v.situacao_fiscal === "sem_emissor" || v.situacao_fiscal === "falha" || v.situacao_fiscal === "pendente") && (
+                        <Button size="sm" variant="ghost" disabled={ocupado} onClick={() => executar(async () => { const r = await api.post<{ status: string; erro: string | null }>(`/admin/enriquecimento/compras/${v.compra_id}/emitir-nota`, {}); return r.status === "EMITIDA" ? "Nota emitida." : r.status === "SEM_EMISSOR" ? "Nenhum emissor fiscal está configurado neste ambiente: a nota continua a emitir." : `A nota não foi emitida: ${r.erro ?? "sem detalhe"}.`; })}>
                           Emitir nota
                         </Button>
                       )}

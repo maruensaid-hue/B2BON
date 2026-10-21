@@ -237,8 +237,7 @@ class EnriquecimentoCustoProvedor(Base):
     (`custo_mensal_usd ÷ creditos_mensais × cambio`) e guardado como foto. O câmbio de planejamento serve à precificação; o valor contábil de cada
     pagamento ao provedor é registrado em `EnriquecimentoPagamentoProvedor` com a taxa efetivamente aplicada.
 
-    `contrato_validado_*`: a validação das regras do contrato/API (ciclo, saldo, consumo, deduplicação, retries, resultados parciais, medição efetiva) é um
-    ato humano com evidência, separado da aprovação dos números. Sem ela a pesquisa no provedor pago fica bloqueada."""
+    Decisão comercial já aprovada pelo PO: não há etapa de "validação de contrato". A medição vem da resposta do provedor e é conciliada com o uso que ele informa."""
 
     __tablename__ = "enriquecimento_custo_provedor"
     __table_args__ = (UniqueConstraint("provedor", "versao", name="uq_enriq_custo_provedor_versao"),)
@@ -259,11 +258,6 @@ class EnriquecimentoCustoProvedor(Base):
     aprovado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     valido_de: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     valido_ate: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    contrato_validado_por: Mapped[str | None] = mapped_column(String, nullable=True)
-    contrato_validado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    contrato_checklist: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    contrato_evidencia: Mapped[str | None] = mapped_column(String, nullable=True)
-    saldo_transferivel: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # o contrato permite levar saldo ao mês seguinte? (fato a registrar)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
@@ -290,7 +284,7 @@ class EnriquecimentoPagamentoProvedor(Base):
 
 class EnriquecimentoNotaFiscal(Base):
     """Nota fiscal de uma compra de pacote (uma por compra). A emissão vai por uma porta (`FiscalProvider`); sem provedor fiscal configurado nada é
-    emitido nem simulado e o checkout permanece bloqueado. Status: PENDENTE, EMITIDA, FALHA."""
+    emitida nem simulada: a nota fica SEM_EMISSOR até existir emissor. Status: PENDENTE, SEM_EMISSOR, EMITIDA, FALHA."""
 
     __tablename__ = "enriquecimento_nota_fiscal"
 
