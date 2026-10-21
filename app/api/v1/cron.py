@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.api.deps import (
     get_account_data_provider,
     get_brasilapi_client,
-    get_contact_enrichment_provider,
     get_db,
     get_sessao_factory,
     get_email_provider,
@@ -38,7 +37,6 @@ from app.llm.base import LLMProvider
 from app.models.tenant import Tenant
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.channels.email.base import EmailProvider
-from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.email_validation.base import EmailVerificationProvider
 from app.providers.payout.base import PayoutProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
@@ -264,7 +262,6 @@ def processar_fila_enriquecimento(
     site_fetcher: SiteFetcher = Depends(get_site_fetcher),
     web_search: WebSearchProvider = Depends(get_web_search_provider),
     account_data: AccountDataProvider = Depends(get_account_data_provider),
-    contact_enrichment: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider),
     graph: Neo4jClient = Depends(get_graph_client),
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
     brasilapi_client: BrasilApiClient = Depends(get_brasilapi_client),
@@ -272,11 +269,12 @@ def processar_fila_enriquecimento(
     """Processa em lotes pequenos a fila de enriquecimento (site +
     decisores) de contas criadas em massa (ex.: importação de planilha de
     evento em `/icp/{icp_id}/contas/importar-participantes`) — evita
-    travar o request de importação esperando LLM/busca web/Lusha por
-    empresa (raio-X: planilha grande estourando timeout do proxy do
+    travar o request de importação esperando LLM/busca web por
+    empresa
+    (decisores: só o QSA da Receita; Lusha nunca é chamada aqui) (raio-X: planilha grande estourando timeout do proxy do
     Render, mesmo raciocínio do recorte de CNPJ)."""
     return enriquecimento_fila_service.processar_pendentes(
-        db, llm, site_fetcher, web_search, account_data, contact_enrichment, graph, plan_limits, brasilapi_client
+        db, llm, site_fetcher, web_search, account_data, graph, plan_limits, brasilapi_client
     )
 
 

@@ -237,7 +237,7 @@ def test_convite_vitrine_enfileira_o_enriquecimento_e_a_fila_o_executa(db_sessio
     site = lambda d: "=== https://convidada.com.br ===\nEmpresa Convidada. CNPJ 11.222.333/0001-81"  # noqa: E731
     resultado = enriquecimento_fila_service.processar_pendentes(
         db_session, FakeLLMProvider(["porte: media"]), site, FakeWebSearchProvider([ResultadoBusca(titulo="x", url="https://x.com", descricao="")]),
-        FakeAccountDataProvider(), FakeContactEnrichmentProvider(), FakeGraphClient(), StubPlanLimitsProvider(),
+        FakeAccountDataProvider(), FakeGraphClient(), StubPlanLimitsProvider(),
     )
 
     assert resultado["concluidos"] == 1

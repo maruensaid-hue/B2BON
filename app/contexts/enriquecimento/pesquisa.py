@@ -5,7 +5,8 @@ Princípios (ver `docs/b2bon/GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md`):
 * o universo do ICP nunca dispara pesquisa: só o conjunto EXPLÍCITO de empresas da prévia chega ao provedor;
 * o backend é a única autoridade: a confirmação recalcula e revalida tudo, e nada que o front mande altera plano, saldo, limite ou orçamento;
 * nenhuma chamada ao provedor acontece antes de a reserva atômica (créditos do tenant e orçamento global) estar gravada;
-* desfecho ambíguo (timeout, 5xx, resposta ilegível) nunca é repetido nem liberado: fica retido até reconciliação com o uso do provedor.
+* a estimativa é um TETO calculado com as tarifas aprovadas do provedor; o que se cobra é o consumo MEDIDO pela resposta dele;
+* desfecho ambíguo (timeout, 5xx, resposta ilegível, medição ausente) nunca é repetido nem liberado: fica retido até reconciliação.
 """
 
 import hashlib
@@ -21,8 +22,16 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.contexts.enriquecimento import ledger
-from app.contexts.enriquecimento.config import ConfigResolvida, agora_utc, config_vigente, periodo_de
+from app.contexts.enriquecimento import ledger, precos
+from app.contexts.enriquecimento.config import (
+    ConfigResolvida,
+    PoliticaResolvida,
+    agora_utc,
+    exigir_configuracao,
+    mensagem,
+    orcamento_vigente,
+    periodo_de,
+)
 from app.core.config import settings
 from app.models.conta import Conta
 from app.models.decisor import Decisor
@@ -52,8 +61,8 @@ class Solicitante:
         return self.papel in PAPEIS_GESTORES
 
 
-def _bloqueio(codigo: str, mensagem: str) -> dict:
-    return {"codigo": codigo, "mensagem": mensagem}
+def _bloqueio(codigo: str, texto: str) -> dict:
+    return {"codigo": codigo, "mensagem": texto}
 
 
 def _chave_empresa(conta: Conta) -> str | None:
@@ -87,33 +96,21 @@ def _mudar_estado_item(db: Session, pesquisa: PesquisaDecisores, item: PesquisaD
         item.motivo = motivo[:500]
 
 
-def _hash_selecao(tenant_id: str, conta_ids: list[int], decisores: int, config: ConfigResolvida, provedor: str) -> str:
+def _hash_selecao(tenant_id: str, conta_ids: list[int], decisores: int, config: ConfigResolvida, politica: PoliticaResolvida, provedor: str) -> str:
     base = json.dumps({"t": tenant_id, "c": sorted(conta_ids), "d": decisores, "o": config.origem, "i": config.id, "v": config.versao,
-                       "p": provedor}, sort_keys=True, separators=(",", ":"))
+                       "p": provedor, "pol": politica.id, "polv": politica.versao}, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(base.encode()).hexdigest()
 
 
-def _config_ou_bloqueio(db: Session, tenant_id: str) -> ConfigResolvida:
-    config, motivo = config_vigente(db, tenant_id)
-    if config is None:
-        mensagens = {
-            "sem_plano_ativo": "Seu tenant não tem plano ativo. Regularize a licença ou fale com o comercial para liberar a pesquisa de decisores.",
-            "plano_sem_configuracao": "Seu plano ainda não tem a pesquisa de decisores configurada. Fale com o comercial para liberar.",
-        }
-        raise PesquisaBloqueada(mensagens[motivo], motivo, [_bloqueio(motivo, mensagens[motivo])])
-    if not config.utilizavel:
-        mensagem = ("A configuração da pesquisa de decisores do seu plano está incompleta. Fale com o comercial para concluir "
-                    f"(faltando: {', '.join(config.faltando)}).")
-        raise PesquisaBloqueada(mensagem, "config_incompleta", [_bloqueio("config_incompleta", mensagem)])
-    return config
-
-
-def _validar_parametros(config: ConfigResolvida, provider: ContactEnrichmentProvider, decisores: int, empresas: int) -> None:
+def _validar_parametros(config: ConfigResolvida, politica: PoliticaResolvida, provider: ContactEnrichmentProvider, decisores: int,
+                        empresas: int) -> None:
     """Rejeita (nunca ajusta em silêncio) valores acima dos tetos conhecidos."""
     if isinstance(decisores, bool) or not isinstance(decisores, int) or decisores < 1:
         raise ValidacaoFalhou("Decisores por empresa deve ser um número inteiro maior que zero.")
     if decisores > config.decisores_por_empresa_max:
         raise ValidacaoFalhou(f"Decisores por empresa ({decisores}) excede o máximo do seu plano ({config.decisores_por_empresa_max}).")
+    if decisores > politica.tamanho_pagina_busca:
+        raise ValidacaoFalhou(f"Decisores por empresa ({decisores}) excede o que uma consulta ao provedor retorna ({politica.tamanho_pagina_busca}).")
     teto_provedor = provider.max_contatos_por_consulta
     if teto_provedor is not None and decisores > teto_provedor:
         raise ValidacaoFalhou(f"Decisores por empresa ({decisores}) excede o que o provedor entrega por consulta ({teto_provedor}).")
@@ -121,56 +118,68 @@ def _validar_parametros(config: ConfigResolvida, provider: ContactEnrichmentProv
         raise ValidacaoFalhou(f"A seleção tem {empresas} empresa(s); o máximo por pesquisa no seu plano é {config.itens_por_lote_max}.")
 
 
-def _avaliar_limites(db: Session, tenant_id: str, config: ConfigResolvida, provider: ContactEnrichmentProvider, total: int,
-                     agora: datetime) -> tuple[list[dict], dict]:
-    """Bloqueios que dependem de estado (provedor, saldo, período, orçamento global) e os números usados. Quem chama já preparou o razão."""
+def _avaliar_limites(db: Session, tenant_id: str, config: ConfigResolvida, politica: PoliticaResolvida, provider: ContactEnrichmentProvider,
+                     total_cliente: int, total_provedor: int, agora: datetime) -> tuple[list[dict], dict]:
+    """Bloqueios que dependem de estado (provedor, saldo, período, orçamento global) e os números usados. Quem chama já preparou o razão.
+    Saldo e período são em créditos do CLIENTE; o orçamento global é em créditos do PROVEDOR."""
     bloqueios: list[dict] = []
     contexto: dict = {}
     if not provider.disponivel:
-        bloqueios.append(_bloqueio("provedor_indisponivel", "O provedor de contatos não está configurado neste ambiente."))
+        bloqueios.append(_bloqueio("provedor_indisponivel", mensagem("provedor_indisponivel")))
     contexto["disponivel"] = ledger.disponivel(db, tenant_id)
-    if total > contexto["disponivel"]:
-        bloqueios.append(_bloqueio("saldo_insuficiente", f"Esta pesquisa pode consumir até {total} crédito(s) de enriquecimento e há "
+    if total_cliente > contexto["disponivel"]:
+        bloqueios.append(_bloqueio("saldo_insuficiente", f"Esta pesquisa pode consumir até {total_cliente} crédito(s) de enriquecimento e há "
                                                          f"{contexto['disponivel']} disponível(is)."))
     if config.limite_periodo_creditos is not None:
         usado = ledger.consumo_liquido(db, tenant_id, periodo_de(agora)) + ledger.reservado(db, tenant_id)
         contexto["periodo_restante"] = max(0, config.limite_periodo_creditos - usado)
-        if total > contexto["periodo_restante"]:
+        if total_cliente > contexto["periodo_restante"]:
             bloqueios.append(_bloqueio("limite_periodo", f"O limite de {config.limite_periodo_creditos} crédito(s) no período deixa "
-                                                         f"{contexto['periodo_restante']} disponível(is); a pesquisa pode precisar de {total}."))
+                                                         f"{contexto['periodo_restante']} disponível(is); a pesquisa pode precisar de {total_cliente}."))
     if provider.pago:
-        situacao = ledger.situacao_global(db, provider.nome_provedor, agora)
-        contexto["global_restante"] = situacao["restante"]
-        contexto["global_nivel"] = situacao["nivel"]
-        if situacao["nivel"] == "nao_configurado":
-            bloqueios.append(_bloqueio("orcamento_global_nao_configurado", "As chamadas ao provedor estão bloqueadas até o administrador "
-                                                                           "configurar o orçamento global. Fale com o administrador."))
-        elif total > situacao["restante"]:
-            bloqueios.append(_bloqueio("orcamento_global_esgotado", "O limite global do provedor para o período não comporta esta pesquisa. "
-                                                                    "Fale com o administrador."))
+        orcamento = orcamento_vigente(db, provider.nome_provedor)
+        if not orcamento.configurado:
+            codigo = "orcamento_global_pendente_aprovacao" if orcamento.pendente_aprovacao else "orcamento_global_nao_configurado"
+            bloqueios.append(_bloqueio(codigo, mensagem(codigo)))
+            contexto["global_nivel"] = "nao_configurado"
+        else:
+            situacao = ledger.situacao_global(db, provider.nome_provedor, agora)
+            contexto["global_restante_provedor"] = situacao["restante"]
+            contexto["global_nivel"] = situacao["nivel"]
+            if total_provedor > situacao["restante"]:
+                bloqueios.append(_bloqueio("orcamento_global_esgotado", "O limite global do provedor para o período não comporta esta pesquisa. "
+                                                                        "Fale com o administrador."))
     return bloqueios, contexto
 
 
-def _sugerir_ajustes(config: ConfigResolvida, contexto: dict, elegiveis: int, decisores: int) -> list[dict]:
-    """Alternativas calculadas só com limites e saldos conhecidos agora. Não prometem que cabem e não alteram a escolha do usuário."""
+def _sugerir_ajustes(config: ConfigResolvida, politica: PoliticaResolvida, contexto: dict, elegiveis: int, decisores: int) -> list[dict]:
+    """Alternativas calculadas só com limites, saldos e tarifas aprovadas, em créditos do cliente. Não prometem que cabem (o consumo real é medido
+    pelo provedor) e não alteram a escolha do usuário."""
+    fator = politica.creditos_cliente_por_credito_provedor
+
+    def custo_empresa(d: int) -> int:
+        return politica.creditos_maximos_por_empresa(d) * fator
+
     capacidades = [contexto["disponivel"]]
-    for chave in ("periodo_restante", "global_restante"):
-        if contexto.get(chave) is not None:
-            capacidades.append(contexto[chave])
+    if contexto.get("periodo_restante") is not None:
+        capacidades.append(contexto["periodo_restante"])
+    if contexto.get("global_restante_provedor") is not None:
+        capacidades.append(contexto["global_restante_provedor"] * fator)
     capacidade = max(0, min(capacidades))
     sugestoes: list[dict] = []
-    if elegiveis and capacidade >= 1:
-        for menor in range(decisores - 1, 0, -1):
-            if elegiveis * menor <= capacidade:
-                sugestoes.append({"tipo": "reduzir_profundidade", "decisores_por_empresa": menor, "empresas_cobertas": elegiveis})
-                break
-        if decisores > 1:
-            mais = min(capacidade, config.itens_por_lote_max)
-            if mais > elegiveis:
-                sugestoes.append({"tipo": "ampliar_abrangencia", "decisores_por_empresa": 1, "empresas_cobertas": mais})
-        cabem = min(capacidade // decisores, config.itens_por_lote_max)
-        if 1 <= cabem < elegiveis:
-            sugestoes.append({"tipo": "reduzir_selecao", "decisores_por_empresa": decisores, "empresas_cobertas": cabem})
+    if not elegiveis:
+        return sugestoes
+    for menor in range(decisores - 1, 0, -1):
+        if elegiveis * custo_empresa(menor) <= capacidade:
+            sugestoes.append({"tipo": "reduzir_profundidade", "decisores_por_empresa": menor, "empresas_cobertas": elegiveis})
+            break
+    if decisores > 1:
+        mais = min(capacidade // custo_empresa(1), config.itens_por_lote_max)
+        if mais > elegiveis:
+            sugestoes.append({"tipo": "ampliar_abrangencia", "decisores_por_empresa": 1, "empresas_cobertas": mais})
+    cabem = min(capacidade // custo_empresa(decisores), config.itens_por_lote_max)
+    if 1 <= cabem < elegiveis:
+        sugestoes.append({"tipo": "reduzir_selecao", "decisores_por_empresa": decisores, "empresas_cobertas": cabem})
     return sugestoes
 
 
@@ -183,8 +192,8 @@ def _existentes_do_provedor(db: Session, tenant_id: str, conta_ids: list[int], p
     return {conta_id: total for conta_id, total in linhas}
 
 
-def _plano_de_itens(db: Session, tenant_id: str, contas: list[Conta], decisores: int, provedor: str) -> list[dict]:
-    """Para cada empresa selecionada: pendente (com o que falta buscar) ou deduplicada (com motivo)."""
+def _plano_de_itens(db: Session, tenant_id: str, contas: list[Conta], decisores: int, provedor: str, politica: PoliticaResolvida) -> list[dict]:
+    """Para cada empresa selecionada: pendente (com o que falta buscar e o teto de créditos do provedor) ou deduplicada (com motivo)."""
     existentes = _existentes_do_provedor(db, tenant_id, [c.id for c in contas], provedor)
     vistas: set[str] = set()
     plano = []
@@ -192,16 +201,34 @@ def _plano_de_itens(db: Session, tenant_id: str, contas: list[Conta], decisores:
         chave = _chave_empresa(conta)
         ja = existentes.get(conta.id, 0)
         if chave is not None and chave in vistas:
-            plano.append({"conta": conta, "estado": "deduplicada", "motivo": "duplicada_na_selecao", "existentes": ja, "buscar": 0})
+            plano.append({"conta": conta, "estado": "deduplicada", "motivo": "duplicada_na_selecao", "existentes": ja, "buscar": 0, "teto": 0})
             continue
         if chave is not None:
             vistas.add(chave)
         buscar = max(0, decisores - ja)
         if buscar == 0:
-            plano.append({"conta": conta, "estado": "deduplicada", "motivo": "decisores_ja_obtidos_do_provedor", "existentes": ja, "buscar": 0})
+            plano.append({"conta": conta, "estado": "deduplicada", "motivo": "decisores_ja_obtidos_do_provedor", "existentes": ja, "buscar": 0, "teto": 0})
         else:
-            plano.append({"conta": conta, "estado": "pendente", "motivo": None, "existentes": ja, "buscar": buscar})
+            plano.append({"conta": conta, "estado": "pendente", "motivo": None, "existentes": ja, "buscar": buscar,
+                          "teto": politica.creditos_maximos_por_empresa(buscar)})
     return plano
+
+
+def _por_categoria(politica: PoliticaResolvida, elegiveis: list[dict]) -> dict:
+    """Teto por categoria e por fonte, em créditos do provedor e do cliente. QSA da Receita e Brasil API não consomem crédito nesta operação."""
+    fator = politica.creditos_cliente_por_credito_provedor
+    busca = len(elegiveis) * politica.tamanho_pagina_busca * politica.creditos_busca_por_resultado
+    por_contato = (politica.creditos_email if politica.revelar_emails else 0) + (politica.creditos_telefone if politica.revelar_telefones else 0)
+    revelacao = sum(p["buscar"] for p in elegiveis) * por_contato
+    return {
+        "ia": {"creditos": 0, "observacao": "Esta operação não usa IA."},
+        "enriquecimento": {
+            "lusha_busca": {"creditos_provedor_max": busca, "creditos_cliente_max": busca * fator},
+            "lusha_revelacao": {"creditos_provedor_max": revelacao, "creditos_cliente_max": revelacao * fator},
+            "receita_qsa": {"creditos_cliente_max": 0, "observacao": "Fluxo separado, sem consumo de crédito."},
+            "brasilapi": {"creditos_cliente_max": 0, "observacao": "Fluxo separado, sem consumo de crédito."},
+        },
+    }
 
 
 def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], decisores_por_empresa: int | None,
@@ -217,12 +244,12 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
         raise ValidacaoFalhou("Identificadores de empresa inválidos.")
     ids_unicos = list(dict.fromkeys(conta_ids))
 
-    config = _config_ou_bloqueio(db, tenant_id)
+    config, politica = exigir_configuracao(db, tenant_id, provider)
     if decisores_por_empresa is None:
         decisores, origem = config.decisores_por_empresa_padrao, "padrao_plano"
     else:
         decisores, origem = decisores_por_empresa, "informado_usuario"
-    _validar_parametros(config, provider, decisores, len(ids_unicos))
+    _validar_parametros(config, politica, provider, decisores, len(ids_unicos))
 
     contas = db.query(Conta).filter(Conta.tenant_id == tenant_id, Conta.id.in_(ids_unicos)).all()
     por_id = {c.id: c for c in contas}
@@ -237,38 +264,51 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
     if abertas >= MAX_PREVIAS_ABERTAS:
         raise ValidacaoFalhou("Há muitas prévias de pesquisa em aberto. Confirme ou cancele algumas antes de criar outra.")
 
-    plano = _plano_de_itens(db, tenant_id, contas_ordenadas, decisores, provider.nome_provedor)
+    plano = _plano_de_itens(db, tenant_id, contas_ordenadas, decisores, provider.nome_provedor, politica)
     elegiveis = [p for p in plano if p["estado"] == "pendente"]
-    total = sum(p["buscar"] for p in elegiveis)
+    fator = politica.creditos_cliente_por_credito_provedor
+    total_provedor = sum(p["teto"] for p in elegiveis)
+    total_cliente = total_provedor * fator
+    solicitados = sum(p["buscar"] for p in elegiveis)
 
     ledger.preparar(db, tenant_id, config, agora)
-    bloqueios, contexto = _avaliar_limites(db, tenant_id, config, provider, total, agora)
+    bloqueios, contexto = _avaliar_limites(db, tenant_id, config, politica, provider, total_cliente, total_provedor, agora)
     deduplicadas = len(plano) - len(elegiveis)
+    valor_maximo = precos.valor(total_provedor, politica.preco_unitario_brl)
     incertezas = [
-        f"O consumo real depende do que o provedor devolver: no máximo {total} crédito(s) (1 crédito = 1 contato revelado); pode ser menor.",
-        "Não há custo em reais por crédito definido no sistema: a estimativa é em créditos, não em dinheiro.",
+        f"É um TETO, não uma previsão: no máximo {total_provedor} crédito(s) do provedor ({total_cliente} de enriquecimento). O que se cobra é o "
+        "consumo informado pelo próprio provedor em cada consulta, que pode ser menor (por exemplo, dado já revelado antes não é cobrado de novo).",
+        "Não há como saber de antemão quantos contatos o provedor devolverá, nem se terão e-mail e telefone; "
+        f"{solicitados} decisor(es) são pedidos no total e o retorno pode ser menor.",
+        "A busca no provedor é cobrada por resultado de uma página inteira, mesmo pedindo poucos decisores.",
+        f"O valor em reais é estimativa de apresentação (preço por crédito do provedor ≈ R$ {precos.exibir(politica.preco_unitario_brl, politica.casas_exibicao)}), "
+        "sem arredondamento de cobrança.",
         f"A prévia vale por {settings.enriquecimento_previa_validade_min} minuto(s) e será revalidada por inteiro na confirmação.",
     ]
     if deduplicadas:
         incertezas.append(f"{deduplicadas} empresa(s) ficam fora da consulta por duplicidade ou decisores já obtidos; a economia não é garantida "
                           "(os decisores já obtidos podem não ter os cargos que você busca).")
     estimativa = {
-        "creditos_maximos": total, "empresas_selecionadas": len(plano), "empresas_a_consultar": len(elegiveis),
+        "creditos_maximos": total_cliente, "creditos_provedor_maximos": total_provedor, "valor_maximo_brl": str(precos.exibir(valor_maximo, politica.casas_exibicao)),
+        "preco_credito_provedor_brl": str(precos.exibir(politica.preco_unitario_brl, politica.casas_exibicao)),
+        "creditos_cliente_por_credito_provedor": fator, "decisores_solicitados": solicitados,
+        "por_categoria": _por_categoria(politica, elegiveis),
+        "empresas_selecionadas": len(plano), "empresas_a_consultar": len(elegiveis),
         "empresas_deduplicadas": deduplicadas, "decisores_por_empresa": decisores, "origem_decisores": origem,
         "disponivel": contexto["disponivel"], "limite_periodo_restante": contexto.get("periodo_restante"),
         "limites": {"decisores_por_empresa_max": config.decisores_por_empresa_max, "itens_por_lote_max": config.itens_por_lote_max,
                     "limite_periodo_creditos": config.limite_periodo_creditos},
-        "config": {"origem": config.origem, "versao": config.versao},
+        "config": {"origem": config.origem, "versao": config.versao}, "politica": {"versao": politica.versao},
         "viavel": not bloqueios, "bloqueios": bloqueios,
-        "ajustes_sugeridos": [] if not bloqueios else _sugerir_ajustes(config, contexto, len(elegiveis), decisores),
-        "nota_ajustes": "Sugestões calculadas com os limites e saldos de agora; não são promessa e serão revalidadas. Sua escolha não foi alterada.",
+        "ajustes_sugeridos": [] if not bloqueios else _sugerir_ajustes(config, politica, contexto, len(elegiveis), decisores),
+        "nota_ajustes": "Sugestões calculadas com os limites, saldos e tarifas de agora; não são promessa e serão revalidadas. Sua escolha não foi alterada.",
         "incertezas": incertezas,
     }
     pesquisa = PesquisaDecisores(
         id=uuid.uuid4().hex, tenant_id=tenant_id, usuario_id=solicitante.id, provedor=provider.nome_provedor, estado="criada",
         decisores_por_empresa=decisores, origem_decisores=origem, config_origem=config.origem, config_id=config.id,
-        config_versao=config.versao, total_empresas=len(plano), total_maximo=total, estimativa=estimativa,
-        selecao_hash=_hash_selecao(tenant_id, ids_unicos, decisores, config, provider.nome_provedor),
+        config_versao=config.versao, total_empresas=len(plano), total_maximo=total_cliente, provedor_reservados=0, politica_id=politica.id,
+        estimativa=estimativa, selecao_hash=_hash_selecao(tenant_id, ids_unicos, decisores, config, politica, provider.nome_provedor),
         previa_expira_em=agora + timedelta(minutes=settings.enriquecimento_previa_validade_min),
     )
     db.add(pesquisa)
@@ -280,7 +320,7 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
         ))
     _registrar_transicao(db, pesquisa, "criada", f"previa_criada viavel={not bloqueios}", str(solicitante.id), anterior="-")
     db.commit()
-    logger.info("ENRIQUECIMENTO_PREVIA pesquisa=%s tenant=%s empresas=%s maximo=%s viavel=%s", pesquisa.id, tenant_id, len(plano), total,
+    logger.info("ENRIQUECIMENTO_PREVIA pesquisa=%s tenant=%s empresas=%s teto_provedor=%s viavel=%s", pesquisa.id, tenant_id, len(plano), total_provedor,
                 not bloqueios)
     return pesquisa
 
@@ -355,45 +395,50 @@ def confirmar(db: Session, *, solicitante: Solicitante, pesquisa_id: str, seleca
 def _validar_e_reservar(db: Session, solicitante: Solicitante, pesquisa: PesquisaDecisores, provider: ContactEnrichmentProvider,
                         agora: datetime) -> None:
     tenant_id, ator = pesquisa.tenant_id, str(solicitante.id)
-    config = _config_ou_bloqueio(db, tenant_id)
+    config, politica = exigir_configuracao(db, tenant_id, provider)
     if (config.origem, config.id, config.versao) != (pesquisa.config_origem, pesquisa.config_id, pesquisa.config_versao):
         raise PesquisaBloqueada("A configuração do seu plano mudou desde a prévia. Crie uma nova prévia.", "estimativa_desatualizada")
+    if politica.id != pesquisa.politica_id:
+        raise PesquisaBloqueada("As tarifas ou o preço do provedor mudaram desde a prévia. Crie uma nova prévia.", "estimativa_desatualizada")
     if provider.nome_provedor != pesquisa.provedor:
         raise PesquisaBloqueada("O provedor mudou desde a prévia. Crie uma nova prévia.", "estimativa_desatualizada")
     itens = itens_de(db, pesquisa.id)
     try:
-        _validar_parametros(config, provider, pesquisa.decisores_por_empresa, len(itens))
+        _validar_parametros(config, politica, provider, pesquisa.decisores_por_empresa, len(itens))
     except ValidacaoFalhou as erro:
         raise PesquisaBloqueada(str(erro), "parametros_fora_do_limite", [_bloqueio("parametros_fora_do_limite", str(erro))]) from None
 
     contas = {c.id: c for c in db.query(Conta).filter(Conta.tenant_id == pesquisa.tenant_id, Conta.id.in_([i.conta_id for i in itens])).all()}
     if len(contas) != len(itens):
         raise PesquisaBloqueada("Alguma empresa da seleção não está mais disponível. Crie uma nova prévia.", "estimativa_desatualizada")
-    plano = _plano_de_itens(db, tenant_id, [contas[i.conta_id] for i in itens], pesquisa.decisores_por_empresa, provider.nome_provedor)
-    atual = {p["conta"].id: p["buscar"] for p in plano}
-    if {i.conta_id: i.decisores_solicitados for i in itens} != atual:
+    plano = _plano_de_itens(db, tenant_id, [contas[i.conta_id] for i in itens], pesquisa.decisores_por_empresa, provider.nome_provedor, politica)
+    atual = {p["conta"].id: p for p in plano}
+    if {i.conta_id: i.decisores_solicitados for i in itens} != {cid: p["buscar"] for cid, p in atual.items()}:
         raise PesquisaBloqueada("Os decisores já obtidos mudaram desde a prévia. Crie uma nova prévia para ver a estimativa certa.",
                                 "estimativa_desatualizada")
-    total = sum(atual.values())
+    fator = politica.creditos_cliente_por_credito_provedor
+    total_provedor = sum(p["teto"] for p in plano)
+    total_cliente = total_provedor * fator
 
     # Ordem fixa de travas: orçamento global (todos os tenants) → carteira do tenant.
     if provider.pago:
         ledger.travar_orcamento(db, provider.nome_provedor)
     ledger.preparar(db, tenant_id, config, agora)
-    bloqueios, _ = _avaliar_limites(db, tenant_id, config, provider, total, agora)
+    bloqueios, _ = _avaliar_limites(db, tenant_id, config, politica, provider, total_cliente, total_provedor, agora)
     if bloqueios:
         raise PesquisaBloqueada(bloqueios[0]["mensagem"], bloqueios[0]["codigo"], bloqueios)
 
     _registrar_transicao(db, pesquisa, "validada", "confirmacao_validada", ator, anterior="criada")
     pesquisa.estado = "validada"
-    if total > 0:
-        ledger.lancar(db, tenant_id, "RESERVA", delta_reservado=total, provedor=provider.nome_provedor, pesquisa_id=pesquisa.id,
-                      origem="pesquisa_decisores", motivo=f"Reserva da pesquisa {pesquisa.id}", ator_id=ator, idempotency_key=f"reserva:{pesquisa.id}",
-                      agora=agora)
+    if total_provedor > 0:
+        ledger.lancar(db, tenant_id, "RESERVA", delta_reservado=total_cliente, provedor_delta_reservado=total_provedor, provedor=provider.nome_provedor,
+                      pesquisa_id=pesquisa.id, origem="pesquisa_decisores", politica_id=politica.id,
+                      motivo=f"Reserva (teto) da pesquisa {pesquisa.id}", ator_id=ator, idempotency_key=f"reserva:{pesquisa.id}", agora=agora)
         for item in itens:
-            item.creditos_reservados = item.decisores_solicitados
-        pesquisa.creditos_reservados = total
-        _mudar_estado(db, pesquisa, "reservada", f"reservados {total} credito(s)", ator)
+            teto = atual[item.conta_id]["teto"]
+            item.provedor_reservados, item.creditos_reservados = teto, teto * fator
+        pesquisa.provedor_reservados, pesquisa.creditos_reservados = total_provedor, total_cliente
+        _mudar_estado(db, pesquisa, "reservada", f"reservados {total_provedor} credito(s) do provedor ({total_cliente} do cliente)", ator)
         if provider.pago:
             situacao = ledger.situacao_global(db, provider.nome_provedor, agora)
             if situacao["nivel"] in ("alerta", "esgotado"):
@@ -401,4 +446,4 @@ def _validar_e_reservar(db: Session, solicitante: Solicitante, pesquisa: Pesquis
                                situacao["percentual"])
     else:
         _mudar_estado(db, pesquisa, "concluida", "nada_a_consultar: todas as empresas deduplicadas", ator)
-    logger.info("ENRIQUECIMENTO_RESERVA pesquisa=%s tenant=%s reservados=%s", pesquisa.id, tenant_id, total)
+    logger.info("ENRIQUECIMENTO_RESERVA pesquisa=%s tenant=%s teto_provedor=%s", pesquisa.id, tenant_id, total_provedor)

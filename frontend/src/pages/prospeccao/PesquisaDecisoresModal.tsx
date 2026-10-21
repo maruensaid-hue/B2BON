@@ -17,8 +17,22 @@ interface Ajuste {
   empresas_cobertas: number;
 }
 
+interface CategoriaFonte {
+  creditos_provedor_max?: number;
+  creditos_cliente_max: number;
+  observacao?: string;
+}
+
 interface Estimativa {
   creditos_maximos: number;
+  creditos_provedor_maximos: number;
+  valor_maximo_brl: string;
+  preco_credito_provedor_brl: string;
+  decisores_solicitados: number;
+  por_categoria: {
+    ia: { creditos: number; observacao: string };
+    enriquecimento: { lusha_busca: CategoriaFonte; lusha_revelacao: CategoriaFonte; receita_qsa: CategoriaFonte; brasilapi: CategoriaFonte };
+  };
   empresas_selecionadas: number;
   empresas_a_consultar: number;
   empresas_deduplicadas: number;
@@ -44,6 +58,7 @@ interface ItemPesquisa {
   decisores_retornados: number;
   creditos_reservados: number;
   creditos_consumidos: number;
+  provedor_medidos: number | null;
 }
 
 interface Pesquisa {
@@ -54,6 +69,8 @@ interface Pesquisa {
   total_maximo: number;
   creditos_reservados: number;
   creditos_consumidos: number;
+  provedor_reservados: number;
+  provedor_consumidos: number;
   requer_reconciliacao: boolean;
   estimativa: Estimativa;
   itens?: ItemPesquisa[];
@@ -61,6 +78,7 @@ interface Pesquisa {
 
 interface PainelResumo {
   plano: { disponivel: boolean; decisores_por_empresa_padrao?: number; decisores_por_empresa_max?: number; orientacao?: string | null };
+  lusha: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
 }
 
 const ROTULO_AJUSTE: Record<Ajuste["tipo"], string> = {
@@ -127,7 +145,8 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
   }, []);
 
   const plano = painel?.plano;
-  const liberado = plano?.disponivel !== false;
+  const lusha = painel?.lusha;
+  const liberado = lusha === undefined ? plano?.disponivel !== false : lusha.disponivel;
 
   async function revisar() {
     setCarregando(true);
@@ -210,10 +229,21 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
         {!pesquisa && (
           <>
             <p className="text-muted">
-              {contaIds.length} empresa(s) escolhida(s). Cada decisor revelado pelo provedor consome 1 crédito de enriquecimento (separado dos créditos de IA). Nada é
-              consultado antes de você revisar e confirmar.
+              {contaIds.length} empresa(s) escolhida(s). A busca e a revelação de contatos têm tarifas próprias no provedor, e o que se cobra é o consumo que o próprio
+              provedor informa, em créditos de enriquecimento (separados dos créditos de IA). Nada é consultado antes de você revisar e confirmar.
             </p>
-            {plano && !liberado && <p className="rounded-md bg-surf2 p-2 text-amber">{plano.orientacao ?? "A pesquisa de decisores não está liberada no seu plano."}</p>}
+            {!liberado && (
+              <div className="rounded-md bg-surf2 p-2 text-amber">
+                <p className="mb-1 font-semibold">A pesquisa de decisores (Lusha) está indisponível agora.</p>
+                <ul className="list-disc space-y-0.5 pl-4">
+                  {(lusha?.motivos ?? []).map((m) => (
+                    <li key={m.codigo}>{m.mensagem}</li>
+                  ))}
+                  {!lusha && <li>{plano?.orientacao ?? "A pesquisa de decisores não está liberada no seu plano."}</li>}
+                </ul>
+                <p className="mt-1 text-[10.5px] text-muted">O mapeamento de decisores pelo QSA da Receita continua funcionando normalmente.</p>
+              </div>
+            )}
             <div>
               <label className="mb-1 block text-[10px] tracking-wide text-muted uppercase" htmlFor="decisores-por-empresa">
                 Decisores por empresa
@@ -252,8 +282,16 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
                 rotulo="Decisores por empresa"
                 valor={`${e.decisores_por_empresa} (${e.origem_decisores === "padrao_plano" ? "padrão do plano" : "escolha sua"})`}
               />
-              <Resumo rotulo="Créditos no máximo" valor={String(e.creditos_maximos)} destaque />
+              <Resumo rotulo="Créditos de enriquecimento (teto)" valor={String(e.creditos_maximos)} destaque />
               <Resumo rotulo="Saldo disponível" valor={String(e.disponivel)} />
+              <Resumo rotulo="Valor máximo estimado" valor={`R$ ${e.valor_maximo_brl.replace(".", ",")}`} />
+              <Resumo rotulo="Decisores pedidos" valor={String(e.decisores_solicitados)} />
+            </div>
+            <div className="rounded-md bg-surf2 p-2 text-[11px] text-muted">
+              <p className="mb-0.5 font-semibold text-text">Teto por categoria (créditos do provedor)</p>
+              <p>Busca: até {e.por_categoria.enriquecimento.lusha_busca.creditos_provedor_max} · Revelação de contatos: até {e.por_categoria.enriquecimento.lusha_revelacao.creditos_provedor_max}</p>
+              <p>IA: {e.por_categoria.ia.creditos} (esta operação não usa IA) · QSA da Receita e Brasil API: sem consumo de crédito</p>
+              <p>Preço por crédito do provedor ≈ R$ {e.preco_credito_provedor_brl.replace(".", ",")} (valor de apresentação). O que se cobra é o consumo medido pelo provedor, que pode ser menor.</p>
             </div>
             {e.empresas_deduplicadas > 0 && <p className="text-muted">{e.empresas_deduplicadas} empresa(s) ficam fora da consulta (duplicadas ou decisores já obtidos).</p>}
             {e.bloqueios.length > 0 && (
@@ -300,7 +338,7 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
                 Voltar
               </Button>
               <Button size="sm" disabled={carregando || !e.viavel} onClick={confirmar}>
-                {carregando ? "Pesquisando..." : `Confirmar e usar até ${e.creditos_maximos} crédito(s)`}
+                {carregando ? "Pesquisando..." : `Confirmar (teto de ${e.creditos_maximos} crédito(s))`}
               </Button>
             </div>
           </>
@@ -313,7 +351,7 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
                 {ROTULO_ESTADO[pesquisa.estado] ?? pesquisa.estado}
               </Badge>
               <span className="text-muted">
-                {pesquisa.creditos_consumidos} crédito(s) consumido(s) de {pesquisa.creditos_reservados} reservado(s)
+                {pesquisa.creditos_consumidos} crédito(s) de enriquecimento consumido(s) (medido pelo provedor: {pesquisa.provedor_consumidos}) de {pesquisa.creditos_reservados} reservado(s)
               </span>
             </div>
             {pesquisa.requer_reconciliacao && (
@@ -330,7 +368,9 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
                     <td className="p-1.5">
                       <Badge tone={TOM_ITEM[i.estado] ?? "muted"}>{i.estado}</Badge>
                     </td>
-                    <td className="p-1.5 text-right text-muted">{i.decisores_retornados} decisor(es)</td>
+                    <td className="p-1.5 text-right text-muted">
+                      {i.decisores_retornados} decisor(es){i.provedor_medidos !== null ? ` · ${i.provedor_medidos} crédito(s) do provedor` : ""}
+                    </td>
                   </tr>
                 ))}
               </tbody>

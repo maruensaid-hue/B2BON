@@ -1462,12 +1462,11 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Status**: ACEITA; sem deploy. Push ao staging autorizado pelo PO, mas bloqueado pelo harness (ver relatório).
 
 
-## D-094 · 2026-10-21 · Governança de créditos de enriquecimento (pesquisa de decisores)
+## D-094 · 2026-10-21 · Governança de créditos de enriquecimento (pesquisa de decisores via Lusha)
 
-- **Contabilidade separada** dos créditos de IA: tabelas próprias, unidade "1 crédito = 1 contato revelado" (convenção, sem preço), razão append-only (`enriquecimento_movimento`) com saldo/reservado derivados.
-- **Seleção explícita**: criar/atualizar/enriquecer ICP e a fila automática nunca chamam o provedor pago; só a pesquisa confirmada, sobre empresas escolhidas, o chama. Provedor pago fica fora de `mapear_decisores` e da fila.
-- **Fail-closed**: configuração de plano ausente/incompleta, saldo, limite do período, orçamento global do provedor ausente/esgotado ou provedor indisponível ⇒ nada chega ao provedor. Nenhum número comercial tem padrão no código.
-- **Prévia → confirmação**: estimativa em créditos (máximo), incertezas e alternativas que nunca mudam a escolha; confirmação ligada ao `selecao_hash` e revalidada por inteiro no servidor; reserva atômica e idempotente antes de qualquer chamada.
-- **Ambiguidade**: timeout/5xx/resposta ilegível não repetem nem liberam; reserva retida até reconciliação manual com o relatório do provedor. Sem retry automático.
-- **Execução em segundo plano** no processo da API (retomável). **Pendências comerciais** (valores por plano, orçamento global, custo por crédito, excedente) listadas em `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md`.
-- **Status**: ACEITA em branch local; sem deploy, sem migração aplicada em ambiente compartilhado, nenhuma ativação; orçamento global **não configurado** (chamadas ao provedor seguem bloqueadas).
+- **QSA-only**: "Mapear decisores" e a fila automática trazem só o QSA da Receita; sem fallback para a Lusha. A pesquisa Lusha é operação separada: seleção explícita, prévia, confirmação, reserva, execução e reconciliação.
+- **Contabilidade separada da IA** e quatro grandezas distintas: créditos do provedor (medidos por `billing.creditsCharged`), créditos de enriquecimento do cliente, custo de aquisição (lotes de compra) e valor de venda. **Não se presume "1 contato = 1 crédito"** (a Lusha cobra busca por resultado e e-mail/telefone por tarifas diferentes): a estimativa é um teto com tarifas aprovadas; debita-se o consumo medido; resposta sem medição é ambígua.
+- **Custo e preço**: aporte de R$ 269,94 por 400 créditos (R$ 0,67485/crédito), markup 100% (R$ 1,3497; ≈ R$ 1,35 na exibição; 50% de margem sobre a venda), registrados como lote de compra e política versionada; Decimal ponta a ponta; arredondamento só de exibição (a regra de cobrança aguarda aprovação).
+- **Fail-closed e aprovação**: plano, política do provedor e orçamento global só valem depois de **aprovados**; qualquer ausência/pendência bloqueia no backend antes da reserva e da chamada. Nenhum número comercial tem padrão.
+- **Ambiguidade e conciliação**: timeout/5xx/medição ausente retêm a reserva até reconciliar; conciliação com o uso informado pelo provedor (`GET /v3/account/usage`) alerta divergência sem ajustar sozinha. Razão append-only.
+- **Status**: ACEITA no staging; Lusha **bloqueada** até haver configuração aprovada por plano, política e orçamento global (pendências em `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md` §16). Sem promoção a master.

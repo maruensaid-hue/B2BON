@@ -23,7 +23,10 @@ interface Painel {
     limite_periodo_creditos?: number | null;
     orientacao?: string | null;
   };
+  lusha: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
+  categorias: { ia: string; enriquecimento: string };
   creditos: { disponivel: number; reservado: number; saldo: number; consumido_no_periodo: number; expirado_no_periodo: number; concedido_no_periodo: number };
+  uso_por_fonte: Record<string, number>;
   pesquisas_por_estado: Record<string, number>;
   estimado_vs_reconciliado: { estimado_maximo: number; consumido: number };
   alertas: { codigo: string; mensagem: string }[];
@@ -35,6 +38,8 @@ interface Movimento {
   delta_saldo: number;
   delta_reservado: number;
   disponivel_apos: number;
+  creditos_provedor: number | null;
+  fonte: string | null;
   pesquisa_id: string | null;
   origem: string | null;
   motivo: string | null;
@@ -48,28 +53,60 @@ interface PesquisaResumo {
   decisores_por_empresa: number;
   total_maximo: number;
   creditos_consumidos: number;
+  provedor_consumidos: number;
   requer_reconciliacao: boolean;
   criado_em: string;
 }
 
-interface VisaoAdmin {
-  orcamento_global: { provedor: string; nivel: string; limite: number | null; consumido: number; reservado: number; restante: number | null; percentual: number | null };
-  pendentes_reconciliacao: { pesquisa_id: string; tenant_id: string; estado: string; empresas_ambiguas: number; creditos_reservados: number }[];
+interface Politica {
+  vigente: boolean;
+  motivo?: string;
+  versao?: number;
+  utilizavel?: boolean;
+  custo_unitario_brl?: string;
+  markup_percentual?: string;
+  preco_unitario_brl?: string;
+  preco_unitario_exibicao?: string;
+  margem_bruta_percentual?: string;
+  creditos_cliente_por_credito_provedor?: number;
 }
 
-const TIPOS = ["", "CONCESSAO", "RENOVACAO", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO"];
+interface Resultado {
+  custo_brl: string;
+  venda_brl: string;
+  margem_brl: string;
+  margem_percentual: string | null;
+}
+
+interface VisaoAdmin {
+  orcamento_global: { provedor: string; nivel: string; limite: number | null; consumido: number; reservado: number; restante: number | null; percentual: number | null };
+  orcamento_pendente_aprovacao: boolean;
+  politica: Politica | null;
+  resultado_financeiro: { mes: Resultado; total: Resultado };
+  lotes_compra: { id: number; referencia: string; quantidade_creditos: number; custo_total_brl: string; custo_unitario_brl: string }[];
+  leituras_de_uso: { id: number; lido_em: string; creditos_usados: number | null; delta_provedor: number | null; delta_razao: number | null; divergencia: number | null; explicacao: string }[];
+  aprovacoes_pendentes: { configs: number; politicas: number; orcamentos: number };
+  pendentes_reconciliacao: { pesquisa_id: string; tenant_id: string; estado: string; empresas_ambiguas: number; creditos_provedor_reservados: number }[];
+}
+
+const TIPOS = ["", "CONCESSAO", "RENOVACAO", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO", "USO"];
+const ROTULO_FONTE: Record<string, string> = { receita_qsa: "QSA da Receita", brasilapi: "Brasil API", lusha: "Lusha" };
 
 const NIVEL_TOM: Record<string, "green" | "amber" | "red" | "muted"> = { ok: "green", alerta: "amber", esgotado: "red", nao_configurado: "red" };
 const NIVEL_ROTULO: Record<string, string> = {
-  ok: "Dentro do limite", alerta: "Perto do limite", esgotado: "Esgotado", nao_configurado: "Não configurado — chamadas ao provedor bloqueadas",
+  ok: "Dentro do limite", alerta: "Perto do limite", esgotado: "Esgotado", nao_configurado: "Sem orçamento aprovado — chamadas ao provedor bloqueadas",
 };
 
 function dataCurta(valor: string): string {
   return new Date(valor).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-/** Painel de créditos de ENRIQUECIMENTO (pesquisa de decisores) do tenant. Separado dos créditos de IA. O orçamento global do provedor só aparece
- * para o super administrador. */
+function brl(valor: string): string {
+  return `R$ ${Number(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+}
+
+/** Painel de créditos de ENRIQUECIMENTO (pesquisa de decisores) do tenant. Separado dos créditos de IA. Orçamento global, custo, markup e margem só
+ * aparecem para o super administrador. */
 export function CreditosEnriquecimento() {
   const { usuario } = useAuth();
   const gestor = usuario?.papel === "admin" || usuario?.papel === "super_admin";
@@ -84,6 +121,8 @@ export function CreditosEnriquecimento() {
   const [motivo, setMotivo] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [pendenteId, setPendenteId] = useState<number | null>(null);
+  const [conciliando, setConciliando] = useState(false);
 
   useEffect(() => {
     api.get<Painel>("/pesquisas-decisores/painel").then(setPainel).catch((e) => setErro(mensagemErro(e, "Não foi possível carregar o painel.")));
@@ -108,19 +147,49 @@ export function CreditosEnriquecimento() {
     setSalvando(true);
     setAviso(null);
     try {
-      await api.put("/admin/enriquecimento/orcamento-global", {
+      const nova = await api.put<{ id: number; versao: number }>("/admin/enriquecimento/orcamento-global", {
         provedor: "lusha",
         limite_creditos: limite.trim() === "" ? null : Number(limite),
         alerta_percentual: 80,
         motivo,
       });
-      setAviso("Orçamento global atualizado (nova versão, auditada).");
+      setPendenteId(nova.id);
+      setAviso(`Versão ${nova.versao} criada e PENDENTE de aprovação. Ela só passa a valer depois de aprovada.`);
       setMotivo("");
       carregarAdmin();
     } catch (e) {
-      setAviso(mensagemErro(e, "Não foi possível atualizar o orçamento global."));
+      setAviso(mensagemErro(e, "Não foi possível criar a versão do orçamento global."));
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function aprovarOrcamento() {
+    if (pendenteId === null) return;
+    setSalvando(true);
+    try {
+      await api.post(`/admin/enriquecimento/orcamento-global/${pendenteId}/aprovar`, {});
+      setPendenteId(null);
+      setAviso("Orçamento global aprovado (auditado).");
+      carregarAdmin();
+    } catch (e) {
+      setAviso(mensagemErro(e, "Não foi possível aprovar."));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function conciliar() {
+    setConciliando(true);
+    setAviso(null);
+    try {
+      const leitura = await api.post<{ explicacao: string }>("/admin/enriquecimento/provedores/lusha/conciliar", {});
+      setAviso(leitura.explicacao);
+      carregarAdmin();
+    } catch (e) {
+      setAviso(mensagemErro(e, "Não foi possível conciliar com o provedor."));
+    } finally {
+      setConciliando(false);
     }
   }
 
@@ -133,15 +202,34 @@ export function CreditosEnriquecimento() {
       <div>
         <h1 className="font-head text-[18px] font-bold">Créditos de enriquecimento</h1>
         <p className="text-[12px] text-muted">
-          Cada decisor revelado pelo provedor consome 1 crédito. É uma conta separada dos créditos de IA. Período {painel.periodo}.
+          Pesquisa de decisores em provedor pago. O consumo é o medido pelo provedor. Esta é uma conta separada dos créditos de IA. {painel.categorias.ia} Período {painel.periodo}.
         </p>
       </div>
 
-      {painel.alertas.map((a) => (
-        <div key={a.codigo} className="rounded-md bg-surf2 p-2 text-[12px] text-amber">
-          {a.mensagem}
-        </div>
-      ))}
+      <Card>
+        <SectionLabel>Pesquisa de decisores (Lusha)</SectionLabel>
+        {painel.lusha.disponivel ? (
+          <p className="text-[12px] text-green">Disponível para o seu plano.</p>
+        ) : (
+          <div className="text-[12px] text-amber">
+            <p className="mb-1 font-semibold">Indisponível agora. Motivo:</p>
+            <ul className="list-disc space-y-0.5 pl-4">
+              {painel.lusha.motivos.map((m) => (
+                <li key={m.codigo}>{m.mensagem}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="mt-1 text-[11px] text-muted">O mapeamento de decisores pelo QSA da Receita e o enriquecimento por Brasil API não dependem desta liberação.</p>
+      </Card>
+
+      {painel.alertas
+        .filter((a) => a.codigo !== "pesquisa_lusha_indisponivel")
+        .map((a) => (
+          <div key={a.codigo} className="rounded-md bg-surf2 p-2 text-[12px] text-amber">
+            {a.mensagem}
+          </div>
+        ))}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <KpiCard label="Disponível" value={painel.creditos.disponivel} sub="saldo − reservado" />
@@ -167,8 +255,16 @@ export function CreditosEnriquecimento() {
           </p>
         )}
         <p className="mt-2 text-[11px] text-muted">
-          Estimado no máximo nas pesquisas concluídas: {painel.estimado_vs_reconciliado.estimado_maximo} · consumido de fato: {painel.estimado_vs_reconciliado.consumido}
+          Teto estimado nas pesquisas concluídas: {painel.estimado_vs_reconciliado.estimado_maximo} · consumido de fato: {painel.estimado_vs_reconciliado.consumido}
         </p>
+        {Object.keys(painel.uso_por_fonte).length > 0 && (
+          <p className="mt-1 text-[11px] text-muted">
+            Uso por fonte no período (sem custo de crédito):{" "}
+            {Object.entries(painel.uso_por_fonte)
+              .map(([fonte, total]) => `${ROTULO_FONTE[fonte] ?? fonte}: ${total}`)
+              .join(" · ")}
+          </p>
+        )}
       </Card>
 
       <Card>
@@ -191,7 +287,7 @@ export function CreditosEnriquecimento() {
                   <Badge tone={x.requer_reconciliacao ? "amber" : x.estado === "concluida" ? "green" : "muted"}>{x.estado}</Badge>
                 </td>
                 <td className="p-1.5 text-right text-muted">
-                  {x.creditos_consumidos} / até {x.total_maximo}
+                  {x.creditos_consumidos} / teto {x.total_maximo}
                 </td>
               </tr>
             ))}
@@ -219,6 +315,7 @@ export function CreditosEnriquecimento() {
                   <th className="p-1.5 text-left">Tipo</th>
                   <th className="p-1.5 text-right">Saldo</th>
                   <th className="p-1.5 text-right">Reservado</th>
+                  <th className="p-1.5 text-right">Créd. provedor</th>
                   <th className="p-1.5 text-right">Disponível após</th>
                   <th className="p-1.5 text-left">Motivo</th>
                 </tr>
@@ -227,16 +324,17 @@ export function CreditosEnriquecimento() {
                 {movimentos.map((m) => (
                   <tr key={m.id} className="border-b border-border">
                     <td className="p-1.5 whitespace-nowrap text-muted">{dataCurta(m.criado_em)}</td>
-                    <td className="p-1.5">{m.tipo}</td>
+                    <td className="p-1.5">{m.tipo}{m.fonte ? ` · ${ROTULO_FONTE[m.fonte] ?? m.fonte}` : ""}</td>
                     <td className="p-1.5 text-right tabular-nums">{m.delta_saldo > 0 ? `+${m.delta_saldo}` : m.delta_saldo}</td>
                     <td className="p-1.5 text-right tabular-nums">{m.delta_reservado > 0 ? `+${m.delta_reservado}` : m.delta_reservado}</td>
+                    <td className="p-1.5 text-right tabular-nums">{m.creditos_provedor ?? ""}</td>
                     <td className="p-1.5 text-right tabular-nums">{m.disponivel_apos}</td>
                     <td className="p-1.5 text-muted">{m.motivo ?? m.origem ?? ""}</td>
                   </tr>
                 ))}
                 {movimentos.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-3 text-center text-muted">
+                    <td colSpan={7} className="p-3 text-center text-muted">
                       Sem movimentações.
                     </td>
                   </tr>
@@ -249,21 +347,73 @@ export function CreditosEnriquecimento() {
 
       {superAdmin && admin && (
         <Card>
-          <SectionLabel>Administração — orçamento global do provedor ({admin.orcamento_global.provedor})</SectionLabel>
+          <SectionLabel>Administração — provedor Lusha (visível só ao super administrador)</SectionLabel>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px]">
             <Badge tone={NIVEL_TOM[admin.orcamento_global.nivel] ?? "muted"}>{NIVEL_ROTULO[admin.orcamento_global.nivel] ?? admin.orcamento_global.nivel}</Badge>
             {admin.orcamento_global.limite !== null && (
               <span className="text-muted">
-                limite {admin.orcamento_global.limite} · consumido {admin.orcamento_global.consumido} · reservado {admin.orcamento_global.reservado} · restante {admin.orcamento_global.restante}
+                orçamento global: limite {admin.orcamento_global.limite} · consumido {admin.orcamento_global.consumido} · reservado {admin.orcamento_global.reservado} · restante {admin.orcamento_global.restante} (créditos do provedor)
+              </span>
+            )}
+            {admin.orcamento_pendente_aprovacao && <Badge tone="amber">há versão do orçamento pendente de aprovação</Badge>}
+          </div>
+
+          {admin.politica?.vigente ? (
+            <dl className="mb-3 grid grid-cols-2 gap-2 text-[12px] lg:grid-cols-4">
+              <Item rotulo="Custo por crédito (aquisição)" valor={brl(admin.politica.custo_unitario_brl ?? "0")} />
+              <Item rotulo="Markup" valor={`${Number(admin.politica.markup_percentual)}%`} />
+              <Item rotulo="Preço de venda por crédito" valor={`${brl(admin.politica.preco_unitario_brl ?? "0")} (≈ R$ ${admin.politica.preco_unitario_exibicao?.replace(".", ",")})`} />
+              <Item rotulo="Margem bruta s/ venda" valor={`${Number(admin.politica.margem_bruta_percentual)}%`} />
+            </dl>
+          ) : (
+            <p className="mb-3 text-[12px] text-amber">Política do provedor sem versão aprovada ({admin.politica?.motivo ?? "não configurada"}): a pesquisa Lusha permanece bloqueada.</p>
+          )}
+
+          <div className="mb-3 grid grid-cols-1 gap-2 text-[12px] lg:grid-cols-2">
+            <div className="rounded-md bg-surf2 p-2">
+              <p className="font-semibold">Resultado no mês</p>
+              <p className="text-muted">
+                custo {brl(admin.resultado_financeiro.mes.custo_brl)} · venda {brl(admin.resultado_financeiro.mes.venda_brl)} · margem {brl(admin.resultado_financeiro.mes.margem_brl)}
+                {admin.resultado_financeiro.mes.margem_percentual ? ` (${Number(admin.resultado_financeiro.mes.margem_percentual)}%)` : ""}
+              </p>
+            </div>
+            <div className="rounded-md bg-surf2 p-2">
+              <p className="font-semibold">Lotes de compra</p>
+              {admin.lotes_compra.map((l) => (
+                <p key={l.id} className="text-muted">
+                  {l.referencia}: {l.quantidade_creditos} créditos por {brl(l.custo_total_brl)} (custo unitário {brl(l.custo_unitario_brl)})
+                </p>
+              ))}
+              {admin.lotes_compra.length === 0 && <p className="text-muted">Nenhum lote registrado.</p>}
+            </div>
+          </div>
+
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px]">
+            <Button size="sm" variant="ghost" disabled={conciliando} onClick={conciliar}>
+              {conciliando ? "Conciliando..." : "Conciliar com o uso do provedor"}
+            </Button>
+            {admin.leituras_de_uso[0] && (
+              <span className={admin.leituras_de_uso[0].divergencia ? "text-amber" : "text-muted"}>
+                Última leitura em {dataCurta(admin.leituras_de_uso[0].lido_em)}: {admin.leituras_de_uso[0].explicacao}
               </span>
             )}
           </div>
+
+          <p className="mb-1 text-[11px] text-muted">
+            Aprovações pendentes — planos: {admin.aprovacoes_pendentes.configs} · política: {admin.aprovacoes_pendentes.politicas} · orçamento: {admin.aprovacoes_pendentes.orcamentos}. Configuração por plano,
+            política e lotes são feitos pela API administrativa; cada versão nova nasce pendente e só vale depois de aprovada.
+          </p>
           <form onSubmit={salvarOrcamento} className="flex flex-wrap items-end gap-2">
-            <Input label="Limite mensal (créditos)" type="number" min={0} value={limite} onChange={(ev) => setLimite(ev.target.value)} placeholder="vazio = não configurado" />
+            <Input label="Limite mensal (créditos do provedor)" type="number" min={0} value={limite} onChange={(ev) => setLimite(ev.target.value)} placeholder="vazio = não configurado" />
             <Input label="Motivo (auditado)" value={motivo} onChange={(ev) => setMotivo(ev.target.value)} placeholder="ex.: contrato ampliado em 20/10" />
             <Button size="sm" type="submit" disabled={salvando || motivo.trim().length < 3}>
-              {salvando ? "Salvando..." : "Definir nova versão"}
+              {salvando ? "Salvando..." : "Criar versão do orçamento"}
             </Button>
+            {pendenteId !== null && (
+              <Button size="sm" variant="ghost" disabled={salvando} onClick={aprovarOrcamento}>
+                Aprovar a versão criada
+              </Button>
+            )}
           </form>
           {aviso && <p className="mt-1.5 text-[12px] text-muted">{aviso}</p>}
           {admin.pendentes_reconciliacao.length > 0 && (
@@ -272,7 +422,7 @@ export function CreditosEnriquecimento() {
               <ul className="space-y-0.5 text-[12px]">
                 {admin.pendentes_reconciliacao.map((r) => (
                   <li key={r.pesquisa_id} className="text-muted">
-                    {r.tenant_id} · pesquisa {r.pesquisa_id.slice(0, 8)} · {r.empresas_ambiguas} empresa(s) ambígua(s) · {r.creditos_reservados} crédito(s) retido(s). Reconcilie pela API
+                    {r.tenant_id} · pesquisa {r.pesquisa_id.slice(0, 8)} · {r.empresas_ambiguas} empresa(s) ambígua(s) · {r.creditos_provedor_reservados} crédito(s) do provedor retido(s). Reconcilie pela API
                     administrativa com o uso informado pelo provedor.
                   </li>
                 ))}

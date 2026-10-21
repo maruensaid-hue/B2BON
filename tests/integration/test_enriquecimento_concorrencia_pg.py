@@ -8,6 +8,8 @@ cenários só são exercidos aqui (CI/staging)."""
 import os
 import threading
 import uuid
+from datetime import datetime
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import create_engine
@@ -46,11 +48,18 @@ def _preparar(Sessao, *, franquia: int, orcamento: int | None = None, tenants: i
         for tenant in ids:
             db.add(Licenca(tenant_id=tenant, plano_id=plano.id, status="ativa"))
         db.commit()
-        config.definir_config(db, plano_id=plano.id, tenant_id=None, ator_id="1", tenant_auditoria=ids[0], motivo="teste pg", campos=dict(
+        config.definir_config(db, plano_id=plano.id, tenant_id=None, ator_id="1", tenant_auditoria=ids[0], motivo="teste pg", aprovar=True, campos=dict(
             franquia_creditos=franquia, periodicidade="mensal", decisores_por_empresa_padrao=2, decisores_por_empresa_max=2, itens_por_lote_max=5))
+        lote = config.registrar_lote_compra(db, provedor=_Provedor.nome_provedor, referencia=f"LOTE-{sufixo}", quantidade_creditos=400,
+                                            custo_total_brl=Decimal("269.94"), comprado_em=datetime(2026, 10, 21), ator_id="1", tenant_auditoria=ids[0])
+        config.definir_politica(
+            db, provedor=_Provedor.nome_provedor, creditos_busca_por_resultado=0, creditos_email=1, creditos_telefone=None, revelar_emails=True,
+            revelar_telefones=False, tamanho_pagina_busca=10, creditos_cliente_por_credito_provedor=1, markup_percentual=Decimal("100"),
+            metodo_custo="lote_referencia", lote_compra_id=lote.id, casas_exibicao=2, fonte_tarifas="manual", ator_id="1", tenant_auditoria=ids[0],
+            motivo="teste pg", aprovar=True)
         if orcamento is not None:
             config.definir_orcamento_global(db, provedor=_Provedor.nome_provedor, limite_creditos=orcamento, alerta_percentual=80, ator_id="1",
-                                            tenant_auditoria=ids[0], motivo="teste pg")
+                                            tenant_auditoria=ids[0], motivo="teste pg", aprovar=True)
     return ids
 
 

@@ -162,10 +162,9 @@ def test_listar_contas_de_uma_lista(client):
     assert contas_lista1[0]["nome"] == "Alpha Tech"
 
 
-def test_mapear_decisores_de_conta_em_lista_com_cargos_alvo_restringe_busca(client, fake_contact_enrichment):
-    """O coração do pedido: lista com cargos_alvo definido restringe a
-    busca do provedor de enriquecimento na requisição em si (economiza
-    consulta), em vez de filtrar depois de já ter revelado o contato."""
+def test_mapear_decisores_de_conta_em_lista_com_cargos_alvo_nao_consulta_provedor_de_contatos(client, fake_contact_enrichment):
+    """Os cargos-alvo da lista só valem para a pesquisa de decisores governada (provedor pago, com seleção e créditos). O mapeamento avulso é
+    só QSA e não consulta o provedor."""
     lista = client.post(
         "/api/v1/listas-prospeccao",
         json={"nome": "Security Leaders 2026", "cargos_alvo": ["CISO", "Diretor de Segurança da Informação"]},
@@ -178,85 +177,13 @@ def test_mapear_decisores_de_conta_em_lista_com_cargos_alvo_restringe_busca(clie
 
     client.post(f"/api/v1/contas/{conta_id}/decisores/mapear")
 
-    assert len(fake_contact_enrichment.buscas) == 1
-    assert fake_contact_enrichment.buscas[0].cargos_alvo == ["CISO", "Diretor de Segurança da Informação"]
+    assert fake_contact_enrichment.buscas == []
 
 
-def test_mapear_decisores_de_conta_sem_lista_usa_default_generico(client, fake_contact_enrichment, criar_icp):
-    """Conta fora de qualquer lista (ou de lista sem cargos_alvo) continua
-    com o comportamento de hoje — sem regressão."""
+def test_mapear_decisores_de_conta_sem_lista_tambem_nao_consulta_provedor_de_contatos(client, fake_contact_enrichment, criar_icp):
     icp = criar_icp()
     conta = client.post(f"/api/v1/icp/{icp['id']}/contas", json={"nome": "Alpha Tech"}).json()
 
     client.post(f"/api/v1/contas/{conta['id']}/decisores/mapear")
 
-    from app.providers.contact_enrichment.base import SENIORIDADE_ALVO
-
-    assert fake_contact_enrichment.buscas[0].cargos_alvo == SENIORIDADE_ALVO
-
-
-def test_excluir_conta_recem_importada_via_api(client):
-    lista = client.post("/api/v1/listas-prospeccao", json={"nome": "Evento Teste"}).json()
-    importado = client.post(
-        f"/api/v1/listas-prospeccao/{lista['id']}/contas/importar-participantes",
-        json={"participantes": [{"nome": "Joana Silva", "empresa": "Alpha Tech"}]},
-    ).json()
-    conta_id = importado["contas"][0]["id"]
-
-    resposta = client.delete(f"/api/v1/contas/{conta_id}")
-
-    assert resposta.status_code == 204
-    contas_restantes = client.get(f"/api/v1/listas-prospeccao/{lista['id']}/contas").json()
-    assert contas_restantes == []
-
-
-def test_excluir_conta_inexistente_e_404(client):
-    resposta = client.delete("/api/v1/contas/999999")
-    assert resposta.status_code == 404
-
-
-def test_reimportar_apos_excluir_cria_conta_nova(client):
-    """O ponto central do pedido: apagar de verdade permite reimportar
-    com as funcionalidades novas (cargo-alvo, mapeamento de coluna)."""
-    lista = client.post(
-        "/api/v1/listas-prospeccao", json={"nome": "Evento Teste", "cargos_alvo": ["CISO"]}
-    ).json()
-    primeira = client.post(
-        f"/api/v1/listas-prospeccao/{lista['id']}/contas/importar-participantes",
-        json={"participantes": [{"nome": "Joana Silva", "empresa": "Alpha Tech"}]},
-    ).json()
-    client.delete(f"/api/v1/contas/{primeira['contas'][0]['id']}")
-
-    segunda = client.post(
-        f"/api/v1/listas-prospeccao/{lista['id']}/contas/importar-participantes",
-        json={"participantes": [{"nome": "Marcos Souza", "empresa": "Alpha Tech"}]},
-    ).json()
-
-    assert segunda["contas_criadas"] == 1
-    assert segunda["contas_reaproveitadas"] == 0
-
-
-def test_excluir_lote_por_lista_via_api(client):
-    lista = client.post("/api/v1/listas-prospeccao", json={"nome": "Evento Teste"}).json()
-    client.post(
-        f"/api/v1/listas-prospeccao/{lista['id']}/contas/importar-participantes",
-        json={
-            "participantes": [
-                {"nome": "Joana Silva", "empresa": "Alpha Tech"},
-                {"nome": "Marcos Souza", "empresa": "Beta Corp"},
-            ]
-        },
-    )
-
-    resposta = client.delete(f"/api/v1/listas-prospeccao/{lista['id']}/contas")
-
-    assert resposta.status_code == 200
-    corpo = resposta.json()
-    assert corpo["apagadas"] == 2
-    assert corpo["bloqueadas"] == 0
-    assert client.get(f"/api/v1/listas-prospeccao/{lista['id']}/contas").json() == []
-
-
-def test_excluir_lote_por_lista_inexistente_e_404(client):
-    resposta = client.delete("/api/v1/listas-prospeccao/999999/contas")
-    assert resposta.status_code == 404
+    assert fake_contact_enrichment.buscas == []

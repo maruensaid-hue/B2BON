@@ -440,10 +440,9 @@ def test_conta_e_decisor_persistidos_no_grafo(client, criar_icp, fake_account_da
     assert arestas_decisor_de[0]["destino"] == f"conta:{conta_id}"
 
 
-def test_mapear_decisores_soma_qsa_e_enriquecimento(client, criar_icp, fake_account_data, fake_contact_enrichment):
-    """Reclamação do usuário: mapear decisores só trazia sócios do QSA,
-    nunca C-Levels/Diretores/Gerentes/Heads contratados sem participação
-    societária — agora as duas fontes se somam na mesma resposta."""
+def test_mapear_decisores_traz_somente_o_qsa_e_nunca_consulta_provedor_de_contatos(client, criar_icp, fake_account_data, fake_contact_enrichment):
+    """Governança de enriquecimento: contatos de provedor pago (Lusha) só vêm da pesquisa de decisores confirmada. Aqui, mesmo com um provedor
+    cheio de contatos disponível, a resposta é só o QSA da Receita e o provedor nem é consultado."""
     icp = criar_icp()
     cnpj = "11222333000191"
     fake_account_data.candidatos = [_candidato(cnpj, "Alpha Tech")]
@@ -457,40 +456,25 @@ def test_mapear_decisores_soma_qsa_e_enriquecimento(client, criar_icp, fake_acco
 
     assert resposta.status_code == 200
     decisores = resposta.json()
-    assert len(decisores) == 2
-    por_nome = {d["nome"]: d for d in decisores}
-    assert por_nome["Joao Silva"]["origem"] == "receita_federal_cnpj_qsa"
-    assert por_nome["Maria Diretora"]["origem"] == "enriquecimento_contatos"
-    assert por_nome["Maria Diretora"]["email"] == "maria@alphatech.com.br"
+    assert [(d["nome"], d["origem"]) for d in decisores] == [("Joao Silva", "receita_federal_cnpj_qsa")]
+    assert fake_contact_enrichment.buscas == []
 
 
-def test_mapear_decisores_nao_duplica_mesma_pessoa_nas_duas_fontes(
-    client, criar_icp, fake_account_data, fake_contact_enrichment
-):
+def test_mapear_decisores_repetido_nao_duplica_o_socio_do_qsa(client, criar_icp, fake_account_data):
     icp = criar_icp()
     cnpj = "11222333000191"
     fake_account_data.candidatos = [_candidato(cnpj, "Alpha Tech")]
     fake_account_data.decisores = {cnpj: [DecisorCandidato(cnpj=cnpj, nome="João Silva", qualificacao="Sócio")]}
-    fake_contact_enrichment.contatos = [
-        ContatoCandidato(nome="joao silva", cargo="CEO", email="joao@alphatech.com.br", telefone="(11) 90000-0000"),
-    ]
     conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
 
+    client.post(f"/api/v1/contas/{conta_id}/decisores/mapear")
     resposta = client.post(f"/api/v1/contas/{conta_id}/decisores/mapear")
 
-    assert resposta.status_code == 200
-    decisores = resposta.json()
-    assert len(decisores) == 1
-    # Backfill: nome/origem vêm do QSA (achado primeiro), e-mail/telefone
-    # que faltavam vêm do enriquecimento.
-    assert decisores[0]["origem"] == "receita_federal_cnpj_qsa"
-    assert decisores[0]["email"] == "joao@alphatech.com.br"
-    assert decisores[0]["telefone"] == "(11) 90000-0000"
+    assert len(resposta.json()) == 1
 
 
-def test_mapear_decisores_funciona_sem_cnpj(client, fake_contact_enrichment):
-    """Antes bloqueava com 'Conta sem CNPJ' — agora o enriquecimento roda
-    via domínio mesmo sem CNPJ (lead recém-cadastrado, ainda sem CNPJ)."""
+def test_mapear_decisores_sem_cnpj_nao_cai_para_provedor_de_contatos(client, fake_contact_enrichment):
+    """Sem CNPJ não há QSA: o resultado é vazio. Não existe alternativa automática para a Lusha ou outro provedor."""
     conta_id = client.post(
         "/api/v1/leads/contas", json={"nome": "Beta Clinica", "dominio": "betaclinica.com.br"}
     ).json()["id"]
@@ -501,10 +485,8 @@ def test_mapear_decisores_funciona_sem_cnpj(client, fake_contact_enrichment):
     resposta = client.post(f"/api/v1/contas/{conta_id}/decisores/mapear")
 
     assert resposta.status_code == 200
-    decisores = resposta.json()
-    assert len(decisores) == 1
-    assert decisores[0]["nome"] == "Carla Head"
-    assert decisores[0]["origem"] == "enriquecimento_contatos"
+    assert resposta.json() == []
+    assert fake_contact_enrichment.buscas == []
 
 
 def test_grafo_navegavel_por_conta(client, criar_icp, fake_account_data):

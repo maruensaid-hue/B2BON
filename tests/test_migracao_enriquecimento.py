@@ -1,0 +1,85 @@
+"""Migração da governança de créditos de enriquecimento (a4c6e8b0d2f4): só tabelas novas, nenhum dado existente tocado, nenhum saldo/configuração
+inventado, lote de compra informado pelo PO como único dado inserido, e downgrade que devolve o banco ao estado anterior sem perder o legado."""
+
+import os
+import tempfile
+from decimal import Decimal
+
+import sqlalchemy as sa
+from alembic import command
+from alembic.config import Config
+
+from app.core.config import settings
+
+ANTERIOR = "f3d5a7c9e1b4"
+TABELAS = ("enriquecimento_carteira", "enriquecimento_config_plano", "enriquecimento_orcamento_global", "enriquecimento_lote_compra",
+           "enriquecimento_politica_provedor", "enriquecimento_uso_provedor", "pesquisa_decisores", "pesquisa_decisores_empresa",
+           "pesquisa_decisores_transicao", "enriquecimento_movimento")
+
+
+def _banco(monkeypatch):
+    fd, caminho = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(caminho)
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{caminho}")
+    return caminho, sa.create_engine(f"sqlite:///{caminho}")
+
+
+def test_migracao_preserva_o_legado_nao_inventa_configuracao_e_registra_so_o_lote_informado(monkeypatch):
+    caminho, engine = _banco(monkeypatch)
+    try:
+        config = Config("alembic.ini")
+        command.upgrade(config, ANTERIOR)
+        with engine.begin() as conexao:
+            conexao.execute(sa.text("INSERT INTO tenant (id, razao_social) VALUES ('t-mig', 'Migração')"))
+            conexao.execute(sa.text("INSERT INTO conta (tenant_id, nome, status) VALUES ('t-mig', 'Empresa Legada', 'prospectada')"))
+            conexao.execute(sa.text("INSERT INTO decisor (tenant_id, conta_id, nome, canal_provavel, origem) VALUES ('t-mig', 1, 'Decisor Legado', 'email', 'lusha')"))
+            conexao.execute(sa.text("INSERT INTO carteira_creditos (tenant_id, saldo) VALUES ('t-mig', 50)"))
+        antes = {t: _contagem(engine, t) for t in ("tenant", "conta", "decisor", "carteira_creditos", "lote_credito", "movimento_credito")}
+
+        command.upgrade(config, "head")
+
+        with engine.connect() as conexao:
+            assert {t: _contagem(engine, t) for t in antes} == antes  # nada existente foi tocado, nem criado
+            assert conexao.execute(sa.text("SELECT nome, origem FROM decisor")).fetchall() == [("Decisor Legado", "lusha")]
+            for tabela in ("enriquecimento_config_plano", "enriquecimento_politica_provedor", "enriquecimento_orcamento_global", "enriquecimento_movimento",
+                           "enriquecimento_carteira", "pesquisa_decisores"):
+                assert _contagem(engine, tabela) == 0, tabela  # nenhum saldo, plano, política ou orçamento inventado: a Lusha segue bloqueada
+            lotes = conexao.execute(sa.text("SELECT provedor, referencia, quantidade_creditos, custo_total_brl, custo_unitario_brl FROM enriquecimento_lote_compra")).fetchall()
+            assert len(lotes) == 1 and lotes[0][:3] == ("lusha", "APORTE-LUSHA-2026-10-21", 400)
+            assert Decimal(str(lotes[0][3])) == Decimal("269.94") and Decimal(str(lotes[0][4])) == Decimal("0.67485")
+    finally:
+        engine.dispose()
+        if os.path.exists(caminho):
+            os.remove(caminho)
+
+
+def test_downgrade_remove_so_as_tabelas_novas_e_o_upgrade_pode_ser_refeito(monkeypatch):
+    caminho, engine = _banco(monkeypatch)
+    try:
+        config = Config("alembic.ini")
+        command.upgrade(config, "head")
+        with engine.begin() as conexao:
+            conexao.execute(sa.text("INSERT INTO tenant (id, razao_social) VALUES ('t-mig', 'Migração')"))
+            conexao.execute(sa.text("INSERT INTO conta (tenant_id, nome, status) VALUES ('t-mig', 'Empresa Legada', 'prospectada')"))
+            conexao.execute(sa.text("INSERT INTO carteira_creditos (tenant_id, saldo) VALUES ('t-mig', 50)"))
+
+        command.downgrade(config, ANTERIOR)
+
+        with engine.connect() as conexao:
+            existentes = {linha[0] for linha in conexao.execute(sa.text("SELECT name FROM sqlite_master WHERE type='table'"))}
+            assert not (set(TABELAS) & existentes)  # as 10 tabelas saíram
+            assert conexao.execute(sa.text("SELECT nome FROM conta")).fetchall() == [("Empresa Legada",)]  # legado e carteira de IA intactos
+            assert float(conexao.execute(sa.text("SELECT saldo FROM carteira_creditos")).scalar()) == 50
+
+        command.upgrade(config, "head")  # recuperação: sobe de novo sem erro
+        assert _contagem(engine, "enriquecimento_lote_compra") == 1
+    finally:
+        engine.dispose()
+        if os.path.exists(caminho):
+            os.remove(caminho)
+
+
+def _contagem(engine, tabela: str) -> int:
+    with engine.connect() as conexao:
+        return conexao.execute(sa.text(f"SELECT count(*) FROM {tabela}")).scalar()

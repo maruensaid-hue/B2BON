@@ -88,8 +88,9 @@ def listar(estado: str | None = None, limite: int = 50, offset: int = 0, usuario
 
 
 @router.get("/painel")
-def painel_do_tenant(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> dict:
-    return painel.painel_tenant(db, _solicitante(usuario))
+def painel_do_tenant(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db),
+                     provider: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider)) -> dict:
+    return painel.painel_tenant(db, _solicitante(usuario), provider)
 
 
 @router.get("/movimentacoes")

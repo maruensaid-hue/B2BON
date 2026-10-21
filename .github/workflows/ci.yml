@@ -75,6 +75,13 @@ jobs:
           B2BON_TESTE_PG_MIGRACAO_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
           CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: pytest -q tests/test_migracoes_v5.py
+      # Governança de créditos de enriquecimento: reserva concorrente de verdade (SELECT ... FOR UPDATE), que o SQLite da suíte não exerce.
+      - name: Concorrência da reserva de créditos de enriquecimento (PostgreSQL)
+        env:
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
+          B2BON_TESTE_PG_URL: postgresql+psycopg://postgres:postgres@localhost:5432/b2bon_test
+          CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        run: pytest -q tests/integration/test_enriquecimento_concorrencia_pg.py
 
   frontend:
     runs-on: ubuntu-latest

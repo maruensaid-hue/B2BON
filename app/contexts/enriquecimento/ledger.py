@@ -8,21 +8,28 @@ orçamento (ordem fixa orçamento → carteira, para não haver impasse entre du
 
 from datetime import datetime, timedelta
 
+from decimal import Decimal
+
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.contexts.enriquecimento import precos
 from app.contexts.enriquecimento.config import ConfigResolvida, agora_utc, orcamento_vigente, periodo_de
 from app.models.enriquecimento_creditos import EnriquecimentoCarteira, EnriquecimentoMovimento, EnriquecimentoOrcamentoGlobal
 from app.services import auditoria_service
 from app.services.errors import ValidacaoFalhou
 
-TIPOS = ("CONCESSAO", "RENOVACAO", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO")
+TIPOS = ("CONCESSAO", "RENOVACAO", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO", "USO")
 TIPOS_CONSUMO = ("CONSUMO", "ESTORNO")  # consumo líquido = consumos − estornos
 
 
 def _soma(db: Session, coluna, *filtros) -> int:
     return int(db.query(func.coalesce(func.sum(coluna), 0)).filter(*filtros).scalar() or 0)
+
+
+def _soma_decimal(db: Session, coluna, *filtros) -> Decimal:
+    return precos.dec(db.query(func.coalesce(func.sum(coluna), 0)).filter(*filtros).scalar() or 0)
 
 
 def travar_carteira(db: Session, tenant_id: str) -> EnriquecimentoCarteira:
@@ -68,14 +75,33 @@ def consumo_liquido(db: Session, tenant_id: str | None, periodo: str, provedor: 
 
 
 def reservado_do_provedor(db: Session, provedor: str) -> int:
-    """Créditos retidos agora por pesquisas em curso de todos os tenants, para o provedor."""
-    return _soma(db, EnriquecimentoMovimento.delta_reservado, EnriquecimentoMovimento.provedor == provedor)
+    """Créditos DO PROVEDOR retidos agora por pesquisas em curso de todos os tenants."""
+    return _soma(db, EnriquecimentoMovimento.provedor_delta_reservado, EnriquecimentoMovimento.provedor == provedor)
+
+
+def consumo_provedor(db: Session, provedor: str, periodo: str) -> int:
+    """Créditos DO PROVEDOR consumidos (medidos pelas respostas dele, menos o que ele devolveu) no mês, todos os tenants somados."""
+    return _soma(db, EnriquecimentoMovimento.provedor_delta_consumido, EnriquecimentoMovimento.provedor == provedor,
+                 EnriquecimentoMovimento.periodo == periodo)
+
+
+def resultado_financeiro(db: Session, provedor: str, periodo: str | None = None) -> dict:
+    """Custo de aquisição × valor de venda dos consumos do provedor (somente administrativo). Valores na precisão interna, sem arredondar."""
+    filtros = [EnriquecimentoMovimento.provedor == provedor, EnriquecimentoMovimento.custo_total_brl.isnot(None)]
+    if periodo:
+        filtros.append(EnriquecimentoMovimento.periodo == periodo)
+    custo = _soma_decimal(db, EnriquecimentoMovimento.custo_total_brl, *filtros)
+    venda = _soma_decimal(db, EnriquecimentoMovimento.valor_venda_brl, *filtros)
+    return {"custo_brl": custo, "venda_brl": venda, "margem_brl": venda - custo,
+            "margem_percentual": (precos.margem_sobre_venda(venda, custo)) if venda else None}
 
 
 def lancar(db: Session, tenant_id: str, tipo: str, *, delta_saldo: int = 0, delta_reservado: int = 0, provedor: str | None = None,
            pesquisa_id: str | None = None, item_id: int | None = None, origem: str | None = None, motivo: str | None = None,
            ator_id: str | None = None, expira_em: datetime | None = None, idempotency_key: str | None = None,
-           agora: datetime | None = None) -> EnriquecimentoMovimento:
+           agora: datetime | None = None, provedor_delta_reservado: int = 0, provedor_delta_consumido: int = 0,
+           custo_unitario_brl=None, preco_unitario_brl=None, custo_total_brl=None, valor_venda_brl=None, politica_id: int | None = None,
+           fonte: str | None = None) -> EnriquecimentoMovimento:
     """Acrescenta uma linha ao razão. Idempotente por (tenant, idempotency_key): repetir devolve a linha original sem lançar de novo.
     Quem chama já deve ter travado a carteira do tenant."""
     if tipo not in TIPOS:
@@ -91,6 +117,8 @@ def lancar(db: Session, tenant_id: str, tipo: str, *, delta_saldo: int = 0, delt
         tenant_id=tenant_id, tipo=tipo, delta_saldo=delta_saldo, delta_reservado=delta_reservado,
         disponivel_apos=antes + delta_saldo - delta_reservado, provedor=provedor, periodo=periodo_de(agora), pesquisa_id=pesquisa_id,
         item_id=item_id, origem=origem, motivo=motivo, ator_id=ator_id, expira_em=expira_em, idempotency_key=idempotency_key, criado_em=agora,
+        provedor_delta_reservado=provedor_delta_reservado, provedor_delta_consumido=provedor_delta_consumido, custo_unitario_brl=custo_unitario_brl,
+        preco_unitario_brl=preco_unitario_brl, custo_total_brl=custo_total_brl, valor_venda_brl=valor_venda_brl, politica_id=politica_id, fonte=fonte,
     )
     db.add(movimento)
     db.flush()
@@ -171,8 +199,10 @@ def ajustar(db: Session, tenant_id: str, quantidade: int, motivo: str, ator_id: 
 
 
 def estornar(db: Session, tenant_id: str, quantidade: int, motivo: str, ator_id: str | None, tenant_auditoria: str, *,
-             pesquisa_id: str | None = None, provedor: str | None = None, idempotency_key: str | None = None) -> EnriquecimentoMovimento:
-    """Devolve créditos já consumidos (ex.: o provedor creditou de volta). Não pode estornar mais do que o consumo líquido da pesquisa."""
+             pesquisa_id: str | None = None, provedor: str | None = None, idempotency_key: str | None = None,
+             provedor_devolvidos: int = 0) -> EnriquecimentoMovimento:
+    """Devolve créditos DO CLIENTE já consumidos. Se o provedor também devolveu créditos a CyberFort, informe `provedor_devolvidos` (em créditos
+    do provedor): o consumo do provedor e o orçamento global são reduzidos nessa quantidade. Não estorna mais do que o consumo líquido da pesquisa."""
     if not motivo or not motivo.strip():
         raise ValidacaoFalhou("Informe o motivo do estorno.")
     if isinstance(quantidade, bool) or not isinstance(quantidade, int) or quantidade <= 0:
@@ -183,8 +213,10 @@ def estornar(db: Session, tenant_id: str, quantidade: int, motivo: str, ator_id:
                          EnriquecimentoMovimento.pesquisa_id == pesquisa_id, EnriquecimentoMovimento.tipo.in_(TIPOS_CONSUMO))
         if quantidade > liquido:
             raise ValidacaoFalhou("Estorno maior que o consumo líquido da pesquisa.")
+    if isinstance(provedor_devolvidos, bool) or not isinstance(provedor_devolvidos, int) or provedor_devolvidos < 0:
+        raise ValidacaoFalhou("provedor_devolvidos deve ser um inteiro maior ou igual a zero.")
     movimento = lancar(db, tenant_id, "ESTORNO", delta_saldo=quantidade, provedor=provedor, pesquisa_id=pesquisa_id, origem="estorno",
-                       motivo=motivo.strip(), ator_id=ator_id, idempotency_key=idempotency_key)
+                       motivo=motivo.strip(), ator_id=ator_id, idempotency_key=idempotency_key, provedor_delta_consumido=-provedor_devolvidos)
     auditoria_service.registrar(db, tenant_auditoria, "enriquecimento_creditos_estornados", "enriquecimento_movimento", movimento.id, ator_id,
                                 {"tenant_alvo": tenant_id, "quantidade": quantidade, "pesquisa_id": pesquisa_id, "motivo": motivo.strip()})
     db.commit()
@@ -192,10 +224,11 @@ def estornar(db: Session, tenant_id: str, quantidade: int, motivo: str, ator_id:
 
 
 def situacao_global(db: Session, provedor: str, agora: datetime | None = None) -> dict:
-    """Uso do orçamento global do provedor no mês: consumido + reservado contra o limite. `nivel`: nao_configurado | ok | alerta | esgotado."""
+    """Uso do orçamento global do provedor no mês, em créditos DO PROVEDOR: medido + reservado contra o limite aprovado.
+    `nivel`: nao_configurado | ok | alerta | esgotado."""
     agora = agora or agora_utc()
     orcamento = orcamento_vigente(db, provedor)
-    consumido = consumo_liquido(db, None, periodo_de(agora), provedor)
+    consumido = consumo_provedor(db, provedor, periodo_de(agora))
     retido = reservado_do_provedor(db, provedor)
     if not orcamento.configurado:
         return {"provedor": provedor, "nivel": "nao_configurado", "limite": None, "consumido": consumido, "reservado": retido,
@@ -207,3 +240,21 @@ def situacao_global(db: Session, provedor: str, agora: datetime | None = None) -
     return {"provedor": provedor, "nivel": nivel, "limite": limite, "consumido": consumido, "reservado": retido,
             "restante": max(0, limite - usado), "percentual": percentual, "versao": orcamento.versao,
             "alerta_percentual": orcamento.alerta_percentual}
+
+
+def registrar_uso_fonte(db: Session, tenant_id: str, fonte: str, operacao: str, quantidade: int = 1, *, ator_id: str | None = None,
+                        referencia: str | None = None) -> EnriquecimentoMovimento:
+    """Contabiliza o USO de uma fonte de enriquecimento (QSA da Receita, Brasil API…) sem custo de crédito: lançamento `USO` de deltas zero, com
+    a fonte e a operação, para o painel mostrar quanto cada fonte foi usada. Cobrança por fonte só existirá com regra comercial aprovada."""
+    return lancar(db, tenant_id, "USO", origem=operacao, fonte=fonte, motivo=f"{operacao} x{quantidade}" + (f" ({referencia})" if referencia else ""),
+                  ator_id=ator_id)
+
+
+def uso_por_fonte(db: Session, tenant_id: str, periodo: str) -> dict[str, int]:
+    """Quantidade de operações registradas por fonte no mês (QSA, Brasil API, Lusha…)."""
+    linhas = (
+        db.query(EnriquecimentoMovimento.fonte, func.count(EnriquecimentoMovimento.id))
+        .filter(EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.tipo == "USO", EnriquecimentoMovimento.periodo == periodo)
+        .group_by(EnriquecimentoMovimento.fonte).all()
+    )
+    return {fonte: total for fonte, total in linhas}

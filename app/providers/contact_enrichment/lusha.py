@@ -5,25 +5,35 @@ from app.providers.contact_enrichment.base import (
     ContatoCandidato,
     FiltroContatos,
     ResultadoBuscaContatos,
+    UsoProvedor,
 )
 
 
+def _inteiro(valor) -> int | None:
+    """Inteiro não negativo ou None. Booleano, texto e negativo não são medição válida."""
+    if isinstance(valor, bool) or not isinstance(valor, int | float) or valor < 0 or int(valor) != valor:
+        return None
+    return int(valor)
+
+
 class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
-    """Integração real com a Prospecting API v3 da Lusha — busca por
-    filtros (`POST /v3/contacts/prospecting`, sem PII) seguida de
-    revelação dos IDs encontrados (`POST /v3/contacts/enrich`, com
-    e-mail/telefone), as duas síncronas (diferente do Apollo, cujo
-    telefone só sai por webhook assíncrono — por isso a escolha pela
-    Lusha). Formato de requisição/resposta dos dois endpoints conferido
-    direto no OpenAPI spec oficial da Lusha (`V3EnrichedContact`,
-    `V3EmailAddress`, `V3PhoneNumber`), não por suposição."""
+    """Integração real com a Prospecting API v3 da Lusha — busca por filtros (`POST /v3/contacts/prospecting`) seguida de revelação dos ids
+    escolhidos (`POST /v3/contacts/enrich`), as duas síncronas. Formato conferido na documentação oficial (docs.lusha.com), não por suposição:
+
+    * a busca é cobrada por resultado devolvido e a revelação por dado revelado (e-mail e telefone têm tarifas diferentes); as duas respostas
+      trazem `billing.creditsCharged`, o consumo REAL da requisição, que é o que a governança de créditos usa (nunca "1 contato = 1 crédito");
+    * `pagination.size` aceita de 10 a 100; `enrich` aceita de 1 a 100 ids; `waterfallEnabled` é desligado para não acionar provedores externos
+      (e custo extra) que o assinante não escolheu;
+    * 402 = créditos insuficientes (nada processado), 429 = limite de taxa."""
 
     _BASE_URL = "https://api.lusha.com"
-    _TAMANHO_MAX_PAGINA = 20  # o que o adaptador já usava; não é um limite contratual conhecido da Lusha
+    _TAMANHO_MAX_PAGINA = 100  # teto documentado de `pagination.size` e de ids por `enrich`
+    _TAMANHO_MIN_PAGINA = 10  # piso documentado de `pagination.size`
 
     nome_provedor = "lusha"
-    max_contatos_por_consulta = _TAMANHO_MAX_PAGINA  # o adaptador não pagina: uma página por consulta
-    pago = True  # cada contato revelado consome crédito contratado: só pelo caminho governado
+    max_contatos_por_consulta = _TAMANHO_MAX_PAGINA
+    tamanho_pagina_minimo = _TAMANHO_MIN_PAGINA
+    pago = True  # cada consulta consome crédito contratado: só pelo caminho governado
 
     def __init__(self, api_key: str) -> None:
         self._api_key = api_key
@@ -31,15 +41,22 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
     def _headers(self) -> dict:
         return {"api_key": self._api_key, "Content-Type": "application/json"}
 
+    # ----------------------------------------------------------------------------------------------------------------- caminho governado
+
     def buscar_contatos_governado(self, filtro: FiltroContatos) -> ResultadoBuscaContatos:
-        """Mesma busca em duas etapas, mas (1) revela no máximo `limite_contatos` ids, (2) separa o que é certeza de não-cobrança do que é
-        desfecho desconhecido. A busca (`prospecting`) não revela dado pessoal; só o `enrich` revela, então falha na busca é sempre segura.
-        No `enrich`: erro de conexão antes do envio e rejeição 4xx (inclui 429) são seguros; timeout de leitura/escrita, 5xx e resposta ilegível
-        são ambíguos. Sem limite informado nada é revelado (falha segura). Se a própria busca consome crédito da Lusha é ponto contratual
-        a confirmar — o adaptador não presume."""
-        limite = filtro.limite_contatos
+        """Busca + revelação com limite, tamanho de página e dados a revelar vindos da política aprovada, e com o consumo medido pela resposta.
+
+        Classificação (a mesma regra vale para as duas etapas, porque as duas consomem crédito):
+        * certa de não-cobrança (`erro_seguro`): erro de conexão antes do envio, rejeição 4xx (inclui 402 e 429);
+        * ambígua (`ambiguo`): timeout, 5xx, queda no meio, resposta ilegível, ou resposta 2xx SEM a medição `billing.creditsCharged`.
+        Se a busca já consumiu crédito e a revelação falha, o consumo da busca vai junto no resultado (`creditos_provedor`)."""
+        limite, pagina, revelar = filtro.limite_contatos, filtro.tamanho_pagina, filtro.revelar
         if limite is None or limite < 1:
             return ResultadoBuscaContatos(estado="erro_seguro", detalhe="limite_de_contatos_ausente")
+        if pagina is None or not self._TAMANHO_MIN_PAGINA <= pagina <= self._TAMANHO_MAX_PAGINA or limite > pagina:
+            return ResultadoBuscaContatos(estado="erro_seguro", detalhe="tamanho_de_pagina_invalido")
+        if not revelar or not set(revelar) <= {"emails", "phones"}:
+            return ResultadoBuscaContatos(estado="erro_seguro", detalhe="dados_a_revelar_invalidos")
 
         filtros_empresa: dict = {"include": {}}
         if filtro.dominio:
@@ -47,35 +64,59 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
         else:
             filtros_empresa["include"]["names"] = [filtro.nome_empresa]
         corpo_busca = {
-            "pagination": {"page": 0, "size": min(limite, self._TAMANHO_MAX_PAGINA)},
+            "pagination": {"page": 0, "size": pagina},
             "filters": {"contacts": {"include": {"jobTitles": filtro.cargos_alvo}}, "companies": filtros_empresa},
         }
         dados_busca, falha = self._chamar_classificado("/v3/contacts/prospecting", corpo_busca)
         if dados_busca is None:
-            return ResultadoBuscaContatos(estado="erro_seguro", detalhe=f"busca_{falha}")
+            return ResultadoBuscaContatos(estado=self._estado_da_falha(falha), detalhe=f"busca_{falha}")
+        creditos_busca = _inteiro((dados_busca.get("billing") or {}).get("creditsCharged"))
+        if creditos_busca is None:
+            return ResultadoBuscaContatos(estado="ambiguo", detalhe="medicao_ausente_na_busca")
 
-        ids = [str(item["id"]) for item in dados_busca.get("results", []) if item.get("id")][:limite]
+        ids = [str(item["id"]) for item in dados_busca.get("results", []) if item.get("id") and not item.get("error")][:limite]
         if not ids:
-            return ResultadoBuscaContatos(estado="sem_resultados")
+            return ResultadoBuscaContatos(estado="sem_resultados", creditos_provedor=creditos_busca, creditos_busca=creditos_busca)
 
-        dados_enrich, falha = self._chamar_classificado("/v3/contacts/enrich", {"ids": ids, "reveal": ["emails", "phones"]})
+        corpo_enrich = {"ids": ids, "reveal": list(revelar), "waterfallEnabled": False}
+        dados_enrich, falha = self._chamar_classificado("/v3/contacts/enrich", corpo_enrich)
         if dados_enrich is None:
-            seguro = falha in ("conexao", "rejeitada")
-            return ResultadoBuscaContatos(estado="erro_seguro" if seguro else "ambiguo", ids_provedor=ids, detalhe=f"revelacao_{falha}")
+            # a busca já foi cobrada e medida; só o desfecho da revelação é certo (seguro) ou incerto (ambíguo)
+            return ResultadoBuscaContatos(
+                estado=self._estado_da_falha(falha), ids_provedor=ids, detalhe=f"revelacao_{falha}",
+                creditos_provedor=creditos_busca, creditos_busca=creditos_busca,
+            )
+        creditos_revelacao = _inteiro((dados_enrich.get("billing") or {}).get("creditsCharged"))
+        if creditos_revelacao is None or str(dados_enrich.get("status", "")).upper().endswith("OUT_OF_CREDITS"):
+            return ResultadoBuscaContatos(
+                estado="ambiguo", ids_provedor=ids, detalhe="medicao_ausente_na_revelacao" if creditos_revelacao is None else "revelacao_sem_creditos",
+                creditos_busca=creditos_busca,
+            )
 
+        total = creditos_busca + creditos_revelacao
         contatos = self._mapear_contatos(dados_enrich)
         if not contatos:
-            return ResultadoBuscaContatos(estado="sem_resultados", ids_provedor=ids)
-        return ResultadoBuscaContatos(estado="ok", contatos=contatos[:limite], ids_provedor=ids)
+            return ResultadoBuscaContatos(estado="sem_resultados", ids_provedor=ids, creditos_provedor=total, creditos_busca=creditos_busca,
+                                          creditos_revelacao=creditos_revelacao)
+        return ResultadoBuscaContatos(estado="ok", contatos=contatos[:limite], ids_provedor=ids, creditos_provedor=total, creditos_busca=creditos_busca,
+                                      creditos_revelacao=creditos_revelacao)
+
+    @staticmethod
+    def _estado_da_falha(falha: str | None) -> str:
+        return "erro_seguro" if falha in ("conexao", "rejeitada", "sem_creditos", "limite_de_taxa") else "ambiguo"
 
     def _chamar_classificado(self, caminho: str, corpo: dict) -> tuple[dict | None, str | None]:
-        """(dados, None) em sucesso; (None, causa) em falha. Causas: conexao (nada foi enviado), rejeitada (4xx), timeout, servidor (5xx),
-        transporte (queda no meio), resposta_ilegivel."""
+        """(dados, None) em sucesso; (None, causa) em falha. Causas: conexao (nada foi enviado), sem_creditos (402), limite_de_taxa (429),
+        rejeitada (outro 4xx), timeout, servidor (5xx), transporte (queda no meio), resposta_ilegivel."""
         try:
             resposta = httpx.post(f"{self._BASE_URL}{caminho}", json=corpo, headers=self._headers(), timeout=15.0)
             resposta.raise_for_status()
         except httpx.HTTPStatusError as erro:
             codigo = getattr(erro.response, "status_code", 500)
+            if codigo == 402:
+                return None, "sem_creditos"
+            if codigo == 429:
+                return None, "limite_de_taxa"
             return None, "rejeitada" if 400 <= codigo < 500 else "servidor"
         except (httpx.ConnectError, httpx.ConnectTimeout):
             return None, "conexao"
@@ -84,9 +125,23 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
         except httpx.HTTPError:
             return None, "transporte"
         try:
-            return resposta.json(), None
+            dados = resposta.json()
         except ValueError:
             return None, "resposta_ilegivel"
+        return (dados, None) if isinstance(dados, dict) else (None, "resposta_ilegivel")
+
+    def consultar_uso(self) -> UsoProvedor:
+        """`GET /v3/account/usage`: créditos do ciclo e tarifas por ação, como o provedor publica. Levanta `httpx.HTTPError` em falha."""
+        resposta = httpx.get(f"{self._BASE_URL}/v3/account/usage", headers=self._headers(), timeout=15.0)
+        resposta.raise_for_status()
+        dados = resposta.json()
+        creditos = dados.get("credits") or {}
+        return UsoProvedor(
+            creditos_total=_inteiro(creditos.get("total")), creditos_usados=_inteiro(creditos.get("used")),
+            creditos_restantes=_inteiro(creditos.get("remaining")), tarifas=dict(dados.get("pricing") or {}),
+        )
+
+    # ----------------------------------------------------------------------------------------------------------------- mapeamento
 
     def _mapear_contatos(self, dados_enrich: dict) -> list[ContatoCandidato]:
         candidatos = []
@@ -110,7 +165,10 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
             )
         return candidatos
 
+    # ----------------------------------------------------------------------------------------------------------------- caminho legado
+
     def buscar_contatos(self, filtro: FiltroContatos) -> list[ContatoCandidato]:
+        """Caminho antigo, sem governança: mantido só para o adaptador continuar testável isoladamente. Nada na aplicação o chama."""
         filtros_empresa: dict = {"include": {}}
         if filtro.dominio:
             filtros_empresa["include"]["domains"] = [filtro.dominio]
@@ -135,27 +193,7 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
         dados_enrich = self._chamar("/v3/contacts/enrich", {"ids": ids, "reveal": ["emails", "phones"]})
         if dados_enrich is None:
             return []
-
-        candidatos = []
-        for contato in dados_enrich.get("results", []):
-            if contato.get("error"):
-                continue
-            nome = contato.get("fullName") or " ".join(
-                parte for parte in [contato.get("firstName"), contato.get("lastName")] if parte
-            )
-            if not nome:
-                continue
-            candidatos.append(
-                ContatoCandidato(
-                    nome=nome,
-                    cargo=(contato.get("jobTitle") or {}).get("title", ""),
-                    email=self._primeiro_valor(contato.get("emails"), "email"),
-                    telefone=self._primeiro_valor(contato.get("phones"), "number"),
-                    linkedin_url=(contato.get("socialLinks") or {}).get("linkedin"),
-                    fonte="lusha",
-                )
-            )
-        return candidatos
+        return self._mapear_contatos(dados_enrich)
 
     def _chamar(self, caminho: str, corpo: dict) -> dict | None:
         try:

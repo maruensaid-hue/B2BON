@@ -33,9 +33,8 @@ from app.models.conteudo_pagina_site import ConteudoPaginaSite
 from app.models.decisor import Decisor
 from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
 from app.models.icp import ICP
-from app.models.lista_prospeccao import ListaProspeccao
 from app.providers.account_data.base import AccountDataProvider, ContaCandidata, DecisorCandidato, FiltroBusca
-from app.providers.contact_enrichment.base import ContactEnrichmentProvider, ContatoCandidato, FiltroContatos
+from app.providers.contact_enrichment.base import ContatoCandidato
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.services import atividade_service, auditoria_service, descarte_service, enriquecimento_limite_service
@@ -613,6 +612,19 @@ def enriquecer(
     return campos
 
 
+def _registrar_uso_fonte(db: Session, tenant_id: str, fonte: str, operacao: str, ator_id: str | None, conta_id: int) -> None:
+    """Contabiliza o uso da fonte (sem custo de crédito) para o painel de enriquecimento. Melhor esforço, em savepoint: uma falha aqui nunca
+    derruba o fluxo do QSA/Brasil API, que não depende de nenhuma configuração de créditos."""
+    try:
+        # Import tardio: o contexto de enriquecimento chama o PREDATOR (lazy) e o PREDATOR só precisa dele para esta contabilidade.
+        from app.contexts.enriquecimento.contract import ledger
+
+        with db.begin_nested():
+            ledger.registrar_uso_fonte(db, tenant_id, fonte, operacao, 1, ator_id=ator_id, referencia=f"conta {conta_id}")
+    except Exception:  # noqa: BLE001
+        logger.warning("USO_FONTE falha ao contabilizar fonte=%s conta=%s", fonte, conta_id, exc_info=True)
+
+
 def enriquecer_via_brasilapi(
     db: Session,
     tenant_id: str,
@@ -677,6 +689,7 @@ def enriquecer_via_brasilapi(
         {"campos": len(campos)},
         conta_id=conta.id,
     )
+    _registrar_uso_fonte(db, tenant_id, "brasilapi", "enriquecer_conta", ator_id, conta.id)
     db.commit()
     for campo_registro in campos:
         db.refresh(campo_registro)
@@ -705,45 +718,26 @@ def mapear_decisores(
     ator_id: str | None,
     conta_id: int,
     account_data: AccountDataProvider,
-    contact_enrichment: ContactEnrichmentProvider,
     graph: Neo4jClient,
     plan_limits: PlanLimitsProvider,
 ) -> list[Decisor]:
-    """Decisores mapeados combinando o QSA da Receita Federal (sócios/
-    administradores formais, quando a conta tem CNPJ) com uma base de
-    enriquecimento de contatos (C-Levels, Diretores, Gerentes e Heads que
-    não aparecem no QSA por não terem participação societária),
-    persistidos no grafo (E2-H2).
+    """Decisores mapeados SOMENTE pelo QSA da Receita Federal (sócios/administradores formais, quando a conta tem CNPJ), persistidos no
+    grafo (E2-H2).
 
-    Se a conta pertence a uma Lista de Prospecção com `cargos_alvo`
-    definido (ex.: só "CISO"/"Diretor de Segurança" pra um projeto de
-    cibersegurança), a busca no provedor de enriquecimento já sai
-    restrita a esses cargos — filtra na requisição, não depois de já ter
-    revelado o contato, economizando consulta de verdade. Sem lista (ou
-    lista sem cargos definidos), cai no default genérico do provider."""
+    Não consulta nenhum provedor de contatos (Lusha ou outro), nem como alternativa quando o QSA vem vazio: contatos de provedor pago só
+    chegam pela pesquisa de decisores governada (`app/contexts/enriquecimento`: seleção explícita, confirmação, reserva de créditos e
+    orçamento global). Por isso esta função nem recebe um provedor de contatos, e nada aqui depende da configuração de enriquecimento."""
     enriquecimento_limite_service.verificar_e_registrar(db, tenant_id, "contatos", plan_limits)
     conta = obter_conta(db, tenant_id, conta_id)
-
-    kwargs_filtro: dict = {"nome_empresa": conta.nome_fantasia or conta.nome, "dominio": conta.dominio, "cnpj": conta.cnpj}
-    if conta.lista_prospeccao_id:
-        lista = db.query(ListaProspeccao).filter_by(id=conta.lista_prospeccao_id).one_or_none()
-        if lista is not None and lista.cargos_alvo:
-            kwargs_filtro["cargos_alvo"] = lista.cargos_alvo
 
     candidatos: list[DecisorCandidato | ContatoCandidato] = []
     if conta.cnpj:
         candidatos.extend(account_data.buscar_decisores(conta.cnpj))
-    if contact_enrichment.pago:
-        # Provedor com custo por contato revelado: só a pesquisa de decisores governada (seleção explícita, reserva de créditos e orçamento
-        # global — `app/contexts/enriquecimento`) o chama. Aqui, em disparo avulso ou automático (fila de enriquecimento), fica só o QSA.
-        logger.info("MAPEAR_DECISORES provedor pago ignorado fora da pesquisa governada conta=%s provedor=%s", conta.id, contact_enrichment.nome_provedor)
-    else:
-        candidatos.extend(contact_enrichment.buscar_contatos(FiltroContatos(**kwargs_filtro)))
 
     novos = registrar_candidatos(db, tenant_id, conta, candidatos, graph)
 
     atividade_service.registrar(
-        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao=f"IA mapeou {novos} decisor(es)",
+        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao=f"QSA da Receita: {novos} decisor(es) novo(s)",
         ator_id=ator_id,
     )
     auditoria_service.registrar(
@@ -756,6 +750,7 @@ def mapear_decisores(
         {"quantidade": novos},
         conta_id=conta.id,
     )
+    _registrar_uso_fonte(db, tenant_id, "receita_qsa", "mapear_decisores", ator_id, conta.id)
     db.commit()
     return decisores_da_conta(db, conta)
 

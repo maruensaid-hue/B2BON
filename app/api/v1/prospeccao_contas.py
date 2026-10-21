@@ -15,7 +15,6 @@ from app.api.deps import (
     get_account_data_provider,
     get_ator_id,
     get_brasilapi_client,
-    get_contact_enrichment_provider,
     get_db,
     get_graph_client,
     get_llm_provider,
@@ -31,7 +30,6 @@ from app.integrations.brasilapi_client import BrasilApiClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
 from app.providers.account_data.base import AccountDataProvider
-from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.schemas.conta import (
@@ -144,11 +142,10 @@ def mapear_decisores(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
     account_data: AccountDataProvider = Depends(get_account_data_provider),
-    contact_enrichment: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider),
     graph: Neo4jClient = Depends(get_graph_client),
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> list[DecisorSchema]:
     decisores = prospeccao.mapear_decisores(
-        db, tenant_id, ator_id, conta_id, account_data, contact_enrichment, graph, plan_limits
+        db, tenant_id, ator_id, conta_id, account_data, graph, plan_limits
     )
     return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, decisores)

@@ -10,7 +10,6 @@ from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
 from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
 from app.providers.account_data.base import AccountDataProvider
-from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
 from app.services import conta_service
@@ -42,7 +41,6 @@ def processar_pendentes(
     site_fetcher: SiteFetcher,
     web_search: WebSearchProvider,
     account_data: AccountDataProvider,
-    contact_enrichment: ContactEnrichmentProvider,
     graph: Neo4jClient,
     plan_limits: PlanLimitsProvider,
     consulta_cnpj: BrasilApiClient | None = None,
@@ -71,7 +69,7 @@ def processar_pendentes(
                 consulta_cnpj=consulta_cnpj, disparo="fila",
             )
             conta_service.mapear_decisores(
-                db, item.tenant_id, None, item.conta_id, account_data, contact_enrichment, graph, plan_limits
+                db, item.tenant_id, None, item.conta_id, account_data, graph, plan_limits
             )
             item.status = "concluido"
             concluidos += 1
