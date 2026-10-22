@@ -5,6 +5,7 @@
 - A pesquisa de decisores passa a valer nos planos PREDATOR Starter (30 créditos por pesquisa, até 5 decisores por empresa) e PREDATOR Professional (60 e até 10), sem alterar o que o administrador já tenha configurado. Enterprise continua configurado por tenant.
 - O super admin pesquisa sem limites de plano, franquia ou saldo. Clientes, representantes, vendedores e demais usuários seguem os limites. O orçamento global do provedor continua valendo para todos.
 - Quem compra um pacote adicional passa a ter, enquanto o pacote valer, o limite de créditos por pesquisa igual ao do pacote (por exemplo, 3.000 num plano Starter). Acabando o crédito ou passando 30 dias, volta ao limite do plano.
+- POC: até 3 pesquisas, com 1 decisor por empresa, no total. Business (120 créditos, 20 decisores por empresa) e Corporate (180 e 30) recebem a franquia assim que o plano é criado em Admin → Planos.
 - Os créditos adicionais agora valem 30 dias a partir da confirmação do pagamento (antes, até o fim do mês). A data aparece antes da compra.
 
 ## Pesquisar decisores: você escolhe o que revelar (2026-10-22, D-098)

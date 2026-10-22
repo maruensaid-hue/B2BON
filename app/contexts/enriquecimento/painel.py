@@ -152,7 +152,7 @@ def painel_tenant(db: Session, solicitante: Solicitante, provider: ContactEnrich
         # Franquia do mês (vence no fim do mês de Brasília) e saldo adicional (pacotes: vencem 30 dias após a confirmação do pagamento) são grandezas
         # separadas e não acumulam. Enquanto houver crédito de pacote válido, o limite de créditos por pesquisa passa a ser o do pacote.
         "composicao": {**ledger.composicao(db, tenant_id, agora), "expira_em": fim_do_mes(agora).isoformat(), "acumula": False},
-        "uso_no_periodo": uso_do_periodo(db, tenant_id, agora),
+        "uso_no_periodo": uso_do_periodo(db, tenant_id, agora, desde_sempre=config is not None and config.periodicidade == "unica"),
         "compra_adicional": {"disponivel": not motivos, "motivos": motivos},
         "dados_a_revelar": _dados_a_revelar(db, provider),
         "uso_por_fonte": ledger.uso_por_fonte(db, tenant_id, periodo),

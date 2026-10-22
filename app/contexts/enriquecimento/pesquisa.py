@@ -126,14 +126,18 @@ def _validar_parametros(config: ConfigResolvida, politica: PoliticaResolvida, pr
         raise ValidacaoFalhou(f"A seleção tem {empresas} empresa(s); o máximo por pesquisa no seu plano é {config.itens_por_lote_max}.")
 
 
-def uso_do_periodo(db: Session, tenant_id: str, agora: datetime, ignorar_pesquisa_id: str | None = None) -> dict:
+def uso_do_periodo(db: Session, tenant_id: str, agora: datetime, ignorar_pesquisa_id: str | None = None, desde_sempre: bool = False) -> dict:
     """O que o tenant já confirmou neste mês (Brasília): pesquisas, empresas consultadas e decisores pedidos. Prévias, canceladas e as que falharam sem consumo não contam, nem a
-    própria pesquisa que está sendo confirmada (`ignorar_pesquisa_id`): ela é o pedido, não o que já foi usado."""
+    própria pesquisa que está sendo confirmada (`ignorar_pesquisa_id`): ela é o pedido, não o que já foi usado. Com `desde_sempre` (autorização única da POC),
+    conta tudo o que o tenant já confirmou, de qualquer mês."""
     inicio, fim = inicio_do_mes(agora), fim_do_mes(agora)
-    pesquisas = db.query(PesquisaDecisores).filter(
-        PesquisaDecisores.tenant_id == tenant_id, PesquisaDecisores.confirmada_em >= inicio, PesquisaDecisores.confirmada_em < fim,
+    consulta = db.query(PesquisaDecisores).filter(
+        PesquisaDecisores.tenant_id == tenant_id, PesquisaDecisores.confirmada_em.isnot(None),
         PesquisaDecisores.estado.notin_(("criada", "cancelada", "falha")), PesquisaDecisores.id != (ignorar_pesquisa_id or ""),
-    ).all()
+    )
+    if not desde_sempre:
+        consulta = consulta.filter(PesquisaDecisores.confirmada_em >= inicio, PesquisaDecisores.confirmada_em < fim)
+    pesquisas = consulta.all()
     ids = [p.id for p in pesquisas]
     itens = db.query(PesquisaDecisoresEmpresa).filter(PesquisaDecisoresEmpresa.pesquisa_id.in_(ids or [""]),
                                                      PesquisaDecisoresEmpresa.decisores_solicitados > 0).all()
@@ -169,13 +173,15 @@ def _avaliar_limites(db: Session, tenant_id: str, config: ConfigResolvida, polit
     if total_cliente > contexto["disponivel"] and not irrestrito:  # o super admin não tem saldo a respeitar: a diferença é concedida na reserva
         bloqueios.append(_bloqueio("saldo_insuficiente", f"Esta pesquisa pode consumir até {total_cliente} crédito(s) de enriquecimento e há "
                                                          f"{contexto['disponivel']} disponível(is)."))
-    uso = uso_do_periodo(db, tenant_id, agora, ignorar_pesquisa_id)
+    unica = config.periodicidade == "unica"  # autorização única (POC): os limites de pesquisas/empresas/contatos valem para a vida do tenant
+    uso = uso_do_periodo(db, tenant_id, agora, ignorar_pesquisa_id, desde_sempre=unica)
     contexto["uso_periodo"] = uso
     for rotulo, atual, pedido, limite in (("pesquisas", uso["pesquisas"], 1, config.limite_pesquisas_periodo),
                                           ("empresas", uso["empresas"], empresas, config.limite_empresas_periodo),
                                           ("contatos", uso["contatos"], contatos, config.limite_contatos_periodo)):
         if limite is not None and atual + pedido > limite:
-            bloqueios.append(_bloqueio(f"limite_{rotulo}_periodo", f"O limite de {limite} {rotulo} no mês deixa {max(0, limite - atual)}; esta pesquisa usaria {pedido}."))
+            bloqueios.append(_bloqueio(f"limite_{rotulo}_periodo", f"O limite de {limite} {rotulo} {'na POC' if unica else 'no mês'} deixa {max(0, limite - atual)}; "
+                                                                      f"esta pesquisa usaria {pedido}."))
     if config.limite_periodo_creditos is not None:
         usado = ledger.consumo_liquido(db, tenant_id, periodo_de(agora)) + ledger.reservado(db, tenant_id)
         contexto["periodo_restante"] = max(0, config.limite_periodo_creditos - usado)

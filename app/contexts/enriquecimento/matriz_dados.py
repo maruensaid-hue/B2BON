@@ -19,8 +19,9 @@ MOTIVO_PACOTES = "Pacotes adicionais de enriquecimento aprovados pelo PO em 2026
 PLANOS: dict[str, dict] = {
     "POC": {
         "aliases": ("POC",),
-        # Sem franquia fixa: cada operação exige autorização aprovada por tenant, com teto calculado pelas tarifas confirmadas. Limite: 1 decisor.
-        "config": {"modo": "poc_autorizada", "decisores_por_empresa_max": 1},
+        # Sem franquia fixa: cada operação exige autorização aprovada por tenant, com teto calculado pelas tarifas confirmadas. Limites (PO, 2026-10-22):
+        # 1 decisor por empresa e até 3 pesquisas NO TOTAL (a autorização da POC é `unica`, então a contagem é na vida do tenant, não por mês).
+        "config": {"modo": "poc_autorizada", "decisores_por_empresa_max": 1, "limite_pesquisas_periodo": 3},
     },
     "Teste gratuito": {
         "aliases": ("Teste gratuito", "Teste", "Free Trial"),

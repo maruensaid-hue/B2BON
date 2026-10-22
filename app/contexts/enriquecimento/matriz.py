@@ -69,6 +69,20 @@ def _aplicar_ao_plano(db: Session, plano: Plano, spec: dict, ator_id: str | None
     relatorio["aplicados"].append({"plano": plano.nome, "versao": nova.versao})
 
 
+def aplicar_ao_plano(db: Session, plano_id: int, *, ator_id: str | None, tenant_auditoria: str) -> dict | None:
+    """Plano recém-criado (ou existente) cujo nome casa com uma linha da matriz (Business, Corporate...) recebe a franquia aprovada na hora, sem passo
+    manual. Nome fora da matriz: nada acontece (devolve None)."""
+    plano = db.get(Plano, plano_id)
+    if plano is None:
+        return None
+    for spec in PLANOS.values():
+        if plano.nome in spec["aliases"] and spec["config"] is not None:
+            relatorio: dict[str, list] = {"aplicados": [], "inalterados": [], "nao_encontrados": [], "por_administrador": [], "ajustes": []}
+            _aplicar_ao_plano(db, plano, spec, ator_id, tenant_auditoria, relatorio)
+            return relatorio
+    return None
+
+
 def status(db: Session, mapeamento: dict[str, int] | None = None) -> list[dict]:
     """Para cada linha da matriz: o plano existe no banco? A configuração aprovada bate com a matriz?"""
     saida = []
@@ -101,7 +115,8 @@ def vitrine() -> list[dict]:
             saida.append({"plano": chave, "modo": "sob_consulta", "descricao": "Limites de contatos, créditos, empresas e operações por período definidos sob medida com o comercial."})
         elif cfg["modo"] == "poc_autorizada":
             saida.append({"plano": chave, "modo": "poc_autorizada", "decisores_por_empresa_max": cfg["decisores_por_empresa_max"],
-                          "descricao": "Sem franquia fixa: cada operação é autorizada com orçamento calculado pelas tarifas confirmadas."})
+                          "limite_pesquisas": cfg.get("limite_pesquisas_periodo"),
+                          "descricao": "Até 3 pesquisas com 1 decisor por empresa, dentro do orçamento autorizado e calculado pelas tarifas confirmadas."})
         else:
             saida.append({"plano": chave, "modo": "franquia_fixa", "franquia_creditos": cfg["franquia_creditos"], "periodicidade": cfg["periodicidade"],
                           "limite_creditos_pesquisa": cfg["limite_creditos_pesquisa"], "decisores_por_empresa_max": cfg["decisores_por_empresa_max"]})

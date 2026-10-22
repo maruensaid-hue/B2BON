@@ -3,7 +3,7 @@
 A POC não tem quantidade de créditos inventada. O teto de uma operação é CALCULADO com a política do provedor aprovada (tarifas confirmadas):
 empresas × (busca + decisores × revelação) em créditos do provedor, convertidos em créditos do cliente pelo fator da política. Esse teto vira uma
 configuração do TENANT (`periodicidade=unica`, uma concessão na vida do tenant) que nasce pendente e só vale depois de aprovada por um administrador
-(mesmo caminho de qualquer configuração). O limite é de 1 decisor por empresa, o da linha POC da matriz. Sem política aprovada (ou incompleta) não há
+(mesmo caminho de qualquer configuração). Os limites são os da linha POC da matriz: 1 decisor por empresa e até 3 pesquisas no total. Sem política aprovada (ou incompleta) não há
 teto: nada é estimado "no chute".
 
 Uma nova operação de POC para o mesmo tenant não ganha franquia nova automaticamente (a concessão `unica` é idempotente): é crédito extra por ajuste
@@ -56,6 +56,6 @@ def autorizar(db: Session, tenant_id: str, *, provedor: str, empresas: int, deci
         motivo=motivo or f"Autorização de POC: {empresas} empresa(s) × {decisores_por_empresa} decisor(es)",
         campos={"modo": "franquia_fixa", "franquia_creditos": creditos, "periodicidade": "unica", "limite_creditos_pesquisa": creditos,
                 "decisores_por_empresa_padrao": decisores_por_empresa, "decisores_por_empresa_max": decisores_por_empresa,
-                "itens_por_lote_max": empresas},
+                "itens_por_lote_max": empresas, "limite_pesquisas_periodo": plano_cfg.limite_pesquisas_periodo},
     )
     return {"config_id": nova.id, "versao": nova.versao, "pendente_aprovacao": True, "teto": teto}

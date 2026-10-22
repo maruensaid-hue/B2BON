@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import exigir_papel, get_ator_id, get_db
 from app.contexts.enriquecimento.contract import matriz, pacotes
 from app.schemas.plano import AtualizarPlanoRequestSchema, CriarPlanoRequestSchema, PlanoSchema
-from app.services import tenant_service
+from app.services import auditoria_service, tenant_service
 
 router = APIRouter(prefix="/planos", tags=["planos"])
 
@@ -37,7 +37,10 @@ def franquias_de_enriquecimento(db: Session = Depends(get_db)) -> dict:
 def criar_plano(dados: CriarPlanoRequestSchema, ator_id: str | None = Depends(get_ator_id), db: Session = Depends(get_db)) -> PlanoSchema:
     corpo = dados.model_dump()
     motivo = corpo.pop("motivo")
-    return tenant_service.criar_plano(db, corpo, ator_id=ator_id, motivo=motivo)
+    plano = tenant_service.criar_plano(db, corpo, ator_id=ator_id, motivo=motivo)
+    # Plano com o nome de uma linha da matriz de enriquecimento (Business, Corporate...) já nasce com a franquia e os limites aprovados pelo PO.
+    matriz.aplicar_ao_plano(db, plano.id, ator_id=ator_id, tenant_auditoria=auditoria_service.TENANT_PLATAFORMA)
+    return plano
 
 
 @router.put("/{plano_id}", response_model=PlanoSchema, dependencies=[Depends(exigir_papel("super_admin"))])

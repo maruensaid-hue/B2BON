@@ -463,6 +463,38 @@ def test_poc_so_pode_ser_autorizada_para_tenant_de_plano_poc_e_respeita_o_limite
         poc.autorizar(db_session, A, provedor="lusha", empresas=5, decisores_por_empresa=2, ator_id="1", tenant_auditoria=A, motivo="x")
 
 
+
+def test_poc_faz_ate_3_pesquisas_com_1_decisor_e_a_quarta_e_recusada_mesmo_em_outro_mes(client, db_session):
+    config_poc(db_session)
+    resultado = poc.autorizar(db_session, A, provedor="lusha", empresas=20, decisores_por_empresa=1, ator_id="1", tenant_auditoria=A, motivo="POC cliente X")
+    config.aprovar_config(db_session, resultado["config_id"], "1", A)
+    cfg, _ = config.config_vigente(db_session, A)
+    assert cfg.limite_pesquisas_periodo == 3 and cfg.periodicidade == "unica" and cfg.decisores_por_empresa_max == 1  # herdado do plano POC
+    solic, prov = eu(db_session), ProvedorPago()
+    for n in range(3):
+        p = previa(db_session, solic, contas(db_session, 2), prov, d=1)
+        assert p.estimativa["viavel"] is True, n
+        confirmar(db_session, solic, p, prov, chave=f"chave-poc-{n}-xx")
+    quarta = previa(db_session, solic, contas(db_session, 2), prov, d=1)
+    assert quarta.estimativa["viavel"] is False
+    assert quarta.estimativa["bloqueios"][0]["codigo"] == "limite_pesquisas_periodo" and "na POC" in quarta.estimativa["bloqueios"][0]["mensagem"]
+    em_dois_meses = previa(db_session, solic, contas(db_session, 2), prov, d=1, agora=AGORA + timedelta(days=65))
+    assert em_dois_meses.estimativa["viavel"] is False  # não é por mês: são 3 pesquisas na vida da POC
+    assert em_dois_meses.estimativa["uso_no_periodo"]["pesquisas"] == 3
+
+
+def test_plano_criado_pela_tela_com_nome_da_matriz_ja_nasce_com_a_franquia_aprovada(client, db_session):
+    base = {"franquia_contas_mes": 1000, "max_usuarios": 30, "preco_mensal": 100.0, "motivo": "teste"}
+    for nome, franquia, decisores in (("Business", 120, 20), ("Corporate", 180, 30)):
+        r = client.post("/api/v1/planos", json={"nome": nome, **base})
+        assert r.status_code == 201, r.text
+        cfg = config.config_aprovada_do_plano(db_session, r.json()["id"])
+        assert (cfg.franquia_creditos, cfg.limite_creditos_pesquisa, cfg.decisores_por_empresa_max, cfg.periodicidade) == (franquia, franquia, decisores, "mensal")
+        assert cfg.aprovado_por == "po:matriz-2026-10-21"
+    outro = client.post("/api/v1/planos", json={"nome": "Plano Livre", **base})
+    assert outro.status_code == 201 and config.config_aprovada_do_plano(db_session, outro.json()["id"]) is None  # fora da matriz: nada é inventado
+
+
 # ============================================================ Enterprise: limites por período ========================================
 
 

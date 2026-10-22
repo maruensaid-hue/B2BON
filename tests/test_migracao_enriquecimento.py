@@ -157,3 +157,27 @@ def test_migracao_que_libera_os_planos_da_matriz_nao_sobrescreve_configuracao_ja
         engine.dispose()
         if os.path.exists(caminho):
             os.remove(caminho)
+
+
+def test_migracao_da_poc_limita_a_3_pesquisas_so_na_linha_ainda_sem_limite(monkeypatch):
+    """f9b1d3e5a7c9: a linha POC aprovada pelo PO (1 decisor) ganha o limite de 3 pesquisas; o downgrade devolve o estado anterior."""
+    caminho, engine = _banco(monkeypatch)
+    try:
+        config = Config("alembic.ini")
+        command.upgrade(config, "e8a0c2d4f6b8")
+        consulta = sa.text("SELECT c.limite_pesquisas_periodo FROM enriquecimento_config_plano c JOIN plano p ON p.id = c.plano_id WHERE p.nome = 'PREDATOR Starter'")
+        with engine.begin() as conexao:  # no banco real a linha POC é de um plano criado fora das migrações; aqui um plano de módulo faz o papel dela
+            conexao.execute(sa.text("UPDATE enriquecimento_config_plano SET modo = 'poc_autorizada' WHERE plano_id = (SELECT id FROM plano WHERE nome = 'PREDATOR Starter')"))
+        with engine.connect() as conexao:
+            antes = conexao.execute(consulta).fetchall()
+        command.upgrade(config, "head")
+        with engine.connect() as conexao:
+            depois = conexao.execute(consulta).fetchall()
+        command.downgrade(config, "e8a0c2d4f6b8")
+        with engine.connect() as conexao:
+            revertido = conexao.execute(consulta).fetchall()
+        assert (antes, depois, revertido) == ([(None,)], [(3,)], [(None,)])
+    finally:
+        engine.dispose()
+        if os.path.exists(caminho):
+            os.remove(caminho)
