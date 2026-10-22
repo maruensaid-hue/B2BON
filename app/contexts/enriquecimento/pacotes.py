@@ -1,9 +1,10 @@
 """Pacotes adicionais de créditos de enriquecimento: catálogo versionado e aprovado, compra pelo checkout existente (Mercado Pago), crédito só pelo
-webhook assinado, validade no fim do mês e rentabilidade calculada com o custo vigente.
+webhook assinado, validade de 30 dias e rentabilidade calculada com o custo vigente.
 
 Regras (matriz do PO, 2026-10-21):
-  - o saldo comprado é separado da franquia (`origem=compra` no razão), NÃO aumenta nenhum limite do plano (decisores por empresa, créditos por
-    pesquisa) e expira no fim do mês-calendário de Brasília, sem acumular;
+  - o saldo comprado é separado da franquia (`origem=compra` no razão) e vale 30 dias a partir da confirmação do pagamento, sem acumular. Enquanto
+    houver crédito de pacote válido, o limite de créditos por pesquisa passa a ser o do pacote (`ledger.limite_por_pacotes`); decisores por empresa
+    seguem os do plano;
   - a data de expiração é informada ANTES da compra: o catálogo traz `expira_em_previsto`, o pedido guarda o que foi informado e a compra exige o
     aceite explícito (`aceite_expiracao`);
   - total do pacote = créditos × preço unitário, em centavos pela regra do produto (`precos.centavos`, meio para cima); o catálogo só aceita preço
@@ -16,7 +17,7 @@ Regras (matriz do PO, 2026-10-21):
     reembolso/chargeback do provedor de pagamento só sinaliza."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -65,8 +66,9 @@ def _serializar(pacote: EnriquecimentoPacote) -> dict:
 def catalogo(db: Session, agora: datetime | None = None) -> dict:
     """Catálogo para exibição (site e plataforma): pacotes vigentes e a data em que um crédito comprado AGORA expira."""
     agora = agora or config.agora_utc()
-    return {"pacotes": [_serializar(p) for p in pacotes_vigentes(db)], "expira_em_previsto": config.fim_do_mes(agora).isoformat(),
-            "regras": {"saldo_separado_da_franquia": True, "aumenta_limites_do_plano": False, "expira_no_fim_do_mes": True, "acumula": False}}
+    return {"pacotes": [_serializar(p) for p in pacotes_vigentes(db)], "expira_em_previsto": _validade(agora).isoformat(),
+            "regras": {"saldo_separado_da_franquia": True, "limite_por_pesquisa_passa_a_ser_o_do_pacote": True, "validade_dias": ledger.VALIDADE_PACOTE_DIAS,
+                       "acumula": False}}
 
 
 def _validar(status: str, creditos, unitario, total) -> tuple[int | None, Decimal | None, Decimal | None]:
@@ -163,6 +165,10 @@ def rentabilidade(db: Session, provedor: str) -> dict:
 # ---------------------------------------------------------------------------------------------------------------------------------- compras
 
 
+def _validade(agora: datetime) -> datetime:
+    return agora + timedelta(days=ledger.VALIDADE_PACOTE_DIAS)
+
+
 def serializar_compra(compra: EnriquecimentoCompra) -> dict:
     return {
         "id": compra.id, "pacote": compra.pacote_codigo, "pacote_versao": compra.pacote_versao, "creditos": compra.creditos,
@@ -183,7 +189,7 @@ def iniciar_compra(db: Session, tenant_id: str, pacote_codigo: str, *, aceite_ex
                    provider, ator_id: str | None, agora: datetime | None = None) -> EnriquecimentoCompra:
     """Pedido de compra com versão e preço congelados e checkout no Mercado Pago. Os créditos só entram pelo webhook assinado."""
     if not aceite_expiracao:
-        raise ValidacaoFalhou("Confirme que está ciente de que os créditos adicionais expiram no fim do mês e não acumulam.")
+        raise ValidacaoFalhou(f"Confirme que está ciente de que os créditos adicionais expiram {ledger.VALIDADE_PACOTE_DIAS} dias depois da confirmação do pagamento e não acumulam.")
     pacote = _vigente_aprovado(db, pacote_codigo)
     if pacote is None or pacote.status == "INATIVO":
         raise NaoEncontrado("Pacote não encontrado.")
@@ -197,14 +203,14 @@ def iniciar_compra(db: Session, tenant_id: str, pacote_codigo: str, *, aceite_ex
     agora = agora or config.agora_utc()
     compra = EnriquecimentoCompra(
         tenant_id=tenant_id, pacote_id=pacote.id, pacote_codigo=pacote.codigo, pacote_versao=pacote.versao, creditos=pacote.quantidade_creditos,
-        preco_unitario_brl=pacote.preco_unitario_brl, preco_total_brl=precos.centavos(pacote.preco_total_brl), expira_em_previsto=config.fim_do_mes(agora),
+        preco_unitario_brl=pacote.preco_unitario_brl, preco_total_brl=precos.centavos(pacote.preco_total_brl), expira_em_previsto=_validade(agora),
         status="PENDENTE", criado_por=ator_id,
     )
     db.add(compra)
     db.flush()
     preferencia = payment_provider.criar_preferencia(
         referencia_externa=f"{PREFIXO_REFERENCIA}{compra.id}",
-        descricao=f"B2B ON — {compra.creditos} créditos de enriquecimento (valem até o fim do mês)",
+        descricao=f"B2B ON — {compra.creditos} créditos de enriquecimento (valem {ledger.VALIDADE_PACOTE_DIAS} dias)",
         valor=float(compra.preco_total_brl), email_pagador=email_pagador,
     )
     compra.preferencia_id_externo, compra.url_checkout = preferencia.id_externo, preferencia.url_checkout
@@ -234,7 +240,7 @@ def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagame
                           fiscal: FiscalProvider | None = None) -> EnriquecimentoCompra | None:
     """Chamado depois da assinatura do webhook validada. Ignora pagamentos que não são de enriquecimento. Idempotente: webhook repetido não credita
     de novo (compra já decidida + `compra:<id>` no razão + `pagamento_id_externo` único). O valor pago precisa bater com o pedido (±1 centavo).
-    A validade é o fim do mês da CONFIRMAÇÃO: quem paga na virada do mês recebe o mês inteiro em vez de um crédito que já nasceria vencido."""
+    A validade são 30 dias contados da CONFIRMAÇÃO do pagamento (não da compra), então o crédito nunca nasce vencido."""
     detalhe = payment_provider.buscar_pagamento(pagamento_id_externo)
     referencia = detalhe.referencia_externa or ""
     if not referencia.startswith(PREFIXO_REFERENCIA) or not referencia.removeprefix(PREFIXO_REFERENCIA).isdigit():
@@ -269,7 +275,7 @@ def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagame
         compra.status = "REJEITADA"
         logger.error("ENRIQUECIMENTO_COMPRA_VALOR_DIVERGENTE compra=%s pago=%s esperado=%s", compra.id, detalhe.valor, compra.preco_total_brl)
     else:
-        compra.expira_em = config.fim_do_mes(agora)
+        compra.expira_em = _validade(agora)
         movimento = ledger.conceder_compra(db, compra.tenant_id, compra.id, compra.creditos, compra.expira_em, compra.pacote_codigo, agora)
         compra.movimento_id = movimento.id
         compra.status = "APROVADA"

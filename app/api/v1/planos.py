@@ -27,7 +27,7 @@ def franquias_de_enriquecimento(db: Session = Depends(get_db)) -> dict:
         "observacoes": [
             "A franquia mensal é o máximo de créditos por pesquisa e vence no fim do mês: o que não for usado não acumula.",
             "O limite de decisores vale por empresa, em cada pesquisa.",
-            "Créditos adicionais ficam em saldo separado, não aumentam os limites do plano e também vencem no fim do mês.",
+            "Créditos adicionais ficam em saldo separado e valem por 30 dias a partir da confirmação do pagamento. Enquanto houver crédito de pacote válido, o limite de créditos por pesquisa passa a ser o do pacote comprado; ao acabar o crédito ou vencer o prazo, volta ao do plano.",
             "Não há limite de tamanho do ICP: os limites valem só para a pesquisa de decisores no provedor pago.",
         ],
     }

@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth";
 
 import { AdminCustoVendas } from "./AdminCustoVendas";
 import { AdminEnriquecimento } from "./AdminEnriquecimento";
-import { custoCredito, dataExpiracao } from "./formatos";
+import { custoCredito, dataExpiracao, dataVencimento } from "./formatos";
 import { PacotesAdicionais } from "./PacotesAdicionais";
 
 interface Painel {
@@ -28,6 +28,7 @@ interface Painel {
     itens_por_lote_max?: number | null;
     limite_periodo_creditos?: number | null;
     limite_creditos_pesquisa?: number | null;
+    limite_origem?: string;
     limite_pesquisas_periodo?: number | null;
     limite_empresas_periodo?: number | null;
     limite_contatos_periodo?: number | null;
@@ -44,7 +45,16 @@ interface Painel {
     concedido_no_periodo: number;
     comprado_no_periodo: number;
   };
-  composicao: { franquia_restante: number; adicional_restante: number; outros: number; saldo: number; expira_em: string; acumula: boolean };
+  composicao: {
+    franquia_restante: number;
+    adicional_restante: number;
+    outros: number;
+    saldo: number;
+    expira_em: string;
+    acumula: boolean;
+    adicional_expira_em: string | null;
+    pacotes_ativos: { creditos: number; restante: number; expira_em: string | null }[];
+  };
   uso_no_periodo: { pesquisas: number; empresas: number; contatos: number };
   compra_adicional: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
   uso_por_fonte: Record<string, number>;
@@ -266,11 +276,14 @@ export function CreditosEnriquecimento() {
           <Item rotulo="Franquia do mês (restante)" valor={String(painel.composicao.franquia_restante)} />
           <Item rotulo="Créditos adicionais (restante)" valor={String(painel.composicao.adicional_restante)} />
           {painel.composicao.outros !== 0 && <Item rotulo="Autorização / ajuste" valor={String(painel.composicao.outros)} />}
-          <Item rotulo="Vencem em" valor={dataExpiracao(painel.composicao.expira_em)} />
+          <Item rotulo="Franquia vence em" valor={dataExpiracao(painel.composicao.expira_em)} />
+          {painel.composicao.adicional_expira_em && <Item rotulo="Adicionais vencem em" valor={dataVencimento(painel.composicao.adicional_expira_em)} />}
         </dl>
         <p className="mt-1 text-[11px] text-muted">
-          A franquia e os créditos adicionais vencem no fim do mês e não acumulam. O saldo adicional não aumenta os limites do plano. Comprados no mês, os adicionais são
-          somados ao saldo; ao consumir, a franquia é usada primeiro.
+          A franquia vence no fim do mês e os créditos adicionais valem 30 dias a partir da confirmação do pagamento; nenhum dos dois acumula. Ao consumir, usa-se primeiro o que
+          vence antes (a franquia).
+          {painel.composicao.pacotes_ativos.length > 0 &&
+            " Enquanto houver crédito de pacote válido, o seu limite de créditos por pesquisa é o do pacote; depois volta ao do plano."}
         </p>
       </Card>
 
@@ -283,7 +296,16 @@ export function CreditosEnriquecimento() {
             ) : (
               <Item rotulo="Franquia" valor={`${p.franquia_creditos ?? "—"} (${p.periodicidade === "unica" ? "única" : "mensal"})`} />
             )}
-            <Item rotulo="Créditos por pesquisa" valor={p.limite_creditos_pesquisa == null ? "—" : `até ${p.limite_creditos_pesquisa}`} />
+            <Item
+              rotulo="Créditos por pesquisa"
+              valor={
+                p.limite_creditos_pesquisa == null
+                  ? p.limite_origem === "super_admin"
+                    ? "sem limite"
+                    : "—"
+                  : `até ${p.limite_creditos_pesquisa}${p.limite_origem === "pacote" ? " (pacote adicional)" : ""}`
+              }
+            />
             <Item
               rotulo="Decisores por empresa"
               valor={p.decisores_por_empresa_padrao ? `padrão ${p.decisores_por_empresa_padrao}, máx. ${p.decisores_por_empresa_max}` : `você escolhe, máx. ${p.decisores_por_empresa_max}`}

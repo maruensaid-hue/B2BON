@@ -49,11 +49,14 @@ def test_migracao_preserva_o_legado_nao_inventa_configuracao_e_registra_so_o_lot
             for tabela in ("enriquecimento_politica_provedor", "enriquecimento_movimento", "enriquecimento_carteira", "enriquecimento_compra",
                            "enriquecimento_pagamento_provedor", "enriquecimento_nota_fiscal", "enriquecimento_estorno_compra", "pesquisa_decisores"):
                 assert _contagem(engine, tabela) == 0, tabela  # nenhum saldo, política, orçamento ou compra inventados: a Lusha segue bloqueada
-            # Só o plano "Teste" da matriz existe no banco; os demais (POC, Starter, ...) não são criados nem adivinhados.
+            # Existem no banco o "Teste" e os planos de módulo PREDATOR Starter/Professional (mesma franquia de pesquisa de decisores); POC, Business,
+            # Corporate e os planos da suíte que não existem aqui não são criados.
             configs = conexao.execute(sa.text(
                 "SELECT p.nome, c.modo, c.franquia_creditos, c.periodicidade, c.limite_creditos_pesquisa, c.decisores_por_empresa_max, c.aprovado_por "
-                "FROM enriquecimento_config_plano c JOIN plano p ON p.id = c.plano_id")).fetchall()
-            assert configs == [("Teste", "franquia_fixa", 30, "mensal", 30, 3, "po:matriz-2026-10-21")]
+                "FROM enriquecimento_config_plano c JOIN plano p ON p.id = c.plano_id ORDER BY p.nome")).fetchall()
+            assert configs == [("PREDATOR Professional", "franquia_fixa", 60, "mensal", 60, 10, "po:matriz-2026-10-21"),
+                               ("PREDATOR Starter", "franquia_fixa", 30, "mensal", 30, 5, "po:matriz-2026-10-21"),
+                               ("Teste", "franquia_fixa", 30, "mensal", 30, 3, "po:matriz-2026-10-21")]
             pacotes = conexao.execute(sa.text("SELECT codigo, quantidade_creditos, preco_unitario_brl, preco_total_brl, status FROM enriquecimento_pacote ORDER BY ordem")).fetchall()
             assert [(p[0], p[1], p[4]) for p in pacotes] == [("ENRIQ_400", 400, "ATIVO"), ("ENRIQ_660", 660, "ATIVO"), ("ENRIQ_1200", 1200, "ATIVO"),
                                                              ("ENRIQ_3000", 3000, "ATIVO"), ("ENRIQ_ACIMA_3000", None, "CONTACT_SALES")]
@@ -126,3 +129,31 @@ def test_lote_desconsiderado_so_e_removido_quando_nenhuma_politica_o_referencia(
 def _contagem(engine, tabela: str) -> int:
     with engine.connect() as conexao:
         return conexao.execute(sa.text(f"SELECT count(*) FROM {tabela}")).scalar()
+
+
+def test_migracao_que_libera_os_planos_da_matriz_nao_sobrescreve_configuracao_ja_definida(monkeypatch):
+    """e8a0c2d4f6b8: aplica a matriz aos planos PREDATOR que ainda não têm configuração; o que um administrador já definiu fica como está."""
+    caminho, engine = _banco(monkeypatch)
+    try:
+        config = Config("alembic.ini")
+        command.upgrade(config, "d7f9b1c3e5a7")
+        with engine.begin() as conexao:
+            ids = {nome: i for i, nome in conexao.execute(sa.text("SELECT id, nome FROM plano")).fetchall()}
+            conexao.execute(sa.text("DELETE FROM enriquecimento_config_plano WHERE plano_id IN (:a, :b)"), {"a": ids["PREDATOR Starter"], "b": ids["PREDATOR Professional"]})
+            conexao.execute(sa.text(
+                "INSERT INTO enriquecimento_config_plano (plano_id, versao, modo, franquia_creditos, periodicidade, limite_creditos_pesquisa, decisores_por_empresa_max, "
+                "motivo, criado_por, aprovado_por, aprovado_em, valido_de) VALUES (:p, 1, 'franquia_fixa', 999, 'mensal', 999, 7, 'admin', 'admin', 'admin', "
+                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"), {"p": ids["PREDATOR Professional"]})
+        command.upgrade(config, "head")
+        with engine.connect() as conexao:
+            linhas = conexao.execute(sa.text(
+                "SELECT p.nome, c.franquia_creditos, c.limite_creditos_pesquisa, c.decisores_por_empresa_max FROM enriquecimento_config_plano c "
+                "JOIN plano p ON p.id = c.plano_id WHERE p.nome LIKE 'PREDATOR%' ORDER BY p.nome")).fetchall()
+        assert linhas == [("PREDATOR Professional", 999, 999, 7), ("PREDATOR Starter", 30, 30, 5)]  # Starter liberado; Professional do admin preservado
+        command.downgrade(config, "d7f9b1c3e5a7")
+        with engine.connect() as conexao:
+            assert conexao.execute(sa.text("SELECT COUNT(*) FROM enriquecimento_config_plano c JOIN plano p ON p.id = c.plano_id WHERE p.nome = 'PREDATOR Starter'")).scalar() == 0
+    finally:
+        engine.dispose()
+        if os.path.exists(caminho):
+            os.remove(caminho)

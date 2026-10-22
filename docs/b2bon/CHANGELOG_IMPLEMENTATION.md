@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Pesquisa de decisores liberada nos planos; super admin sem limites; pacote define o limite (2026-10-22, D-099)
+
+- A pesquisa de decisores passa a valer nos planos PREDATOR Starter (30 créditos por pesquisa, até 5 decisores por empresa) e PREDATOR Professional (60 e até 10), sem alterar o que o administrador já tenha configurado. Enterprise continua configurado por tenant.
+- O super admin pesquisa sem limites de plano, franquia ou saldo. Clientes, representantes, vendedores e demais usuários seguem os limites. O orçamento global do provedor continua valendo para todos.
+- Quem compra um pacote adicional passa a ter, enquanto o pacote valer, o limite de créditos por pesquisa igual ao do pacote (por exemplo, 3.000 num plano Starter). Acabando o crédito ou passando 30 dias, volta ao limite do plano.
+- Os créditos adicionais agora valem 30 dias a partir da confirmação do pagamento (antes, até o fim do mês). A data aparece antes da compra.
+
 ## Pesquisar decisores: você escolhe o que revelar (2026-10-22, D-098)
 
 - No menu "Pesquisar decisores" há agora caixas de seleção para revelar **e-mail** (marcada por padrão), **telefone** ou os dois. A estimativa mostra quanto cada dado custa por decisor e o teto da pesquisa, e cada usuário escolhe de acordo com os créditos que tem.

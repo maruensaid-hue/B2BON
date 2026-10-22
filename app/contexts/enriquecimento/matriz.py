@@ -20,17 +20,15 @@ from app.services.errors import NaoEncontrado
 _CAMPOS = config.CAMPOS_NUMERICOS + ("periodicidade", "modo")
 
 
-def _plano_existente(db: Session, chave: str, aliases: tuple[str, ...], mapeamento: dict[str, int] | None) -> Plano | None:
+def _planos_existentes(db: Session, chave: str, aliases: tuple[str, ...], mapeamento: dict[str, int] | None) -> list[Plano]:
+    """Todos os planos do banco que pertencem à linha da matriz: o mapeamento explícito, ou cada nome/apelido existente (ex.: "Starter" da suíte e
+    "PREDATOR Starter" do módulo avulso, que têm a mesma franquia de pesquisa de decisores)."""
     if mapeamento and chave in mapeamento:
         plano = db.get(Plano, mapeamento[chave])
         if plano is None:
             raise NaoEncontrado(f"Plano {mapeamento[chave]} (linha {chave} da matriz) não existe.")
-        return plano
-    for nome in aliases:
-        plano = db.query(Plano).filter(Plano.nome == nome).first()
-        if plano is not None:
-            return plano
-    return None
+        return [plano]
+    return db.query(Plano).filter(Plano.nome.in_(aliases)).order_by(Plano.id).all()
 
 
 def _valores(linha: EnriquecimentoConfigPlano) -> dict:
@@ -41,41 +39,47 @@ def aplicar(db: Session, *, ator_id: str | None, tenant_auditoria: str, mapeamen
     """Aplica a matriz aos planos existentes. Devolve o relatório: aplicados, inalterados, não encontrados e os que são por administrador."""
     relatorio: dict[str, list] = {"aplicados": [], "inalterados": [], "nao_encontrados": [], "por_administrador": [], "ajustes": []}
     for chave, spec in PLANOS.items():
-        plano = _plano_existente(db, chave, spec["aliases"], mapeamento)
-        if plano is None:
+        planos = _planos_existentes(db, chave, spec["aliases"], mapeamento)
+        if not planos:
             relatorio["nao_encontrados"].append(chave)
             continue
-        if spec["config"] is None:
-            relatorio["por_administrador"].append(plano.nome)
-            continue
-        atual = config.config_aprovada_do_plano(db, plano.id)
-        base = _valores(atual) if atual is not None else {campo: None for campo in _CAMPOS}
-        alvo = {**base, **{campo: valor for campo, valor in spec["config"].items()}}
-        padrao, maximo = alvo.get("decisores_por_empresa_padrao"), alvo.get("decisores_por_empresa_max")
-        if padrao is not None and maximo is not None and padrao > maximo:
-            # Configuração anterior que permitia mais decisores do que a matriz (ex.: padrão de 5 no Teste gratuito): o padrão é removido, nunca o
-            # teto da matriz relaxado. O usuário passa a escolher o número de decisores (até o teto).
-            alvo["decisores_por_empresa_padrao"] = None
-            relatorio["ajustes"].append({"plano": plano.nome, "campo": "decisores_por_empresa_padrao", "de": padrao, "para": None})
-        if atual is not None and _valores(atual) == alvo:
-            relatorio["inalterados"].append(plano.nome)
-            continue
-        nova = config.definir_config(db, plano_id=plano.id, tenant_id=None, campos=alvo, ator_id=APROVADOR_MATRIZ, tenant_auditoria=tenant_auditoria,
-                                     motivo=f"{MOTIVO_MATRIZ} (aplicada por {ator_id or 'sistema'})", aprovar=True)
-        relatorio["aplicados"].append({"plano": plano.nome, "versao": nova.versao})
+        for plano in planos:
+            _aplicar_ao_plano(db, plano, spec, ator_id, tenant_auditoria, relatorio)
     return relatorio
+
+
+def _aplicar_ao_plano(db: Session, plano: Plano, spec: dict, ator_id: str | None, tenant_auditoria: str, relatorio: dict) -> None:
+    if spec["config"] is None:
+        relatorio["por_administrador"].append(plano.nome)
+        return
+    atual = config.config_aprovada_do_plano(db, plano.id)
+    base = _valores(atual) if atual is not None else {campo: None for campo in _CAMPOS}
+    alvo = {**base, **{campo: valor for campo, valor in spec["config"].items()}}
+    padrao, maximo = alvo.get("decisores_por_empresa_padrao"), alvo.get("decisores_por_empresa_max")
+    if padrao is not None and maximo is not None and padrao > maximo:
+        # Configuração anterior que permitia mais decisores do que a matriz (ex.: padrão de 5 no Teste gratuito): o padrão é removido, nunca o
+        # teto da matriz relaxado. O usuário passa a escolher o número de decisores (até o teto).
+        alvo["decisores_por_empresa_padrao"] = None
+        relatorio["ajustes"].append({"plano": plano.nome, "campo": "decisores_por_empresa_padrao", "de": padrao, "para": None})
+    if atual is not None and _valores(atual) == alvo:
+        relatorio["inalterados"].append(plano.nome)
+        return
+    nova = config.definir_config(db, plano_id=plano.id, tenant_id=None, campos=alvo, ator_id=APROVADOR_MATRIZ, tenant_auditoria=tenant_auditoria,
+                                 motivo=f"{MOTIVO_MATRIZ} (aplicada por {ator_id or 'sistema'})", aprovar=True)
+    relatorio["aplicados"].append({"plano": plano.nome, "versao": nova.versao})
 
 
 def status(db: Session, mapeamento: dict[str, int] | None = None) -> list[dict]:
     """Para cada linha da matriz: o plano existe no banco? A configuração aprovada bate com a matriz?"""
     saida = []
     for chave, spec in PLANOS.items():
-        plano = _plano_existente(db, chave, spec["aliases"], mapeamento)
-        if plano is None:
+        planos = _planos_existentes(db, chave, spec["aliases"], mapeamento)
+        if not planos:
             saida.append({"matriz": chave, "plano": None, "situacao": "plano_inexistente"})
-        elif spec["config"] is None:
-            saida.append({"matriz": chave, "plano": plano.nome, "situacao": "configuravel_por_administrador"})
-        else:
+        for plano in planos:
+            if spec["config"] is None:
+                saida.append({"matriz": chave, "plano": plano.nome, "situacao": "configuravel_por_administrador"})
+                continue
             atual = config.config_aprovada_do_plano(db, plano.id)
             if atual is None:
                 situacao = "nao_aplicada"

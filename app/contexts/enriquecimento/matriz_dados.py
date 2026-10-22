@@ -27,11 +27,11 @@ PLANOS: dict[str, dict] = {
         "config": {"modo": "franquia_fixa", "franquia_creditos": 30, "periodicidade": "mensal", "limite_creditos_pesquisa": 30, "decisores_por_empresa_max": 3},
     },
     "Starter": {
-        "aliases": ("Starter",),
+        "aliases": ("Starter", "PREDATOR Starter"),
         "config": {"modo": "franquia_fixa", "franquia_creditos": 30, "periodicidade": "mensal", "limite_creditos_pesquisa": 30, "decisores_por_empresa_max": 5},
     },
     "Professional": {
-        "aliases": ("Professional",),
+        "aliases": ("Professional", "PREDATOR Professional"),
         "config": {"modo": "franquia_fixa", "franquia_creditos": 60, "periodicidade": "mensal", "limite_creditos_pesquisa": 60, "decisores_por_empresa_max": 10},
     },
     "Business": {

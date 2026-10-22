@@ -54,7 +54,7 @@ class CompraRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pacote: str = Field(min_length=3, max_length=60)
-    aceite_expiracao: bool = Field(description="Ciência de que os créditos adicionais expiram no fim do mês e não acumulam")
+    aceite_expiracao: bool = Field(description="Ciência de que os créditos adicionais expiram 30 dias depois da confirmação do pagamento e não acumulam")
 
 
 def _solicitante(usuario: Usuario) -> Solicitante:

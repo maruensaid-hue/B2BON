@@ -174,7 +174,7 @@ class EnriquecimentoUsoProvedor(Base):
 
 class EnriquecimentoPacote(Base):
     """Pacote de créditos de enriquecimento para compra adicional (versionado e aprovado). Os créditos comprados formam saldo adicional, separado
-    da franquia, e expiram no fim do mês (não acumulam). Não alteram os limites do plano (decisores por empresa, créditos por pesquisa).
+    da franquia, e valem 30 dias a partir da confirmação do pagamento (não acumulam). Enquanto valem, o limite de créditos por pesquisa passa a ser o do pacote.
     `status=CONTACT_SALES` (acima de 3.000 créditos): sem preço e sem checkout automático, só cotação comercial."""
 
     __tablename__ = "enriquecimento_pacote"
@@ -212,7 +212,7 @@ class EnriquecimentoCompra(Base):
     creditos: Mapped[int] = mapped_column(Integer)
     preco_unitario_brl: Mapped[float] = mapped_column(Numeric(14, 4))
     preco_total_brl: Mapped[float] = mapped_column(Numeric(14, 2))
-    expira_em_previsto: Mapped[datetime] = mapped_column(DateTime)  # fim do mês no momento do pedido, informado antes da compra
+    expira_em_previsto: Mapped[datetime] = mapped_column(DateTime)  # confirmação + 30 dias, informado antes da compra
     status: Mapped[str] = mapped_column(String, default="PENDENTE")  # PENDENTE | APROVADA | REJEITADA
     preferencia_id_externo: Mapped[str | None] = mapped_column(String, nullable=True)
     url_checkout: Mapped[str | None] = mapped_column(String, nullable=True)

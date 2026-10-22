@@ -7,7 +7,7 @@ Provedor e pagamento sempre simulados: nenhuma chamada real, nenhum orçamento r
 
 import hashlib
 import hmac
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -231,8 +231,8 @@ def test_catalogo_traz_os_precos_exatos_e_o_pacote_acima_de_3000_nao_tem_preco_n
         ("ENRIQ_400", "1.35", "540.00"), ("ENRIQ_660", "1.28", "844.80"), ("ENRIQ_1200", "1.21", "1452.00"), ("ENRIQ_3000", "1.08", "3240.00")]
     sob = por_codigo["ENRIQ_ACIMA_3000"]
     assert sob["sob_negociacao"] is True and sob["checkout_automatico"] is False and sob["preco_total_brl"] is None and sob["preco_unitario_brl"] is None
-    assert vitrine["regras"] == {"saldo_separado_da_franquia": True, "aumenta_limites_do_plano": False, "expira_no_fim_do_mes": True, "acumula": False}
-    assert vitrine["expira_em_previsto"] == "2026-11-01T03:00:00"  # fim de outubro em Brasília
+    assert vitrine["regras"] == {"saldo_separado_da_franquia": True, "limite_por_pesquisa_passa_a_ser_o_do_pacote": True, "validade_dias": 30, "acumula": False}
+    assert vitrine["expira_em_previsto"] == (AGORA + timedelta(days=30)).isoformat()  # 30 dias depois da confirmação, não o fim do mês
 
 
 @pytest.mark.parametrize("creditos,unitario,total", [(400, "1.35", "540.00"), (660, "1.28", "844.80"), (1200, "1.21", "1452.00"), (3000, "1.08", "3240.00")])
@@ -269,7 +269,7 @@ def test_compra_exige_aceite_da_expiracao_e_pacote_negociado_nao_tem_checkout(cl
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     base = dict(payment_provider=pagamento, email_pagador="a@b.com", provider=prov, ator_id="1", agora=AGORA)
-    with pytest.raises(ValidacaoFalhou, match="expiram no fim do mês"):
+    with pytest.raises(ValidacaoFalhou, match="expiram 30 dias depois da confirmação do pagamento"):
         pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=False, **base)
     with pytest.raises(ValidacaoFalhou, match="negociado com o comercial"):
         pacotes.iniciar_compra(db_session, A, "ENRIQ_ACIMA_3000", aceite_expiracao=True, **base)
@@ -284,7 +284,7 @@ def test_compra_e_bloqueada_enquanto_a_pesquisa_lusha_esta_indisponivel(client, 
     assert erro.value.bloqueios and pagamento._preferencias == {} and db_session.query(EnriquecimentoCompra).count() == 0
 
 
-def test_compra_aprovada_pelo_webhook_vira_saldo_adicional_separado_que_nao_muda_nenhum_limite(client, db_session):
+def test_compra_aprovada_pelo_webhook_vira_saldo_adicional_separado_e_o_limite_por_pesquisa_passa_a_ser_o_do_pacote(client, db_session):
     liberar_lusha(db_session, "Starter")
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
@@ -293,19 +293,20 @@ def test_compra_aprovada_pelo_webhook_vira_saldo_adicional_separado_que_nao_muda
     compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_660", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov,
                                     ator_id="1", agora=AGORA)
     assert compra.status == "PENDENTE" and compra.url_checkout.startswith("https://checkout.stub.local/")
-    assert (compra.creditos, Decimal(str(compra.preco_total_brl)), compra.expira_em_previsto) == (660, Decimal("844.80"), datetime(2026, 11, 1, 3, 0))
+    assert (compra.creditos, Decimal(str(compra.preco_total_brl)), compra.expira_em_previsto) == (660, Decimal("844.80"), AGORA + timedelta(days=30))
     assert pagamento._preferencias[compra.preferencia_id_externo]["referencia_externa"] == f"enriquecimento:{compra.id}"
     assert pagamento._preferencias[compra.preferencia_id_externo]["valor"] == 844.8
     assert ledger.saldo(db_session, A) == 30  # o navegador voltando do checkout não credita nada
     _, confirmada = pagar(db_session, pagamento, compra)
-    assert confirmada.status == "APROVADA" and confirmada.expira_em == datetime(2026, 11, 1, 3, 0) and confirmada.movimento_id is not None
+    assert confirmada.status == "APROVADA" and confirmada.expira_em == AGORA + timedelta(days=30) and confirmada.movimento_id is not None
     comp = ledger.composicao(db_session, A, AGORA)
     assert (comp["franquia_restante"], comp["adicional_restante"], comp["saldo"]) == (30, 660, 690)  # separados
     cfg_depois, _ = config.config_vigente(db_session, A)
-    assert (cfg_depois.franquia_creditos, cfg_depois.limite_creditos_pesquisa, cfg_depois.decisores_por_empresa_max) == (30, 30, 5)  # limites iguais
-    # o saldo extra NÃO libera uma pesquisa maior que o limite por pesquisa do plano (30)
-    maior = previa(db_session, eu(db_session), contas(db_session, 7), prov, d=5)
-    assert maior.estimativa["viavel"] is False and maior.estimativa["bloqueios"][0]["codigo"] == "limite_por_pesquisa"
+    assert (cfg_depois.franquia_creditos, cfg_depois.limite_creditos_pesquisa, cfg_depois.decisores_por_empresa_max) == (30, 30, 5)  # a configuração do plano não muda
+    # enquanto o pacote vale, o limite por pesquisa passa a ser o do pacote (660), e não o da franquia (30); decisores por empresa seguem os do plano
+    maior = previa(db_session, eu(db_session), contas(db_session, 7), prov, d=5)  # 7 empresas × 5 decisores = 35 créditos > 30 da franquia
+    assert maior.estimativa["viavel"] is True and maior.estimativa["limites"]["limite_creditos_pesquisa"] == 660
+    assert maior.estimativa["limites"]["limite_origem"] == "pacote" and maior.estimativa["limites"]["decisores_por_empresa_max"] == 5
     movimento = db_session.get(EnriquecimentoMovimento, confirmada.movimento_id)
     assert (movimento.tipo, movimento.origem, movimento.delta_saldo) == ("COMPRA", "compra", 660)
     invariantes(db_session)
@@ -347,7 +348,7 @@ def test_pagamentos_de_outras_categorias_sao_ignorados_pelo_webhook_de_enriqueci
         assert pacotes.confirmar_via_webhook(db_session, pagamento, pagamento_id, AGORA) is None
 
 
-def test_credito_comprado_vence_no_fim_do_mes_junto_com_a_franquia_sem_acumular(client, db_session):
+def test_credito_comprado_vence_30_dias_depois_e_a_franquia_no_fim_do_mes_sem_acumular(client, db_session):
     liberar_lusha(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
@@ -359,17 +360,24 @@ def test_credito_comprado_vence_no_fim_do_mes_junto_com_a_franquia_sem_acumular(
     ledger.travar_carteira(db_session, A)
     ledger.lancar(db_session, A, "CONSUMO", delta_saldo=-40, agora=AGORA)  # consome a franquia (30) e 10 do adicional
     db_session.commit()
-    assert ledger.composicao(db_session, A, AGORA) == {"franquia_restante": 0, "adicional_restante": 390, "outros": 0, "saldo": 390}
-    novembro = datetime(2026, 11, 2, 12, 0)
+    composicao = ledger.composicao(db_session, A, AGORA)
+    assert {k: composicao[k] for k in ("franquia_restante", "adicional_restante", "outros", "saldo")} == {"franquia_restante": 0, "adicional_restante": 390,
+                                                                                                         "outros": 0, "saldo": 390}
+    novembro = datetime(2026, 11, 2, 12, 0)  # a franquia de outubro acabou de vencer (já estava toda consumida); o pacote ainda vale até 14/11
     ledger.preparar(db_session, A, cfg, novembro)
     db_session.commit()
-    assert ledger.saldo(db_session, A) == 30  # só a franquia nova; os 390 restantes do pacote venceram
+    assert ledger.saldo(db_session, A) == 420  # franquia nova (30) + os 390 do pacote, que ainda não venceram
+    assert db_session.query(EnriquecimentoMovimento).filter_by(tenant_id=A, tipo="EXPIRACAO").count() == 0
+    depois = datetime(2026, 11, 15, 12, 0)  # passaram os 30 dias do pacote
+    ledger.preparar(db_session, A, cfg, depois)
+    db_session.commit()
+    assert ledger.saldo(db_session, A) == 30  # os 390 restantes do pacote venceram; sobra só a franquia de novembro
     expiracoes = db_session.query(EnriquecimentoMovimento).filter_by(tenant_id=A, tipo="EXPIRACAO").all()
     assert sorted((e.origem, e.delta_saldo) for e in expiracoes) == [("compra", -390)]
-    assert ledger.composicao(db_session, A, novembro)["adicional_restante"] == 0
+    assert ledger.composicao(db_session, A, depois)["adicional_restante"] == 0
 
 
-def test_compra_confirmada_na_virada_do_mes_vale_ate_o_fim_do_mes_da_confirmacao(client, db_session):
+def test_compra_vale_30_dias_contados_da_confirmacao_do_pagamento(client, db_session):
     liberar_lusha(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
@@ -377,7 +385,7 @@ def test_compra_confirmada_na_virada_do_mes_vale_ate_o_fim_do_mes_da_confirmacao
     compra = pacotes.iniciar_compra(db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov,
                                     ator_id="1", agora=ultimo_minuto)
     _, confirmada = pagar(db_session, pagamento, compra, agora=datetime(2026, 11, 1, 3, 30))
-    assert confirmada.expira_em_previsto == datetime(2026, 11, 1, 3, 0) and confirmada.expira_em == datetime(2026, 12, 1, 3, 0)
+    assert confirmada.expira_em_previsto == ultimo_minuto + timedelta(days=30) and confirmada.expira_em == datetime(2026, 11, 1, 3, 30) + timedelta(days=30)
     assert ledger.composicao(db_session, A, datetime(2026, 11, 1, 3, 30))["adicional_restante"] == 400
 
 

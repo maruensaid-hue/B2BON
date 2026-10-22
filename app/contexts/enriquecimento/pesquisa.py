@@ -15,7 +15,7 @@ import json
 import logging
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from sqlalchemy import func
@@ -61,6 +61,11 @@ class Solicitante:
     @property
     def gestor(self) -> bool:
         return self.papel in PAPEIS_GESTORES
+
+    @property
+    def irrestrito(self) -> bool:
+        """O super admin da plataforma pesquisa sem os limites de plano e franquia (o dos clientes, representantes e vendedores continua valendo)."""
+        return self.papel == "super_admin" and settings.enriquecimento_super_admin_sem_limites
 
 
 def _bloqueio(codigo: str, texto: str) -> dict:
@@ -135,9 +140,20 @@ def uso_do_periodo(db: Session, tenant_id: str, agora: datetime, ignorar_pesquis
     return {"pesquisas": len(pesquisas), "empresas": len(itens), "contatos": sum(i.decisores_solicitados for i in itens)}
 
 
+def _com_limite_de_pacote(db: Session, tenant_id: str, config: ConfigResolvida, agora: datetime) -> ConfigResolvida:
+    """Pacote adicional válido (com crédito não consumido e dentro dos 30 dias) faz o limite de créditos por pesquisa passar a ser o do pacote, mesmo que a
+    franquia do plano seja menor. Nunca reduz um limite maior que o plano já dê, e não mexe em plano sem limite. Termina quando o crédito acaba ou vence."""
+    if config.limite_origem == "super_admin" or config.limite_creditos_pesquisa is None:
+        return config
+    limite, _ = ledger.limite_por_pacotes(db, tenant_id, agora)
+    if limite is not None and limite > config.limite_creditos_pesquisa:
+        return replace(config, limite_creditos_pesquisa=limite, limite_origem="pacote")
+    return config
+
+
 def _avaliar_limites(db: Session, tenant_id: str, config: ConfigResolvida, politica: PoliticaResolvida, provider: ContactEnrichmentProvider,
                      total_cliente: int, total_provedor: int, agora: datetime, empresas: int = 0, contatos: int = 0,
-                     ignorar_pesquisa_id: str | None = None) -> tuple[list[dict], dict]:
+                     ignorar_pesquisa_id: str | None = None, irrestrito: bool = False) -> tuple[list[dict], dict]:
     """Bloqueios que dependem de estado (provedor, saldo, período, orçamento global) e os números usados. Quem chama já preparou o razão.
     Saldo e período são em créditos do CLIENTE; o orçamento global é em créditos do PROVEDOR."""
     bloqueios: list[dict] = []
@@ -148,9 +164,9 @@ def _avaliar_limites(db: Session, tenant_id: str, config: ConfigResolvida, polit
         contexto["limite_pesquisa"] = config.limite_creditos_pesquisa
         if total_cliente > config.limite_creditos_pesquisa:
             bloqueios.append(_bloqueio("limite_por_pesquisa", f"Esta pesquisa pode precisar de até {total_cliente} crédito(s) e o limite por pesquisa do "
-                                                              f"seu plano é {config.limite_creditos_pesquisa}."))
+                                                              f"seu {'pacote' if config.limite_origem == 'pacote' else 'plano'} é {config.limite_creditos_pesquisa}."))
     contexto["disponivel"] = ledger.disponivel(db, tenant_id)
-    if total_cliente > contexto["disponivel"]:
+    if total_cliente > contexto["disponivel"] and not irrestrito:  # o super admin não tem saldo a respeitar: a diferença é concedida na reserva
         bloqueios.append(_bloqueio("saldo_insuficiente", f"Esta pesquisa pode consumir até {total_cliente} crédito(s) de enriquecimento e há "
                                                          f"{contexto['disponivel']} disponível(is)."))
     uso = uso_do_periodo(db, tenant_id, agora, ignorar_pesquisa_id)
@@ -285,7 +301,7 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
         raise ValidacaoFalhou("Identificadores de empresa inválidos.")
     ids_unicos = list(dict.fromkeys(conta_ids))
 
-    config, politica = exigir_configuracao(db, tenant_id, provider, sincronizar=True)
+    config, politica = exigir_configuracao(db, tenant_id, provider, sincronizar=True, irrestrito=solicitante.irrestrito)
     if decisores_por_empresa is None:
         if config.decisores_por_empresa_padrao is None:
             raise ValidacaoFalhou("Informe quantos decisores por empresa você quer pesquisar: o seu plano não define um valor padrão.")
@@ -320,7 +336,9 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
     solicitados = sum(p["buscar"] for p in elegiveis)
 
     ledger.preparar(db, tenant_id, config, agora)
-    bloqueios, contexto = _avaliar_limites(db, tenant_id, config, politica, provider, total_cliente, total_provedor, agora, len(elegiveis), solicitados)
+    config = _com_limite_de_pacote(db, tenant_id, config, agora)
+    bloqueios, contexto = _avaliar_limites(db, tenant_id, config, politica, provider, total_cliente, total_provedor, agora, len(elegiveis), solicitados,
+                                           irrestrito=solicitante.irrestrito)
     deduplicadas = len(plano) - len(elegiveis)
     valor_maximo = precos.valor(total_provedor, politica.preco_unitario_brl)
     incertezas = [
@@ -351,7 +369,7 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
         "limites": {"decisores_por_empresa_max": config.decisores_por_empresa_max, "itens_por_lote_max": config.itens_por_lote_max,
                     "limite_periodo_creditos": config.limite_periodo_creditos, "limite_creditos_pesquisa": config.limite_creditos_pesquisa,
                     "limite_pesquisas_periodo": config.limite_pesquisas_periodo, "limite_empresas_periodo": config.limite_empresas_periodo,
-                    "limite_contatos_periodo": config.limite_contatos_periodo},
+                    "limite_contatos_periodo": config.limite_contatos_periodo, "limite_origem": config.limite_origem},
         "uso_no_periodo": contexto["uso_periodo"],
         "config": {"origem": config.origem, "versao": config.versao}, "politica": {"versao": politica.versao},
         "viavel": not bloqueios, "bloqueios": bloqueios,
@@ -451,7 +469,7 @@ def confirmar(db: Session, *, solicitante: Solicitante, pesquisa_id: str, seleca
 def _validar_e_reservar(db: Session, solicitante: Solicitante, pesquisa: PesquisaDecisores, provider: ContactEnrichmentProvider,
                         agora: datetime) -> None:
     tenant_id, ator = pesquisa.tenant_id, str(solicitante.id)
-    config, politica = exigir_configuracao(db, tenant_id, provider)
+    config, politica = exigir_configuracao(db, tenant_id, provider, irrestrito=solicitante.irrestrito)
     if (config.origem, config.id, config.versao) != (pesquisa.config_origem, pesquisa.config_id, pesquisa.config_versao):
         raise PesquisaBloqueada("A configuração do seu plano mudou desde a prévia. Crie uma nova prévia.", "estimativa_desatualizada")
     if politica.id != pesquisa.politica_id:
@@ -484,15 +502,21 @@ def _validar_e_reservar(db: Session, solicitante: Solicitante, pesquisa: Pesquis
     if provider.pago:
         ledger.travar_orcamento(db, provider.nome_provedor)
     ledger.preparar(db, tenant_id, config, agora)
+    config = _com_limite_de_pacote(db, tenant_id, config, agora)
     elegiveis_agora = [p for p in plano if p["estado"] == "pendente"]
     bloqueios, _ = _avaliar_limites(db, tenant_id, config, politica, provider, total_cliente, total_provedor, agora, len(elegiveis_agora),
-                                    sum(p["buscar"] for p in elegiveis_agora), pesquisa.id)
+                                    sum(p["buscar"] for p in elegiveis_agora), pesquisa.id, irrestrito=solicitante.irrestrito)
     if bloqueios:
         raise PesquisaBloqueada(bloqueios[0]["mensagem"], bloqueios[0]["codigo"], bloqueios)
 
     _registrar_transicao(db, pesquisa, "validada", "confirmacao_validada", ator, anterior="criada")
     pesquisa.estado = "validada"
     if total_provedor > 0:
+        faltante = total_cliente - ledger.disponivel(db, tenant_id)
+        if solicitante.irrestrito and faltante > 0:
+            # Super admin sem saldo: concede só o que falta para reservar o teto desta pesquisa (rastreável, idempotente); o consumo continua medido.
+            ledger.lancar(db, tenant_id, "CONCESSAO", delta_saldo=faltante, origem="super_admin", motivo=f"Pesquisa {pesquisa.id} do super admin, sem limites de franquia",
+                          ator_id=ator, idempotency_key=f"super_admin:{pesquisa.id}", agora=agora)
         ledger.lancar(db, tenant_id, "RESERVA", delta_reservado=total_cliente, provedor_delta_reservado=total_provedor, provedor=provider.nome_provedor,
                       pesquisa_id=pesquisa.id, origem="pesquisa_decisores", politica_id=politica.id,
                       motivo=f"Reserva (teto) da pesquisa {pesquisa.id}", ator_id=ator, idempotency_key=f"reserva:{pesquisa.id}", agora=agora)

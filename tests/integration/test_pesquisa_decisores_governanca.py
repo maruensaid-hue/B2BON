@@ -1331,3 +1331,124 @@ def test_api_aceita_os_dados_a_revelar_e_o_painel_informa_o_que_cada_dado_custa(
     assert dados["emails"] == {"disponivel": True, "creditos_por_decisor": 1} and dados["telefones"] == {"disponivel": True, "creditos_por_decisor": 5}
     assert "LinkedIn" in dados["linkedin"]
     assert client.post(f"{URL}/previa", json={"conta_ids": [c.id], "revelar_emails": False, "revelar_telefones": False}).status_code == 422
+
+
+
+# ============================================================ pacote adicional muda o limite por pesquisa; super admin sem limites =========
+
+AGORA_PACOTE = datetime(2026, 10, 15, 15, 0)
+
+
+def comprar_pacote(db, tenant, creditos, agora=AGORA_PACOTE, compra_id=1):
+    """Pacote já pago (como o webhook do Mercado Pago o credita): saldo adicional com validade de 30 dias."""
+    ledger.travar_carteira(db, tenant)
+    ledger.conceder_compra(db, tenant, compra_id, creditos, agora + timedelta(days=ledger.VALIDADE_PACOTE_DIAS), f"ENRIQ_{creditos}", agora)
+    db.commit()
+
+
+def test_pacote_de_3000_faz_o_limite_do_starter_ser_3000_ate_acabar_e_depois_volta_ao_do_plano(client, db_session):
+    cenario(db_session, franquia=30, itens=None, maximo=5, limite_pesquisa=30, orcamento=6800)
+    solic, prov = eu(db_session), ProvedorPago()
+    cs = contas(db_session, 40)
+    antes = previa(db_session, solic, cs, prov, d=1, agora=AGORA_PACOTE)  # 40 créditos > 30 do plano
+    assert antes.estimativa["viavel"] is False and antes.estimativa["bloqueios"][0]["codigo"] == "limite_por_pesquisa"
+    comprar_pacote(db_session, A, 3000)
+    com = previa(db_session, solic, cs, prov, d=1, agora=AGORA_PACOTE)
+    assert com.estimativa["viavel"] is True
+    assert (com.estimativa["limites"]["limite_creditos_pesquisa"], com.estimativa["limites"]["limite_origem"]) == (3000, "pacote")
+    assert com.estimativa["limites"]["decisores_por_empresa_max"] == 5  # só o limite de créditos por pesquisa muda
+    # consumiu todo o crédito (franquia 30 + pacote 3000): o limite volta ao do plano, mesmo antes dos 30 dias
+    ledger.travar_carteira(db_session, A)
+    ledger.lancar(db_session, A, "CONSUMO", delta_saldo=-3030, agora=AGORA_PACOTE)
+    db_session.commit()
+    depois = previa(db_session, solic, cs, prov, d=1, agora=AGORA_PACOTE)
+    assert (depois.estimativa["limites"]["limite_creditos_pesquisa"], depois.estimativa["limites"]["limite_origem"]) == (30, "plano")
+    assert "limite_por_pesquisa" in [b["codigo"] for b in depois.estimativa["bloqueios"]]
+
+
+def test_limite_do_pacote_termina_aos_30_dias_mesmo_com_credito_sobrando(client, db_session):
+    cenario(db_session, franquia=30, itens=None, maximo=5, limite_pesquisa=30, orcamento=6800)
+    solic, prov, cs = eu(db_session), ProvedorPago(), contas(db_session, 40)
+    comprar_pacote(db_session, A, 3000)
+    dia_29 = previa(db_session, solic, cs, prov, d=1, agora=AGORA_PACOTE + timedelta(days=29))
+    assert dia_29.estimativa["limites"]["limite_creditos_pesquisa"] == 3000 and dia_29.estimativa["viavel"] is True
+    dia_31 = previa(db_session, solic, cs, prov, d=1, agora=AGORA_PACOTE + timedelta(days=31))
+    assert dia_31.estimativa["limites"]["limite_creditos_pesquisa"] == 30 and dia_31.estimativa["viavel"] is False
+    assert ledger.composicao(db_session, A, AGORA_PACOTE + timedelta(days=31))["adicional_restante"] == 0  # o saldo do pacote também venceu
+
+
+def test_pacote_menor_que_o_limite_do_plano_nao_reduz_o_limite(client, db_session):
+    cenario(db_session, franquia=500, itens=None, maximo=5, limite_pesquisa=500, orcamento=6800)
+    comprar_pacote(db_session, A, 400)
+    p = previa(db_session, eu(db_session), contas(db_session, 1), ProvedorPago(), d=1, agora=AGORA_PACOTE)
+    assert (p.estimativa["limites"]["limite_creditos_pesquisa"], p.estimativa["limites"]["limite_origem"]) == (500, "plano")
+
+
+def test_dois_pacotes_ativos_somam_o_limite(client, db_session):
+    cenario(db_session, franquia=30, itens=None, maximo=5, limite_pesquisa=30, orcamento=6800)
+    comprar_pacote(db_session, A, 400, compra_id=1)
+    comprar_pacote(db_session, A, 660, compra_id=2)
+    p = previa(db_session, eu(db_session), contas(db_session, 1), ProvedorPago(), d=1, agora=AGORA_PACOTE)
+    assert p.estimativa["limites"]["limite_creditos_pesquisa"] == 1060
+
+
+def test_painel_mostra_o_limite_vigente_e_a_validade_dos_pacotes(client, db_session, prov_api):
+    cenario(db_session, franquia=30, itens=None, maximo=5, limite_pesquisa=30, orcamento=6800)
+    agora = config.agora_utc()
+    comprar_pacote(db_session, A, 3000, agora=agora)
+    d = client.get(f"{URL}/painel").json()
+    assert (d["plano"]["limite_creditos_pesquisa"], d["plano"]["limite_origem"]) == (3000, "pacote")
+    assert d["composicao"]["adicional_restante"] == 3000 and d["composicao"]["pacotes_ativos"][0]["creditos"] == 3000
+    assert d["composicao"]["adicional_expira_em"] == (agora + timedelta(days=30)).isoformat()
+
+
+def liberar_super_admin(db, monkeypatch, *, orcamento=6800):
+    monkeypatch.setattr(settings, "enriquecimento_super_admin_sem_limites", True)
+    custo_contratual(db)
+    politica(db)
+    config.definir_orcamento_global(db, provedor="lusha", limite_creditos=orcamento, alerta_percentual=80, ator_id="1", tenant_auditoria=A, motivo="teste",
+                                    aprovar=True)
+
+
+def test_super_admin_pesquisa_sem_plano_sem_saldo_e_sem_limites_e_os_demais_continuam_limitados(client, db_session, fake_graph, monkeypatch):
+    liberar_super_admin(db_session, monkeypatch)  # nenhum plano configurado, nenhuma franquia, saldo zero
+    cs = contas(db_session, 12)
+    sa = eu(db_session, papel="super_admin")
+    p = rodar(db_session, fake_graph, sa, cs, ProvedorPago(), d=10)  # 12 empresas × 10 decisores: acima de qualquer plano da matriz
+    assert p.estado == "concluida" and p.config_origem == "super_admin" and p.estimativa["limites"]["limite_creditos_pesquisa"] is None
+    assert p.creditos_consumidos == 120 and ledger.disponivel(db_session, A) == 0
+    concessao = db_session.query(EnriquecimentoMovimento).filter_by(origem="super_admin").one()
+    assert (concessao.tipo, concessao.delta_saldo) == ("CONCESSAO", 120)  # só o necessário, rastreado
+    invariantes(db_session)
+    # o mesmo pedido de um admin do tenant (sem plano configurado) é recusado
+    with pytest.raises(PesquisaBloqueada) as erro:
+        previa(db_session, eu(db_session, papel="admin"), cs, ProvedorPago(), d=2)
+    assert erro.value.codigo == "plano_sem_configuracao"
+
+
+def test_super_admin_ignora_limites_do_plano_mas_vendedor_e_admin_nao(client, db_session, monkeypatch):
+    liberar_super_admin(db_session, monkeypatch)
+    config.definir_config(db_session, plano_id=plano_id(db_session), tenant_id=None, ator_id="1", tenant_auditoria=A, motivo="teste", aprovar=True, campos=dict(
+        franquia_creditos=10, periodicidade="mensal", decisores_por_empresa_padrao=2, decisores_por_empresa_max=3, itens_por_lote_max=2,
+        limite_periodo_creditos=10, limite_creditos_pesquisa=10, limite_pesquisas_periodo=1, limite_empresas_periodo=2, limite_contatos_periodo=5))
+    cs, prov = contas(db_session, 5), ProvedorPago()
+    p = previa(db_session, eu(db_session, papel="super_admin"), cs, prov, d=8)
+    assert p.estimativa["viavel"] is True and p.estimativa["bloqueios"] == []
+    for papel in ("admin", "user"):
+        with pytest.raises(ValidacaoFalhou, match="excede o máximo do seu plano"):
+            previa(db_session, eu(db_session, papel=papel), cs, prov, d=8)
+    ok_dentro = previa(db_session, eu(db_session, papel="user"), cs[:2], prov, d=2)
+    assert ok_dentro.estimativa["viavel"] is True  # dentro do plano, o usuário comum pesquisa normalmente
+
+
+def test_orcamento_global_do_provedor_continua_valendo_para_o_super_admin(client, db_session, monkeypatch):
+    liberar_super_admin(db_session, monkeypatch, orcamento=50)
+    p = previa(db_session, eu(db_session, papel="super_admin"), contas(db_session, 12), ProvedorPago(), d=10)  # teto de 120 > 50 do orçamento global
+    assert p.estimativa["viavel"] is False and p.estimativa["bloqueios"][0]["codigo"] == "orcamento_global_esgotado"
+
+
+def test_painel_do_super_admin_mostra_a_pesquisa_liberada_sem_limites(client, db_session, prov_api, monkeypatch):
+    liberar_super_admin(db_session, monkeypatch)  # o usuário padrão da fixture `client` é super_admin
+    d = client.get(f"{URL}/painel").json()
+    assert d["lusha"]["disponivel"] is True and d["plano"]["disponivel"] is True and d["plano"]["origem"] == "super_admin"
+    assert d["plano"]["limite_creditos_pesquisa"] is None and d["plano"]["itens_por_lote_max"] is None and d["plano"]["decisores_por_empresa_max"] == 10

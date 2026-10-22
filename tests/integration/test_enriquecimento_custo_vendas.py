@@ -423,7 +423,7 @@ def test_estorno_so_reverte_o_que_nao_foi_consumido_e_registra_o_resto(client, d
     invariantes(db_session)
 
 
-def test_estorno_parcial_nao_causa_expiracao_em_dobro_no_mes_seguinte(client, db_session):
+def test_estorno_parcial_nao_causa_expiracao_em_dobro_depois_do_vencimento(client, db_session):
     liberar_lusha(db_session)
     catalogo(db_session)
     cfg, _ = config.config_vigente(db_session, A)
@@ -435,7 +435,10 @@ def test_estorno_parcial_nao_causa_expiracao_em_dobro_no_mes_seguinte(client, db
     assert ledger.saldo(db_session, A) == 330  # 30 de franquia + 300 que sobraram do pacote
     ledger.preparar(db_session, A, cfg, datetime(2026, 11, 2, 12, 0))
     db_session.commit()
-    assert ledger.saldo(db_session, A) == 30  # venceu tudo de outubro (franquia 30 + pacote 300) uma única vez; entrou só a franquia de novembro
+    assert ledger.saldo(db_session, A) == 330  # venceu a franquia de outubro (30); o pacote (300) vale até 14/11 e entrou a franquia de novembro
+    ledger.preparar(db_session, A, cfg, datetime(2026, 11, 20, 12, 0))
+    db_session.commit()
+    assert ledger.saldo(db_session, A) == 30  # venceu o pacote (300) uma única vez; sobra só a franquia de novembro
     expirado = sum(-m.delta_saldo for m in db_session.query(EnriquecimentoMovimento).filter_by(tipo="EXPIRACAO").all())
     assert expirado == 330
     invariantes(db_session)

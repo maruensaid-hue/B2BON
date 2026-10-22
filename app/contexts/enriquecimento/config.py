@@ -121,6 +121,7 @@ class ConfigResolvida:
     limite_contatos_periodo: int | None = None
     modo: str = "franquia_fixa"
     faltando: tuple[str, ...] = field(default_factory=tuple)
+    limite_origem: str = "plano"  # plano | pacote (limite por pesquisa ampliado por pacote adicional) | super_admin (sem limites)
 
     @property
     def utilizavel(self) -> bool:
@@ -579,18 +580,32 @@ def _sincronizar_politica_se_faltar(db: Session, provider) -> str | None:
     return None
 
 
-def exigir_configuracao(db: Session, tenant_id: str, provider, *, sincronizar: bool = False) -> tuple[ConfigResolvida, PoliticaResolvida]:
+def config_sem_limites(politica: "PoliticaResolvida", provider) -> ConfigResolvida:
+    """Configuração do SUPER ADMIN: nenhum limite de plano ou franquia (créditos por pesquisa/período, empresas por pesquisa, pesquisas/empresas/contatos
+    por período). O único teto de decisores por empresa é o que a consulta ao provedor consegue entregar; limite do provedor e orçamento global continuam."""
+    teto = politica.tamanho_pagina_busca
+    if provider.max_contatos_por_consulta is not None:
+        teto = min(teto, provider.max_contatos_por_consulta)
+    return ConfigResolvida(origem="super_admin", id=0, versao=0, franquia_creditos=None, periodicidade=None, decisores_por_empresa_padrao=None,
+                           decisores_por_empresa_max=teto, itens_por_lote_max=None, limite_periodo_creditos=None, limite_creditos_pesquisa=None,
+                           limite_origem="super_admin")
+
+
+def exigir_configuracao(db: Session, tenant_id: str, provider, *, sincronizar: bool = False,
+                        irrestrito: bool = False) -> tuple[ConfigResolvida, PoliticaResolvida]:
     """Configuração do plano e política do provedor, aprovadas e completas, ou `PesquisaBloqueada` com o motivo. Não olha saldo nem orçamento. Com
     `sincronizar=True` (estimativa), um provedor pago sem política tenta publicá-la a partir das tarifas que ele próprio informa."""
     if not provider.disponivel:
         raise PesquisaBloqueada(mensagem("provedor_indisponivel"), "provedor_indisponivel",
                                 [{"codigo": "provedor_indisponivel", "mensagem": mensagem("provedor_indisponivel")}])
-    config, motivo = config_vigente(db, tenant_id)
-    if config is None:
-        raise PesquisaBloqueada(mensagem(motivo), motivo, [{"codigo": motivo, "mensagem": mensagem(motivo)}])
-    if not config.utilizavel:
-        texto = f"{mensagem('config_incompleta')} (faltando: {', '.join(config.faltando)})"
-        raise PesquisaBloqueada(texto, "config_incompleta", [{"codigo": "config_incompleta", "mensagem": texto}])
+    config = None
+    if not irrestrito:  # o super admin não depende de plano nem de configuração de franquia
+        config, motivo = config_vigente(db, tenant_id)
+        if config is None:
+            raise PesquisaBloqueada(mensagem(motivo), motivo, [{"codigo": motivo, "mensagem": mensagem(motivo)}])
+        if not config.utilizavel:
+            texto = f"{mensagem('config_incompleta')} (faltando: {', '.join(config.faltando)})"
+            raise PesquisaBloqueada(texto, "config_incompleta", [{"codigo": "config_incompleta", "mensagem": texto}])
     politica, motivo = politica_vigente(db, provider.nome_provedor)
     if sincronizar and provider.pago and (politica is None or not politica.utilizavel):
         detalhe = _sincronizar_politica_se_faltar(db, provider)
@@ -607,17 +622,21 @@ def exigir_configuracao(db: Session, tenant_id: str, provider, *, sincronizar: b
         motivo = motivo_de_contrato_indisponivel(db, provider.nome_provedor)
         if motivo is not None:
             raise PesquisaBloqueada(mensagem(motivo), motivo, [{"codigo": motivo, "mensagem": mensagem(motivo)}])
+    if irrestrito:
+        config = config_sem_limites(politica, provider)
     return config, politica
 
 
-def motivos_de_indisponibilidade(db: Session, tenant_id: str, provider) -> list[dict]:
+def motivos_de_indisponibilidade(db: Session, tenant_id: str, provider, *, irrestrito: bool = False) -> list[dict]:
     """TODOS os motivos pelos quais a pesquisa de decisores está indisponível agora para o tenant (lista vazia = liberada para tentar).
     Mostrado na interface; não inclui números do orçamento global."""
     motivos: list[str] = []
     if not provider.disponivel:
         motivos.append("provedor_indisponivel")
-    config, motivo = config_vigente(db, tenant_id)
-    if config is None:
+    config, motivo = (None, None) if irrestrito else config_vigente(db, tenant_id)
+    if irrestrito:
+        pass
+    elif config is None:
         motivos.append(motivo)
     elif not config.utilizavel:
         motivos.append("config_incompleta")

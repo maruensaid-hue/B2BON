@@ -5,6 +5,12 @@ export function dataExpiracao(valor: string): string {
   return ultimo.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
+/** Data (Brasília) de um instante do servidor: vencimento dos pacotes adicionais, que valem 30 dias a partir da confirmação do pagamento. */
+export function dataVencimento(valor: string): string {
+  const instante = new Date(valor.endsWith("Z") ? valor : `${valor}Z`);
+  return instante.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
 export function reais(valor: string | null): string {
   return valor === null ? "—" : `R$ ${Number(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }

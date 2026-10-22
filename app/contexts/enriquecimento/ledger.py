@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.contexts.enriquecimento import precos
-from app.contexts.enriquecimento.config import ConfigResolvida, agora_utc, fim_do_mes, inicio_do_mes, orcamento_vigente, periodo_de
+from app.contexts.enriquecimento.config import ConfigResolvida, agora_utc, fim_do_mes, orcamento_vigente, periodo_de
 from app.models.enriquecimento_creditos import EnriquecimentoCarteira, EnriquecimentoMovimento, EnriquecimentoOrcamentoGlobal
 from app.services import auditoria_service
 from app.services.errors import ValidacaoFalhou
@@ -144,76 +144,126 @@ def garantir_franquia(db: Session, tenant_id: str, config: ConfigResolvida, agor
 
 
 ORIGENS_COM_VALIDADE = ("franquia", "compra")
+VALIDADE_PACOTE_DIAS = 30  # o pacote adicional vale 30 dias a partir da confirmação do pagamento (não o fim do mês)
+JANELA_DE_CONSUMO_DIAS = 70  # franquia vive no máximo 31 dias e pacote 30: tudo que ainda vale hoje nasceu dentro desta janela
+_SEM_VALIDADE = datetime.max
+
+
+def baldes(db: Session, tenant_id: str, agora: datetime | None = None) -> list[dict]:
+    """Reconstrói, a partir do razão, de QUAL concessão cada crédito ainda disponível veio (franquia do mês, pacotes comprados, créditos sem validade).
+
+    Reprodução cronológica: cada concessão vira um balde com validade; cada consumo sai primeiro do balde que vence antes (a franquia do mês, depois os
+    pacotes, depois o que não vence), o que é o mais favorável ao cliente; o que sobra num balde na hora em que ele vence é o que expira. Estorno de
+    pacote reduz o balde do pacote; estorno de consumo devolve ao balde de onde saiu. É uma distribuição derivada do razão, não um segundo saldo."""
+    agora = agora or agora_utc()
+    desde = agora - timedelta(days=JANELA_DE_CONSUMO_DIAS)
+    chaves_expiradas = {chave for (chave,) in db.query(EnriquecimentoMovimento.idempotency_key).filter(
+        EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.tipo == "EXPIRACAO").all() if chave}
+    # Concessão com validade que ainda não teve a sua expiração lançada pode ser mais antiga que a janela (tenant parado): entra mesmo assim.
+    pendente = db.query(EnriquecimentoMovimento).filter(
+        EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.origem.in_(ORIGENS_COM_VALIDADE),
+        EnriquecimentoMovimento.tipo.in_(("CONCESSAO", "RENOVACAO", "COMPRA")), EnriquecimentoMovimento.expira_em.isnot(None),
+        EnriquecimentoMovimento.criado_em < desde).order_by(EnriquecimentoMovimento.criado_em).all()
+    for c in pendente:
+        if f"expiracao:{c.id}" not in chaves_expiradas:
+            desde = min(desde, c.criado_em)
+            break
+    movimentos = db.query(EnriquecimentoMovimento).filter(
+        EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.criado_em >= desde,
+        EnriquecimentoMovimento.tipo.in_(("CONCESSAO", "RENOVACAO", "COMPRA", "AJUSTE", "ESTORNO_COMPRA", "CONSUMO", "ESTORNO")),
+    ).order_by(EnriquecimentoMovimento.criado_em, EnriquecimentoMovimento.id).all()
+
+    lista: list[dict] = []
+    pilha: list[tuple[dict, int]] = []  # consumos feitos, para devolver um estorno de consumo ao balde certo
+
+    def vencer(ate: datetime) -> None:
+        for b in lista:
+            if not b["vencido"] and b["expira_em"] is not None and b["expira_em"] <= ate:
+                b["vencido"], b["restante_ao_vencer"], b["restante"] = True, b["restante"], 0
+
+    def consumir(quantidade: int, registrar: bool) -> None:
+        candidatos = sorted((b for b in lista if not b["vencido"] and b["restante"] > 0),
+                            key=lambda b: (b["expira_em"] or _SEM_VALIDADE, b["origem"] != "franquia", b["id"]))
+        for b in candidatos:
+            if quantidade <= 0:
+                break
+            tirar = min(quantidade, b["restante"])
+            b["restante"] -= tirar
+            quantidade -= tirar
+            if registrar:
+                pilha.append((b, tirar))
+
+    for m in movimentos:
+        vencer(m.criado_em)
+        if m.tipo in ("CONCESSAO", "RENOVACAO", "COMPRA") or (m.tipo == "AJUSTE" and m.delta_saldo > 0):
+            lista.append({"id": m.id, "origem": m.origem or "ajuste", "quantidade": m.delta_saldo, "restante": m.delta_saldo, "criado_em": m.criado_em,
+                          "expira_em": m.expira_em, "vencido": False, "restante_ao_vencer": 0, "chave": m.idempotency_key})
+        elif m.tipo == "ESTORNO_COMPRA":
+            alvo = next((b for b in lista if b["origem"] == "compra" and b["expira_em"] == m.expira_em and b["quantidade"] > 0), None)
+            if alvo is not None:
+                tirar = min(-m.delta_saldo, alvo["quantidade"])
+                alvo["quantidade"] -= tirar
+                alvo["restante"] = max(0, alvo["restante"] - tirar) if not alvo["vencido"] else 0
+        elif m.tipo == "CONSUMO" or (m.tipo == "AJUSTE" and m.delta_saldo < 0):
+            consumir(-m.delta_saldo, registrar=m.tipo == "CONSUMO")
+        elif m.tipo == "ESTORNO" and m.delta_saldo > 0:
+            devolver = m.delta_saldo
+            while devolver > 0 and pilha:
+                balde, qtd = pilha.pop()
+                volta = min(devolver, qtd)
+                devolver -= volta
+                if not balde["vencido"]:
+                    balde["restante"] += volta
+    vencer(agora)
+    return lista
 
 
 def expirar_vencidos(db: Session, tenant_id: str, agora: datetime | None = None) -> int:
-    """Franquia mensal e créditos comprados vencem no fim do mês (não acumulam). O que não foi consumido na janela e não está retido por pesquisa
-    vira EXPIRACAO. O consumo da janela é abatido primeiro da franquia e depois das compras (por ordem de concessão), ou seja, o que vence antes sai
-    primeiro: aproximação favorável ao cliente. Ajustes administrativos e a autorização de POC (`unica`) não têm validade e não expiram aqui."""
+    """Franquia mensal (fim do mês) e pacotes adicionais (30 dias) vencem e não acumulam. O que sobrou no balde na hora em que ele venceu, e não está
+    retido por pesquisa, vira EXPIRACAO. Ajustes administrativos e a autorização de POC (`unica`) não têm validade e não expiram aqui."""
     agora = agora or agora_utc()
-    vencidas = db.query(EnriquecimentoMovimento).filter(
-        EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.origem.in_(ORIGENS_COM_VALIDADE),
-        EnriquecimentoMovimento.tipo.in_(("CONCESSAO", "RENOVACAO", "COMPRA")),
-        EnriquecimentoMovimento.expira_em.isnot(None), EnriquecimentoMovimento.expira_em <= agora,
-    ).order_by(EnriquecimentoMovimento.criado_em, EnriquecimentoMovimento.id).all()
-    por_validade: dict[datetime, list[EnriquecimentoMovimento]] = {}
-    for concessao in vencidas:
-        por_validade.setdefault(concessao.expira_em, []).append(concessao)
     total = 0
-    for validade, grupo in por_validade.items():
-        grupo.sort(key=lambda c: (c.origem != "franquia", c.criado_em, c.id))  # franquia primeiro, depois as compras
-        consumo = -_soma(db, EnriquecimentoMovimento.delta_saldo, EnriquecimentoMovimento.tenant_id == tenant_id,
-                         EnriquecimentoMovimento.tipo.in_(TIPOS_CONSUMO), EnriquecimentoMovimento.criado_em >= inicio_do_mes(validade - timedelta(microseconds=1)),
-                         EnriquecimentoMovimento.criado_em < validade)
-        pool = max(consumo, 0)
-        # Estorno manual de pacote (ESTORNO_COMPRA) reduz o que aquele vencimento ainda tinha de crédito comprado a expirar.
-        estornado = -_soma(db, EnriquecimentoMovimento.delta_saldo, EnriquecimentoMovimento.tenant_id == tenant_id,
-                           EnriquecimentoMovimento.tipo == "ESTORNO_COMPRA", EnriquecimentoMovimento.expira_em == validade)
-        for concessao in grupo:
-            efetivo = concessao.delta_saldo
-            if concessao.origem == "compra" and estornado > 0:
-                tirar = min(estornado, efetivo)
-                efetivo -= tirar
-                estornado -= tirar
-            usado = min(efetivo, pool)
-            pool -= usado
-            chave = f"expiracao:{concessao.id}"
-            if db.query(EnriquecimentoMovimento.id).filter_by(tenant_id=tenant_id, idempotency_key=chave).first() is not None:
-                continue
-            a_expirar = max(0, min(efetivo - usado, disponivel(db, tenant_id)))
-            if a_expirar > 0:
-                travar_carteira(db, tenant_id)
-                lancar(db, tenant_id, "EXPIRACAO", delta_saldo=-a_expirar, origem=concessao.origem, idempotency_key=chave, agora=agora,
-                       motivo=f"{'Franquia' if concessao.origem == 'franquia' else 'Pacote adicional'} {concessao.periodo} vencido(a) sem uso")
-                total += a_expirar
+    for balde in baldes(db, tenant_id, agora):
+        if not balde["vencido"] or balde["origem"] not in ORIGENS_COM_VALIDADE or balde["restante_ao_vencer"] <= 0:
+            continue
+        chave = f"expiracao:{balde['id']}"
+        if db.query(EnriquecimentoMovimento.id).filter_by(tenant_id=tenant_id, idempotency_key=chave).first() is not None:
+            continue
+        a_expirar = max(0, min(balde["restante_ao_vencer"], disponivel(db, tenant_id)))
+        if a_expirar > 0:
+            travar_carteira(db, tenant_id)
+            lancar(db, tenant_id, "EXPIRACAO", delta_saldo=-a_expirar, origem=balde["origem"], idempotency_key=chave, agora=agora,
+                   motivo=f"{'Franquia' if balde['origem'] == 'franquia' else 'Pacote adicional'} {periodo_de(balde['criado_em'])} vencido(a) sem uso")
+            total += a_expirar
     return total
 
 
 def composicao(db: Session, tenant_id: str, agora: datetime | None = None) -> dict:
-    """Saldo por origem, para o painel: franquia do mês, créditos comprados (adicionais) e outros (ajuste, autorização de POC). Franquia e compras
-    do mês vigente; o consumo do mês é abatido primeiro da franquia. É uma distribuição derivada do razão, não um segundo saldo."""
+    """Saldo por origem, para o painel: franquia do mês, pacotes adicionais ainda válidos e outros (ajuste, autorização de POC). Distribuição derivada
+    do razão (ver `baldes`), não um segundo saldo."""
     agora = agora or agora_utc()
-    inicio = inicio_do_mes(agora)
-
-    def _vigente(origem: str) -> int:
-        return _soma(db, EnriquecimentoMovimento.delta_saldo, EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.origem == origem,
-                     EnriquecimentoMovimento.tipo.in_(("CONCESSAO", "RENOVACAO", "COMPRA")), EnriquecimentoMovimento.expira_em > agora,
-                     EnriquecimentoMovimento.criado_em >= inicio)
-
-    estornos = -_soma(db, EnriquecimentoMovimento.delta_saldo, EnriquecimentoMovimento.tenant_id == tenant_id,
-                      EnriquecimentoMovimento.tipo == "ESTORNO_COMPRA", EnriquecimentoMovimento.expira_em > agora)
-    franquia, compras = _vigente("franquia"), _vigente("compra") - estornos
-    consumo = max(0, consumo_liquido(db, tenant_id, periodo_de(agora)))
-    franquia_restante = max(0, franquia - consumo)
-    adicional_restante = max(0, compras - max(0, consumo - franquia))
+    ativos = [b for b in baldes(db, tenant_id, agora) if not b["vencido"]]
+    franquia_restante = sum(b["restante"] for b in ativos if b["origem"] == "franquia")
+    pacotes_ativos = sorted((b for b in ativos if b["origem"] == "compra"), key=lambda b: (b["expira_em"] or _SEM_VALIDADE, b["id"]))
+    adicional_restante = sum(b["restante"] for b in pacotes_ativos)
     total = saldo(db, tenant_id)
     return {"franquia_restante": franquia_restante, "adicional_restante": adicional_restante,
-            "outros": total - franquia_restante - adicional_restante, "saldo": total}
+            "outros": total - franquia_restante - adicional_restante, "saldo": total,
+            "adicional_expira_em": pacotes_ativos[0]["expira_em"].isoformat() if pacotes_ativos and pacotes_ativos[0]["restante"] > 0 else None,
+            "pacotes_ativos": [{"creditos": b["quantidade"], "restante": b["restante"], "expira_em": b["expira_em"].isoformat() if b["expira_em"] else None}
+                               for b in pacotes_ativos if b["restante"] > 0]}
+
+
+def limite_por_pacotes(db: Session, tenant_id: str, agora: datetime | None = None) -> tuple[int | None, list[dict]]:
+    """Limite de créditos por pesquisa concedido por pacotes adicionais: enquanto houver crédito de pacote válido (não consumido e dentro dos 30 dias), o
+    limite do tenant passa a ser o tamanho do pacote comprado (a soma, se houver mais de um ativo). Acabou o crédito ou venceu: volta ao do plano."""
+    pacotes = composicao(db, tenant_id, agora)["pacotes_ativos"]
+    return (sum(p["creditos"] for p in pacotes) or None), pacotes
 
 
 def conceder_compra(db: Session, tenant_id: str, compra_id: int, quantidade: int, expira_em: datetime, pacote_codigo: str, agora: datetime | None = None
                     ) -> EnriquecimentoMovimento:
-    """Crédito de pacote adicional pago (idempotente por `compra:<id>`), com validade no fim do mês. Separado da franquia (`origem=compra`)."""
+    """Crédito de pacote adicional pago (idempotente por `compra:<id>`), com validade de 30 dias. Separado da franquia (`origem=compra`)."""
     travar_carteira(db, tenant_id)
     return lancar(db, tenant_id, "COMPRA", delta_saldo=quantidade, origem="compra", expira_em=expira_em, idempotency_key=f"compra:{compra_id}",
                   motivo=f"Pacote {pacote_codigo}", agora=agora)

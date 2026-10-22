@@ -122,6 +122,8 @@ def _super_admin_segue_o_plano(monkeypatch):
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "super_admin_acesso_total_modulos", False)
+    # Idem para a pesquisa de decisores: o usuário padrão dos testes é super_admin e os testes de limite precisam vê-lo sob o plano.
+    monkeypatch.setattr(settings, "enriquecimento_super_admin_sem_limites", False)
 
 
 @pytest.fixture(autouse=True)

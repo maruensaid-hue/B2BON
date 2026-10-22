@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { api, mensagemErro } from "@/lib/api";
 
-import { dataExpiracao, reais } from "./formatos";
+import { dataVencimento, reais } from "./formatos";
 
 export interface Pacote {
   codigo: string;
@@ -43,7 +43,7 @@ interface Compra {
 const TOM_COMPRA: Record<string, "green" | "amber" | "red" | "muted"> = { APROVADA: "green", PENDENTE: "amber", REJEITADA: "red" };
 
 /** Compra de créditos de enriquecimento adicionais (só administradores). O saldo comprado é separado da franquia, não aumenta nenhum limite do plano e
- * vence no fim do mês; a data é mostrada ANTES da compra e exige ciência explícita. O crédito só entra quando o pagamento é confirmado pelo servidor. */
+ * vale 30 dias a partir da confirmação do pagamento; enquanto vale, o limite de créditos por pesquisa passa a ser o do pacote. A data é mostrada ANTES da compra e exige ciência explícita. O crédito só entra quando o pagamento é confirmado pelo servidor. */
 export function PacotesAdicionais({ onComprado }: { onComprado?: () => void }) {
   const [catalogo, setCatalogo] = useState<Catalogo | null>(null);
   const [compras, setCompras] = useState<Compra[]>([]);
@@ -74,14 +74,15 @@ export function PacotesAdicionais({ onComprado }: { onComprado?: () => void }) {
 
   if (!catalogo) return erro ? <div className="text-[12px] text-red">{erro}</div> : null;
   const bloqueada = catalogo.compra_disponivel === false;
-  const vence = dataExpiracao(catalogo.expira_em_previsto);
+  const vence = dataVencimento(catalogo.expira_em_previsto);
 
   return (
     <Card>
       <SectionLabel>Créditos adicionais</SectionLabel>
       <p className="mb-2 text-[12px] text-muted">
-        Saldo separado da sua franquia. Não aumenta os limites do plano (decisores por empresa e créditos por pesquisa).{" "}
-        <strong className="text-text">Se comprados agora, vencem em {vence}</strong> (fim do mês) e não acumulam para o mês seguinte.
+        Saldo separado da sua franquia. Enquanto houver crédito do pacote, o seu limite de créditos por pesquisa passa a ser o do pacote comprado (por exemplo, 3.000),
+        mesmo que a franquia do plano seja menor; quando os créditos acabarem ou o prazo vencer, volta ao limite do plano.{" "}
+        <strong className="text-text">Se comprados agora, valem 30 dias e vencem em {vence}</strong> e não acumulam.
       </p>
       {bloqueada && (
         <div className="mb-2 rounded-md bg-surf2 p-2 text-[12px] text-amber">
@@ -141,7 +142,7 @@ export function PacotesAdicionais({ onComprado }: { onComprado?: () => void }) {
                 <td className="p-1.5">
                   <Badge tone={TOM_COMPRA[c.status] ?? "muted"}>{c.status === "PENDENTE" ? "aguardando pagamento" : c.status.toLowerCase()}</Badge>
                 </td>
-                <td className="p-1.5 text-muted">{dataExpiracao(c.expira_em ?? c.expira_em_previsto)}</td>
+                <td className="p-1.5 text-muted">{dataVencimento(c.expira_em ?? c.expira_em_previsto)}</td>
                 <td className="p-1.5 text-muted">{c.status !== "APROVADA" ? "—" : c.nota?.status === "EMITIDA" ? `NF ${c.nota.numero}` : "nota a emitir"}</td>
               </tr>
             ))}

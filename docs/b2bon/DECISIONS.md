@@ -1506,3 +1506,11 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Por quê**: a matriz de franquias só fecha com ~1 crédito por contato (e-mail); o telefone custa 5. Quem tem saldo e precisa de telefone pode pagar por ele, sem depender de o administrador publicar uma política diferente para todos.
 - **Consequência**: a deduplicação ficou por dado (decisor só com e-mail não dispensa pesquisa de telefone). LinkedIn: sem crédito extra, depende de a Lusha devolver o link; contado por empresa.
 - **Status**: ACEITA no staging. Sem promoção a master. Ver `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md` §21.
+
+
+## D-099 · 2026-10-22 · Super admin sem limites; pacote adicional define o limite por pesquisa (30 dias)
+
+- **Pedido do PO**: liberar a pesquisa de decisores nos limites dos planos e franquias já definidos; o super admin sem restrições (apenas tenants, representantes, vendedores e demais usuários seguem os limites); e, se uma empresa comprar pacote adicional, o limite dela passa a ser o do pacote até acabar o consumo ou vencer em 30 dias, voltando depois à franquia do plano.
+- **Decisão**: a matriz é aplicada por migração aos planos PREDATOR Starter/Professional sem configuração (sem sobrescrever o que o administrador definiu; Enterprise segue por tenant; planos inexistentes não são criados). O super admin ignora plano, franquia, saldo e limites (concessão rastreada só do que faltar), mas não o orçamento global do provedor. O limite por pesquisa efetivo é o maior entre o do plano e a soma dos pacotes válidos. Pacotes valem 30 dias da confirmação do pagamento; o razão passou a ser reproduzido em baldes por validade, e a expiração e a composição usam isso.
+- **Substitui parcialmente** a regra de D-095 ("o saldo adicional não aumenta limites; expira no fim do mês").
+- **Status**: ACEITA no staging. Sem promoção a master. Ver `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md` §22.

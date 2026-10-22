@@ -46,6 +46,7 @@ interface Estimativa {
     itens_por_lote_max: number | null;
     limite_periodo_creditos: number | null;
     limite_creditos_pesquisa: number | null;
+    limite_origem?: string;
     limite_pesquisas_periodo: number | null;
     limite_empresas_periodo: number | null;
     limite_contatos_periodo: number | null;
@@ -365,7 +366,12 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
               />
               <Resumo rotulo="Créditos de enriquecimento (teto)" valor={String(e.creditos_maximos)} destaque />
               <Resumo rotulo="Saldo disponível" valor={String(e.disponivel)} />
-              {e.limites.limite_creditos_pesquisa !== null && <Resumo rotulo="Limite por pesquisa" valor={`${e.limites.limite_creditos_pesquisa} crédito(s)`} />}
+              {e.limites.limite_creditos_pesquisa !== null && (
+                <Resumo
+                  rotulo="Limite por pesquisa"
+                  valor={`${e.limites.limite_creditos_pesquisa} crédito(s)${e.limites.limite_origem === "pacote" ? " (pacote adicional)" : ""}`}
+                />
+              )}
               <Resumo rotulo="Máx. de decisores por empresa" valor={String(e.limites.decisores_por_empresa_max)} />
               <Resumo rotulo="Valor máximo estimado" valor={`R$ ${e.valor_maximo_brl.replace(".", ",")}`} />
               <Resumo rotulo="Decisores pedidos" valor={String(e.decisores_solicitados)} />
@@ -395,7 +401,7 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
                 </ul>
                 {e.bloqueios.some((b) => b.codigo === "saldo_insuficiente") && !e.bloqueios.some((b) => b.codigo === "limite_por_pesquisa") && (
                   <p className="mt-1 text-[11px] text-muted">
-                    Faltou saldo: veja os <a className="text-cyan underline" href="/creditos-enriquecimento">pacotes de créditos adicionais</a> (valem até o fim do mês e não aumentam o limite por pesquisa).
+                    Faltou saldo: veja os <a className="text-cyan underline" href="/creditos-enriquecimento">pacotes de créditos adicionais</a> (valem 30 dias e, enquanto houver crédito do pacote, o limite por pesquisa passa a ser o do pacote).
                   </p>
                 )}
               </div>

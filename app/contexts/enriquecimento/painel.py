@@ -11,6 +11,7 @@ from app.contexts.enriquecimento import conciliacao, custo, ledger, precos, vend
 from app.contexts.enriquecimento.config import (
     CAMPOS_OBRIGATORIOS_POR_MODO,
     agora_utc,
+    config_sem_limites,
     config_vigente,
     fim_do_mes,
     motivos_de_indisponibilidade,
@@ -18,7 +19,7 @@ from app.contexts.enriquecimento.config import (
     periodo_de,
     politica_vigente,
 )
-from app.contexts.enriquecimento.pesquisa import Solicitante, itens_de, uso_do_periodo
+from app.contexts.enriquecimento.pesquisa import Solicitante, _com_limite_de_pacote, itens_de, uso_do_periodo
 from app.models.conta import Conta
 from app.models.enriquecimento_creditos import (
     EnriquecimentoConfigPlano,
@@ -73,7 +74,7 @@ def _resumo_config(config, motivo: str | None) -> dict:
         "franquia_creditos": config.franquia_creditos, "periodicidade": config.periodicidade,
         "decisores_por_empresa_padrao": config.decisores_por_empresa_padrao, "decisores_por_empresa_max": config.decisores_por_empresa_max,
         "itens_por_lote_max": config.itens_por_lote_max, "limite_periodo_creditos": config.limite_periodo_creditos, "modo": config.modo,
-        "limite_creditos_pesquisa": config.limite_creditos_pesquisa, "limite_pesquisas_periodo": config.limite_pesquisas_periodo,
+        "limite_creditos_pesquisa": config.limite_creditos_pesquisa, "limite_origem": config.limite_origem, "limite_pesquisas_periodo": config.limite_pesquisas_periodo,
         "limite_empresas_periodo": config.limite_empresas_periodo, "limite_contatos_periodo": config.limite_contatos_periodo,
         "orientacao": None if config.utilizavel else "Configuração incompleta: fale com o comercial.",
     }
@@ -102,6 +103,11 @@ def painel_tenant(db: Session, solicitante: Solicitante, provider: ContactEnrich
     ledger.preparar(db, tenant_id, config, agora)
     db.commit()
     periodo = periodo_de(agora)
+    politica_atual, _ = politica_vigente(db, provider.nome_provedor)
+    if solicitante.irrestrito and politica_atual is not None and politica_atual.utilizavel:
+        config, motivo = config_sem_limites(politica_atual, provider), None  # super admin: nenhum limite de plano/franquia
+    elif config is not None and config.utilizavel:
+        config = _com_limite_de_pacote(db, tenant_id, config, agora)
 
     def _soma_tipo(tipo: str, coluna) -> int:
         return int(db.query(func.coalesce(func.sum(coluna), 0)).filter(
@@ -119,7 +125,7 @@ def painel_tenant(db: Session, solicitante: Solicitante, provider: ContactEnrich
 
     disponivel, retido = ledger.disponivel(db, tenant_id), ledger.reservado(db, tenant_id)
     consumido_periodo = ledger.consumo_liquido(db, tenant_id, periodo)
-    motivos = motivos_de_indisponibilidade(db, tenant_id, provider)
+    motivos = motivos_de_indisponibilidade(db, tenant_id, provider, irrestrito=solicitante.irrestrito)
     alertas = []
     if motivos:
         alertas.append({"codigo": "pesquisa_lusha_indisponivel", "mensagem": "A pesquisa de decisores (Lusha) está indisponível: " + motivos[0]["mensagem"]})
@@ -143,8 +149,8 @@ def painel_tenant(db: Session, solicitante: Solicitante, provider: ContactEnrich
             "concedido_no_periodo": _soma_tipo("CONCESSAO", EnriquecimentoMovimento.delta_saldo) + _soma_tipo("RENOVACAO", EnriquecimentoMovimento.delta_saldo),
             "comprado_no_periodo": _soma_tipo("COMPRA", EnriquecimentoMovimento.delta_saldo),
         },
-        # Franquia do mês e saldo adicional (pacotes comprados) são grandezas separadas; ambas vencem no fim do mês de Brasília e não acumulam.
-        # O adicional NÃO aumenta nenhum limite do plano (decisores por empresa, créditos por pesquisa).
+        # Franquia do mês (vence no fim do mês de Brasília) e saldo adicional (pacotes: vencem 30 dias após a confirmação do pagamento) são grandezas
+        # separadas e não acumulam. Enquanto houver crédito de pacote válido, o limite de créditos por pesquisa passa a ser o do pacote.
         "composicao": {**ledger.composicao(db, tenant_id, agora), "expira_em": fim_do_mes(agora).isoformat(), "acumula": False},
         "uso_no_periodo": uso_do_periodo(db, tenant_id, agora),
         "compra_adicional": {"disponivel": not motivos, "motivos": motivos},
