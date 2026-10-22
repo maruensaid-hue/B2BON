@@ -67,6 +67,7 @@ from app.api.v1.pesquisas_decisores import router as pesquisas_decisores_router
 from app.api.v1.ri import router as ri_router
 from app.api.v1.prospeccao_contas import router as prospeccao_contas_router
 from app.api.v1.regras_aprendidas import router as regras_aprendidas_router
+from app.api.v1.relatorio_consumo import router as relatorio_consumo_router
 from app.api.v1.relatorios import router as relatorios_router
 from app.api.v1.representantes import router as representantes_router
 from app.api.v1.rotulos_hierarquia import router as rotulos_hierarquia_router
@@ -190,6 +191,7 @@ router.include_router(admin_enriquecimento_router)
 router.include_router(integracoes_router)
 router.include_router(parceiros_router)
 router.include_router(relatorios_router)
+router.include_router(relatorio_consumo_router)
 router.include_router(crm_router, dependencies=_exige_crm)
 router.include_router(oportunidades_router, dependencies=_exige_crm)
 router.include_router(revenue_intelligence_router, dependencies=_exige_crm)

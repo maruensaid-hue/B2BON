@@ -132,6 +132,7 @@ const ADMIN_NAV_ITEM_API: NavItem = { path: "/admin/api", label: "API & Webhooks
 const ADMIN_NAV_ITEM_IA: NavItem = { path: "/admin/ia", label: "FinOps IA", icon: "📈" };
 const NAV_ITEM_VALORES: NavItem = { path: "/valores", label: "Valores", icon: "💲" };
 const NAV_ITEM_AI_CREDITS: NavItem = { path: "/ai-credits", label: "AI Credits", icon: "💠" };
+const ADMIN_NAV_ITEM_CONSUMO: NavItem = { path: "/relatorio-consumo-creditos", label: "Consumo de créditos", icon: "📉" };
 const ADMIN_NAV_ITEM_ASSINATURA: NavItem = { path: "/assinatura", label: "Assinatura", icon: "🧾" };
 
 const CLASSE_ITEM_BASE =
@@ -824,6 +825,7 @@ export function AppShell() {
               {(isAdmin || isSuperAdmin) && <NavButton {...ADMIN_NAV_ITEM_API} collapsed={collapsed} />}
               {(isAdmin || isSuperAdmin) && <NavButton {...NAV_ITEM_AI_CREDITS} collapsed={collapsed} />}
               {isSuperAdmin && <NavButton {...ADMIN_NAV_ITEM_IA} collapsed={collapsed} />}
+              {(isAdmin || isSuperAdmin) && <NavButton {...ADMIN_NAV_ITEM_CONSUMO} collapsed={collapsed} />}
               {(isAdmin || isSuperAdmin) && <NavButton {...ADMIN_NAV_ITEM_ASSINATURA} collapsed={collapsed} />}
               <NavButton {...ADMIN_NAV_ITEM_CONVITES} collapsed={collapsed} />
               {isSuperAdmin &&

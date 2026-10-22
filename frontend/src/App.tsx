@@ -51,6 +51,9 @@ const CerebroCorporativo = lazy(() =>
 );
 const Assinatura = lazy(() => import("@/pages/Assinatura").then((m) => ({ default: m.Assinatura })));
 const Valores = lazy(() => import("@/pages/Valores").then((m) => ({ default: m.Valores })));
+const RelatorioConsumoCreditos = lazy(() =>
+  import("@/pages/relatorios/RelatorioConsumoCreditos").then((m) => ({ default: m.RelatorioConsumoCreditos })),
+);
 const AiCredits = lazy(() => import("@/pages/AiCredits").then((m) => ({ default: m.AiCredits })));
 const FinOpsIa = lazy(() => import("@/pages/admin/FinOpsIa").then((m) => ({ default: m.FinOpsIa })));
 const ApiPlataforma = lazy(() => import("@/pages/admin/ApiPlataforma").then((m) => ({ default: m.ApiPlataforma })));
@@ -424,6 +427,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <RegrasAprendidas />
+              </Suspense>
+            }
+          />
+          <Route
+            path="relatorio-consumo-creditos"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <RelatorioConsumoCreditos />
               </Suspense>
             }
           />

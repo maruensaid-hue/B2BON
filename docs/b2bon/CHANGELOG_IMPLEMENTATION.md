@@ -1,5 +1,9 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Relatório de consumo de créditos de IA e de Lusha (2026-10-22, D-100)
+
+- Nova tela em Admin → Consumo de créditos (e planilha CSV): consumo por empresa e por usuário, franquia e limites do perfil contratado, quanto foi consumido além da franquia, e os créditos adicionais adquiridos (quantidade, data e valor). O super admin vê todas as empresas; o admin, a sua.
+
 ## Pesquisa de decisores liberada nos planos; super admin sem limites; pacote define o limite (2026-10-22, D-099)
 
 - A pesquisa de decisores passa a valer nos planos PREDATOR Starter (30 créditos por pesquisa, até 5 decisores por empresa) e PREDATOR Professional (60 e até 10), sem alterar o que o administrador já tenha configurado. Enterprise continua configurado por tenant.

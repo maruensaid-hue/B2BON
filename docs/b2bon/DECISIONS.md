@@ -1515,3 +1515,11 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Substitui parcialmente** a regra de D-095 ("o saldo adicional não aumenta limites; expira no fim do mês").
 - **Status**: ACEITA no staging. Sem promoção a master. Ver `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md` §22.
 - **Complemento (2026-10-22)**: Business 120/120/20 e Corporate 180/180/30 aplicados automaticamente quando o plano é criado pela tela com esse nome (os planos não existem no banco; criá-los exige preço, que o PO não definiu); POC limitada a 3 pesquisas com 1 decisor por empresa, contadas na vida do tenant.
+
+
+## D-100 · 2026-10-22 · Relatório de consumo de créditos de IA e de Lusha
+
+- **Pedido do PO**: relatório de consumo de créditos de IA e do Lusha por usuário e por empresa, com os limites da franquia do perfil contratado, as aquisições de créditos adicionais (quantidade, data, valor) e os consumos adicionais.
+- **Decisão**: leitura pura dos razões existentes, em tela e CSV, para admin (escopo da subárvore) e super admin (todas as empresas). "Empresa" = tenant (empresa usuária do B2B ON). Consumo adicional separado do da franquia; IA e Lusha nunca somadas. Sem tabela nova nem migração.
+- **Limite conhecido**: a origem franquia × pacote do consumo de Lusha é reconstruída do razão (a franquia vence antes e é consumida primeiro), não gravada em cada lançamento.
+- **Status**: ACEITA no staging. Sem promoção a master. Ver `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md` §23.

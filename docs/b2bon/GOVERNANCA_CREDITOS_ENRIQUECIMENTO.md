@@ -319,3 +319,16 @@ O `super_admin` da plataforma (chave `ENRIQUECIMENTO_SUPER_ADMIN_SEM_LIMITES`, p
 
 * **Business** (120 créditos de franquia mensal, 120 por pesquisa, 20 decisores por empresa) e **Corporate** (180/180/30) já estão na matriz (`matriz_dados.py`) e são **incluídos no valor da contratação do plano**: não há cobrança adicional pela pesquisa dentro desses volumes. No banco de produção esses dois planos ainda **não existem como registro** na tabela `plano` (conferido em 2026-10-22: só POC, Teste, Starter, Professional, Enterprise e os de módulo); criar plano exige preço e limites de usuários que a matriz não define. Quando o super admin cria o plano em Admin → Planos com o nome `Business` ou `Corporate`, a franquia e os limites aprovados são aplicados **na hora** (`matriz.aplicar_ao_plano`); não há passo manual.
 * **POC**: 1 decisor por empresa e **até 3 pesquisas no total** (migração `f9b1d3e5a7c9` grava o limite na linha do plano; `poc.autorizar` copia para a autorização do tenant). Como a autorização da POC é única (`periodicidade=unica`), os limites de pesquisas/empresas/contatos contam **na vida do tenant**, não por mês. Continua valendo o orçamento de créditos da autorização, calculado pelas tarifas.
+
+## 23. Relatório de consumo de créditos de IA e de Lusha (v8, 2026-10-22)
+
+Tela **Admin → Consumo de créditos** (`/relatorio-consumo-creditos`) e API `GET /api/v1/relatorio-consumo-creditos` (+ `/csv`, planilha com `;` e BOM para o Excel). Acesso: `admin` e `super_admin`. O super admin vê **todas as empresas**; o admin vê a própria empresa e a subárvore (mesmo escopo de `relatorio_service`); uma empresa fora do escopo responde como inexistente. Período padrão: mês corrente de Brasília; máximo de 366 dias.
+
+Por empresa (tenant) e por usuário, separando as duas carteiras (nunca somadas):
+
+* **Perfil contratado**: plano; IA — franquia mensal; Lusha — franquia, máx. de créditos por pesquisa (e se vem do plano ou de pacote adicional), máx. de decisores por empresa e de empresas por pesquisa; percentual da franquia usado.
+* **Consumo**: total, **da franquia** e **adicional** (IA: pacotes comprados, bônus/ajustes e excedente pós-pago com valor; Lusha: pacotes comprados e outros — ajuste, autorização de POC, super admin), expirado no período e saldo atual.
+* **Por usuário**: IA — créditos e execuções liquidadas; Lusha — créditos, pesquisas, empresas e decisores das pesquisas que ele confirmou.
+* **Aquisições de créditos adicionais**: quantidade, data da confirmação e valor, de IA (`CompraCreditos` aprovadas) e de Lusha (`EnriquecimentoCompra` aprovadas, com a data de validade).
+
+Fontes: o extrato de IA (`movimento_credito` + lotes), `execucao_ia`, o razão de enriquecimento, `pesquisa_decisores` e as compras. Nada é gravado nem recalculado de outro jeito. A origem do consumo de Lusha (franquia × pacote) é derivada do razão por `ledger.baldes(..., coletor=...)`, na ordem em que os créditos vencem; para períodos mais antigos a janela de reprodução é ampliada, e o que não puder ser identificado vai para "outros". Estorno de consumo de IA é abatido do lote que recebeu a devolução. Testes: `tests/integration/test_relatorio_consumo_creditos.py`.

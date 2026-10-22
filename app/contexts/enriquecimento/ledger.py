@@ -149,14 +149,16 @@ JANELA_DE_CONSUMO_DIAS = 70  # franquia vive no máximo 31 dias e pacote 30: tud
 _SEM_VALIDADE = datetime.max
 
 
-def baldes(db: Session, tenant_id: str, agora: datetime | None = None) -> list[dict]:
+def baldes(db: Session, tenant_id: str, agora: datetime | None = None, *, janela_dias: int = JANELA_DE_CONSUMO_DIAS,
+           coletor: list[dict] | None = None) -> list[dict]:
     """Reconstrói, a partir do razão, de QUAL concessão cada crédito ainda disponível veio (franquia do mês, pacotes comprados, créditos sem validade).
 
     Reprodução cronológica: cada concessão vira um balde com validade; cada consumo sai primeiro do balde que vence antes (a franquia do mês, depois os
     pacotes, depois o que não vence), o que é o mais favorável ao cliente; o que sobra num balde na hora em que ele vence é o que expira. Estorno de
-    pacote reduz o balde do pacote; estorno de consumo devolve ao balde de onde saiu. É uma distribuição derivada do razão, não um segundo saldo."""
+    pacote reduz o balde do pacote; estorno de consumo devolve ao balde de onde saiu. É uma distribuição derivada do razão, não um segundo saldo. `coletor` recebe cada consumo com a
+    origem do balde (franquia, compra, ...), para os relatórios; `janela_dias` alarga a reprodução para períodos antigos."""
     agora = agora or agora_utc()
-    desde = agora - timedelta(days=JANELA_DE_CONSUMO_DIAS)
+    desde = agora - timedelta(days=janela_dias)
     chaves_expiradas = {chave for (chave,) in db.query(EnriquecimentoMovimento.idempotency_key).filter(
         EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.tipo == "EXPIRACAO").all() if chave}
     # Concessão com validade que ainda não teve a sua expiração lançada pode ser mais antiga que a janela (tenant parado): entra mesmo assim.
@@ -181,7 +183,7 @@ def baldes(db: Session, tenant_id: str, agora: datetime | None = None) -> list[d
             if not b["vencido"] and b["expira_em"] is not None and b["expira_em"] <= ate:
                 b["vencido"], b["restante_ao_vencer"], b["restante"] = True, b["restante"], 0
 
-    def consumir(quantidade: int, registrar: bool) -> None:
+    def consumir(quantidade: int, registrar: bool, quando: datetime | None = None) -> None:
         candidatos = sorted((b for b in lista if not b["vencido"] and b["restante"] > 0),
                             key=lambda b: (b["expira_em"] or _SEM_VALIDADE, b["origem"] != "franquia", b["id"]))
         for b in candidatos:
@@ -192,6 +194,10 @@ def baldes(db: Session, tenant_id: str, agora: datetime | None = None) -> list[d
             quantidade -= tirar
             if registrar:
                 pilha.append((b, tirar))
+            if coletor is not None and quando is not None:
+                coletor.append({"em": quando, "origem": b["origem"], "creditos": tirar})
+        if coletor is not None and quando is not None and quantidade > 0:
+            coletor.append({"em": quando, "origem": "sem_origem_identificada", "creditos": quantidade})
 
     for m in movimentos:
         vencer(m.criado_em)
@@ -205,7 +211,7 @@ def baldes(db: Session, tenant_id: str, agora: datetime | None = None) -> list[d
                 alvo["quantidade"] -= tirar
                 alvo["restante"] = max(0, alvo["restante"] - tirar) if not alvo["vencido"] else 0
         elif m.tipo == "CONSUMO" or (m.tipo == "AJUSTE" and m.delta_saldo < 0):
-            consumir(-m.delta_saldo, registrar=m.tipo == "CONSUMO")
+            consumir(-m.delta_saldo, registrar=m.tipo == "CONSUMO", quando=m.criado_em if m.tipo == "CONSUMO" else None)
         elif m.tipo == "ESTORNO" and m.delta_saldo > 0:
             devolver = m.delta_saldo
             while devolver > 0 and pilha:
