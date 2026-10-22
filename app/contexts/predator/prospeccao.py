@@ -781,7 +781,8 @@ def registrar_candidatos(
             conta_id=conta.id,
             nome=dados["nome"],
             cargo=dados["cargo"],
-            canal_provavel="email",
+            # Canal pelo dado que veio: e-mail quando há; senão telefone (WhatsApp) quando só o telefone foi revelado; senão o perfil no LinkedIn.
+            canal_provavel="email" if dados["email"] or not (dados["telefone"] or dados["linkedin_url"]) else ("whatsapp" if dados["telefone"] else "linkedin"),
             email=dados["email"],
             telefone=dados["telefone"],
             linkedin_url=dados["linkedin_url"],

@@ -143,6 +143,18 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
 
     # ----------------------------------------------------------------------------------------------------------------- mapeamento
 
+    @staticmethod
+    def _link_linkedin(contato: dict) -> str | None:
+        """Link do perfil no LinkedIn: a Lusha o devolve em `socialLinks.linkedin`; aceita também chaves planas. Nunca inventa: sem link, None."""
+        social = contato.get("socialLinks") or {}
+        for bruto in (social.get("linkedin"), contato.get("linkedinUrl"), contato.get("linkedin")):
+            if isinstance(bruto, dict):
+                bruto = bruto.get("url")
+            if isinstance(bruto, str) and bruto.strip():
+                link = bruto.strip()
+                return link if link.lower().startswith(("http://", "https://")) else "https://" + link.lstrip("/")
+        return None
+
     def _mapear_contatos(self, dados_enrich: dict) -> list[ContatoCandidato]:
         candidatos = []
         for contato in dados_enrich.get("results", []):
@@ -159,7 +171,7 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
                     cargo=(contato.get("jobTitle") or {}).get("title", ""),
                     email=self._primeiro_valor(contato.get("emails"), "email"),
                     telefone=self._primeiro_valor(contato.get("phones"), "number"),
-                    linkedin_url=(contato.get("socialLinks") or {}).get("linkedin"),
+                    linkedin_url=self._link_linkedin(contato),
                     fonte="lusha",
                 )
             )

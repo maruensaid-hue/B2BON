@@ -22,7 +22,7 @@ Regras que o modelo carrega:
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, event, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, event, false, func, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -344,6 +344,9 @@ class PesquisaDecisores(Base):
     provedor: Mapped[str] = mapped_column(String)
     estado: Mapped[str] = mapped_column(String, index=True)
     decisores_por_empresa: Mapped[int] = mapped_column(Integer)
+    # Dados a revelar escolhidos PELO USUÁRIO nesta pesquisa (cada um tem tarifa própria): e-mail (padrão), telefone ou os dois.
+    revelar_emails: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    revelar_telefones: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     origem_decisores: Mapped[str] = mapped_column(String)  # padrao_plano | informado_usuario
     config_origem: Mapped[str] = mapped_column(String)  # tenant | plano
     config_id: Mapped[int] = mapped_column(Integer)
@@ -381,6 +384,7 @@ class PesquisaDecisoresEmpresa(Base):
     decisores_existentes: Mapped[int] = mapped_column(Integer, default=0)  # já obtidos do mesmo provedor antes
     decisores_solicitados: Mapped[int] = mapped_column(Integer, default=0)  # o que ainda falta buscar (limite enviado ao provedor)
     decisores_retornados: Mapped[int] = mapped_column(Integer, default=0)
+    decisores_com_linkedin: Mapped[int | None] = mapped_column(Integer, nullable=True)  # dos retornados, quantos vieram com o link do perfil no LinkedIn
     creditos_reservados: Mapped[int] = mapped_column(Integer, default=0)  # do cliente
     creditos_consumidos: Mapped[int] = mapped_column(Integer, default=0)  # do cliente
     provedor_reservados: Mapped[int] = mapped_column(Integer, default=0)

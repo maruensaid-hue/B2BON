@@ -168,16 +168,16 @@ def prov_api(client):
     return provedor
 
 
-def previa(db, solic, ids, prov, d=None, agora=None):
-    return pesquisa.estimar(db, solicitante=solic, conta_ids=[c.id if hasattr(c, "id") else c for c in ids], decisores_por_empresa=d, provider=prov, agora=agora)
+def previa(db, solic, ids, prov, d=None, agora=None, **dados):
+    return pesquisa.estimar(db, solicitante=solic, conta_ids=[c.id if hasattr(c, "id") else c for c in ids], decisores_por_empresa=d, provider=prov, agora=agora, **dados)
 
 
 def confirmar(db, solic, p, prov, chave="chave-de-teste-1", agora=None):
     return pesquisa.confirmar(db, solicitante=solic, pesquisa_id=p.id, selecao_hash=p.selecao_hash, idempotency_key=chave, provider=prov, agora=agora)
 
 
-def rodar(db, graph, solic, ids, prov, d=None, chave="chave-de-teste-1"):
-    p = previa(db, solic, ids, prov, d)
+def rodar(db, graph, solic, ids, prov, d=None, chave="chave-de-teste-1", **dados):
+    p = previa(db, solic, ids, prov, d, **dados)
     p = confirmar(db, solic, p, prov, chave)
     return execucao.executar(db, tenant_id=solic.tenant_id, pesquisa_id=p.id, provider=prov, graph=graph, ator_id=str(solic.id))
 
@@ -470,7 +470,7 @@ def test_previa_mostra_estimativa_por_categoria_incertezas_e_nao_reserva_nem_cha
 def test_estimativa_com_as_tarifas_da_lusha_busca_email_e_telefone(client, db_session):
     """Tarifas publicadas pela Lusha: e-mail 1, telefone 5; a busca cobra por resultado devolvido (página inteira)."""
     cenario(db_session, franquia=1000, maximo=5, busca=1, email=1, telefone=5, revelar_telefones=True, pagina=10)
-    p = previa(db_session, eu(db_session), contas(db_session, 2), ProvedorPago(), d=2)
+    p = previa(db_session, eu(db_session), contas(db_session, 2), ProvedorPago(), d=2, revelar_telefones=True)
     e = p.estimativa
     # por empresa: 10 resultados × 1 (busca) + 2 contatos × (1 + 5) = 22; duas empresas = 44
     assert e["creditos_provedor_maximos"] == 44 and e["creditos_maximos"] == 44
@@ -540,7 +540,7 @@ def test_decisores_obtidos_entre_a_previa_e_a_confirmacao_invalidam_a_estimativa
     cenario(db_session)
     prov, solic, cs = ProvedorPago(), eu(db_session), contas(db_session, 1)
     p = previa(db_session, solic, cs, prov)
-    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já veio", origem="lusha"))
+    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já veio", email="x@exemplo.com.br", origem="lusha"))
     db_session.commit()
     esperar_bloqueio("estimativa_desatualizada", lambda: confirmar(db_session, solic, p, prov))
 
@@ -578,7 +578,7 @@ def test_fluxo_feliz_reserva_o_teto_consome_o_medido_e_grava_decisores(client, d
 def test_o_debito_e_o_consumo_medido_pelo_provedor_e_nao_o_numero_de_contatos(client, db_session, fake_graph):
     """2 contatos revelados mas o provedor mediu 5 créditos (e-mail + telefone): cobra 5, não 2."""
     cenario(db_session, franquia=20, busca=0, email=1, telefone=5, revelar_telefones=True)  # teto da empresa: 2 × 6 = 12
-    p = rodar(db_session, fake_graph, eu(db_session), contas(db_session, 1), ProvedorPago([ok(2, medido=5)]))
+    p = rodar(db_session, fake_graph, eu(db_session), contas(db_session, 1), ProvedorPago([ok(2, medido=5)]), revelar_telefones=True)
     assert p.estado == "concluida" and (p.provedor_reservados, p.provedor_consumidos, p.creditos_consumidos) == (12, 5, 5)
     assert ledger.disponivel(db_session, A) == 15 and "LIBERACAO" in tipos(db_session)
     invariantes(db_session)
@@ -816,7 +816,7 @@ def test_duplicidade_na_selecao_e_decisores_ja_obtidos_ficam_fora_da_consulta(cl
     prov, solic = ProvedorPago(), eu(db_session)
     a, b, c = contas(db_session, 3)
     b.cnpj = a.cnpj  # a mesma empresa duas vezes (CNPJ repetido)
-    db_session.add_all([Decisor(tenant_id=A, conta_id=c.id, nome="Pessoa X", origem="lusha"), Decisor(tenant_id=A, conta_id=c.id, nome="Pessoa Y", origem="lusha")])
+    db_session.add_all([Decisor(tenant_id=A, conta_id=c.id, nome="Pessoa X", email="x@exemplo.com.br", origem="lusha"), Decisor(tenant_id=A, conta_id=c.id, nome="Pessoa Y", email="x@exemplo.com.br", origem="lusha")])
     db_session.commit()
     p = previa(db_session, solic, [a, b, c], prov)
     assert p.total_maximo == 2 and p.estimativa["empresas_deduplicadas"] == 2
@@ -832,7 +832,7 @@ def test_duplicidade_na_selecao_e_decisores_ja_obtidos_ficam_fora_da_consulta(cl
 def test_so_o_que_falta_e_pedido_ao_provedor(client, db_session, fake_graph):
     cenario(db_session, franquia=20, padrao=3)
     prov, cs = ProvedorPago(), contas(db_session, 1)
-    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já tenho", origem="lusha"))
+    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já tenho", email="x@exemplo.com.br", origem="lusha"))
     db_session.commit()
     p = rodar(db_session, fake_graph, eu(db_session), cs, prov)
     assert prov.chamadas[0].limite_contatos == 2 and p.creditos_reservados == 2
@@ -841,7 +841,7 @@ def test_so_o_que_falta_e_pedido_ao_provedor(client, db_session, fake_graph):
 def test_nada_a_consultar_conclui_sem_reservar(client, db_session, fake_graph):
     cenario(db_session, franquia=20, padrao=1)
     prov, cs, solic = ProvedorPago(), contas(db_session, 1), eu(db_session)
-    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já tenho", origem="lusha"))
+    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já tenho", email="x@exemplo.com.br", origem="lusha"))
     db_session.commit()
     p = confirmar(db_session, solic, previa(db_session, solic, cs, prov), prov)
     assert p.estado == "concluida" and "RESERVA" not in tipos(db_session) and prov.chamadas == []
@@ -1241,3 +1241,93 @@ def test_precisao_decimal_de_ponta_a_ponta(client, db_session, fake_graph):
     rodar(db_session, fake_graph, eu(db_session), contas(db_session, 1), ProvedorPago([ok(2, medido=400)]))
     consumo = db_session.query(EnriquecimentoMovimento).filter_by(tipo="CONSUMO").one()
     assert Decimal(str(consumo.custo_total_brl)) == Decimal("269.94") and Decimal(str(consumo.valor_venda_brl)) == precos.valor(400, "1.3497")
+
+
+# ============================================================ dados a revelar escolhidos pelo usuário em cada pesquisa ===================
+
+
+def test_padrao_revela_so_o_email_e_o_provedor_recebe_so_emails(client, db_session, fake_graph):
+    cenario(db_session, franquia=100, telefone=5, revelar_telefones=True)  # a política OFERECE telefone, mas o usuário não marcou
+    prov = ProvedorPago()
+    p = rodar(db_session, fake_graph, eu(db_session), contas(db_session, 1), prov, d=3)
+    assert (p.revelar_emails, p.revelar_telefones) == (True, False) and prov.chamadas[0].revelar == ["emails"]
+    assert p.estimativa["creditos_maximos"] == 3 and p.estimativa["dados_a_revelar"]["rotulo"] == "só e-mail"
+
+
+@pytest.mark.parametrize("emails,telefones,esperado,teto,rotulo", [
+    (True, True, ["emails", "phones"], 2 * (1 + 5), "e-mail e telefone"),
+    (False, True, ["phones"], 2 * 5, "só telefone"),
+    (True, False, ["emails"], 2 * 1, "só e-mail"),
+])
+def test_cada_combinacao_escolhida_vai_ao_provedor_e_define_o_teto_da_reserva(client, db_session, fake_graph, emails, telefones, esperado, teto, rotulo):
+    cenario(db_session, franquia=100, telefone=5, revelar_telefones=True)
+    prov = ProvedorPago()
+    p = rodar(db_session, fake_graph, eu(db_session), contas(db_session, 1), prov, d=2, revelar_emails=emails, revelar_telefones=telefones)
+    assert prov.chamadas[0].revelar == esperado and p.estimativa["creditos_maximos"] == teto and p.estimativa["dados_a_revelar"]["rotulo"] == rotulo
+    assert p.creditos_reservados == 0 or p.estado == "concluida"
+
+
+def test_a_mesma_selecao_com_dados_diferentes_gera_outro_hash(client, db_session):
+    cenario(db_session, franquia=100, telefone=5, revelar_telefones=True)
+    cs, solic, prov = contas(db_session, 1), eu(db_session), ProvedorPago()
+    so_email = previa(db_session, solic, cs, prov, d=2)
+    ambos = previa(db_session, solic, cs, prov, d=2, revelar_telefones=True)
+    assert so_email.selecao_hash != ambos.selecao_hash
+    with pytest.raises(PesquisaBloqueada):  # confirmar a prévia "só e-mail" com o hash da outra seleção é recusado
+        pesquisa.confirmar(db_session, solicitante=solic, pesquisa_id=so_email.id, selecao_hash=ambos.selecao_hash, idempotency_key="chave-de-teste-1", provider=prov)
+
+
+def test_nenhum_dado_marcado_ou_telefone_nao_oferecido_nao_geram_pesquisa(client, db_session):
+    cenario(db_session, franquia=100)  # política sem tarifa de telefone: o provedor não o oferece
+    cs, solic, prov = contas(db_session, 1), eu(db_session), ProvedorPago()
+    with pytest.raises(ValidacaoFalhou, match="ao menos um dado"):
+        previa(db_session, solic, cs, prov, revelar_emails=False, revelar_telefones=False)
+    with pytest.raises(ValidacaoFalhou, match="telefone não está disponível"):
+        previa(db_session, solic, cs, prov, revelar_telefones=True)
+    assert db_session.query(PesquisaDecisores).count() == 0 and prov.chamadas == []
+
+
+def test_decisor_so_com_email_nao_conta_como_obtido_quando_o_usuario_pede_telefone(client, db_session, fake_graph):
+    cenario(db_session, franquia=100, telefone=5, revelar_telefones=True)
+    c = contas(db_session, 1)[0]
+    db_session.add(Decisor(tenant_id=A, conta_id=c.id, nome="Só e-mail", email="a@exemplo.com.br", origem="lusha"))
+    db_session.commit()
+    solic, prov = eu(db_session), ProvedorPago()
+    assert previa(db_session, solic, [c], prov, d=1).estimativa["empresas_a_consultar"] == 0  # e-mail pedido: já tem
+    pedindo_telefone = previa(db_session, solic, [c], prov, d=1, revelar_emails=False, revelar_telefones=True)
+    assert pedindo_telefone.estimativa["empresas_a_consultar"] == 1  # telefone pedido: ainda falta
+
+
+def test_link_do_linkedin_chega_ao_decisor_e_a_contagem_aparece_por_empresa(client, db_session, fake_graph):
+    cenario(db_session, franquia=100)
+    contatos = [ContatoCandidato(nome="Ana Souza", cargo="CEO", email="ana@x.com.br", linkedin_url="https://www.linkedin.com/in/ana", fonte="lusha"),
+                ContatoCandidato(nome="Beto Lima", cargo="CFO", email="beto@x.com.br", fonte="lusha")]
+    resultado = ResultadoBuscaContatos(estado="ok", ids_provedor=["1", "2"], creditos_provedor=2, contatos=contatos)
+    c = contas(db_session, 1)[0]
+    p = rodar(db_session, fake_graph, eu(db_session), [c], ProvedorPago([resultado]), d=2)
+    item = pesquisa.itens_de(db_session, p.id)[0]
+    assert (item.decisores_retornados, item.decisores_com_linkedin) == (2, 1)
+    ana = db_session.query(Decisor).filter_by(conta_id=c.id, nome="Ana Souza").one()
+    assert ana.linkedin_url == "https://www.linkedin.com/in/ana" and ana.canal_provavel == "email"
+
+
+def test_so_telefone_define_o_canal_provavel_como_whatsapp(client, db_session, fake_graph):
+    cenario(db_session, franquia=100, telefone=5, revelar_telefones=True)
+    resultado = ResultadoBuscaContatos(estado="ok", ids_provedor=["1"], creditos_provedor=5,
+                                       contatos=[ContatoCandidato(nome="Carla Dias", cargo="COO", telefone="+5511999990000", fonte="lusha")])
+    c = contas(db_session, 1)[0]
+    rodar(db_session, fake_graph, eu(db_session), [c], ProvedorPago([resultado]), d=1, revelar_emails=False, revelar_telefones=True)
+    assert db_session.query(Decisor).filter_by(conta_id=c.id, nome="Carla Dias").one().canal_provavel == "whatsapp"
+
+
+def test_api_aceita_os_dados_a_revelar_e_o_painel_informa_o_que_cada_dado_custa(client, db_session, prov_api):
+    cenario(db_session, franquia=100, telefone=5, revelar_telefones=True)
+    c = contas(db_session, 1)[0]
+    r = client.post(f"{URL}/previa", json={"conta_ids": [c.id], "decisores_por_empresa": 2, "revelar_emails": True, "revelar_telefones": True})
+    assert r.status_code == 201 and r.json()["estimativa"]["dados_a_revelar"] == {"emails": True, "telefones": True, "rotulo": "e-mail e telefone",
+                                                                                 "creditos_por_decisor": 6}
+    assert client.get(f"{URL}/{r.json()['id']}").json()["dados_a_revelar"] == {"emails": True, "telefones": True}
+    dados = client.get(f"{URL}/painel").json()["dados_a_revelar"]
+    assert dados["emails"] == {"disponivel": True, "creditos_por_decisor": 1} and dados["telefones"] == {"disponivel": True, "creditos_por_decisor": 5}
+    assert "LinkedIn" in dados["linkedin"]
+    assert client.post(f"{URL}/previa", json={"conta_ids": [c.id], "revelar_emails": False, "revelar_telefones": False}).status_code == 422

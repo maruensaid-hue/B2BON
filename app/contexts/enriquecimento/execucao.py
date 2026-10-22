@@ -95,9 +95,12 @@ def _finalizar(db: Session, pesquisa: PesquisaDecisores, ator_id: str | None) ->
     _mudar_estado(db, pesquisa, novo, f"consumidos={pesquisa.creditos_consumidos} reservados={pesquisa.creditos_reservados}", ator_id)
 
 
-def _filtro_da_empresa(db: Session, tenant_id: str, conta: Conta, item: PesquisaDecisoresEmpresa, politica: PoliticaResolvida) -> FiltroContatos:
+def _filtro_da_empresa(db: Session, tenant_id: str, conta: Conta, item: PesquisaDecisoresEmpresa, politica: PoliticaResolvida,
+                       pesquisa: PesquisaDecisores) -> FiltroContatos:
+    # Os dados a revelar são os que o USUÁRIO escolheu nesta pesquisa (já validados contra a política na prévia e na confirmação).
+    revelar = (["emails"] if pesquisa.revelar_emails else []) + (["phones"] if pesquisa.revelar_telefones else [])
     filtro: dict = {"nome_empresa": conta.nome_fantasia or conta.nome, "dominio": conta.dominio, "cnpj": conta.cnpj,
-                    "limite_contatos": item.decisores_solicitados, "tamanho_pagina": politica.tamanho_pagina_busca, "revelar": politica.revelar}
+                    "limite_contatos": item.decisores_solicitados, "tamanho_pagina": politica.tamanho_pagina_busca, "revelar": revelar}
     if conta.lista_prospeccao_id:
         lista = db.query(ListaProspeccao).filter_by(id=conta.lista_prospeccao_id, tenant_id=tenant_id).one_or_none()
         if lista is not None and lista.cargos_alvo:
@@ -145,7 +148,7 @@ def executar(db: Session, *, tenant_id: str, pesquisa_id: str, provider: Contact
             logger.warning("ENRIQUECIMENTO_PAUSA pesquisa=%s apos=%s falhas seguidas; o restante fica pendente", pesquisa.id, seguidas)
             break
         conta = db.query(Conta).filter_by(id=item.conta_id, tenant_id=tenant_id).one()
-        filtro = _filtro_da_empresa(db, tenant_id, conta, item, politica)
+        filtro = _filtro_da_empresa(db, tenant_id, conta, item, politica, pesquisa)
 
         # Reivindicação atômica: só quem trocar `pendente` por `enviado` chama o provedor (duas execuções paralelas nunca enviam a mesma empresa).
         reivindicada = db.query(PesquisaDecisoresEmpresa).filter(
@@ -172,6 +175,7 @@ def executar(db: Session, *, tenant_id: str, pesquisa_id: str, provider: Contact
         if resultado.estado == "ok":
             novos = registrar_candidatos(db, tenant_id, conta, resultado.contatos[: item.decisores_solicitados], graph)
             item.decisores_retornados = len(resultado.contatos)
+            item.decisores_com_linkedin = sum(1 for c in resultado.contatos[: item.decisores_solicitados] if getattr(c, "linkedin_url", None))
             _liquidar_item(db, pesquisa, item, medidos, origem="execucao", motivo=f"medido={medidos}", ator_id=ator_id, agora=agora_item, politica=politica)
             _mudar_estado_item(db, pesquisa, item, "concluido", f"revelados={len(resultado.contatos)} creditos_provedor={medidos}", ator_id)
             atividade_service.registrar(db, tenant_id, conta_id=conta.id, tipo="sistema",

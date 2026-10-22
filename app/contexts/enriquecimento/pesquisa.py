@@ -98,9 +98,10 @@ def _mudar_estado_item(db: Session, pesquisa: PesquisaDecisores, item: PesquisaD
         item.motivo = motivo[:500]
 
 
-def _hash_selecao(tenant_id: str, conta_ids: list[int], decisores: int, config: ConfigResolvida, politica: PoliticaResolvida, provedor: str) -> str:
+def _hash_selecao(tenant_id: str, conta_ids: list[int], decisores: int, config: ConfigResolvida, politica: PoliticaResolvida, provedor: str,
+                  emails: bool = True, telefones: bool = False) -> str:
     base = json.dumps({"t": tenant_id, "c": sorted(conta_ids), "d": decisores, "o": config.origem, "i": config.id, "v": config.versao,
-                       "p": provedor, "pol": politica.id, "polv": politica.versao}, sort_keys=True, separators=(",", ":"))
+                       "p": provedor, "pol": politica.id, "polv": politica.versao, "em": emails, "tel": telefones}, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(base.encode()).hexdigest()
 
 
@@ -181,13 +182,14 @@ def _avaliar_limites(db: Session, tenant_id: str, config: ConfigResolvida, polit
     return bloqueios, contexto
 
 
-def _sugerir_ajustes(config: ConfigResolvida, politica: PoliticaResolvida, contexto: dict, elegiveis: int, decisores: int) -> list[dict]:
+def _sugerir_ajustes(config: ConfigResolvida, politica: PoliticaResolvida, contexto: dict, elegiveis: int, decisores: int, emails: bool = True,
+                     telefones: bool = False) -> list[dict]:
     """Alternativas calculadas só com limites, saldos e tarifas aprovadas, em créditos do cliente. Não prometem que cabem (o consumo real é medido
     pelo provedor) e não alteram a escolha do usuário."""
     fator = politica.creditos_cliente_por_credito_provedor
 
     def custo_empresa(d: int) -> int:
-        return politica.creditos_maximos_por_empresa(d) * fator
+        return politica.creditos_maximos_por_empresa(d, emails, telefones) * fator
 
     capacidades = [contexto["disponivel"]]
     if contexto.get("limite_pesquisa") is not None:
@@ -215,18 +217,20 @@ def _sugerir_ajustes(config: ConfigResolvida, politica: PoliticaResolvida, conte
     return sugestoes
 
 
-def _existentes_do_provedor(db: Session, tenant_id: str, conta_ids: list[int], provedor: str) -> dict[int, int]:
-    linhas = (
-        db.query(Decisor.conta_id, func.count(Decisor.id))
-        .filter(Decisor.tenant_id == tenant_id, Decisor.conta_id.in_(conta_ids), Decisor.origem == provedor)
-        .group_by(Decisor.conta_id).all()
-    )
-    return {conta_id: total for conta_id, total in linhas}
+def _existentes_do_provedor(db: Session, tenant_id: str, conta_ids: list[int], provedor: str, emails: bool = True, telefones: bool = False) -> dict[int, int]:
+    """Decisores do provedor que JÁ têm todos os dados pedidos agora: quem veio de uma pesquisa só de e-mail não conta para uma pesquisa que pede telefone."""
+    consulta = db.query(Decisor.conta_id, func.count(Decisor.id)).filter(Decisor.tenant_id == tenant_id, Decisor.conta_id.in_(conta_ids), Decisor.origem == provedor)
+    if emails:
+        consulta = consulta.filter(Decisor.email.isnot(None), Decisor.email != "")
+    if telefones:
+        consulta = consulta.filter(Decisor.telefone.isnot(None), Decisor.telefone != "")
+    return {conta_id: total for conta_id, total in consulta.group_by(Decisor.conta_id).all()}
 
 
-def _plano_de_itens(db: Session, tenant_id: str, contas: list[Conta], decisores: int, provedor: str, politica: PoliticaResolvida) -> list[dict]:
+def _plano_de_itens(db: Session, tenant_id: str, contas: list[Conta], decisores: int, provedor: str, politica: PoliticaResolvida, emails: bool = True,
+                    telefones: bool = False) -> list[dict]:
     """Para cada empresa selecionada: pendente (com o que falta buscar e o teto de créditos do provedor) ou deduplicada (com motivo)."""
-    existentes = _existentes_do_provedor(db, tenant_id, [c.id for c in contas], provedor)
+    existentes = _existentes_do_provedor(db, tenant_id, [c.id for c in contas], provedor, emails, telefones)
     vistas: set[str] = set()
     plano = []
     for conta in contas:
@@ -242,15 +246,19 @@ def _plano_de_itens(db: Session, tenant_id: str, contas: list[Conta], decisores:
             plano.append({"conta": conta, "estado": "deduplicada", "motivo": "decisores_ja_obtidos_do_provedor", "existentes": ja, "buscar": 0, "teto": 0})
         else:
             plano.append({"conta": conta, "estado": "pendente", "motivo": None, "existentes": ja, "buscar": buscar,
-                          "teto": politica.creditos_maximos_por_empresa(buscar)})
+                          "teto": politica.creditos_maximos_por_empresa(buscar, emails, telefones)})
     return plano
 
 
-def _por_categoria(politica: PoliticaResolvida, elegiveis: list[dict]) -> dict:
+def _rotulo_dados(emails: bool, telefones: bool) -> str:
+    return "e-mail e telefone" if emails and telefones else ("só telefone" if telefones else "só e-mail")
+
+
+def _por_categoria(politica: PoliticaResolvida, elegiveis: list[dict], emails: bool = True, telefones: bool = False) -> dict:
     """Teto por categoria e por fonte, em créditos do provedor e do cliente. QSA da Receita e Brasil API não consomem crédito nesta operação."""
     fator = politica.creditos_cliente_por_credito_provedor
     busca = len(elegiveis) * politica.tamanho_pagina_busca * politica.creditos_busca_por_resultado
-    por_contato = (politica.creditos_email if politica.revelar_emails else 0) + (politica.creditos_telefone if politica.revelar_telefones else 0)
+    por_contato = ((politica.creditos_email or 0) if emails else 0) + ((politica.creditos_telefone or 0) if telefones else 0)
     revelacao = sum(p["buscar"] for p in elegiveis) * por_contato
     return {
         "ia": {"creditos": 0, "observacao": "Esta operação não usa IA."},
@@ -264,7 +272,8 @@ def _por_categoria(politica: PoliticaResolvida, elegiveis: list[dict]) -> dict:
 
 
 def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], decisores_por_empresa: int | None,
-            provider: ContactEnrichmentProvider, agora: datetime | None = None) -> PesquisaDecisores:
+            provider: ContactEnrichmentProvider, agora: datetime | None = None, revelar_emails: bool = True,
+            revelar_telefones: bool = False) -> PesquisaDecisores:
     """Cria a PRÉVIA (nada é reservado nem enviado ao provedor). O usuário revê a estimativa e só então confirma essa mesma prévia."""
     agora = agora or agora_utc()
     tenant_id = solicitante.tenant_id
@@ -284,6 +293,11 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
     else:
         decisores, origem = decisores_por_empresa, "informado_usuario"
     _validar_parametros(config, politica, provider, decisores, len(ids_unicos))
+    if not isinstance(revelar_emails, bool) or not isinstance(revelar_telefones, bool):
+        raise ValidacaoFalhou("Escolha os dados a revelar com verdadeiro/falso.")
+    recusa = politica.motivo_de_recusa_dos_dados(revelar_emails, revelar_telefones)
+    if recusa:
+        raise ValidacaoFalhou(recusa)
 
     contas = db.query(Conta).filter(Conta.tenant_id == tenant_id, Conta.id.in_(ids_unicos)).all()
     por_id = {c.id: c for c in contas}
@@ -298,7 +312,7 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
     if abertas >= MAX_PREVIAS_ABERTAS:
         raise ValidacaoFalhou("Há muitas prévias de pesquisa em aberto. Confirme ou cancele algumas antes de criar outra.")
 
-    plano = _plano_de_itens(db, tenant_id, contas_ordenadas, decisores, provider.nome_provedor, politica)
+    plano = _plano_de_itens(db, tenant_id, contas_ordenadas, decisores, provider.nome_provedor, politica, revelar_emails, revelar_telefones)
     elegiveis = [p for p in plano if p["estado"] == "pendente"]
     fator = politica.creditos_cliente_por_credito_provedor
     total_provedor = sum(p["teto"] for p in elegiveis)
@@ -312,7 +326,8 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
     incertezas = [
         f"É um TETO, não uma previsão: no máximo {total_provedor} crédito(s) do provedor ({total_cliente} de enriquecimento). O que se cobra é o "
         "consumo informado pelo próprio provedor em cada consulta, que pode ser menor (por exemplo, dado já revelado antes não é cobrado de novo).",
-        "Não há como saber de antemão quantos contatos o provedor devolverá, nem se terão e-mail e telefone; "
+        "Não há como saber de antemão quantos contatos o provedor devolverá, nem se terão os dados escolhidos "
+        f"({_rotulo_dados(revelar_emails, revelar_telefones)}); o link do perfil no LinkedIn vem junto quando o provedor o informa; "
         f"{solicitados} decisor(es) são pedidos no total e o retorno pode ser menor.",
         "A busca no provedor é cobrada por resultado de uma página inteira, mesmo pedindo poucos decisores.",
         f"O valor em reais é estimativa de apresentação (preço por crédito do provedor ≈ R$ {precos.exibir(politica.preco_unitario_brl, politica.casas_exibicao)}), "
@@ -326,7 +341,10 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
         "creditos_maximos": total_cliente, "creditos_provedor_maximos": total_provedor, "valor_maximo_brl": str(precos.exibir(valor_maximo, politica.casas_exibicao)),
         "preco_credito_provedor_brl": str(precos.exibir(politica.preco_unitario_brl, politica.casas_exibicao)),
         "creditos_cliente_por_credito_provedor": fator, "decisores_solicitados": solicitados,
-        "por_categoria": _por_categoria(politica, elegiveis),
+        "por_categoria": _por_categoria(politica, elegiveis, revelar_emails, revelar_telefones),
+        "dados_a_revelar": {"emails": revelar_emails, "telefones": revelar_telefones, "rotulo": _rotulo_dados(revelar_emails, revelar_telefones),
+                            "creditos_por_decisor": ((politica.creditos_email or 0) if revelar_emails else 0) * fator
+                            + ((politica.creditos_telefone or 0) if revelar_telefones else 0) * fator},
         "empresas_selecionadas": len(plano), "empresas_a_consultar": len(elegiveis),
         "empresas_deduplicadas": deduplicadas, "decisores_por_empresa": decisores, "origem_decisores": origem,
         "disponivel": contexto["disponivel"], "limite_periodo_restante": contexto.get("periodo_restante"),
@@ -337,15 +355,16 @@ def estimar(db: Session, *, solicitante: Solicitante, conta_ids: list[int], deci
         "uso_no_periodo": contexto["uso_periodo"],
         "config": {"origem": config.origem, "versao": config.versao}, "politica": {"versao": politica.versao},
         "viavel": not bloqueios, "bloqueios": bloqueios,
-        "ajustes_sugeridos": [] if not bloqueios else _sugerir_ajustes(config, politica, contexto, len(elegiveis), decisores),
+        "ajustes_sugeridos": [] if not bloqueios else _sugerir_ajustes(config, politica, contexto, len(elegiveis), decisores, revelar_emails, revelar_telefones),
         "nota_ajustes": "Sugestões calculadas com os limites, saldos e tarifas de agora; não são promessa e serão revalidadas. Sua escolha não foi alterada.",
         "incertezas": incertezas,
     }
     pesquisa = PesquisaDecisores(
         id=uuid.uuid4().hex, tenant_id=tenant_id, usuario_id=solicitante.id, provedor=provider.nome_provedor, estado="criada",
-        decisores_por_empresa=decisores, origem_decisores=origem, config_origem=config.origem, config_id=config.id,
+        decisores_por_empresa=decisores, origem_decisores=origem, revelar_emails=revelar_emails, revelar_telefones=revelar_telefones,
+        config_origem=config.origem, config_id=config.id,
         config_versao=config.versao, total_empresas=len(plano), total_maximo=total_cliente, provedor_reservados=0, politica_id=politica.id,
-        estimativa=estimativa, selecao_hash=_hash_selecao(tenant_id, ids_unicos, decisores, config, politica, provider.nome_provedor),
+        estimativa=estimativa, selecao_hash=_hash_selecao(tenant_id, ids_unicos, decisores, config, politica, provider.nome_provedor, revelar_emails, revelar_telefones),
         previa_expira_em=agora + timedelta(minutes=settings.enriquecimento_previa_validade_min),
     )
     db.add(pesquisa)
@@ -448,7 +467,11 @@ def _validar_e_reservar(db: Session, solicitante: Solicitante, pesquisa: Pesquis
     contas = {c.id: c for c in db.query(Conta).filter(Conta.tenant_id == pesquisa.tenant_id, Conta.id.in_([i.conta_id for i in itens])).all()}
     if len(contas) != len(itens):
         raise PesquisaBloqueada("Alguma empresa da seleção não está mais disponível. Crie uma nova prévia.", "estimativa_desatualizada")
-    plano = _plano_de_itens(db, tenant_id, [contas[i.conta_id] for i in itens], pesquisa.decisores_por_empresa, provider.nome_provedor, politica)
+    recusa = politica.motivo_de_recusa_dos_dados(pesquisa.revelar_emails, pesquisa.revelar_telefones)
+    if recusa:
+        raise PesquisaBloqueada(recusa + " Crie uma nova prévia.", "estimativa_desatualizada")
+    plano = _plano_de_itens(db, tenant_id, [contas[i.conta_id] for i in itens], pesquisa.decisores_por_empresa, provider.nome_provedor, politica,
+                            pesquisa.revelar_emails, pesquisa.revelar_telefones)
     atual = {p["conta"].id: p for p in plano}
     if {i.conta_id: i.decisores_solicitados for i in itens} != {cid: p["buscar"] for cid, p in atual.items()}:
         raise PesquisaBloqueada("Os decisores já obtidos mudaram desde a prévia. Crie uma nova prévia para ver a estimativa certa.",

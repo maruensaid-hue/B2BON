@@ -27,9 +27,9 @@ logger = logging.getLogger("b2bon.enriquecimento")
 ATOR_SISTEMA = "sistema:politica-do-provedor"
 # Nomes das ações em `pricing` de `GET /v3/account/usage` (docs.lusha.com): busca de contatos, revelação de e-mail e de telefone.
 ACAO_BUSCA, ACAO_EMAIL, ACAO_TELEFONE = "api_search", "revealEmail", "revealPhone"
-# Dados revelados pela pesquisa: só e-mail. A matriz de franquias (ex.: 30 créditos para até 5 decisores por empresa) só fecha com ~1 crédito por contato,
-# e o telefone custa 5. O administrador pode publicar uma política que também revele telefones.
-REVELAR_EMAILS, REVELAR_TELEFONES = True, False
+# A política guarda o que o provedor OFERECE (e-mail sempre; telefone quando a Lusha informa a tarifa). Quem escolhe o que revelar em cada pesquisa é o
+# USUÁRIO (padrão: só e-mail), de acordo com os créditos que tem.
+REVELAR_EMAILS = True
 
 
 def _leitura(provider: ContactEnrichmentProvider):
@@ -126,7 +126,7 @@ def _creditos_por_unidade(tarifas: dict, acao: str) -> int | None:
 
 def _igual(vigente, alvo: dict) -> bool:
     return (vigente.creditos_busca_por_resultado == alvo["busca"] and vigente.creditos_email == alvo["email"] and vigente.creditos_telefone == alvo["telefone"]
-            and vigente.revelar_emails == REVELAR_EMAILS and vigente.revelar_telefones == REVELAR_TELEFONES
+            and vigente.revelar_emails == REVELAR_EMAILS and vigente.revelar_telefones == (alvo["telefone"] is not None)
             and vigente.tamanho_pagina_busca == alvo["pagina"] and vigente.creditos_cliente_por_credito_provedor == 1
             and vigente.markup_percentual == alvo["markup"] and vigente.custo_unitario_brl == alvo["custo"])
 
@@ -162,7 +162,7 @@ def sincronizar_politica(db: Session, provider: ContactEnrichmentProvider, *, at
         return {"alterada": False, "politica_id": vigente.id, "versao": vigente.versao, "tarifas": {"busca": busca, "email": email, "telefone": telefone}}
     nova = config.definir_politica(
         db, provedor=nome, creditos_busca_por_resultado=busca, creditos_email=email, creditos_telefone=telefone, revelar_emails=REVELAR_EMAILS,
-        revelar_telefones=REVELAR_TELEFONES, tamanho_pagina_busca=alvo["pagina"], creditos_cliente_por_credito_provedor=1, markup_percentual=alvo["markup"],
+        revelar_telefones=telefone is not None, tamanho_pagina_busca=alvo["pagina"], creditos_cliente_por_credito_provedor=1, markup_percentual=alvo["markup"],
         metodo_custo="contrato_mensal", lote_compra_id=None, casas_exibicao=2, fonte_tarifas="provedor_usage", ator_id=ator_id, tenant_auditoria=tenant_auditoria,
         motivo=f"Sincronização com as tarifas informadas pelo provedor; preço de referência: pacote {referencia.codigo}",
         tamanho_pagina_minimo=provider.tamanho_pagina_minimo, tamanho_pagina_maximo=provider.max_contatos_por_consulta, aprovar=True)

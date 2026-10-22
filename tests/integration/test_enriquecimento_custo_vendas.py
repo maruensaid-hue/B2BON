@@ -535,7 +535,7 @@ def test_politica_nasce_das_tarifas_que_a_lusha_informa_sem_aprovacao_manual(cli
     politica, motivo = config.politica_vigente(db_session, "lusha")
     assert motivo is None and politica.utilizavel
     assert (politica.creditos_busca_por_resultado, politica.creditos_email, politica.creditos_telefone) == (1, 1, 5)
-    assert (politica.revelar_emails, politica.revelar_telefones, politica.tamanho_pagina_busca, politica.creditos_cliente_por_credito_provedor) == (True, False, 10, 1)
+    assert (politica.revelar_emails, politica.revelar_telefones, politica.tamanho_pagina_busca, politica.creditos_cliente_por_credito_provedor) == (True, True, 10, 1)  # telefone: oferecido (a Lusha informa a tarifa); quem o revela é o usuário, por pesquisa
     assert precos.exibir(politica.custo_unitario_brl, 9) == Decimal("0.529411765")  # custo contratual
     assert precos.exibir(politica.markup_percentual, 1) == Decimal("155.0")  # o preço de referência é o menor pacote (R$ 1,35)
     assert precos.exibir(politica.preco_unitario_brl, 2) == Decimal("1.35")

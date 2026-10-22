@@ -38,7 +38,8 @@ from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 def serializar_pesquisa(db: Session, pesquisa: PesquisaDecisores, *, com_itens: bool = False, com_transicoes: bool = False) -> dict:
     dados = {
         "id": pesquisa.id, "estado": pesquisa.estado, "provedor": pesquisa.provedor, "decisores_por_empresa": pesquisa.decisores_por_empresa,
-        "origem_decisores": pesquisa.origem_decisores, "total_empresas": pesquisa.total_empresas, "total_maximo": pesquisa.total_maximo,
+        "origem_decisores": pesquisa.origem_decisores, "dados_a_revelar": {"emails": pesquisa.revelar_emails, "telefones": pesquisa.revelar_telefones},
+        "total_empresas": pesquisa.total_empresas, "total_maximo": pesquisa.total_maximo,
         "creditos_reservados": pesquisa.creditos_reservados, "creditos_consumidos": pesquisa.creditos_consumidos,
         "provedor_reservados": pesquisa.provedor_reservados, "provedor_consumidos": pesquisa.provedor_consumidos,
         "requer_reconciliacao": pesquisa.requer_reconciliacao, "selecao_hash": pesquisa.selecao_hash,
@@ -53,7 +54,7 @@ def serializar_pesquisa(db: Session, pesquisa: PesquisaDecisores, *, com_itens: 
         dados["itens"] = [{
             "id": i.id, "conta_id": i.conta_id, "conta_nome": nomes.get(i.conta_id), "estado": i.estado, "motivo": i.motivo,
             "decisores_existentes": i.decisores_existentes, "decisores_solicitados": i.decisores_solicitados,
-            "decisores_retornados": i.decisores_retornados, "creditos_reservados": i.creditos_reservados,
+            "decisores_retornados": i.decisores_retornados, "decisores_com_linkedin": i.decisores_com_linkedin, "creditos_reservados": i.creditos_reservados,
             "creditos_consumidos": i.creditos_consumidos, "provedor_reservados": i.provedor_reservados, "provedor_medidos": i.provedor_medidos,
             "tentativas": i.tentativas,
         } for i in itens]
@@ -75,6 +76,20 @@ def _resumo_config(config, motivo: str | None) -> dict:
         "limite_creditos_pesquisa": config.limite_creditos_pesquisa, "limite_pesquisas_periodo": config.limite_pesquisas_periodo,
         "limite_empresas_periodo": config.limite_empresas_periodo, "limite_contatos_periodo": config.limite_contatos_periodo,
         "orientacao": None if config.utilizavel else "Configuração incompleta: fale com o comercial.",
+    }
+
+
+def _dados_a_revelar(db: Session, provider: ContactEnrichmentProvider) -> dict | None:
+    """O que o usuário pode escolher revelar e quanto cada dado custa por decisor, em créditos de enriquecimento (tarifa do provedor × fator). Sem política
+    publicada ainda: None (a tela deixa escolher e o servidor valida)."""
+    politica, _ = politica_vigente(db, provider.nome_provedor)
+    if politica is None or not politica.utilizavel:
+        return None
+    fator = politica.creditos_cliente_por_credito_provedor
+    return {
+        "emails": {"disponivel": politica.motivo_de_recusa_dos_dados(True, False) is None, "creditos_por_decisor": (politica.creditos_email or 0) * fator},
+        "telefones": {"disponivel": politica.motivo_de_recusa_dos_dados(False, True) is None, "creditos_por_decisor": (politica.creditos_telefone or 0) * fator},
+        "linkedin": "O link do perfil no LinkedIn acompanha todo decisor encontrado, sem crédito extra, quando o provedor o informa.",
     }
 
 
@@ -133,6 +148,7 @@ def painel_tenant(db: Session, solicitante: Solicitante, provider: ContactEnrich
         "composicao": {**ledger.composicao(db, tenant_id, agora), "expira_em": fim_do_mes(agora).isoformat(), "acumula": False},
         "uso_no_periodo": uso_do_periodo(db, tenant_id, agora),
         "compra_adicional": {"disponivel": not motivos, "motivos": motivos},
+        "dados_a_revelar": _dados_a_revelar(db, provider),
         "uso_por_fonte": ledger.uso_por_fonte(db, tenant_id, periodo),
         "pesquisas_por_estado": por_estado,
         "estimado_vs_reconciliado": {"estimado_maximo": int(estimado), "consumido": int(consumido_pesquisas)},

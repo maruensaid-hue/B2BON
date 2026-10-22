@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Pesquisar decisores: você escolhe o que revelar (2026-10-22, D-098)
+
+- No menu "Pesquisar decisores" há agora caixas de seleção para revelar **e-mail** (marcada por padrão), **telefone** ou os dois. A estimativa mostra quanto cada dado custa por decisor e o teto da pesquisa, e cada usuário escolhe de acordo com os créditos que tem.
+- O link do perfil no LinkedIn acompanha todo decisor encontrado, sem crédito extra, quando o provedor o informa; o resultado mostra quantos decisores de cada empresa vieram com o link.
+- Quem já foi obtido só com e-mail não impede uma nova pesquisa que peça telefone.
+
 ## Créditos de enriquecimento: custo do provedor, nota fiscal e estorno manual (2026-10-21, D-096 e D-097)
 
 - Custo da Lusha no sistema: USD 600/mês, 81.600 créditos/ano e câmbio de planejamento de R$ 6,00. O administrador registra os pagamentos reais ao provedor (dólar, câmbio efetivo e encargos) e vê o custo por crédito de fato consumido e a ociosidade.

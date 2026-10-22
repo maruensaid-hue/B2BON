@@ -376,11 +376,24 @@ class PoliticaResolvida:
     def revelar(self) -> list[str]:
         return (["emails"] if self.revelar_emails else []) + (["phones"] if self.revelar_telefones else [])
 
-    def creditos_maximos_por_empresa(self, decisores: int) -> int:
+    def motivo_de_recusa_dos_dados(self, emails: bool, telefones: bool) -> str | None:
+        """Por que a combinação de dados a revelar escolhida não pode ser usada (None = pode). A escolha é do usuário; a política diz o que o provedor
+        oferece e quanto cada dado custa."""
+        if not (emails or telefones):
+            return "Escolha ao menos um dado a revelar: e-mail, telefone ou os dois."
+        if emails and not (self.revelar_emails and self.creditos_email is not None):
+            return "A revelação de e-mail não está disponível na política do provedor."
+        if telefones and not (self.revelar_telefones and self.creditos_telefone is not None):
+            return "A revelação de telefone não está disponível na política do provedor."
+        return None
+
+    def creditos_maximos_por_empresa(self, decisores: int, emails: bool | None = None, telefones: bool | None = None) -> int:
         """Teto de créditos DO PROVEDOR para consultar uma empresa pedindo `decisores`: a busca devolve até uma página inteira (cobrada por
         resultado) e a revelação cobra, por contato, a tarifa de cada dado a revelar. É um teto, não uma previsão: o consumo real vem da
         medição do provedor."""
-        por_contato = (self.creditos_email if self.revelar_emails else 0) + (self.creditos_telefone if self.revelar_telefones else 0)
+        emails = self.revelar_emails if emails is None else emails
+        telefones = self.revelar_telefones if telefones is None else telefones
+        por_contato = ((self.creditos_email or 0) if emails else 0) + ((self.creditos_telefone or 0) if telefones else 0)
         return self.tamanho_pagina_busca * self.creditos_busca_por_resultado + decisores * por_contato
 
 

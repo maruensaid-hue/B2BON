@@ -29,6 +29,7 @@ interface Estimativa {
   valor_maximo_brl: string;
   preco_credito_provedor_brl: string;
   decisores_solicitados: number;
+  dados_a_revelar: { emails: boolean; telefones: boolean; rotulo: string; creditos_por_decisor: number };
   por_categoria: {
     ia: { creditos: number; observacao: string };
     enriquecimento: { lusha_busca: CategoriaFonte; lusha_revelacao: CategoriaFonte; receita_qsa: CategoriaFonte; brasilapi: CategoriaFonte };
@@ -65,6 +66,7 @@ interface ItemPesquisa {
   motivo: string | null;
   decisores_solicitados: number;
   decisores_retornados: number;
+  decisores_com_linkedin: number | null;
   creditos_reservados: number;
   creditos_consumidos: number;
   provedor_medidos: number | null;
@@ -96,6 +98,11 @@ interface PainelResumo {
   };
   lusha: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
   composicao?: { franquia_restante: number; adicional_restante: number; expira_em: string };
+  dados_a_revelar?: {
+    emails: { disponivel: boolean; creditos_por_decisor: number };
+    telefones: { disponivel: boolean; creditos_por_decisor: number };
+    linkedin: string;
+  } | null;
 }
 
 const ROTULO_AJUSTE: Record<Ajuste["tipo"], string> = {
@@ -131,6 +138,9 @@ interface Props {
 export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props) {
   const [painel, setPainel] = useState<PainelResumo | null>(null);
   const [valor, setValor] = useState("");
+  // Dados a revelar em CADA pesquisa (escolha do usuário, conforme os créditos que tem): e-mail marcado por padrão. O link do LinkedIn acompanha sempre.
+  const [revelarEmails, setRevelarEmails] = useState(true);
+  const [revelarTelefones, setRevelarTelefones] = useState(false);
   const [pesquisa, setPesquisa] = useState<Pesquisa | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -173,13 +183,21 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
   const liberado = lusha === undefined ? plano?.disponivel !== false : lusha.disponivel;
   // Sem padrão no plano, o número de decisores é escolha obrigatória do usuário (nunca é assumido em silêncio).
   const semPadrao = plano !== undefined && !plano.decisores_por_empresa_padrao;
+  const dadosPainel = painel?.dados_a_revelar ?? null;
+  const telefoneIndisponivel = dadosPainel !== null && !dadosPainel.telefones.disponivel;
+  const nenhumDado = !revelarEmails && !revelarTelefones;
+  const porDecisor = (revelarEmails ? (dadosPainel?.emails.creditos_por_decisor ?? 0) : 0) + (revelarTelefones ? (dadosPainel?.telefones.creditos_por_decisor ?? 0) : 0);
   const opcoes = Array.from({ length: Math.min(plano?.decisores_por_empresa_max ?? 10, 50) }, (_, i) => i + 1);
 
   async function revisar() {
     setCarregando(true);
     setErro(null);
     try {
-      const corpo: { conta_ids: number[]; decisores_por_empresa?: number } = { conta_ids: contaIds };
+      const corpo: { conta_ids: number[]; decisores_por_empresa?: number; revelar_emails: boolean; revelar_telefones: boolean } = {
+        conta_ids: contaIds,
+        revelar_emails: revelarEmails,
+        revelar_telefones: revelarTelefones,
+      };
       if (valor.trim() !== "") corpo.decisores_por_empresa = Number(valor);
       const criada = await api.post<Pesquisa>("/pesquisas-decisores/previa", corpo);
       chave.current = crypto.randomUUID();
@@ -290,12 +308,47 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
               </p>
               {plano?.modo === "poc_autorizada" && <p className="mt-1 text-[10.5px] text-muted">POC: 1 decisor por empresa, dentro do orçamento autorizado para a sua operação.</p>}
             </div>
+            <fieldset className="rounded-md bg-surf2 p-2">
+              <legend className="px-1 text-[10px] tracking-wide text-muted uppercase">Dados a revelar de cada decisor</legend>
+              <label className="flex cursor-pointer items-start gap-2 py-0.5">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={revelarEmails}
+                  onChange={(ev) => setRevelarEmails(ev.target.checked)}
+                />
+                <span>
+                  <span className="font-semibold">E-mail</span>
+                  {dadosPainel && <span className="text-muted"> · {dadosPainel.emails.creditos_por_decisor} crédito(s) por decisor</span>}
+                </span>
+              </label>
+              <label className={`flex items-start gap-2 py-0.5 ${telefoneIndisponivel ? "opacity-60" : "cursor-pointer"}`}>
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={revelarTelefones && !telefoneIndisponivel}
+                  disabled={telefoneIndisponivel}
+                  onChange={(ev) => setRevelarTelefones(ev.target.checked)}
+                />
+                <span>
+                  <span className="font-semibold">Telefone</span>
+                  {dadosPainel && !telefoneIndisponivel && <span className="text-muted"> · {dadosPainel.telefones.creditos_por_decisor} crédito(s) por decisor</span>}
+                  {telefoneIndisponivel && <span className="text-muted"> · indisponível: o provedor não informou a tarifa</span>}
+                </span>
+              </label>
+              <p className="mt-1 text-[10.5px] text-muted">
+                O link do perfil no LinkedIn vem junto com todo decisor encontrado, sem crédito extra, sempre que o provedor o informa.
+                {dadosPainel && porDecisor > 0 ? ` Com esta escolha, cada decisor custa até ${porDecisor} crédito(s), além da busca da empresa.` : ""} Escolha conforme os créditos que
+                você tem: dá para gastar toda a franquia em uma única empresa ou pesquisar o máximo de decisores só com o e-mail.
+              </p>
+              {nenhumDado && <p className="mt-1 text-red">Marque ao menos um dado: e-mail ou telefone.</p>}
+            </fieldset>
             {erro && <p className="text-red">{erro}</p>}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={onClose}>
                 Fechar
               </Button>
-              <Button size="sm" disabled={carregando || !liberado || (semPadrao && valor === "")} onClick={revisar}>
+              <Button size="sm" disabled={carregando || !liberado || nenhumDado || (semPadrao && valor === "")} onClick={revisar}>
                 {carregando ? "Calculando..." : "Revisar estimativa"}
               </Button>
             </div>
@@ -316,6 +369,7 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
               <Resumo rotulo="Máx. de decisores por empresa" valor={String(e.limites.decisores_por_empresa_max)} />
               <Resumo rotulo="Valor máximo estimado" valor={`R$ ${e.valor_maximo_brl.replace(".", ",")}`} />
               <Resumo rotulo="Decisores pedidos" valor={String(e.decisores_solicitados)} />
+              <Resumo rotulo="Dados a revelar" valor={`${e.dados_a_revelar.rotulo} + LinkedIn`} />
             </div>
             <div className="rounded-md bg-surf2 p-2 text-[11px] text-muted">
               <p className="mb-0.5 font-semibold text-text">Teto por categoria (créditos do provedor)</p>
@@ -411,7 +465,9 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
                       <Badge tone={TOM_ITEM[i.estado] ?? "muted"}>{i.estado}</Badge>
                     </td>
                     <td className="p-1.5 text-right text-muted">
-                      {i.decisores_retornados} decisor(es){i.provedor_medidos !== null ? ` · ${i.provedor_medidos} crédito(s) do provedor` : ""}
+                      {i.decisores_retornados} decisor(es)
+                      {i.decisores_com_linkedin !== null && i.decisores_retornados > 0 ? ` · ${i.decisores_com_linkedin} com LinkedIn` : ""}
+                      {i.provedor_medidos !== null ? ` · ${i.provedor_medidos} crédito(s) do provedor` : ""}
                     </td>
                   </tr>
                 ))}

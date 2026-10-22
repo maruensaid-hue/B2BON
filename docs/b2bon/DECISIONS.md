@@ -1497,3 +1497,12 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Bloqueio só técnico e descrito**: sem credencial da Lusha, ou sem a tarifa da busca/e-mail em `pricing` (ou com fração), a pesquisa não monta teto confiável e a mensagem diz exatamente o quê. Não há aprovação a pedir.
 - **Nota fiscal**: auditado o fluxo de compra de créditos de IA — não há emissor, nota nem conciliação fiscal em nenhum fluxo de pagamento. A venda de pacotes usa o **mesmo pagamento, webhook e idempotência**, **não é bloqueada** pela nota, que fica "a emitir" (nunca simulada) até existir um emissor real; a porta `FiscalProvider` permanece como extensão opcional. Conciliação financeira (inclui crédito no razão × pedido) separada da fiscal.
 - **Status**: ACEITA no staging. Sem promoção a master. Ver `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md` §20.
+
+
+## D-098 · 2026-10-22 · Dados a revelar escolhidos pelo usuário em cada pesquisa de decisores
+
+- **Pedido do PO**: caixas de seleção no menu "Pesquisar decisores" para revelar só e-mail (marcado por padrão), só telefone ou os dois, deixando cada usuário decidir conforme seus créditos, com o link do LinkedIn sempre junto.
+- **Decisão**: as flags de revelação saem da política (antes, constante `REVELAR_EMAILS`/`REVELAR_TELEFONES`) e passam a ser **por pesquisa**, persistidas, no `selecao_hash`, no teto de reserva, na deduplicação e no `reveal` enviado à Lusha. A política passa a declarar apenas capacidades: e-mail sempre; telefone quando a Lusha informa a tarifa.
+- **Por quê**: a matriz de franquias só fecha com ~1 crédito por contato (e-mail); o telefone custa 5. Quem tem saldo e precisa de telefone pode pagar por ele, sem depender de o administrador publicar uma política diferente para todos.
+- **Consequência**: a deduplicação ficou por dado (decisor só com e-mail não dispensa pesquisa de telefone). LinkedIn: sem crédito extra, depende de a Lusha devolver o link; contado por empresa.
+- **Status**: ACEITA no staging. Sem promoção a master. Ver `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md` §21.

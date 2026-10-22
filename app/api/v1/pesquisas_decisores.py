@@ -39,6 +39,8 @@ class PreviaRequest(BaseModel):
 
     conta_ids: list[int] = Field(min_length=1, max_length=500)
     decisores_por_empresa: int | None = Field(default=None, ge=1, le=1000)
+    revelar_emails: bool = True  # padrão: só e-mail
+    revelar_telefones: bool = False
 
 
 class ConfirmarRequest(BaseModel):
@@ -86,7 +88,8 @@ def criar_previa(dados: PreviaRequest, usuario: Usuario = Depends(get_usuario_at
     for conta_id in dict.fromkeys(dados.conta_ids):
         exigir_escopo_conta_usuario(conta_id, usuario.tenant_id, usuario, db)  # vendedor só seleciona o que enxerga
     criada = pesquisa.estimar(db, solicitante=_solicitante(usuario), conta_ids=dados.conta_ids,
-                              decisores_por_empresa=dados.decisores_por_empresa, provider=provider)
+                              decisores_por_empresa=dados.decisores_por_empresa, provider=provider, revelar_emails=dados.revelar_emails,
+                              revelar_telefones=dados.revelar_telefones)
     return _detalhe(db, criada)
 
 
