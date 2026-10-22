@@ -34,7 +34,7 @@ interface Painel {
     limite_contatos_periodo?: number | null;
     orientacao?: string | null;
   };
-  lusha: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
+  contatos: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
   categorias: { ia: string; enriquecimento: string };
   creditos: {
     disponivel: number;
@@ -121,7 +121,7 @@ interface VisaoAdmin {
 }
 
 const TIPOS = ["", "CONCESSAO", "RENOVACAO", "COMPRA", "RESERVA", "CONSUMO", "LIBERACAO", "ESTORNO", "EXPIRACAO", "AJUSTE", "RECONCILIACAO", "USO"];
-const ROTULO_FONTE: Record<string, string> = { receita_qsa: "QSA da Receita", brasilapi: "Brasil API", lusha: "Lusha" };
+const ROTULO_FONTE: Record<string, string> = { receita_qsa: "QSA da Receita", cadastro_publico: "Dados cadastrais públicos", contatos: "Decisores" };
 
 const NIVEL_TOM: Record<string, "green" | "amber" | "red" | "muted"> = { ok: "green", alerta: "amber", esgotado: "red", nao_configurado: "red" };
 const NIVEL_ROTULO: Record<string, string> = {
@@ -167,7 +167,7 @@ export function CreditosEnriquecimento() {
   }, [gestor, tipo]);
 
   function carregarAdmin() {
-    api.get<VisaoAdmin>("/admin/enriquecimento/orcamento-global?provedor=lusha").then(setAdmin).catch(() => setAdmin(null));
+    api.get<VisaoAdmin>("/admin/enriquecimento/orcamento-global?provedor=contatos").then(setAdmin).catch(() => setAdmin(null));
   }
   useEffect(() => {
     if (superAdmin) carregarAdmin();
@@ -179,7 +179,7 @@ export function CreditosEnriquecimento() {
     setAviso(null);
     try {
       const nova = await api.put<{ id: number; versao: number }>("/admin/enriquecimento/orcamento-global", {
-        provedor: "lusha",
+        provedor: "contatos",
         limite_creditos: limite.trim() === "" ? null : Number(limite),
         alerta_percentual: 80,
         motivo,
@@ -214,7 +214,7 @@ export function CreditosEnriquecimento() {
     setConciliando(true);
     setAviso(null);
     try {
-      const leitura = await api.post<{ explicacao: string }>("/admin/enriquecimento/provedores/lusha/conciliar", {});
+      const leitura = await api.post<{ explicacao: string }>("/admin/enriquecimento/provedores/contatos/conciliar", {});
       setAviso(leitura.explicacao);
       carregarAdmin();
     } catch (e) {
@@ -238,24 +238,24 @@ export function CreditosEnriquecimento() {
       </div>
 
       <Card>
-        <SectionLabel>Pesquisa de decisores (Lusha)</SectionLabel>
-        {painel.lusha.disponivel ? (
+        <SectionLabel>Pesquisa de decisores</SectionLabel>
+        {painel.contatos.disponivel ? (
           <p className="text-[12px] text-green">Disponível para o seu plano.</p>
         ) : (
           <div className="text-[12px] text-amber">
             <p className="mb-1 font-semibold">Indisponível agora. Motivo:</p>
             <ul className="list-disc space-y-0.5 pl-4">
-              {painel.lusha.motivos.map((m) => (
+              {painel.contatos.motivos.map((m) => (
                 <li key={m.codigo}>{m.mensagem}</li>
               ))}
             </ul>
           </div>
         )}
-        <p className="mt-1 text-[11px] text-muted">O mapeamento de decisores pelo QSA da Receita e o enriquecimento por Brasil API não dependem desta liberação.</p>
+        <p className="mt-1 text-[11px] text-muted">O mapeamento de decisores pelo QSA da Receita e o enriquecimento por dados cadastrais públicos não dependem desta liberação.</p>
       </Card>
 
       {painel.alertas
-        .filter((a) => a.codigo !== "pesquisa_lusha_indisponivel")
+        .filter((a) => a.codigo !== "pesquisa_indisponivel")
         .map((a) => (
           <div key={a.codigo} className="rounded-md bg-surf2 p-2 text-[12px] text-amber">
             {a.mensagem}
@@ -421,7 +421,7 @@ export function CreditosEnriquecimento() {
 
       {superAdmin && admin && (
         <Card>
-          <SectionLabel>Administração — provedor Lusha (visível só ao super administrador)</SectionLabel>
+          <SectionLabel>Administração — provedor de contatos (visível só ao super administrador)</SectionLabel>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px]">
             <Badge tone={NIVEL_TOM[admin.orcamento_global.nivel] ?? "muted"}>{NIVEL_ROTULO[admin.orcamento_global.nivel] ?? admin.orcamento_global.nivel}</Badge>
             {admin.orcamento_global.limite !== null && (
@@ -440,7 +440,7 @@ export function CreditosEnriquecimento() {
               <Item rotulo="Margem bruta s/ venda" valor={`${Number(admin.politica.margem_bruta_percentual)}%`} />
             </dl>
           ) : (
-            <p className="mb-3 text-[12px] text-amber">Política do provedor sem versão aprovada ({admin.politica?.motivo ?? "não configurada"}): a pesquisa Lusha permanece bloqueada.</p>
+            <p className="mb-3 text-[12px] text-amber">Política do provedor sem versão aprovada ({admin.politica?.motivo ?? "não configurada"}): a pesquisa de decisores permanece bloqueada.</p>
           )}
 
           <div className="mb-3 grid grid-cols-1 gap-2 text-[12px] lg:grid-cols-2">

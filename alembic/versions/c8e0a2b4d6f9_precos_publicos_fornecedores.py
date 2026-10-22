@@ -8,8 +8,8 @@
 - Preços públicos verificados em 2026-10-01 (páginas oficiais): Render Scale (workspace) USD 499/mês; Render Web Service
   12 CPU/96 GB USD 1.500/mês; Render Postgres USD 11.000/mês e Key Value USD 1.100/mês (disponíveis, não alocados: o banco é o
   Neon e não há Key Value na arquitetura); Render Persistent Disk USD 0,25/GB-mês (por uso, não alocado); Render Enterprise
-  e Lusha Scale CUSTOM (sem preço); Neon Scale por uso (USD 0,222/CU-hora, USD 0,35/GB-mês; exemplo oficial ≈ USD 1.404 só
-  como benchmark); Lusha Premium USD 399,90/mês (3.400 créditos, 5 assentos) no pool DATA_PROVIDER.
+  e o plano Scale do provedor de contatos CUSTOM (sem preço); Neon Scale por uso (USD 0,222/CU-hora, USD 0,35/GB-mês; exemplo oficial ≈ USD 1.404 só
+  como benchmark); plano Premium do provedor de contatos USD 399,90/mês (3.400 créditos, 5 assentos) no pool DATA_PROVIDER.
 - Pesos de infraestrutura v2: STARTER/DEPARTMENT 1, PROFESSIONAL 2, ENTERPRISE 4, BID_INTELLIGENCE 2, STRATEGIC_SOURCING 4
   (o tier ENTRY passa a STARTER).
 
@@ -32,7 +32,7 @@ depends_on = None
 VERIFICADO = date(2026, 10, 1)
 REVISAO = date(2026, 12, 30)  # revisão trimestral dos preços públicos
 INICIO = date(2026, 10, 1)
-RENDER, NEON, LUSHA = "https://render.com/pricing", "https://neon.com/pricing", "https://www.lusha.com/pricing/"
+RENDER, NEON = "https://render.com/pricing", "https://neon.com/pricing"
 PUBLICO = "OFFICIAL_PUBLIC_PRICING"
 TIERS = {"Bid Intelligence": "BID_INTELLIGENCE", "Strategic Sourcing": "STRATEGIC_SOURCING",
          "Strategic Sourcing Enterprise": "STRATEGIC_SOURCING"}
@@ -80,12 +80,12 @@ COMPONENTES = (
     _componente("NEON", "POSTGRES", "DATABASE", plano_referencia="Scale", modelo="USAGE_BASED", funcao="PRIMARY_DATABASE", url=NEON,
                 unidade="CU-hora / GB-mês", atributos={"precos_unitarios": {"CU_HOUR": 0.222, "GB_MONTH": 0.35}},
                 observacoes="Banco principal (DEPLOY.md). Sem preço mensal fixo: provisionado = Capacity Envelope."),
-    _componente("LUSHA", "SALES_INTELLIGENCE", "DATA_PROVIDER", plano_referencia="Premium", custo=399.90, plano="Premium",
-                contabilizacao="DATA_PROVIDER", metodo="DIRECT", url=LUSHA, unidade="créditos",
+    _componente("CONTATOS_B2B", "SALES_INTELLIGENCE", "DATA_PROVIDER", plano_referencia="Premium", custo=399.90, plano="Premium",
+                contabilizacao="DATA_PROVIDER", metodo="DIRECT", url=None, unidade="créditos",
                 atributos={"creditos_incluidos": 3400, "assentos_incluidos": 5, "preco_referencia_fonte": "PREMIUM_PUBLIC"},
                 observacoes="Maior plano com preço público. Consumo medido por tenant tem prioridade (DIRECT)."),
-    _componente("LUSHA", "SALES_INTELLIGENCE_SCALE", "DATA_PROVIDER", plano_referencia="Scale", modelo="CUSTOM",
-                contabilizacao="DATA_PROVIDER", status="AVAILABLE_NOT_ALLOCATED", provisionado=False, url=LUSHA,
+    _componente("CONTATOS_B2B", "SALES_INTELLIGENCE_SCALE", "DATA_PROVIDER", plano_referencia="Scale", modelo="CUSTOM",
+                contabilizacao="DATA_PROVIDER", status="AVAILABLE_NOT_ALLOCATED", provisionado=False, url=None,
                 atributos={"modelo_comercial": "CUSTOM_ANNUAL_AGREEMENT"},
                 observacoes="Preço sob consulta (contrato anual). Se contratado, entra o valor do contrato com nova vigência."),
 )

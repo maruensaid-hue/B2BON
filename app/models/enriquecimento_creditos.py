@@ -5,7 +5,7 @@ não existe conversão nem compensação entre as duas categorias.
 
 Quatro grandezas ficam separadas (nunca se confundem):
 
-* **crédito do provedor** (Lusha): medido pela própria resposta do provedor (`billing.creditsCharged`), nunca presumido por contato;
+* **crédito do provedor**: medido pela própria resposta do provedor (`billing.creditsCharged`), nunca presumido por contato;
 * **crédito de enriquecimento do cliente**: `créditos do provedor × creditos_cliente_por_credito_provedor` (política aprovada);
 * **custo de aquisição**: lotes de compra (`enriquecimento_lote_compra`), com custo, quantidade, data e referência próprios;
 * **valor de venda**: custo unitário × (1 + markup), em política versionada e aprovada.
@@ -100,7 +100,7 @@ class EnriquecimentoOrcamentoGlobal(Base):
 
 
 class EnriquecimentoLoteCompra(Base):
-    """Lote de compra de créditos do provedor (ex.: R$ 269,94 por 400 créditos Lusha). Registro histórico, append-only: um novo aporte é um novo
+    """Lote de compra de créditos do provedor (ex.: R$ 269,94 por 400 créditos provedor de contatos). Registro histórico, append-only: um novo aporte é um novo
     lote com custo, quantidade, data e referência próprios; nada é sobrescrito."""
 
     __tablename__ = "enriquecimento_lote_compra"
@@ -121,7 +121,7 @@ class EnriquecimentoLoteCompra(Base):
 class EnriquecimentoPoliticaProvedor(Base):
     """Política do provedor (versionada e aprovada): tarifas em créditos do provedor, relação com o crédito do cliente e preço de venda.
 
-    Nada tem valor padrão. Campo obrigatório nulo bloqueia a pesquisa. As tarifas são o que o provedor publica (a Lusha informa o preço por
+    Nada tem valor padrão. Campo obrigatório nulo bloqueia a pesquisa. As tarifas são o que o provedor publica (o provedor de contatos informa o preço por
     ação em `GET /v3/account/usage`); quem aprova confere. `custo_unitario_brl` e `preco_unitario_brl` são fotos calculadas na publicação
     (lote de referência ou média ponderada dos lotes), para o histórico não mudar quando entram novos lotes."""
 
@@ -434,7 +434,7 @@ class EnriquecimentoMovimento(Base):
     custo_total_brl: Mapped[float | None] = mapped_column(Numeric(24, 12), nullable=True)
     valor_venda_brl: Mapped[float | None] = mapped_column(Numeric(24, 12), nullable=True)
     politica_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    fonte: Mapped[str | None] = mapped_column(String, nullable=True, index=True)  # receita_qsa | brasilapi | lusha (uso por fonte)
+    fonte: Mapped[str | None] = mapped_column(String, nullable=True, index=True)  # receita_qsa | cadastro_publico | contatos (uso por fonte)
     provedor: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     periodo: Mapped[str | None] = mapped_column(String, nullable=True)  # AAAA-MM do evento
     pesquisa_id: Mapped[str | None] = mapped_column(ForeignKey("pesquisa_decisores.id"), nullable=True, index=True)

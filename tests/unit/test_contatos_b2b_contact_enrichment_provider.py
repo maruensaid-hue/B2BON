@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from app.providers.contact_enrichment.base import FiltroContatos
-from app.providers.contact_enrichment.lusha import LushaContactEnrichmentProvider
+from app.providers.contact_enrichment.contatos_b2b import ProvedorContatosB2B
 
 
 class _RespostaFalsa:
@@ -65,7 +65,7 @@ def test_busca_encadeia_prospecting_e_enrich_e_mapeia_campos(monkeypatch: pytest
 
     monkeypatch.setattr(httpx, "post", _post_falso)
 
-    provider = LushaContactEnrichmentProvider(api_key="chave-teste")
+    provider = ProvedorContatosB2B(api_key="chave-teste")
     resultado = provider.buscar_contatos(
         FiltroContatos(nome_empresa="Empresa Teste", dominio="empresateste.com.br", cargos_alvo=["CEO", "Diretor"])
     )
@@ -77,7 +77,7 @@ def test_busca_encadeia_prospecting_e_enrich_e_mapeia_campos(monkeypatch: pytest
     assert resultado[0].email == "ana@empresateste.com.br"
     assert resultado[0].telefone == "+5511988887777"
     assert resultado[0].linkedin_url == "https://linkedin.com/in/ana-souza"
-    assert resultado[0].fonte == "lusha"
+    assert resultado[0].fonte == "contatos"
     assert resultado[1].nome == "Carlos Lima"
     assert resultado[1].email is None
     assert resultado[1].telefone is None
@@ -92,7 +92,7 @@ def test_busca_sem_dominio_filtra_por_nome_da_empresa(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(httpx, "post", _post_falso)
 
-    provider = LushaContactEnrichmentProvider(api_key="chave-teste")
+    provider = ProvedorContatosB2B(api_key="chave-teste")
     resultado = provider.buscar_contatos(FiltroContatos(nome_empresa="Empresa Sem Dominio"))
 
     assert resultado == []
@@ -107,7 +107,7 @@ def test_search_sem_resultados_nao_chama_enrich(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(httpx, "post", _post_falso)
 
-    provider = LushaContactEnrichmentProvider(api_key="chave-teste")
+    provider = ProvedorContatosB2B(api_key="chave-teste")
     resultado = provider.buscar_contatos(FiltroContatos(nome_empresa="Empresa Teste"))
 
     assert resultado == []
@@ -124,7 +124,7 @@ def test_contato_com_erro_no_enrich_e_ignorado(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(httpx, "post", _post_falso)
 
-    provider = LushaContactEnrichmentProvider(api_key="chave-teste")
+    provider = ProvedorContatosB2B(api_key="chave-teste")
     resultado = provider.buscar_contatos(FiltroContatos(nome_empresa="Empresa Teste"))
 
     assert resultado == []
@@ -136,7 +136,7 @@ def test_erro_http_na_busca_retorna_lista_vazia(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(httpx, "post", _post_falso)
 
-    provider = LushaContactEnrichmentProvider(api_key="chave-invalida")
+    provider = ProvedorContatosB2B(api_key="chave-invalida")
     resultado = provider.buscar_contatos(FiltroContatos(nome_empresa="Empresa Teste"))
 
     assert resultado == []
@@ -150,7 +150,7 @@ def test_erro_http_no_enrich_retorna_lista_vazia(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(httpx, "post", _post_falso)
 
-    provider = LushaContactEnrichmentProvider(api_key="chave-teste")
+    provider = ProvedorContatosB2B(api_key="chave-teste")
     resultado = provider.buscar_contatos(FiltroContatos(nome_empresa="Empresa Teste"))
 
     assert resultado == []

@@ -48,7 +48,7 @@ class ConfigRequest(BaseModel):
 class CustoRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    provedor: str = Field(default="lusha", min_length=2, max_length=50)
+    provedor: str = Field(default="contatos", min_length=2, max_length=50)
     custo_mensal_usd: str = Field(min_length=1, max_length=20, description="Decimal em texto, ex.: 600")
     creditos_anuais: int = Field(gt=0)
     cambio_planejamento_brl: str = Field(min_length=1, max_length=20, description="Câmbio de PLANEJAMENTO (precificação), decimal em texto, ex.: 6.00")
@@ -58,7 +58,7 @@ class CustoRequest(BaseModel):
 class PagamentoProvedorRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    provedor: str = Field(default="lusha", min_length=2, max_length=50)
+    provedor: str = Field(default="contatos", min_length=2, max_length=50)
     referencia: str = Field(min_length=3, max_length=120)
     periodo: str = Field(pattern=r"^\d{4}-\d{2}$")
     valor_usd: str = Field(min_length=1, max_length=20)
@@ -106,7 +106,7 @@ class PacoteRequest(BaseModel):
 class PocTetoRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    provedor: str = Field(default="lusha", min_length=2, max_length=50)
+    provedor: str = Field(default="contatos", min_length=2, max_length=50)
     empresas: int = Field(gt=0)
     decisores_por_empresa: int = Field(default=1, ge=1)
 
@@ -212,7 +212,7 @@ def _linha_politica(p: EnriquecimentoPoliticaProvedor) -> dict:
 
 @router.get("/planos", dependencies=[_super])
 def situacao_dos_planos(db: Session = Depends(get_db)) -> list[dict]:
-    """Por plano: configuração de enriquecimento aprovada, pendente ou ausente (o que libera ou mantém bloqueada a Lusha para os clientes dele)."""
+    """Por plano: configuração de enriquecimento aprovada, pendente ou ausente (o que libera ou mantém bloqueado o provedor de contatos para os clientes dele)."""
     return painel.planos_status(db)
 
 
@@ -286,7 +286,7 @@ def aprovar_pacote(pacote_id: int, admin: Usuario = Depends(exigir_papel("super_
 
 
 @router.get("/pacotes/rentabilidade", dependencies=[_super])
-def rentabilidade_dos_pacotes(provedor: str = "lusha", db: Session = Depends(get_db)) -> dict:
+def rentabilidade_dos_pacotes(provedor: str = "contatos", db: Session = Depends(get_db)) -> dict:
     """Margem de cada pacote com o custo CONTRATUAL vigente (USD 600 ÷ 6.800 créditos × câmbio de planejamento). Recalculada a cada leitura."""
     return pacotes.rentabilidade(db, provedor)
 
@@ -312,7 +312,7 @@ def _linha_custo(c: EnriquecimentoCustoProvedor) -> dict:
 
 
 @router.get("/custo", dependencies=[_super])
-def listar_custos(provedor: str = "lusha", db: Session = Depends(get_db)) -> dict:
+def listar_custos(provedor: str = "contatos", db: Session = Depends(get_db)) -> dict:
     """Versões do custo contratual do provedor e o custo efetivo por crédito consumido no mês."""
     linhas = db.query(EnriquecimentoCustoProvedor).filter_by(provedor=provedor).order_by(EnriquecimentoCustoProvedor.versao.desc()).all()
     return {"versoes": [_linha_custo(c) for c in linhas], "efetivo_no_mes": custo.custo_efetivo(db, provedor, config.periodo_de(config.agora_utc()))}
@@ -332,7 +332,7 @@ def aprovar_custo(custo_id: int, admin: Usuario = Depends(exigir_papel("super_ad
 
 
 @router.get("/custo/efetivo", dependencies=[_super])
-def custo_efetivo(provedor: str = "lusha", periodo: str | None = None, db: Session = Depends(get_db)) -> dict:
+def custo_efetivo(provedor: str = "contatos", periodo: str | None = None, db: Session = Depends(get_db)) -> dict:
     return custo.custo_efetivo(db, provedor, periodo or config.periodo_de(config.agora_utc()))
 
 
@@ -410,7 +410,7 @@ def auditoria(tenant_id: str | None = None, limite: int = 100, offset: int = 0, 
 
 
 @router.get("/orcamento-global", dependencies=[_super])
-def ver_orcamento_global(provedor: str = "lusha", db: Session = Depends(get_db)) -> dict:
+def ver_orcamento_global(provedor: str = "contatos", db: Session = Depends(get_db)) -> dict:
     """Visão administrativa do provedor: orçamento global (todos os tenants), política (tarifas, custo, markup, preço, margem), resultado financeiro,
     lotes, leituras de uso, aprovações pendentes e pesquisas aguardando reconciliação. Só aqui; nunca na visão do tenant."""
     return painel.visao_administrativa(db, provedor)
@@ -448,7 +448,7 @@ def registrar_lote_compra(dados: LoteCompraRequest, admin: Usuario = Depends(exi
 
 
 @router.get("/politica", dependencies=[_super])
-def listar_politicas(provedor: str = "lusha", db: Session = Depends(get_db)) -> list[dict]:
+def listar_politicas(provedor: str = "contatos", db: Session = Depends(get_db)) -> list[dict]:
     linhas = db.query(EnriquecimentoPoliticaProvedor).filter_by(provedor=provedor).order_by(EnriquecimentoPoliticaProvedor.versao.desc()).all()
     return [_linha_politica(p) for p in linhas]
 
@@ -481,7 +481,7 @@ def aprovar_politica(politica_id: int, admin: Usuario = Depends(exigir_papel("su
 
 @router.get("/provedores/{provedor}/tarifas-do-provedor", dependencies=[_super])
 def tarifas_do_provedor(provedor: str, provider: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider)) -> dict:
-    """Tarifas por ação como o PRÓPRIO provedor publica (`GET /v3/account/usage` na Lusha), para conferir ao montar a política. Só leitura."""
+    """Tarifas por ação como o PRÓPRIO provedor publica (consulta de uso do provedor), para conferir ao montar a política. Só leitura."""
     if provider.nome_provedor != provedor:
         raise ValidacaoFalhou("O provedor configurado neste ambiente é outro.")
     return conciliacao.tarifas_do_provedor(provider)
@@ -519,7 +519,7 @@ def ajustar_creditos(tenant_id: str, dados: AjusteRequest, admin: Usuario = Depe
 def estornar_creditos(tenant_id: str, dados: EstornoRequest, admin: Usuario = Depends(exigir_papel("super_admin")), db: Session = Depends(get_db)) -> dict:
     movimento = ledger.estornar(db, tenant_id, dados.quantidade, dados.motivo, str(admin.id), admin.tenant_id, pesquisa_id=dados.pesquisa_id,
                                 idempotency_key=dados.idempotency_key, provedor_devolvidos=dados.provedor_devolvidos,
-                                provedor="lusha" if dados.provedor_devolvidos else None)
+                                provedor="contatos" if dados.provedor_devolvidos else None)
     return {"movimento_id": movimento.id, "disponivel": ledger.disponivel(db, tenant_id)}
 
 

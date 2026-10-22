@@ -1,6 +1,6 @@
 """Enriquecimento: remove a etapa de "validação de contrato" do custo do provedor.
 
-As decisões comerciais da Lusha (custo, créditos, câmbio de planejamento, preços dos pacotes) já foram aprovadas pelo PO e não dependem de nova validação
+As decisões comerciais do provedor de contatos (custo, créditos, câmbio de planejamento, preços dos pacotes) já foram aprovadas pelo PO e não dependem de nova validação
 contratual. A medição vem da resposta do provedor e a conciliação, do uso que ele informa. Remove as colunas criadas por `b5d7f9a1c3e5` para esse fim
 (`contrato_validado_*`, `contrato_checklist`, `contrato_evidencia`, `saldo_transferivel`), todas nulas em qualquer ambiente que nunca usou a validação.
 

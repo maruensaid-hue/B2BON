@@ -60,7 +60,7 @@ export function PagamentoRetorno() {
           <>
             <div className="font-head text-lg font-bold">Ainda processando...</div>
             <div className="mt-2 text-[12px] text-muted">
-              O Mercado Pago está confirmando seu pagamento. Isso costuma levar só alguns segundos.
+              Estamos confirmando seu pagamento. Isso costuma levar só alguns segundos.
             </div>
           </>
         )}

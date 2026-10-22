@@ -56,12 +56,12 @@ PACOTES: tuple[tuple, ...] = (
     ("ENRIQ_ACIMA_3000", "Acima de 3.000 créditos", None, None, None, "CONTACT_SALES", 5),  # sob negociação: sem preço, sem checkout automático
 )
 
-# Base econômica do provedor (Lusha), informada pelo PO em 2026-10-21. A compra pontual de 400 créditos por R$ 269,94 foi DESCONSIDERADA por ele e não
+# Base econômica do provedor, informada pelo PO em 2026-10-21. A compra pontual de 400 créditos por R$ 269,94 foi DESCONSIDERADA por ele e não
 # participa de custo, preço, margem nem configuração. O câmbio é de PLANEJAMENTO (precificação); o contábil é o efetivamente pago (`custo.registrar_pagamento`).
-APROVADOR_CUSTO = "po:custo-lusha-2026-10-21"
-MOTIVO_CUSTO = "Base econômica Lusha informada pelo PO em 2026-10-21: USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00"
-CUSTO_LUSHA = {"provedor": "lusha", "custo_mensal_usd": "600", "creditos_anuais": 81600, "cambio_planejamento_brl": "6.00"}
+APROVADOR_CUSTO = "po:custo-contatos-2026-10-21"
+MOTIVO_CUSTO = "Base econômica do provedor de contatos informada pelo PO em 2026-10-21: USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00"
+CUSTO_CONTATOS = {"provedor": "contatos", "custo_mensal_usd": "600", "creditos_anuais": 81600, "cambio_planejamento_brl": "6.00"}
 # Orçamento global = a capacidade mensal equivalente ao teto de USD 600 (81.600 ÷ 12 créditos do provedor por mês).
-ORCAMENTO_LUSHA_CREDITOS_MES = CUSTO_LUSHA["creditos_anuais"] // 12
+ORCAMENTO_CONTATOS_CREDITOS_MES = CUSTO_CONTATOS["creditos_anuais"] // 12
 ALERTA_ORCAMENTO_PERCENTUAL = 80
-LOTE_DESCONSIDERADO = "APORTE-LUSHA-2026-10-21"
+LOTE_DESCONSIDERADO = "APORTE-CONTATOS-2026-10-21"

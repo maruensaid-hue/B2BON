@@ -274,7 +274,7 @@ def processar_fila_enriquecimento(
     evento em `/icp/{icp_id}/contas/importar-participantes`) — evita
     travar o request de importação esperando LLM/busca web por
     empresa
-    (decisores: só o QSA da Receita; Lusha nunca é chamada aqui) (raio-X: planilha grande estourando timeout do proxy do
+    (decisores: só o QSA da Receita; o provedor de contatos nunca é chamado aqui) (raio-X: planilha grande estourando timeout do proxy do
     Render, mesmo raciocínio do recorte de CNPJ)."""
     return enriquecimento_fila_service.processar_pendentes(
         db, llm, site_fetcher, web_search, account_data, graph, plan_limits, brasilapi_client

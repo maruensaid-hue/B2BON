@@ -49,7 +49,7 @@ def test_enriquecer_via_brasilapi_mapeia_campos(db_session):
     assert valores_por_campo["email"] == "contato@alphatech.com.br"
     assert valores_por_campo["situacao_cadastral"] == "ATIVA"
     assert valores_por_campo["cnaes_secundarios"] == "6202300 - Consultoria em TI"
-    assert all(campo.fonte == "brasilapi_cnpj" for campo in campos)
+    assert all(campo.fonte == "cadastro_publico_cnpj" for campo in campos)
 
 
 def test_enriquecer_via_brasilapi_ignora_campos_ausentes(db_session):

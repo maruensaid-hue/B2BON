@@ -111,7 +111,7 @@ export function AdminCustoVendas() {
   const [motivoDecisao, setMotivoDecisao] = useState("");
 
   const carregar = useCallback(() => {
-    api.get<DadosCusto>("/admin/enriquecimento/custo?provedor=lusha").then(setCusto).catch(() => setCusto(null));
+    api.get<DadosCusto>("/admin/enriquecimento/custo?provedor=contatos").then(setCusto).catch(() => setCusto(null));
     api.get<DadosVendas>("/admin/enriquecimento/vendas?limite=50").then(setVendas).catch(() => setVendas(null));
     api.get<Estorno[]>("/admin/enriquecimento/estornos").then(setEstornos).catch(() => setEstornos([]));
   }, []);
@@ -148,11 +148,11 @@ export function AdminCustoVendas() {
   function sincronizarTarifas() {
     executar(async () => {
       const r = await api.post<{ alterada: boolean; versao: number; tarifas: { busca: number; email: number; telefone: number | null } }>(
-        "/admin/enriquecimento/provedores/lusha/sincronizar-politica", {},
+        "/admin/enriquecimento/provedores/contatos/sincronizar-politica", {},
       );
       return r.alterada
-        ? `Política v${r.versao} publicada a partir das tarifas que a Lusha informa (busca ${r.tarifas.busca}, e-mail ${r.tarifas.email}${r.tarifas.telefone !== null ? `, telefone ${r.tarifas.telefone}` : ""} crédito(s) por unidade).`
-        : "A política vigente já corresponde às tarifas informadas pela Lusha.";
+        ? `Política v${r.versao} publicada a partir das tarifas que o provedor de contatos informa (busca ${r.tarifas.busca}, e-mail ${r.tarifas.email}${r.tarifas.telefone !== null ? `, telefone ${r.tarifas.telefone}` : ""} crédito(s) por unidade).`
+        : "A política vigente já corresponde às tarifas informadas pelo provedor de contatos.";
     });
   }
 
@@ -198,7 +198,7 @@ export function AdminCustoVendas() {
           <Item rotulo="Versão" valor={`v${vigente.versao}`} />
         </dl>
       ) : (
-        <p className="mb-2 text-[12px] text-amber">Nenhum custo contratual cadastrado: a pesquisa Lusha permanece bloqueada.</p>
+        <p className="mb-2 text-[12px] text-amber">Nenhum custo contratual cadastrado: a pesquisa de decisores permanece bloqueada.</p>
       )}
       {ef?.configurado && (
         <p className="mb-2 text-[12px] text-muted">
@@ -222,10 +222,10 @@ export function AdminCustoVendas() {
       ))}
       <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px]">
         <Button size="sm" variant="ghost" disabled={ocupado} onClick={sincronizarTarifas}>
-          Sincronizar tarifas com a Lusha
+          Sincronizar tarifas com o provedor de contatos
         </Button>
         <span className="text-muted">
-          Lê as tarifas por ação que a própria Lusha informa (busca, e-mail, telefone) e publica a política. Roda sozinha no agendador; sem a tarifa da busca ou do e-mail o
+          Lê as tarifas por ação que o próprio provedor informa (busca, e-mail, telefone) e publica a política. Roda sozinha no agendador; sem a tarifa da busca ou do e-mail o
           motivo técnico aparece aqui.
         </span>
       </div>

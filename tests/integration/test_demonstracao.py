@@ -126,9 +126,9 @@ def test_provedores_externos_sao_simulados_na_demonstracao(monkeypatch):
         return (deps.get_email_provider(), deps.get_calendar_provider(), deps.get_meeting_bot_provider(),
                 deps.get_contact_enrichment_provider(), deps.get_web_search_provider(), deps.get_payment_provider(),
                 deps.get_graph_client(), deps.get_site_fetcher()("exemplo.com.br"))
-    email, agenda, robo, lusha, busca, pagamento, grafo, site = contextvars.copy_context().run(_na_demo)
+    email, agenda, robo, contatos, busca, pagamento, grafo, site = contextvars.copy_context().run(_na_demo)
     assert isinstance(email, StubEmailProvider) and isinstance(agenda, StubCalendarProvider)
-    assert isinstance(robo, StubMeetingBotProvider) and isinstance(lusha, StubContactEnrichmentProvider)
+    assert isinstance(robo, StubMeetingBotProvider) and isinstance(contatos, StubContactEnrichmentProvider)
     assert isinstance(busca, StubWebSearchProvider) and isinstance(pagamento, StubPaymentProvider)
     assert isinstance(grafo, GrafoNulo) and "demonstração" in site
     assert not isinstance(deps.get_email_provider(), StubEmailProvider)  # fora da demonstração, nada muda

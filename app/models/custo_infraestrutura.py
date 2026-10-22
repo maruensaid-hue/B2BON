@@ -18,7 +18,7 @@ class ComponenteInfra(Base):
     __tablename__ = "componente_infra"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    fornecedor: Mapped[str] = mapped_column(String)  # provider (ex.: Render, Neon, Lusha)
+    fornecedor: Mapped[str] = mapped_column(String)  # provider (ex.: Render, Neon, provedor de contatos)
     servico: Mapped[str] = mapped_column(String)  # service
     categoria: Mapped[str] = mapped_column(String)  # HOSTING | DATABASE | STORAGE | ... (tipos.CATEGORIAS_INFRA)
     plano: Mapped[str | None] = mapped_column(String, nullable=True)  # plano contratado hoje

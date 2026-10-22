@@ -1,4 +1,4 @@
-"""Conciliação do razão com o uso informado pelo próprio provedor (`GET /v3/account/usage` na Lusha).
+"""Conciliação do razão com o uso informado pelo próprio provedor (consulta de uso do provedor).
 
 Também sincroniza a política do provedor com as TARIFAS que ele próprio informa (`pricing` da mesma consulta), sem aprovação manual adicional: as decisões
 comerciais (custo, créditos, câmbio de planejamento, preços dos pacotes) já são do PO; as tarifas por ação são fato do provedor.
@@ -25,9 +25,9 @@ from app.services.errors import PesquisaBloqueada, ValidacaoFalhou
 logger = logging.getLogger("b2bon.enriquecimento")
 
 ATOR_SISTEMA = "sistema:politica-do-provedor"
-# Nomes das ações em `pricing` de `GET /v3/account/usage` (docs.lusha.com): busca de contatos, revelação de e-mail e de telefone.
+# Nomes das ações em `pricing` de `GET /v3/account/usage` (a documentação do provedor): busca de contatos, revelação de e-mail e de telefone.
 ACAO_BUSCA, ACAO_EMAIL, ACAO_TELEFONE = "api_search", "revealEmail", "revealPhone"
-# A política guarda o que o provedor OFERECE (e-mail sempre; telefone quando a Lusha informa a tarifa). Quem escolhe o que revelar em cada pesquisa é o
+# A política guarda o que o provedor OFERECE (e-mail sempre; telefone quando o provedor de contatos informa a tarifa). Quem escolhe o que revelar em cada pesquisa é o
 # USUÁRIO (padrão: só e-mail), de acordo com os créditos que tem.
 REVELAR_EMAILS = True
 
@@ -152,7 +152,7 @@ def sincronizar_politica(db: Session, provider: ContactEnrichmentProvider, *, at
     busca, email, telefone = (_creditos_por_unidade(uso.tarifas, a) for a in (ACAO_BUSCA, ACAO_EMAIL, ACAO_TELEFONE))
     faltam = [rotulo for rotulo, valor in ((ACAO_BUSCA, busca), (ACAO_EMAIL, email)) if valor is None]
     if faltam:
-        raise ValidacaoFalhou("Bloqueio técnico: a Lusha não informou, em GET /v3/account/usage (pricing), a tarifa de " + ", ".join(faltam)
+        raise ValidacaoFalhou("Bloqueio técnico: o provedor de contatos não informou, na consulta de uso do provedor (pricing), a tarifa de " + ", ".join(faltam)
                               + f". Chaves recebidas: {sorted(uso.tarifas) or 'nenhuma'}. Sem a tarifa não há teto de reserva confiável.")
     alvo = {"busca": busca, "email": email, "telefone": telefone, "pagina": provider.tamanho_pagina_minimo,
             "markup": precos.markup_percentual(referencia.preco_unitario_brl, contrato.custo_unitario_brl).quantize(Decimal("0.0001")),
@@ -171,7 +171,7 @@ def sincronizar_politica(db: Session, provider: ContactEnrichmentProvider, *, at
 
 
 def conferir_capacidade(db: Session, provider: ContactEnrichmentProvider, uso=None) -> dict:
-    """Compara os créditos totais do ciclo informados pela Lusha com os créditos anuais do contrato cadastrado (81.600). Divergência não bloqueia nada: vira aviso."""
+    """Compara os créditos totais do ciclo informados pelo provedor de contatos com os créditos anuais do contrato cadastrado (81.600). Divergência não bloqueia nada: vira aviso."""
     contrato = custo.custo_vigente(db, provider.nome_provedor)
     uso = uso or _leitura(provider)
     if contrato is None or uso.creditos_total is None:
@@ -180,13 +180,13 @@ def conferir_capacidade(db: Session, provider: ContactEnrichmentProvider, uso=No
     if not confere:
         logger.warning("ENRIQUECIMENTO_CAPACIDADE_DIVERGENTE provedor=%s contrato=%s provedor_informa=%s", provider.nome_provedor, contrato.creditos_anuais, uso.creditos_total)
     return {"confere": confere, "esperado_anual": contrato.creditos_anuais, "informado_pelo_provedor": uso.creditos_total,
-            "explicacao": "Os créditos totais informados pela Lusha batem com o contrato." if confere else
-            "Os créditos totais informados pela Lusha diferem dos créditos anuais cadastrados: confira o contrato ou o cadastro de custo."}
+            "explicacao": "Os créditos totais informados pelo provedor de contatos batem com o contrato." if confere else
+            "Os créditos totais informados pelo provedor de contatos diferem dos créditos anuais cadastrados: confira o contrato ou o cadastro de custo."}
 
 
 def conciliar_se_devido(db: Session, provider: ContactEnrichmentProvider, ator_id: str | None, tenant_auditoria: str, intervalo_horas: int = 6,
                         agora: datetime | None = None) -> dict | None:
-    """Rotina agendada: concilia com o uso do provedor no máximo uma vez por intervalo (o uso da Lusha tem limite de 5 consultas/min)."""
+    """Rotina agendada: concilia com o uso do provedor no máximo uma vez por intervalo (o uso do provedor de contatos tem limite de 5 consultas/min)."""
     agora = agora or agora_utc()
     ultima = db.query(EnriquecimentoUsoProvedor).filter_by(provedor=provider.nome_provedor).order_by(EnriquecimentoUsoProvedor.id.desc()).first()
     if ultima is not None and agora - ultima.lido_em < timedelta(hours=intervalo_horas):

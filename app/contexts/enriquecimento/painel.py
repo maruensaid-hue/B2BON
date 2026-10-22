@@ -96,7 +96,7 @@ def _dados_a_revelar(db: Session, provider: ContactEnrichmentProvider) -> dict |
 
 def painel_tenant(db: Session, solicitante: Solicitante, provider: ContactEnrichmentProvider, agora: datetime | None = None) -> dict:
     """Números do tenant: franquia, disponível/reservado/consumido/expirado, uso no período, uso por fonte, pesquisas por estado e a disponibilidade
-    da pesquisa Lusha com o MOTIVO quando indisponível. Nada de outro tenant, nada do orçamento global, do custo ou da margem."""
+    da pesquisa de decisores com o MOTIVO quando indisponível. Nada de outro tenant, nada do orçamento global, do custo ou da margem."""
     agora = agora or agora_utc()
     tenant_id = solicitante.tenant_id
     config, motivo = config_vigente(db, tenant_id)
@@ -128,7 +128,7 @@ def painel_tenant(db: Session, solicitante: Solicitante, provider: ContactEnrich
     motivos = motivos_de_indisponibilidade(db, tenant_id, provider, irrestrito=solicitante.irrestrito)
     alertas = []
     if motivos:
-        alertas.append({"codigo": "pesquisa_lusha_indisponivel", "mensagem": "A pesquisa de decisores (Lusha) está indisponível: " + motivos[0]["mensagem"]})
+        alertas.append({"codigo": "pesquisa_indisponivel", "mensagem": "A pesquisa de decisores está indisponível: " + motivos[0]["mensagem"]})
     if disponivel <= 0 and config is not None and config.utilizavel:
         alertas.append({"codigo": "sem_saldo", "mensagem": "Não há créditos de enriquecimento disponíveis."})
     if config is not None and config.limite_periodo_creditos is not None and consumido_periodo + retido >= config.limite_periodo_creditos:
@@ -137,7 +137,7 @@ def painel_tenant(db: Session, solicitante: Solicitante, provider: ContactEnrich
         alertas.append({"codigo": "aguardando_reconciliacao", "mensagem": "Há pesquisa aguardando reconciliação com o provedor."})
     return {
         "periodo": periodo, "plano": _resumo_config(config, motivo),
-        "lusha": {"disponivel": not motivos, "motivos": motivos},
+        "contatos": {"disponivel": not motivos, "motivos": motivos},
         "categorias": {
             "ia": "Os créditos de IA (incluindo a análise de sites) são contabilizados à parte, no módulo AI Credits.",
             "enriquecimento": "Créditos de enriquecimento (pesquisa de decisores no provedor pago): esta página.",
@@ -257,7 +257,7 @@ def visao_administrativa(db: Session, provedor: str, agora: datetime | None = No
 
 
 def planos_status(db: Session) -> list[dict]:
-    """Por plano: a configuração de enriquecimento está aprovada, pendente ou ausente? (É o que decide se a Lusha está liberada para os
+    """Por plano: a configuração de enriquecimento está aprovada, pendente ou ausente? (É o que decide se o provedor de contatos está liberado para os
     clientes do plano.) Só super_admin."""
     saida = []
     for plano in db.query(Plano).order_by(Plano.id).all():

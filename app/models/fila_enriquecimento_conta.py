@@ -12,7 +12,7 @@ class FilaEnriquecimentoConta(Base):
     poucos pelo cron, nunca de forma síncrona no request que criou as
     contas (uma planilha grande enriquecendo tudo na hora estouraria o
     timeout do proxy do Render, cada empresa passa por LLM + busca web +
-    Lusha)."""
+    provedor de contatos)."""
 
     __tablename__ = "fila_enriquecimento_conta"
 

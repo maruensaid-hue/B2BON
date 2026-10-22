@@ -22,7 +22,7 @@ class ListaProspeccao(Base):
     nome: Mapped[str] = mapped_column(String)
     icp_id: Mapped[int | None] = mapped_column(ForeignKey("icp.id"), nullable=True)
     # None = usa o default genérico de seniority (SENIORIDADE_ALVO); lista
-    # preenchida restringe a busca do Lusha só a esses cargos, economizando
+    # preenchida restringe a busca do provedor de contatos só a esses cargos, economizando
     # consulta em vez de filtrar depois de já ter revelado o contato.
     cargos_alvo: Mapped[list | None] = mapped_column(JSON, nullable=True)
     criado_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)

@@ -228,7 +228,7 @@ class Settings(BaseSettings):
     # como o SendGrid.
     recall_webhook_secret: str = ""
 
-    # Base B2B de contatos — Lusha (Prospecting API, decidido no raio-X de
+    # Base B2B de contatos — provedor de contatos (Prospecting API, decidido no raio-X de
     # produção por revelar telefone direto de forma síncrona, diferente do
     # Apollo). Vazio usa StubContactEnrichmentProvider em dev/teste,
     # mapeando decisores só via QSA da Receita Federal.

@@ -1,4 +1,4 @@
-"""Custo contratual do provedor, política sincronizada com as tarifas que a Lusha informa, conciliação, custo efetivo, orçamento global dentro da capacidade,
+"""Custo contratual do provedor, política sincronizada com as tarifas que o provedor de contatos informa, conciliação, custo efetivo, orçamento global dentro da capacidade,
 venda de pacotes com nota fiscal opcional e conciliação, contestação sem estorno automático e estorno manual de créditos.
 
 Base econômica (informada pelo PO): USD 600/mês, 81.600 créditos/ano (6.800/mês), câmbio de planejamento R$ 6,00 ⇒ R$ 0,529411765 por crédito e R$ 3.600,00/mês.
@@ -28,7 +28,7 @@ from app.providers.fiscal.desativado import FiscalDesativado
 from app.providers.fiscal.stub import StubFiscalProvider
 from app.providers.payment.stub import StubPaymentProvider
 from app.services.errors import NaoAutorizado, PesquisaBloqueada, ValidacaoFalhou
-from tests.integration.test_enriquecimento_matriz_pacotes import catalogo, liberar_lusha
+from tests.integration.test_enriquecimento_matriz_pacotes import catalogo, liberar_contatos
 from tests.integration.test_pesquisa_decisores_governanca import (
     A,
     ADMIN,
@@ -67,15 +67,15 @@ def comprar(db, pagamento, prov, fiscal, pacote="ENRIQ_400", taxas=None, liquido
 
 
 def test_custo_contratual_deriva_custo_unitario_e_mensal_e_so_vale_aprovado(client, db_session):
-    nova = custo.definir_custo(db_session, provedor="lusha", custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="6.00", ator_id="1",
+    nova = custo.definir_custo(db_session, provedor="contatos", custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="6.00", ator_id="1",
                                tenant_auditoria=A, motivo="base econômica do PO")
-    assert custo.custo_vigente(db_session, "lusha") is None  # pendente não vale
+    assert custo.custo_vigente(db_session, "contatos") is None  # pendente não vale
     custo.aprovar_custo(db_session, nova.id, "1", A)
-    vigente = custo.custo_vigente(db_session, "lusha")
+    vigente = custo.custo_vigente(db_session, "contatos")
     assert vigente.creditos_mensais == 6800
     assert precos.exibir(vigente.custo_unitario_usd, 9) == Decimal("0.088235294") and precos.exibir(vigente.custo_unitario_brl, 9) == Decimal("0.529411765")
     assert vigente.custo_mensal_brl == Decimal("3600.00") and vigente.cambio_planejamento_brl == Decimal(6)
-    assert custo.capacidade_mensal(db_session, "lusha") == 6800
+    assert custo.capacidade_mensal(db_session, "contatos") == 6800
 
 
 @pytest.mark.parametrize("campos,trecho", [
@@ -84,7 +84,7 @@ def test_custo_contratual_deriva_custo_unitario_e_mensal_e_so_vale_aprovado(clie
     (dict(motivo=" "), "motivo"),
 ])
 def test_custo_contratual_recusa_valores_invalidos(client, db_session, campos, trecho):
-    base = dict(provedor="lusha", custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="6.00", ator_id="1", tenant_auditoria=A, motivo="x")
+    base = dict(provedor="contatos", custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="6.00", ator_id="1", tenant_auditoria=A, motivo="x")
     with pytest.raises(ValidacaoFalhou, match=trecho):
         custo.definir_custo(db_session, **{**base, **campos})
 
@@ -97,7 +97,7 @@ def test_com_o_custo_cadastrado_nao_ha_nenhuma_etapa_de_validacao_de_contrato(cl
     assert not hasattr(custo, "validar_contrato") and not hasattr(custo, "CHECKLIST_CONTRATO")
 
 
-def test_sem_custo_contratual_a_lusha_fica_bloqueada_antes_de_reservar(client, db_session):
+def test_sem_custo_contratual_a_contatos_fica_bloqueada_antes_de_reservar(client, db_session):
     cenario(db_session, contrato=False)
     prov = ProvedorPago()
     esperar_bloqueio("custo_provedor_nao_configurado", lambda: previa(db_session, eu(db_session), contas(db_session, 1), prov))
@@ -107,19 +107,19 @@ def test_sem_custo_contratual_a_lusha_fica_bloqueada_antes_de_reservar(client, d
 
 def test_orcamento_global_nunca_passa_da_capacidade_do_contrato(client, db_session):
     cenario(db_session)
-    kw = dict(provedor="lusha", alerta_percentual=80, ator_id="1", tenant_auditoria=A, motivo="teto de USD 600")
+    kw = dict(provedor="contatos", alerta_percentual=80, ator_id="1", tenant_auditoria=A, motivo="teto de USD 600")
     with pytest.raises(ValidacaoFalhou, match="capacidade do contrato"):
         config.definir_orcamento_global(db_session, limite_creditos=6801, **kw)
     config.definir_orcamento_global(db_session, limite_creditos=6800, aprovar=True, **kw)
-    assert config.orcamento_vigente(db_session, "lusha").limite_creditos == 6800
-    menor = custo.definir_custo(db_session, provedor="lusha", custo_mensal_usd="600", creditos_anuais=60000, cambio_planejamento_brl="6.00", ator_id="1",
+    assert config.orcamento_vigente(db_session, "contatos").limite_creditos == 6800
+    menor = custo.definir_custo(db_session, provedor="contatos", custo_mensal_usd="600", creditos_anuais=60000, cambio_planejamento_brl="6.00", ator_id="1",
                                 tenant_auditoria=A, motivo="contrato menor")  # 5.000/mês
     with pytest.raises(ValidacaoFalhou, match="excede a capacidade"):
         custo.aprovar_custo(db_session, menor.id, "1", A)
 
 
 def test_politica_com_o_metodo_contrato_mensal_usa_o_custo_de_planejamento(client, db_session):
-    base = dict(provedor="lusha", creditos_busca_por_resultado=0, creditos_email=1, creditos_telefone=None, revelar_emails=True, revelar_telefones=False,
+    base = dict(provedor="contatos", creditos_busca_por_resultado=0, creditos_email=1, creditos_telefone=None, revelar_emails=True, revelar_telefones=False,
                 tamanho_pagina_busca=10, creditos_cliente_por_credito_provedor=1, markup_percentual=Decimal("100"), metodo_custo="contrato_mensal",
                 lote_compra_id=None, casas_exibicao=2, fonte_tarifas="manual", ator_id="1", tenant_auditoria=A, motivo="teste", tamanho_pagina_minimo=10,
                 tamanho_pagina_maximo=100)
@@ -133,25 +133,25 @@ def test_politica_com_o_metodo_contrato_mensal_usa_o_custo_de_planejamento(clien
 def test_custo_efetivo_por_credito_consumido_cresce_com_a_ociosidade_e_usa_o_pagamento_real(client, db_session):
     custo_contratual(db_session)
     ledger.travar_carteira(db_session, A)
-    ledger.lancar(db_session, A, "CONSUMO", delta_saldo=-1700, provedor="lusha", provedor_delta_consumido=1700, agora=AGORA)
+    ledger.lancar(db_session, A, "CONSUMO", delta_saldo=-1700, provedor="contatos", provedor_delta_consumido=1700, agora=AGORA)
     db_session.commit()
-    plano = custo.custo_efetivo(db_session, "lusha", "2026-10")
+    plano = custo.custo_efetivo(db_session, "contatos", "2026-10")
     assert (plano["creditos_consumidos"], plano["creditos_ociosos"], plano["ociosidade_percentual"]) == (1700, 5100, "75.0")
     assert plano["base_do_calculo"] == "planejamento" and plano["custo_mensal_planejamento_brl"] == "3600.00" and plano["aviso"]
     assert Decimal(plano["custo_efetivo_por_credito_consumido_brl"]) == precos.interna(Decimal(3600) / Decimal(1700))  # R$ 2,117647058824
-    custo.registrar_pagamento(db_session, provedor="lusha", referencia="FAT-2026-10", periodo="2026-10", valor_usd="600", taxa_cambio_efetiva="5.80",
+    custo.registrar_pagamento(db_session, provedor="contatos", referencia="FAT-2026-10", periodo="2026-10", valor_usd="600", taxa_cambio_efetiva="5.80",
                               encargos_brl="25.50", pago_em=datetime(2026, 10, 5), observacao="fatura de outubro", ator_id="1", tenant_auditoria=A)
-    custo.registrar_pagamento(db_session, provedor="lusha", referencia="FAT-2026-09", periodo="2026-09", valor_usd="600", taxa_cambio_efetiva="6.20",
+    custo.registrar_pagamento(db_session, provedor="contatos", referencia="FAT-2026-09", periodo="2026-09", valor_usd="600", taxa_cambio_efetiva="6.20",
                               pago_em=datetime(2026, 9, 5), observacao=None, ator_id="1", tenant_auditoria=A)
-    real = custo.custo_efetivo(db_session, "lusha", "2026-10")
+    real = custo.custo_efetivo(db_session, "contatos", "2026-10")
     assert real["base_do_calculo"] == "pagamentos_efetivos" and real["custo_mensal_efetivo_brl"] == "3505.50"  # 600 × 5,80 + 25,50 (o de setembro não entra)
     assert real["custo_mensal_planejamento_brl"] == "3600.00" and real["aviso"] is None and len(real["pagamentos"]) == 1
     assert Decimal(real["custo_efetivo_por_credito_consumido_brl"]) == precos.interna(Decimal("3505.50") / Decimal(1700))
-    assert custo.custo_efetivo(db_session, "lusha", "2026-08")["custo_efetivo_por_credito_consumido_brl"] is None  # sem consumo, sem custo por crédito
+    assert custo.custo_efetivo(db_session, "contatos", "2026-08")["custo_efetivo_por_credito_consumido_brl"] is None  # sem consumo, sem custo por crédito
 
 
 def test_pagamento_ao_provedor_valida_periodo_referencia_unica_e_nao_inventa_encargos(client, db_session):
-    base = dict(provedor="lusha", periodo="2026-10", valor_usd="600", taxa_cambio_efetiva="5.9", pago_em=datetime(2026, 10, 5), observacao=None, ator_id="1", tenant_auditoria=A)
+    base = dict(provedor="contatos", periodo="2026-10", valor_usd="600", taxa_cambio_efetiva="5.9", pago_em=datetime(2026, 10, 5), observacao=None, ator_id="1", tenant_auditoria=A)
     pagamento = custo.registrar_pagamento(db_session, referencia="FAT-1", **base)
     assert pagamento.encargos_brl == 0 and pagamento.valor_brl_total == Decimal("3540.00")  # sem encargos informados, nenhum encargo é presumido
     for campos, trecho in ((dict(referencia="FAT-1"), "Já existe"), (dict(referencia="FAT-2", periodo="2026-13"), "AAAA-MM"), (dict(referencia=" "), "referência"),
@@ -170,9 +170,9 @@ def test_a_compra_pontual_de_400_creditos_nao_participa_de_custo_preco_margem_ne
     lote(db_session)  # existe como linha legada, mas nada a consulta
     catalogo(db_session)
     custo_contratual(db_session)
-    r = pacotes.rentabilidade(db_session, "lusha")
+    r = pacotes.rentabilidade(db_session, "contatos")
     assert r["origem_custo"] == "contrato_v1" and r["custo_unitario_provedor_brl"] == "0.529411765"
-    assert custo.custo_efetivo(db_session, "lusha", "2026-10")["custo_unitario_nominal_brl"].startswith("0.52941176")
+    assert custo.custo_efetivo(db_session, "contatos", "2026-10")["custo_unitario_nominal_brl"].startswith("0.52941176")
 
 
 # ============================================================ APIs de custo e dashboard administrativo ================================
@@ -192,7 +192,7 @@ def test_api_de_custo_pagamento_e_visao_administrativa(client, db_session, prov_
                                                              "pago_em": "2026-10-05T10:00:00"}).status_code in (400, 422)
     lista = client.get(f"{ADMIN}/custo").json()
     assert lista["versoes"][0]["vigente"] is True and "checklist_contrato" not in lista and lista["efetivo_no_mes"]["base_do_calculo"] == "pagamentos_efetivos"
-    visao = client.get(f"{ADMIN}/orcamento-global?provedor=lusha").json()
+    visao = client.get(f"{ADMIN}/orcamento-global?provedor=contatos").json()
     assert "contrato_validado" not in visao and visao["custo_contratual"]["custo_unitario_nominal_brl"].startswith("0.52941176")
     assert visao["orcamento_global_usd_equivalente"] == "88.24"  # orçamento do cenário de teste: 1.000 créditos × USD 0,088235294
     assert visao["conciliacao_vendas"]["vendas_aprovadas"] == 0
@@ -202,7 +202,7 @@ def test_rotas_novas_de_administracao_exigem_super_admin(client, db_session):
     comum = Usuario(id=77, tenant_id=A, papel="admin", nome="Admin", email="admin@x.com", ativo=True)
     app.dependency_overrides[get_usuario_atual] = lambda: comum
     for metodo, caminho, corpo in (("get", "/custo", None), ("put", "/custo", {"custo_mensal_usd": "600", "creditos_anuais": 81600, "cambio_planejamento_brl": "6", "motivo": "xxx"}),
-                                   ("post", "/custo/1/aprovar", None), ("post", "/provedores/lusha/sincronizar-politica", None),
+                                   ("post", "/custo/1/aprovar", None), ("post", "/provedores/contatos/sincronizar-politica", None),
                                    ("get", "/custo/efetivo", None), ("post", "/pagamentos-provedor", {"referencia": "FAT", "periodo": "2026-10", "valor_usd": "1",
                                                                                                     "taxa_cambio_efetiva": "1", "pago_em": "2026-10-05T10:00:00"}),
                                    ("get", "/vendas", None), ("post", "/compras/1/emitir-nota", None), ("get", "/estornos", None),
@@ -216,7 +216,7 @@ def test_rotas_novas_de_administracao_exigem_super_admin(client, db_session):
 
 
 def test_falta_de_emissor_fiscal_nao_bloqueia_a_compra_como_na_compra_de_creditos_de_ia(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     compra, _ = comprar(db_session, pagamento, prov, FiscalDesativado())  # o emissor real não existe: a venda segue
@@ -229,7 +229,7 @@ def test_falta_de_emissor_fiscal_nao_bloqueia_a_compra_como_na_compra_de_credito
 
 
 def test_catalogo_e_compra_do_tenant_nao_dependem_de_emissor_fiscal(client, db_session, prov_api):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     app.dependency_overrides[get_fiscal_provider] = lambda: FiscalDesativado()
     app.dependency_overrides[get_payment_provider] = lambda: StubPaymentProvider()
@@ -240,7 +240,7 @@ def test_catalogo_e_compra_do_tenant_nao_dependem_de_emissor_fiscal(client, db_s
 
 
 def test_venda_aprovada_emite_nota_registra_o_que_o_provedor_informou_e_fica_conciliada(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     fiscal = StubFiscalProvider()
     compra, _ = comprar(db_session, StubPaymentProvider(), ProvedorPago(), fiscal, taxas=31.19, liquido=508.81)
@@ -257,7 +257,7 @@ def test_venda_aprovada_emite_nota_registra_o_que_o_provedor_informou_e_fica_con
 
 
 def test_taxas_nao_informadas_pelo_provedor_ficam_vazias_e_nunca_sao_estimadas(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     compra, _ = comprar(db_session, StubPaymentProvider(), ProvedorPago(), StubFiscalProvider())
     assert compra.taxa_pagamento_brl is None and compra.valor_liquido_brl is None
@@ -265,7 +265,7 @@ def test_taxas_nao_informadas_pelo_provedor_ficam_vazias_e_nunca_sao_estimadas(c
 
 
 def test_falha_do_emissor_nao_desfaz_o_credito_pago_e_a_nota_pode_ser_reemitida_sem_duplicar(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     fiscal = StubFiscalProvider(fora_do_ar_vezes=1)
     compra, pagamento_id = comprar(db_session, StubPaymentProvider(), ProvedorPago(), fiscal)
@@ -281,7 +281,7 @@ def test_falha_do_emissor_nao_desfaz_o_credito_pago_e_a_nota_pode_ser_reemitida_
 
 
 def test_novo_aviso_do_provedor_de_pagamento_reemite_a_nota_que_ficou_pendente(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     pagamento, fiscal = StubPaymentProvider(), StubFiscalProvider(fora_do_ar_vezes=1)
     compra, pagamento_id = comprar(db_session, pagamento, ProvedorPago(), fiscal)
@@ -292,7 +292,7 @@ def test_novo_aviso_do_provedor_de_pagamento_reemite_a_nota_que_ficou_pendente(c
 
 
 def test_emissor_que_rejeita_os_dados_deixa_a_nota_com_falha_e_o_motivo(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     compra, _ = comprar(db_session, StubPaymentProvider(), ProvedorPago(), StubFiscalProvider(rejeitar="CNPJ do tomador inválido"))
     nota = db_session.query(EnriquecimentoNotaFiscal).one()
@@ -300,7 +300,7 @@ def test_emissor_que_rejeita_os_dados_deixa_a_nota_com_falha_e_o_motivo(client, 
 
 
 def test_nota_sem_emissor_e_emitida_depois_que_um_emissor_passa_a_existir(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     pagamento = StubPaymentProvider()
     compra, pagamento_id = comprar(db_session, pagamento, ProvedorPago(), FiscalDesativado())
@@ -330,7 +330,7 @@ def test_situacao_de_conciliacao_e_derivada_dos_fatos_registrados():
 
 
 def test_credito_do_razao_que_nao_confere_com_o_pedido_aparece_na_conciliacao(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     compra, _ = comprar(db_session, StubPaymentProvider(), ProvedorPago(), StubFiscalProvider())
     assert vendas.resumo_conciliacao(db_session)["creditos_que_nao_conferem"] == []
@@ -346,7 +346,7 @@ def test_credito_do_razao_que_nao_confere_com_o_pedido_aparece_na_conciliacao(cl
 
 @pytest.mark.parametrize("status_externo", ["refunded", "charged_back", "cancelled"])
 def test_reembolso_ou_chargeback_avisado_pelo_provedor_so_sinaliza_e_nao_mexe_nos_creditos(client, db_session, status_externo):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     pagamento, fiscal = StubPaymentProvider(), StubFiscalProvider()
     compra, pagamento_id = comprar(db_session, pagamento, ProvedorPago(), fiscal)
@@ -363,7 +363,7 @@ def test_reembolso_ou_chargeback_avisado_pelo_provedor_so_sinaliza_e_nao_mexe_no
 
 
 def test_estorno_manual_exige_justificativa_evidencia_e_compra_paga(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     pendente, _ = comprar(db_session, StubPaymentProvider(), ProvedorPago(), StubFiscalProvider(), pagar=False)
     base = dict(tipo="ESTORNO", creditos=100, justificativa="Cliente pediu o cancelamento da compra", evidencia="protocolo-123", ator_id="10", tenant_auditoria=A)
@@ -381,7 +381,7 @@ def test_estorno_manual_exige_justificativa_evidencia_e_compra_paga(client, db_s
 
 
 def test_estorno_manual_aprovado_por_outro_administrador_gera_lancamento_compensatorio_idempotente(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     paga, _ = comprar(db_session, StubPaymentProvider(), ProvedorPago(), StubFiscalProvider())
     original = db_session.query(EnriquecimentoMovimento).filter_by(tipo="COMPRA").one()
@@ -406,7 +406,7 @@ def test_estorno_manual_aprovado_por_outro_administrador_gera_lancamento_compens
 
 
 def test_estorno_so_reverte_o_que_nao_foi_consumido_e_registra_o_resto(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     cfg, _ = config.config_vigente(db_session, A)
     ledger.preparar(db_session, A, cfg, AGORA)
@@ -424,7 +424,7 @@ def test_estorno_so_reverte_o_que_nao_foi_consumido_e_registra_o_resto(client, d
 
 
 def test_estorno_parcial_nao_causa_expiracao_em_dobro_depois_do_vencimento(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     cfg, _ = config.config_vigente(db_session, A)
     ledger.preparar(db_session, A, cfg, AGORA)
@@ -445,7 +445,7 @@ def test_estorno_parcial_nao_causa_expiracao_em_dobro_depois_do_vencimento(clien
 
 
 def test_estorno_rejeitado_nao_mexe_no_razao_e_nao_pode_ser_aprovado_depois(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     paga, _ = comprar(db_session, StubPaymentProvider(), ProvedorPago(), StubFiscalProvider())
     pedido = estornos.solicitar(db_session, paga.id, tipo="ESTORNO", creditos=50, justificativa="Pedido sem comprovação do cliente", evidencia="ticket-1",
@@ -459,7 +459,7 @@ def test_estorno_rejeitado_nao_mexe_no_razao_e_nao_pode_ser_aprovado_depois(clie
 
 
 def test_a_trava_dos_quatro_olhos_pode_ser_desligada_so_por_configuracao_do_ambiente(client, db_session, monkeypatch):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     paga, _ = comprar(db_session, StubPaymentProvider(), ProvedorPago(), StubFiscalProvider())
     pedido = estornos.solicitar(db_session, paga.id, tipo="ESTORNO", creditos=10, justificativa="Ajuste pequeno a pedido do cliente", evidencia="ticket-9",
@@ -470,7 +470,7 @@ def test_a_trava_dos_quatro_olhos_pode_ser_desligada_so_por_configuracao_do_ambi
 
 
 def test_api_de_vendas_nota_e_estorno_manual(client, db_session, prov_api):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     fiscal = StubFiscalProvider(fora_do_ar_vezes=1)
     app.dependency_overrides[get_fiscal_provider] = lambda: fiscal
@@ -502,7 +502,7 @@ def test_api_de_vendas_nota_e_estorno_manual(client, db_session, prov_api):
 
 
 def test_painel_do_tenant_reflete_o_estorno_no_saldo_adicional(client, db_session, prov_api):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     paga, _ = comprar(db_session, StubPaymentProvider(), prov_api, StubFiscalProvider())
     pedido = estornos.solicitar(db_session, paga.id, tipo="ESTORNO", creditos=150, justificativa="Cancelamento solicitado pelo cliente", evidencia="ticket-3",
@@ -515,10 +515,10 @@ def test_painel_do_tenant_reflete_o_estorno_no_saldo_adicional(client, db_sessio
     assert painel.auditoria_administrativa(db_session, prefixo="enriquecimento_estorno")
 
 
-# ============================================================ política sincronizada com o que a Lusha informa ============================
+# ============================================================ política sincronizada com o que o provedor de contatos informa ============================
 
 
-def uso_lusha(**mudancas):
+def uso_contatos(**mudancas):
     tarifas = {"api_search": {"credits": 1, "perQuantity": 1}, "revealEmail": {"credits": 1, "perQuantity": 1}, "revealPhone": {"credits": 5, "perQuantity": 1}}
     tarifas.update(mudancas)
     return UsoProvedor(creditos_total=81600, creditos_usados=0, creditos_restantes=81600, tarifas={k: v for k, v in tarifas.items() if v is not None})
@@ -529,16 +529,16 @@ def sem_politica(db):
     catalogo(db)
 
 
-def test_politica_nasce_das_tarifas_que_a_lusha_informa_sem_aprovacao_manual(client, db_session):
+def test_politica_nasce_das_tarifas_que_a_contatos_informa_sem_aprovacao_manual(client, db_session):
     sem_politica(db_session)
-    prov = ProvedorPago(uso=uso_lusha())
-    assert config.politica_vigente(db_session, "lusha")[0] is None
+    prov = ProvedorPago(uso=uso_contatos())
+    assert config.politica_vigente(db_session, "contatos")[0] is None
     r = conciliacao.sincronizar_politica(db_session, prov)
     assert r["alterada"] is True and r["tarifas"] == {"busca": 1, "email": 1, "telefone": 5}
-    politica, motivo = config.politica_vigente(db_session, "lusha")
+    politica, motivo = config.politica_vigente(db_session, "contatos")
     assert motivo is None and politica.utilizavel
     assert (politica.creditos_busca_por_resultado, politica.creditos_email, politica.creditos_telefone) == (1, 1, 5)
-    assert (politica.revelar_emails, politica.revelar_telefones, politica.tamanho_pagina_busca, politica.creditos_cliente_por_credito_provedor) == (True, True, 10, 1)  # telefone: oferecido (a Lusha informa a tarifa); quem o revela é o usuário, por pesquisa
+    assert (politica.revelar_emails, politica.revelar_telefones, politica.tamanho_pagina_busca, politica.creditos_cliente_por_credito_provedor) == (True, True, 10, 1)  # telefone: oferecido (o provedor de contatos informa a tarifa); quem o revela é o usuário, por pesquisa
     assert precos.exibir(politica.custo_unitario_brl, 9) == Decimal("0.529411765")  # custo contratual
     assert precos.exibir(politica.markup_percentual, 1) == Decimal("155.0")  # o preço de referência é o menor pacote (R$ 1,35)
     assert precos.exibir(politica.preco_unitario_brl, 2) == Decimal("1.35")
@@ -547,26 +547,26 @@ def test_politica_nasce_das_tarifas_que_a_lusha_informa_sem_aprovacao_manual(cli
     assert conciliacao.sincronizar_politica(db_session, prov)["alterada"] is False  # idempotente
     assert db_session.query(EnriquecimentoPoliticaProvedor).count() == 1
     # o provedor mudou a tarifa do e-mail: nova versão aprovada, a anterior encerrada
-    mudou = conciliacao.sincronizar_politica(db_session, ProvedorPago(uso=uso_lusha(revealEmail={"credits": 2, "perQuantity": 1})))
-    assert mudou["alterada"] is True and mudou["versao"] == 2 and config.politica_vigente(db_session, "lusha")[0].creditos_email == 2
+    mudou = conciliacao.sincronizar_politica(db_session, ProvedorPago(uso=uso_contatos(revealEmail={"credits": 2, "perQuantity": 1})))
+    assert mudou["alterada"] is True and mudou["versao"] == 2 and config.politica_vigente(db_session, "contatos")[0].creditos_email == 2
 
 
 def test_nova_versao_do_custo_gera_nova_politica_na_proxima_sincronizacao(client, db_session):
     sem_politica(db_session)
-    prov = ProvedorPago(uso=uso_lusha())
+    prov = ProvedorPago(uso=uso_contatos())
     conciliacao.sincronizar_politica(db_session, prov)
-    custo.definir_custo(db_session, provedor="lusha", custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="5.50", ator_id="1",
+    custo.definir_custo(db_session, provedor="contatos", custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="5.50", ator_id="1",
                         tenant_auditoria=A, motivo="câmbio de planejamento 5,50", aprovar=True)
     r = conciliacao.sincronizar_politica(db_session, prov)
-    assert r["alterada"] is True and precos.exibir(config.politica_vigente(db_session, "lusha")[0].custo_unitario_brl, 9) == Decimal("0.485294118")
+    assert r["alterada"] is True and precos.exibir(config.politica_vigente(db_session, "contatos")[0].custo_unitario_brl, 9) == Decimal("0.485294118")
 
 
 def test_pesquisa_se_libera_sozinha_sincronizando_a_politica_na_estimativa(client, db_session):
     sem_politica(db_session)
-    prov = ProvedorPago(uso=uso_lusha())
+    prov = ProvedorPago(uso=uso_contatos())
     p = previa(db_session, eu(db_session), contas(db_session, 1), prov, d=2)
     assert p.estimativa["viavel"] is True and p.estimativa["creditos_maximos"] == 12  # página de 10 × 1 crédito de busca + 2 decisores × 1 crédito de e-mail
-    assert config.politica_vigente(db_session, "lusha")[0] is not None and prov.chamadas == []
+    assert config.politica_vigente(db_session, "contatos")[0] is not None and prov.chamadas == []
 
 
 @pytest.mark.parametrize("mudanca,trecho", [
@@ -576,11 +576,11 @@ def test_pesquisa_se_libera_sozinha_sincronizando_a_politica_na_estimativa(clien
 ])
 def test_tarifa_ausente_ou_fracionada_vira_bloqueio_tecnico_descrito_e_a_pesquisa_segue_fechada(client, db_session, mudanca, trecho):
     sem_politica(db_session)
-    prov = ProvedorPago(uso=uso_lusha(**mudanca))
+    prov = ProvedorPago(uso=uso_contatos(**mudanca))
     with pytest.raises(PesquisaBloqueada) as erro:
         previa(db_session, eu(db_session), contas(db_session, 1), prov, d=1)
     assert trecho in str(erro.value)
-    assert config.politica_vigente(db_session, "lusha")[0] is None and prov.chamadas == [] and ledger.reservado(db_session, A) == 0
+    assert config.politica_vigente(db_session, "contatos")[0] is None and prov.chamadas == [] and ledger.reservado(db_session, A) == 0
 
 
 def test_provedor_que_nao_informa_o_proprio_uso_deixa_o_bloqueio_tecnico_explicado(client, db_session):
@@ -592,31 +592,31 @@ def test_provedor_que_nao_informa_o_proprio_uso_deixa_o_bloqueio_tecnico_explica
 def test_politica_nao_e_sincronizada_sem_custo_contratual_nem_sem_pacote_de_referencia(client, db_session):
     cenario(db_session, franquia=100, com_politica=False, contrato=False)
     with pytest.raises(ValidacaoFalhou, match="custo contratual"):
-        conciliacao.sincronizar_politica(db_session, ProvedorPago(uso=uso_lusha()))
+        conciliacao.sincronizar_politica(db_session, ProvedorPago(uso=uso_contatos()))
     custo_contratual(db_session)
     with pytest.raises(ValidacaoFalhou, match="pacote ativo"):
-        conciliacao.sincronizar_politica(db_session, ProvedorPago(uso=uso_lusha()))
+        conciliacao.sincronizar_politica(db_session, ProvedorPago(uso=uso_contatos()))
 
 
 def test_confirmacao_nunca_sincroniza_politica_no_meio_da_reserva(client, db_session):
     cenario(db_session, franquia=100)  # política aprovada de teste
-    prov = ProvedorPago(uso=uso_lusha())
+    prov = ProvedorPago(uso=uso_contatos())
     p = previa(db_session, eu(db_session), contas(db_session, 1), prov, d=1)
-    politica_id = config.politica_vigente(db_session, "lusha")[0].id
+    politica_id = config.politica_vigente(db_session, "contatos")[0].id
     assert confirmar(db_session, eu(db_session), p, prov).estado == "reservada"
-    assert config.politica_vigente(db_session, "lusha")[0].id == politica_id
+    assert config.politica_vigente(db_session, "contatos")[0].id == politica_id
 
 
-def test_capacidade_informada_pela_lusha_e_conferida_com_o_contrato(client, db_session):
+def test_capacidade_informada_pela_contatos_e_conferida_com_o_contrato(client, db_session):
     custo_contratual(db_session)
-    assert conciliacao.conferir_capacidade(db_session, ProvedorPago(uso=uso_lusha()))["confere"] is True
+    assert conciliacao.conferir_capacidade(db_session, ProvedorPago(uso=uso_contatos()))["confere"] is True
     diverge = conciliacao.conferir_capacidade(db_session, ProvedorPago(uso=UsoProvedor(creditos_total=100000, creditos_usados=0, creditos_restantes=100000)))
     assert diverge["confere"] is False and diverge["esperado_anual"] == 81600 and diverge["informado_pelo_provedor"] == 100000
 
 
 def test_rotina_agendada_sincroniza_a_politica_e_concilia_no_maximo_a_cada_6_horas(client, db_session):
     sem_politica(db_session)
-    prov = ProvedorPago(uso=uso_lusha())
+    prov = ProvedorPago(uso=uso_contatos())
     primeira = conciliacao.rotina(db_session, prov, AGORA)
     assert primeira["ativa"] is True and primeira["politica"]["alterada"] is True and primeira["conciliacao"]["capacidade"]["confere"] is True
     segunda = conciliacao.rotina(db_session, prov, datetime(2026, 10, 15, 17, 0))  # 2 h depois: política igual, conciliação ainda não é devida
@@ -628,16 +628,16 @@ def test_rotina_agendada_sincroniza_a_politica_e_concilia_no_maximo_a_cada_6_hor
 def test_rotina_isola_falhas_e_nao_roda_sem_provedor_pago_configurado(client, db_session, fake_contact_enrichment):
     assert conciliacao.rotina(db_session, fake_contact_enrichment) == {"ativa": False}  # provedor de dev/teste: nada a fazer
     sem_politica(db_session)
-    r = conciliacao.rotina(db_session, ProvedorPago(uso=uso_lusha(api_search=None)), AGORA)
+    r = conciliacao.rotina(db_session, ProvedorPago(uso=uso_contatos(api_search=None)), AGORA)
     assert "api_search" in r["politica"]["erro"] and r["conciliacao"]["creditos_total"] == 81600  # a política falhou; a conciliação seguiu
 
 
 def test_api_sincroniza_politica_e_concilia_com_conferencia_de_capacidade(client, db_session):
     sem_politica(db_session)
-    provedor = ProvedorPago(uso=uso_lusha())
+    provedor = ProvedorPago(uso=uso_contatos())
     app.dependency_overrides[get_contact_enrichment_provider] = lambda: provedor
-    r = client.post(f"{ADMIN}/provedores/lusha/sincronizar-politica")
+    r = client.post(f"{ADMIN}/provedores/contatos/sincronizar-politica")
     assert r.status_code == 200 and r.json()["alterada"] is True
-    conc = client.post(f"{ADMIN}/provedores/lusha/conciliar").json()
+    conc = client.post(f"{ADMIN}/provedores/contatos/conciliar").json()
     assert conc["capacidade"]["confere"] is True and conc["creditos_total"] == 81600
     assert client.post(f"{ADMIN}/provedores/outro/sincronizar-politica").status_code in (400, 422)

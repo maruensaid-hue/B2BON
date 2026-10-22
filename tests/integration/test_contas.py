@@ -223,13 +223,13 @@ def test_enriquecer_conta_via_brasilapi_registra_fonte(client, criar_icp, fake_a
     fake_account_data.candidatos = [_candidato("11222333000191", "Alpha Tech")]
     conta_id = client.post(f"/api/v1/icp/{icp['id']}/contas/gerar", json={"quantidade": 5}).json()["contas"][0]["id"]
 
-    resposta = client.post(f"/api/v1/contas/{conta_id}/enriquecer-brasilapi")
+    resposta = client.post(f"/api/v1/contas/{conta_id}/enriquecer-cadastro")
 
     assert resposta.status_code == 200
     campos = resposta.json()["campos"]
     assert len(campos) >= 1
     for campo in campos:
-        assert campo["fonte"] == "brasilapi_cnpj"
+        assert campo["fonte"] == "cadastro_publico_cnpj"
         assert campo["coletado_em"]
 
 
@@ -441,7 +441,7 @@ def test_conta_e_decisor_persistidos_no_grafo(client, criar_icp, fake_account_da
 
 
 def test_mapear_decisores_traz_somente_o_qsa_e_nunca_consulta_provedor_de_contatos(client, criar_icp, fake_account_data, fake_contact_enrichment):
-    """Governança de enriquecimento: contatos de provedor pago (Lusha) só vêm da pesquisa de decisores confirmada. Aqui, mesmo com um provedor
+    """Governança de enriquecimento: contatos de provedor pago só vêm da pesquisa de decisores confirmada. Aqui, mesmo com um provedor
     cheio de contatos disponível, a resposta é só o QSA da Receita e o provedor nem é consultado."""
     icp = criar_icp()
     cnpj = "11222333000191"
@@ -474,7 +474,7 @@ def test_mapear_decisores_repetido_nao_duplica_o_socio_do_qsa(client, criar_icp,
 
 
 def test_mapear_decisores_sem_cnpj_nao_cai_para_provedor_de_contatos(client, fake_contact_enrichment):
-    """Sem CNPJ não há QSA: o resultado é vazio. Não existe alternativa automática para a Lusha ou outro provedor."""
+    """Sem CNPJ não há QSA: o resultado é vazio. Não existe alternativa automática para o provedor de contatos ou outro provedor."""
     conta_id = client.post(
         "/api/v1/leads/contas", json={"nome": "Beta Clinica", "dominio": "betaclinica.com.br"}
     ).json()["id"]
@@ -572,7 +572,7 @@ def test_export_pdf_inclui_email_e_telefone_do_decisor(client, criar_icp, fake_a
 
 
 def test_export_pdf_normaliza_acento_decomposto(client, criar_icp, fake_account_data, monkeypatch):
-    """Raio-X: nome vindo de fornecedor externo (Lusha) pode chegar com
+    """Raio-X: nome vindo de fornecedor externo pode chegar com
     acento em forma decomposta (NFD) — sem normalizar pra NFC antes do
     encode Latin-1, "César" virava "Ce?sar" no PDF exportado."""
     from fpdf import FPDF

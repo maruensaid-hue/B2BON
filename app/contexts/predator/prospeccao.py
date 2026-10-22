@@ -639,12 +639,12 @@ def enriquecer_via_brasilapi(
     institucional), pois a resposta já vem em JSON."""
     conta = obter_conta(db, tenant_id, conta_id)
     if not conta.cnpj:
-        raise RegraNegocioViolada("Conta sem CNPJ cadastrado — não é possível enriquecer via BrasilAPI.")
+        raise RegraNegocioViolada("Conta sem CNPJ cadastrado — não é possível enriquecer com dados cadastrais públicos.")
 
     try:
         resposta = brasilapi_client(conta.cnpj)
     except httpx.HTTPError as erro:
-        raise RegraNegocioViolada(f"Não foi possível consultar a BrasilAPI: {erro}") from erro
+        raise RegraNegocioViolada(f"Não foi possível consultar o cadastro público: {erro}") from erro
 
     cnaes_secundarios = resposta.get("cnaes_secundarios") or []
     valores_por_campo = {
@@ -670,26 +670,26 @@ def enriquecer_via_brasilapi(
             conta_id=conta.id,
             campo=campo,
             valor=str(valor),
-            fonte="brasilapi_cnpj",
+            fonte="cadastro_publico_cnpj",
             coletado_em=agora,
         )
         db.add(registro)
         campos.append(registro)
 
     atividade_service.registrar(
-        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao="IA enriqueceu via BrasilAPI", ator_id=ator_id
+        db, tenant_id, conta_id=conta.id, tipo="sistema", descricao="IA enriqueceu com dados cadastrais públicos", ator_id=ator_id
     )
     auditoria_service.registrar(
         db,
         tenant_id,
-        "conta_enriquecida_brasilapi",
+        "conta_enriquecida_cadastro",
         "conta",
         conta.id,
         ator_id,
         {"campos": len(campos)},
         conta_id=conta.id,
     )
-    _registrar_uso_fonte(db, tenant_id, "brasilapi", "enriquecer_conta", ator_id, conta.id)
+    _registrar_uso_fonte(db, tenant_id, "cadastro_publico", "enriquecer_conta", ator_id, conta.id)
     db.commit()
     for campo_registro in campos:
         db.refresh(campo_registro)
@@ -724,7 +724,7 @@ def mapear_decisores(
     """Decisores mapeados SOMENTE pelo QSA da Receita Federal (sócios/administradores formais, quando a conta tem CNPJ), persistidos no
     grafo (E2-H2).
 
-    Não consulta nenhum provedor de contatos (Lusha ou outro), nem como alternativa quando o QSA vem vazio: contatos de provedor pago só
+    Não consulta nenhum provedor de contatos (ou outro), nem como alternativa quando o QSA vem vazio: contatos de provedor pago só
     chegam pela pesquisa de decisores governada (`app/contexts/enriquecimento`: seleção explícita, confirmação, reserva de créditos e
     orçamento global). Por isso esta função nem recebe um provedor de contatos, e nada aqui depende da configuração de enriquecimento."""
     enriquecimento_limite_service.verificar_e_registrar(db, tenant_id, "contatos", plan_limits)

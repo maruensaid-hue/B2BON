@@ -14,7 +14,7 @@ router = APIRouter(prefix="/relatorio-consumo-creditos", tags=["relatorio-consum
 @router.get("")
 def relatorio(inicio: date | None = None, fim: date | None = None, tenant_id: str | None = None,
               usuario: Usuario = Depends(exigir_papel("admin", "super_admin")), db: Session = Depends(get_db)) -> dict:
-    """Consumo de créditos de IA e de enriquecimento (Lusha) por empresa e por usuário, com a franquia e os limites do perfil contratado, as aquisições de
+    """Consumo de créditos de IA e de enriquecimento por empresa e por usuário, com a franquia e os limites do perfil contratado, as aquisições de
     créditos adicionais (quantidade, data e valor) e o consumo adicional. Super admin vê todas as empresas; admin, a própria e a subárvore. Padrão: mês corrente."""
     return relatorio_consumo_service.gerar(db, usuario, inicio, fim, tenant_id)
 

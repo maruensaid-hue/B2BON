@@ -135,7 +135,7 @@ export function AdminEnriquecimento() {
     api.get<PlanoStatus[]>("/admin/enriquecimento/planos").then(setPlanos).catch(() => setPlanos([]));
     api.get<ConfigLinha[]>("/admin/enriquecimento/config").then(setConfigs).catch(() => setConfigs([]));
     api.get<PacoteLinha[]>("/admin/enriquecimento/pacotes").then(setPacotes).catch(() => setPacotes([]));
-    api.get<Rentabilidade>("/admin/enriquecimento/pacotes/rentabilidade?provedor=lusha").then(setRentabilidade).catch(() => setRentabilidade(null));
+    api.get<Rentabilidade>("/admin/enriquecimento/pacotes/rentabilidade?provedor=contatos").then(setRentabilidade).catch(() => setRentabilidade(null));
     api.get<CompraAdmin[]>("/admin/enriquecimento/compras?limite=20").then(setCompras).catch(() => setCompras([]));
     api.get<Auditoria[]>("/admin/enriquecimento/auditoria?limite=30").then(setAuditoria).catch(() => setAuditoria([]));
   }, []);

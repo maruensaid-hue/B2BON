@@ -1,8 +1,8 @@
-"""Relatório de consumo de créditos de IA e de enriquecimento (pesquisa de decisores / Lusha).
+"""Relatório de consumo de créditos de IA e de enriquecimento (pesquisa de decisores / provedor de contatos).
 
 Responde, para um período e para o escopo de quem pede (super admin: todas as empresas; admin: a própria empresa e a subárvore):
 
-* quanto cada EMPRESA e cada USUÁRIO consumiu, de IA e de Lusha;
+* quanto cada EMPRESA e cada USUÁRIO consumiu, de IA e de provedor de contatos;
 * a franquia e os limites do perfil contratado (plano), e quanto da franquia foi usado;
 * as aquisições de créditos adicionais (quantidade, data e valor);
 * o consumo ADICIONAL (o que saiu de pacote comprado, promoção/ajuste ou excedente pós-pago), separado do consumo da franquia.
@@ -140,10 +140,10 @@ def _ia(db: Session, tenant_id: str, ini: datetime, fim: datetime, usuarios: dic
     }
 
 
-# ---------------------------------------------------------------------------------------------------------------------------- Lusha
+# ---------------------------------------------------------------------------------------------------------------------------- provedor de contatos
 
 
-def _lusha(db: Session, tenant_id: str, ini: datetime, fim: datetime, agora: datetime, usuarios: dict[int, Usuario]) -> dict:
+def _contatos(db: Session, tenant_id: str, ini: datetime, fim: datetime, agora: datetime, usuarios: dict[int, Usuario]) -> dict:
     consumo_total = -int(db.query(func.coalesce(func.sum(EnriquecimentoMovimento.delta_saldo), 0)).filter(
         EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.tipo.in_(enr_ledger.TIPOS_CONSUMO),
         EnriquecimentoMovimento.criado_em >= ini, EnriquecimentoMovimento.criado_em < fim).scalar() or 0)
@@ -177,7 +177,7 @@ def _lusha(db: Session, tenant_id: str, ini: datetime, fim: datetime, agora: dat
     for c in db.query(EnriquecimentoCompra).filter(EnriquecimentoCompra.tenant_id == tenant_id, EnriquecimentoCompra.status == "APROVADA",
                                                    EnriquecimentoCompra.confirmado_em >= ini, EnriquecimentoCompra.confirmado_em < fim).order_by(
             EnriquecimentoCompra.confirmado_em).all():
-        compras.append({"produto": "Lusha", "pacote": c.pacote_codigo, "creditos": int(c.creditos), "valor_brl": _dinheiro(c.preco_total_brl),
+        compras.append({"produto": "Decisores", "pacote": c.pacote_codigo, "creditos": int(c.creditos), "valor_brl": _dinheiro(c.preco_total_brl),
                         "data": c.confirmado_em.isoformat(), "valido_ate": c.expira_em.isoformat() if c.expira_em else None})
 
     cfg, motivo = enr_config.config_vigente(db, tenant_id)
@@ -217,29 +217,29 @@ def gerar(db: Session, usuario: Usuario, inicio: date | None = None, fim: date |
     for tenant in _tenants_do_escopo(db, usuario, tenant_id):
         plano = (db.query(Plano).join(Licenca, Licenca.plano_id == Plano.id).filter(Licenca.tenant_id == tenant.id).first())
         usuarios = _usuarios(db, tenant.id)
-        ia, lusha = _ia(db, tenant.id, ini, limite, usuarios), _lusha(db, tenant.id, ini, limite, agora, usuarios)
-        empresas.append({"tenant_id": tenant.id, "empresa": tenant.razao_social, "plano": plano.nome if plano else None, "ia": ia, "lusha": lusha})
-    empresas.sort(key=lambda e: -(e["ia"]["consumo_total"] + e["lusha"]["consumo_total"]))
+        ia, contatos = _ia(db, tenant.id, ini, limite, usuarios), _contatos(db, tenant.id, ini, limite, agora, usuarios)
+        empresas.append({"tenant_id": tenant.id, "empresa": tenant.razao_social, "plano": plano.nome if plano else None, "ia": ia, "contatos": contatos})
+    empresas.sort(key=lambda e: -(e["ia"]["consumo_total"] + e["contatos"]["consumo_total"]))
     aquisicoes = sorted(
-        ({**a, "tenant_id": e["tenant_id"], "empresa": e["empresa"]} for e in empresas for a in e["ia"]["aquisicoes"] + e["lusha"]["aquisicoes"]),
+        ({**a, "tenant_id": e["tenant_id"], "empresa": e["empresa"]} for e in empresas for a in e["ia"]["aquisicoes"] + e["contatos"]["aquisicoes"]),
         key=lambda a: a["data"])
     totais = {
         "empresas": len(empresas),
         "ia": {"consumo_total": _n(sum(e["ia"]["consumo_total"] for e in empresas)),
                "consumo_da_franquia": _n(sum(e["ia"]["consumo_da_franquia"] for e in empresas)),
                "consumo_adicional": _n(sum(e["ia"]["consumo_adicional"]["total"] + e["ia"]["consumo_excedente"]["creditos"] for e in empresas))},
-        "lusha": {"consumo_total": sum(e["lusha"]["consumo_total"] for e in empresas), "consumo_da_franquia": sum(e["lusha"]["consumo_da_franquia"] for e in empresas),
-                  "consumo_adicional": sum(e["lusha"]["consumo_adicional"]["total"] for e in empresas)},
+        "contatos": {"consumo_total": sum(e["contatos"]["consumo_total"] for e in empresas), "consumo_da_franquia": sum(e["contatos"]["consumo_da_franquia"] for e in empresas),
+                  "consumo_adicional": sum(e["contatos"]["consumo_adicional"]["total"] for e in empresas)},
         "aquisicoes": {"quantidade": len(aquisicoes), "creditos": sum(a["creditos"] for a in aquisicoes),
                        "valor_brl": _dinheiro(sum(Decimal(a["valor_brl"]) for a in aquisicoes))},
     }
     return {"periodo": {"inicio": ini.isoformat(), "fim": limite.isoformat(), "fuso": "UTC (datas de Brasília, UTC−3)"}, "totais": totais, "empresas": empresas,
             "aquisicoes": aquisicoes,
             "notas": [
-                "Consumo por usuário: IA = execuções liquidadas do usuário; Lusha = créditos das pesquisas de decisores confirmadas por ele.",
+                "Consumo por usuário: IA = execuções liquidadas do usuário; provedor de contatos = créditos das pesquisas de decisores confirmadas por ele.",
                 "Consumo adicional = o que saiu de pacote comprado, bônus/ajuste ou excedente pós-pago. A origem é derivada do razão: a franquia, que vence antes, é "
                 "consumida primeiro.",
-                "Créditos de IA e de enriquecimento (Lusha) são carteiras separadas e nunca se somam.",
+                "Créditos de IA e de enriquecimento são carteiras separadas e nunca se somam.",
             ]}
 
 
@@ -250,9 +250,9 @@ def para_csv(relatorio: dict) -> str:
     escritor.writerow(["tipo", "empresa", "plano", "produto", "usuario", "descricao", "creditos", "valor_brl", "data"])
     for e in relatorio["empresas"]:
         base = [e["empresa"], e["plano"] or ""]
-        for produto, d in (("IA", e["ia"]), ("Lusha", e["lusha"])):
+        for produto, d in (("IA", e["ia"]), ("Decisores", e["contatos"])):
             escritor.writerow(["franquia", *base, produto, "", "Franquia mensal contratada", d["franquia_mensal"] if d["franquia_mensal"] is not None else "", "", ""])
-            if produto == "Lusha":
+            if produto == "Decisores":
                 escritor.writerow(["limite", *base, produto, "", f"Máx. de créditos por pesquisa ({d['limite_por_pesquisa_origem']})",
                                    d["limite_por_pesquisa"] if d["limite_por_pesquisa"] is not None else "", "", ""])
                 escritor.writerow(["limite", *base, produto, "", "Máx. de decisores por empresa", d["decisores_por_empresa_max"] or "", "", ""])

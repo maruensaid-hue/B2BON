@@ -94,7 +94,7 @@ def enriquecer_contas_em_lote(
     """Enfileira as contas selecionadas pra enriquecimento em lote (site +
     decisores) — processado aos poucos pelo cron a cada 15min, mesma fila
     usada pela importação de planilha de evento. Não roda na hora (cada
-    conta passa por LLM + busca web + Lusha), pra não estourar o timeout
+    conta passa por LLM + busca web + provedor de contatos), pra não estourar o timeout
     do proxy do Render."""
     return EnriquecerEmLoteResponseSchema(
         **prospeccao.enfileirar_enriquecimento_em_lote(db, tenant_id, dados.conta_ids)
@@ -123,7 +123,7 @@ def enriquecer_conta(
     return EnriquecerContaResponseSchema(campos=campos)
 
 
-@router.post("/contas/{conta_id}/enriquecer-brasilapi", response_model=EnriquecerContaResponseSchema)
+@router.post("/contas/{conta_id}/enriquecer-cadastro", response_model=EnriquecerContaResponseSchema)
 def enriquecer_conta_via_brasilapi(
     conta_id: int,
     tenant_id: str = Depends(get_tenant_id),

@@ -106,7 +106,7 @@ def test_pesos_configuraveis_versionados_e_auditados(client, db_session, tenants
 
 def test_atribuicao_direta_tem_prioridade_e_nao_vaza_entre_tenants(db_session, tenants):
     _criar(db_session, 0.0)
-    direto = _criar(db_session, 1000.0, fornecedor="Lusha", servico="Créditos de enriquecimento", categoria="DATA_PROVIDER",
+    direto = _criar(db_session, 1000.0, fornecedor="Decisores", servico="Créditos de enriquecimento", categoria="DATA_PROVIDER",
                     metodo_alocacao="DIRECT")
     comissoes.infraestrutura.registrar_custo_direto(db_session, {"componente_id": direto.id, "tenant_id": "t-pro",
                                                                  "competencia": HOJE.strftime("%Y-%m"), "custo": 300, "quantidade": 120}, "teste")

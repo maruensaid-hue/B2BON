@@ -2,11 +2,11 @@
 global, política do provedor (tarifas, custo, markup, preço), lotes de compra e leituras de uso do provedor.
 
 Só cria tabelas novas: nenhuma linha existente é tocada e nenhum saldo é inventado. Linhas inseridas, todas informadas pelo PO:
-  - o lote de compra de R$ 269,94 por 400 créditos Lusha, como histórico de custo;
+  - o lote de compra de R$ 269,94 por 400 créditos provedor de contatos, como histórico de custo;
   - os pacotes adicionais (400/660/1.200/3.000 créditos e "acima de 3.000" sob negociação), aprovados;
   - a franquia de cada plano da matriz que JÁ EXISTE na tabela `plano` (por nome), aprovada pelo PO. Plano que não existe não é criado (exigiria
     preço); rodar `matriz.aplicar` depois cobre os que surgirem.
-Nada disso libera a pesquisa de decisores na Lusha: sem a política do provedor e o orçamento global aprovados ela continua bloqueada.
+Nada disso libera a pesquisa de decisores no provedor de contatos: sem a política do provedor e o orçamento global aprovados ela continua bloqueada.
 
 Downgrade: remove as tabelas e, com elas, configuração, razão, pesquisas, lotes e leituras de uso de enriquecimento. Os decisores já gravados
 e os créditos/lotes de IA não são tocados. O razão e os lotes são histórico financeiro: faça cópia antes de reverter em ambiente com uso.
@@ -294,7 +294,7 @@ def upgrade() -> None:
     op.create_index("ix_enriquecimento_movimento_pesquisa_id", "enriquecimento_movimento", ["pesquisa_id"])
     op.create_index("ix_enriquecimento_movimento_criado_em", "enriquecimento_movimento", ["criado_em"])
 
-    # Aporte informado pelo PO: R$ 269,94 por 400 créditos Lusha (custo unitário de referência R$ 0,67485). Só histórico de custo.
+    # Aporte informado pelo PO: R$ 269,94 por 400 créditos provedor de contatos (custo unitário de referência R$ 0,67485). Só histórico de custo.
     lotes = sa.table(
         "enriquecimento_lote_compra",
         sa.column("provedor", sa.String), sa.column("referencia", sa.String), sa.column("quantidade_creditos", sa.Integer),
@@ -302,7 +302,7 @@ def upgrade() -> None:
         sa.column("observacao", sa.String), sa.column("criado_por", sa.String),
     )
     op.bulk_insert(lotes, [{
-        "provedor": "lusha", "referencia": "APORTE-LUSHA-2026-10-21", "quantidade_creditos": 400, "custo_total_brl": Decimal("269.94"),
+        "provedor": "contatos", "referencia": "APORTE-CONTATOS-2026-10-21", "quantidade_creditos": 400, "custo_total_brl": Decimal("269.94"),
         "custo_unitario_brl": Decimal("0.67485"), "comprado_em": datetime(2026, 10, 21),
         "observacao": "Aporte informado pelo PO; a data é a do registro (a data exata da compra não foi informada).", "criado_por": "migracao",
     }])

@@ -16,9 +16,9 @@ def _inteiro(valor) -> int | None:
     return int(valor)
 
 
-class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
-    """Integração real com a Prospecting API v3 da Lusha — busca por filtros (`POST /v3/contacts/prospecting`) seguida de revelação dos ids
-    escolhidos (`POST /v3/contacts/enrich`), as duas síncronas. Formato conferido na documentação oficial (docs.lusha.com), não por suposição:
+class ProvedorContatosB2B(ContactEnrichmentProvider):
+    """Integração real com a API de prospecção B2B contratada (v3) — busca por filtros (`POST /v3/contacts/prospecting`) seguida de revelação dos ids
+    escolhidos (`POST /v3/contacts/enrich`), as duas síncronas. Formato conferido na documentação oficial do provedor, não por suposição:
 
     * a busca é cobrada por resultado devolvido e a revelação por dado revelado (e-mail e telefone têm tarifas diferentes); as duas respostas
       trazem `billing.creditsCharged`, o consumo REAL da requisição, que é o que a governança de créditos usa (nunca "1 contato = 1 crédito");
@@ -30,7 +30,7 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
     _TAMANHO_MAX_PAGINA = 100  # teto documentado de `pagination.size` e de ids por `enrich`
     _TAMANHO_MIN_PAGINA = 10  # piso documentado de `pagination.size`
 
-    nome_provedor = "lusha"
+    nome_provedor = "contatos"
     max_contatos_por_consulta = _TAMANHO_MAX_PAGINA
     tamanho_pagina_minimo = _TAMANHO_MIN_PAGINA
     pago = True  # cada consulta consome crédito contratado: só pelo caminho governado
@@ -145,7 +145,7 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
 
     @staticmethod
     def _link_linkedin(contato: dict) -> str | None:
-        """Link do perfil no LinkedIn: a Lusha o devolve em `socialLinks.linkedin`; aceita também chaves planas. Nunca inventa: sem link, None."""
+        """Link do perfil no LinkedIn: o provedor o devolve em `socialLinks.linkedin`; aceita também chaves planas. Nunca inventa: sem link, None."""
         social = contato.get("socialLinks") or {}
         for bruto in (social.get("linkedin"), contato.get("linkedinUrl"), contato.get("linkedin")):
             if isinstance(bruto, dict):
@@ -172,7 +172,7 @@ class LushaContactEnrichmentProvider(ContactEnrichmentProvider):
                     email=self._primeiro_valor(contato.get("emails"), "email"),
                     telefone=self._primeiro_valor(contato.get("phones"), "number"),
                     linkedin_url=self._link_linkedin(contato),
-                    fonte="lusha",
+                    fonte="contatos",
                 )
             )
         return candidatos

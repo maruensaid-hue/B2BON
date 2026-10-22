@@ -65,27 +65,27 @@ def _tenant(db, tenant_id, tier):
     return plano
 
 
-def test_precos_publicos_verificados_do_render_e_da_lusha():
+def test_precos_publicos_verificados_do_render_e_da_contatos():
     por_servico = {(c["fornecedor"], c["servico"]): c for c in MIG.COMPONENTES}
     workspace, web = por_servico[("RENDER", "WORKSPACE")], por_servico[("RENDER", "WEB_SERVICE_COMPUTE")]
     assert (workspace["plano_referencia"], workspace["custo_referencia"], workspace["moeda"], workspace["ciclo_cobranca"]) == (
         "Scale", 499.00, "USD", "MONTHLY")
     assert (web["plano_referencia"], web["custo_referencia"]) == ("12c-96g", 1500.00)  # D-077; a D-079 tira o valor (CUSTOM)
-    lusha = por_servico[("LUSHA", "SALES_INTELLIGENCE")]
-    assert (lusha["plano_referencia"], lusha["custo_referencia"], lusha["contabilizacao"]) == ("Premium", 399.90, "DATA_PROVIDER")
-    assert (lusha["atributos"]["creditos_incluidos"], lusha["atributos"]["assentos_incluidos"]) == (3400, 5)
-    for chave in (("RENDER", "WORKSPACE_ENTERPRISE"), ("LUSHA", "SALES_INTELLIGENCE_SCALE")):
+    contatos = por_servico[("CONTATOS_B2B", "SALES_INTELLIGENCE")]
+    assert (contatos["plano_referencia"], contatos["custo_referencia"], contatos["contabilizacao"]) == ("Premium", 399.90, "DATA_PROVIDER")
+    assert (contatos["atributos"]["creditos_incluidos"], contatos["atributos"]["assentos_incluidos"]) == (3400, 5)
+    for chave in (("RENDER", "WORKSPACE_ENTERPRISE"), ("CONTATOS_B2B", "SALES_INTELLIGENCE_SCALE")):
         custom = por_servico[chave]
         assert (custom["modelo_preco"], custom["custo_referencia"], custom["custo_contratado"]) == ("CUSTOM", None, None)  # nada inventado
     for componente in MIG.COMPONENTES:
         assert (componente["tipo_fonte"], componente["verificado_em"]) == ("OFFICIAL_PUBLIC_PRICING", date(2026, 10, 1))
-        assert componente["url_fonte"].startswith("https://") and componente["proxima_revisao_em"] > componente["verificado_em"]
+        assert (componente["url_fonte"] is None or componente["url_fonte"].startswith("https://")) and componente["proxima_revisao_em"] > componente["verificado_em"]
 
 
 def test_pool_so_com_componentes_aplicaveis_e_postgres_e_key_value_fora(db_session):
     _semear(db_session)
     no_pool = {(c.fornecedor, c.servico) for c in comissoes.infraestrutura.aplicaveis(db_session, DIA, POOLS)}
-    assert no_pool == {("RENDER", "WORKSPACE"), ("RENDER", "WEB_SERVICE_COMPUTE"), ("NEON", "POSTGRES"), ("LUSHA", "SALES_INTELLIGENCE")}
+    assert no_pool == {("RENDER", "WORKSPACE"), ("RENDER", "WEB_SERVICE_COMPUTE"), ("NEON", "POSTGRES"), ("CONTATOS_B2B", "SALES_INTELLIGENCE")}
     assert ("RENDER", "POSTGRES") not in no_pool  # USD 11.000 nunca entra sozinho
     key_value = _componente(db_session, "RENDER", "KEY_VALUE")
     comissoes.infraestrutura.atualizar(db_session, key_value.id, {"status_arquitetura": "APPLICABLE", "provisionado_para_comissao": True},
@@ -114,7 +114,7 @@ def test_dolar_pela_ptax_e_pool_completo_com_envelope(db_session):
     _semear(db_session)
     _envelope_neon(db_session)
     dados = comissoes.infraestrutura.pool(db_session, DIA)
-    # (499 + 1.500) × 5 = 9.995 infraestrutura + 985,30 Neon; Lusha 399,90 × 5 = 1.999,50 provedor de dados
+    # (499 + 1.500) × 5 = 9.995 infraestrutura + 985,30 Neon; provedor de contatos 399,90 × 5 = 1.999,50 provedor de dados
     assert dados["por_pool"] == {"DATA_PROVIDER": 1999.5, "INFRASTRUCTURE": 10980.3}
     assert dados["provisionado"] == Decimal("12979.80") and dados["faltantes"] == []
     fx = next(c for c in dados["componentes"] if c["servico"] == "WORKSPACE")["fx"]
@@ -142,9 +142,9 @@ def test_sem_dupla_contagem_neon_e_render_postgres(db_session):
 
 def test_sem_dupla_contagem_entre_provedor_de_dados_e_infraestrutura(db_session):
     _semear(db_session)
-    lusha = next(c for c in MIG.COMPONENTES if c["servico"] == "SALES_INTELLIGENCE")
+    contatos = next(c for c in MIG.COMPONENTES if c["servico"] == "SALES_INTELLIGENCE")
     with pytest.raises(ValidacaoFalhou, match="dupla contagem"):
-        comissoes.infraestrutura.criar(db_session, {**{k: v for k, v in lusha.items() if k != "criado_por"},
+        comissoes.infraestrutura.criar(db_session, {**{k: v for k, v in contatos.items() if k != "criado_por"},
                                                     "contabilizacao": "INFRASTRUCTURE"}, "teste")
     _envelope_neon(db_session)
     regras = dict(comissoes.politica.vigente_infra(db_session).regras, pools_comissao=["INFRASTRUCTURE"])
@@ -160,12 +160,12 @@ def test_preco_custom_nunca_recebe_valor_publico_e_contrato_tem_prioridade(db_se
     with pytest.raises(ValidacaoFalhou, match="CUSTOM"):
         comissoes.infraestrutura.criar(db_session, {**{k: v for k, v in escala.items() if k != "criado_por"}, "custo_referencia": 999.0,
                                                     "servico": "OUTRO"}, "teste")
-    # contrato futuro do Lusha Scale substitui o preço público do mesmo serviço (não soma)
+    # contrato futuro do provedor de contatos Scale substitui o preço público do mesmo serviço (não soma)
     premium = next(c for c in MIG.COMPONENTES if c["servico"] == "SALES_INTELLIGENCE")
     comissoes.infraestrutura.criar(db_session, {**{k: v for k, v in premium.items() if k != "criado_por"}, "plano": "Scale",
                                                 "plano_referencia": "Scale", "custo_referencia": 800.0, "tipo_fonte": "CONTRACT"}, "teste")
-    lushas = [c for c in comissoes.infraestrutura.aplicaveis(db_session, DIA, POOLS) if c.fornecedor == "LUSHA"]
-    assert [(c.plano_referencia, c.tipo_fonte) for c in lushas] == [("Scale", "CONTRACT")]
+    contatoss = [c for c in comissoes.infraestrutura.aplicaveis(db_session, DIA, POOLS) if c.fornecedor == "CONTATOS_B2B"]
+    assert [(c.plano_referencia, c.tipo_fonte) for c in contatoss] == [("Scale", "CONTRACT")]
 
 
 def test_pesos_por_tier_incluindo_bid_intelligence_e_strategic_sourcing(db_session):
@@ -227,7 +227,7 @@ def test_revisao_de_preco_vencida_aparece_nas_pendencias(client, db_session):
     assert any(p.startswith("Revisar preço: RENDER · WORKSPACE") for p in pendentes)
     assert "Confirmar uso na arquitetura: RENDER · WEB_SERVICE_COMPUTE" in pendentes
     assert "Capacity envelope: NEON · POSTGRES" in pendentes
-    assert not any("LUSHA" in p and "Valor" in p for p in pendentes) and not any("Enterprise" in p for p in pendentes)
+    assert not any("CONTATOS_B2B" in p and "Valor" in p for p in pendentes) and not any("Enterprise" in p for p in pendentes)
 
 
 def test_web_service_12c_96g_custom_sem_preco_e_pool_aguarda(client, db_session):

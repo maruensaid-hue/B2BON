@@ -65,5 +65,5 @@ class SendGridEmailProvider(EmailProvider):
             return ResultadoEnvio(sucesso=False, motivo_falha=str(erro))
 
         if resposta.status_code != 202:
-            return ResultadoEnvio(sucesso=False, motivo_falha=f"SendGrid {resposta.status_code}: {resposta.text}")
+            return ResultadoEnvio(sucesso=False, motivo_falha=f"Falha do serviço de e-mail ({resposta.status_code}): {resposta.text}")
         return ResultadoEnvio(sucesso=True, id_externo=resposta.headers.get("X-Message-Id"))

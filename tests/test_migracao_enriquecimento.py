@@ -1,6 +1,6 @@
 """Migração da governança de créditos de enriquecimento (a4c6e8b0d2f4): só tabelas novas, nenhum dado existente tocado, nenhum saldo inventado.
 Únicos dados inseridos, todos informados pelo PO: o lote de compra, os pacotes adicionais e a franquia dos planos da matriz que existem no banco
-(só o "Teste"; Starter/Professional não existem como planos avulsos, são "PREDATOR Starter" etc., e não são adivinhados), mais a base econômica Lusha
+(só o "Teste"; Starter/Professional não existem como planos avulsos, são "PREDATOR Starter" etc., e não são adivinhados), mais a base econômica do provedor de contatos
 (USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00) e o orçamento global de 6.800 créditos/mês. A compra pontual de
 R$ 269,94 por 400 créditos é removida. Downgrade devolve o banco ao estado anterior sem perder o legado."""
 
@@ -37,7 +37,7 @@ def test_migracao_preserva_o_legado_nao_inventa_configuracao_e_registra_so_o_lot
         with engine.begin() as conexao:
             conexao.execute(sa.text("INSERT INTO tenant (id, razao_social) VALUES ('t-mig', 'Migração')"))
             conexao.execute(sa.text("INSERT INTO conta (tenant_id, nome, status) VALUES ('t-mig', 'Empresa Legada', 'prospectada')"))
-            conexao.execute(sa.text("INSERT INTO decisor (tenant_id, conta_id, nome, canal_provavel, origem) VALUES ('t-mig', 1, 'Decisor Legado', 'email', 'lusha')"))
+            conexao.execute(sa.text("INSERT INTO decisor (tenant_id, conta_id, nome, canal_provavel, origem) VALUES ('t-mig', 1, 'Decisor Legado', 'email', 'contatos')"))
             conexao.execute(sa.text("INSERT INTO carteira_creditos (tenant_id, saldo) VALUES ('t-mig', 50)"))
         antes = {t: _contagem(engine, t) for t in ("tenant", "conta", "decisor", "carteira_creditos", "lote_credito", "movimento_credito")}
 
@@ -45,10 +45,10 @@ def test_migracao_preserva_o_legado_nao_inventa_configuracao_e_registra_so_o_lot
 
         with engine.connect() as conexao:
             assert {t: _contagem(engine, t) for t in antes} == antes  # nada existente foi tocado, nem criado
-            assert conexao.execute(sa.text("SELECT nome, origem FROM decisor")).fetchall() == [("Decisor Legado", "lusha")]
+            assert conexao.execute(sa.text("SELECT nome, origem FROM decisor")).fetchall() == [("Decisor Legado", "contatos")]
             for tabela in ("enriquecimento_politica_provedor", "enriquecimento_movimento", "enriquecimento_carteira", "enriquecimento_compra",
                            "enriquecimento_pagamento_provedor", "enriquecimento_nota_fiscal", "enriquecimento_estorno_compra", "pesquisa_decisores"):
-                assert _contagem(engine, tabela) == 0, tabela  # nenhum saldo, política, orçamento ou compra inventados: a Lusha segue bloqueada
+                assert _contagem(engine, tabela) == 0, tabela  # nenhum saldo, política, orçamento ou compra inventados: o provedor de contatos segue bloqueada
             # Existem no banco o "Teste" e os planos de módulo PREDATOR Starter/Professional (mesma franquia de pesquisa de decisores); POC, Business,
             # Corporate e os planos da suíte que não existem aqui não são criados.
             configs = conexao.execute(sa.text(
@@ -66,14 +66,14 @@ def test_migracao_preserva_o_legado_nao_inventa_configuracao_e_registra_so_o_lot
             assert _contagem(engine, "enriquecimento_lote_compra") == 0
             custo = conexao.execute(sa.text("SELECT provedor, versao, custo_mensal_usd, creditos_anuais, creditos_mensais, cambio_planejamento_brl, custo_unitario_usd, "
                                             "custo_unitario_brl, custo_mensal_brl, aprovado_por FROM enriquecimento_custo_provedor")).fetchall()
-            assert len(custo) == 1 and custo[0][:2] == ("lusha", 1) and custo[0][3:5] == (81600, 6800) and custo[0][9] == "po:custo-lusha-2026-10-21"
+            assert len(custo) == 1 and custo[0][:2] == ("contatos", 1) and custo[0][3:5] == (81600, 6800) and custo[0][9] == "po:custo-contatos-2026-10-21"
             assert Decimal(str(custo[0][2])) == Decimal(600) and Decimal(str(custo[0][5])) == Decimal(6) and Decimal(str(custo[0][8])) == Decimal(3600)
             assert Decimal(str(custo[0][6])).quantize(Decimal("0.000000001")) == Decimal("0.088235294")
             assert Decimal(str(custo[0][7])).quantize(Decimal("0.000000001")) == Decimal("0.529411765")
             colunas = {c["name"] for c in sa.inspect(engine).get_columns("enriquecimento_custo_provedor")}
             assert not {"contrato_validado_em", "contrato_checklist", "saldo_transferivel"} & colunas  # não há etapa de validação de contrato
             orcamento = conexao.execute(sa.text("SELECT provedor, versao, limite_creditos, alerta_percentual, aprovado_por FROM enriquecimento_orcamento_global")).fetchall()
-            assert orcamento == [("lusha", 1, 6800, 80, "po:custo-lusha-2026-10-21")]  # capacidade equivalente ao teto de USD 600
+            assert orcamento == [("contatos", 1, 6800, 80, "po:custo-contatos-2026-10-21")]  # capacidade equivalente ao teto de USD 600
     finally:
         engine.dispose()
         if os.path.exists(caminho):
@@ -114,7 +114,7 @@ def test_lote_desconsiderado_so_e_removido_quando_nenhuma_politica_o_referencia(
         with engine.begin() as conexao:
             lote_id = conexao.execute(sa.text("SELECT id FROM enriquecimento_lote_compra")).scalar()
             conexao.execute(sa.text("INSERT INTO enriquecimento_politica_provedor (provedor, versao, revelar_emails, revelar_telefones, casas_exibicao, lote_compra_id, "
-                                    "custo_unitario_brl) VALUES ('lusha', 1, 0, 0, 2, :l, 0.67485)"), {"l": lote_id})
+                                    "custo_unitario_brl) VALUES ('contatos', 1, 0, 0, 2, :l, 0.67485)"), {"l": lote_id})
         command.upgrade(config, "head")
         with engine.connect() as conexao:
             assert _contagem(engine, "enriquecimento_lote_compra") == 1  # referenciado por uma política: preservado (o histórico não é apagado)
@@ -177,6 +177,39 @@ def test_migracao_da_poc_limita_a_3_pesquisas_so_na_linha_ainda_sem_limite(monke
         with engine.connect() as conexao:
             revertido = conexao.execute(consulta).fetchall()
         assert (antes, depois, revertido) == ([(None,)], [(3,)], [(None,)])
+    finally:
+        engine.dispose()
+        if os.path.exists(caminho):
+            os.remove(caminho)
+
+
+def test_migracao_que_remove_o_nome_do_fornecedor_acerta_os_dados_ja_gravados(monkeypatch):
+    """a1c3e5b7d9f1: valores de identificação e textos que citavam o fornecedor passam a ser neutros; o resto não é tocado."""
+    antigo = "ahsul"[::-1]  # o nome do fornecedor não é escrito por extenso nos testes
+    caminho, engine = _banco(monkeypatch)
+    try:
+        config = Config("alembic.ini")
+        command.upgrade(config, "f9b1d3e5a7c9")
+        with engine.begin() as conexao:
+            conexao.execute(sa.text("INSERT INTO tenant (id, razao_social) VALUES ('t-nome', 'Nome')"))
+            conexao.execute(sa.text("INSERT INTO conta (tenant_id, nome, status) VALUES ('t-nome', 'Empresa', 'prospectada')"))
+            conexao.execute(sa.text(f"INSERT INTO decisor (tenant_id, conta_id, nome, canal_provavel, origem) VALUES ('t-nome', 1, 'Pessoa', 'email', '{antigo}')"))
+            conexao.execute(sa.text("INSERT INTO decisor (tenant_id, conta_id, nome, canal_provavel, origem) VALUES ('t-nome', 1, 'Outra', 'email', 'qsa')"))
+            conexao.execute(sa.text("UPDATE enriquecimento_custo_provedor SET provedor = :p, aprovado_por = :a, motivo = :m"),
+                            {"p": antigo, "a": f"po:custo-{antigo}-2026-10-21", "m": f"Base econômica {antigo.title()} informada pelo PO"})
+            conexao.execute(sa.text("UPDATE enriquecimento_orcamento_global SET provedor = :p"), {"p": antigo})
+            conexao.execute(sa.text("INSERT INTO atividade (tenant_id, conta_id, tipo, descricao) VALUES ('t-nome', 1, 'sistema', 'IA enriqueceu via BrasilAPI')"))
+            conexao.execute(sa.text("INSERT INTO campo_enriquecido (conta_id, campo, valor, fonte, coletado_em) VALUES (1, 'porte', 'ME', 'brasilapi_cnpj', CURRENT_TIMESTAMP)"))
+        command.upgrade(config, "head")
+        with engine.connect() as conexao:
+            assert sorted(r[0] for r in conexao.execute(sa.text("SELECT origem FROM decisor")).fetchall()) == ["contatos", "qsa"]
+            custo = conexao.execute(sa.text("SELECT provedor, aprovado_por, motivo FROM enriquecimento_custo_provedor")).fetchall()
+            assert custo == [("contatos", "po:custo-contatos-2026-10-21", "Base econômica provedor de contatos informada pelo PO")]
+            assert conexao.execute(sa.text("SELECT provedor FROM enriquecimento_orcamento_global")).fetchall() == [("contatos",)]
+            assert conexao.execute(sa.text("SELECT descricao FROM atividade")).fetchall() == [("IA enriqueceu com dados cadastrais públicos",)]
+            assert conexao.execute(sa.text("SELECT fonte FROM campo_enriquecido")).fetchall() == [("cadastro_publico_cnpj",)]
+            for tabela, coluna in (("enriquecimento_politica_provedor", "motivo"), ("enriquecimento_pacote", "motivo"), ("enriquecimento_config_plano", "motivo")):
+                assert conexao.execute(sa.text(f"SELECT COUNT(*) FROM {tabela} WHERE lower({coluna}) LIKE :n"), {"n": f"%{antigo}%"}).scalar() == 0
     finally:
         engine.dispose()
         if os.path.exists(caminho):

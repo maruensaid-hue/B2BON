@@ -2,7 +2,7 @@
 
 Cobre: limites por plano (inclui Teste gratuito = 3 decisores), concessão mensal idempotente no mês de Brasília, expiração sem acúmulo, pacotes (preço
 exato em centavos, expiração informada antes da compra, saldo separado que não aumenta limites, >3.000 sem checkout), rentabilidade, POC com teto
-calculado, limites por período do Enterprise, ICP grande sem limite, site fora da franquia Lusha, webhook de pagamento e permissões.
+calculado, limites por período do Enterprise, ICP grande sem limite, site fora da franquia do provedor de contatos, webhook de pagamento e permissões.
 Provedor e pagamento sempre simulados: nenhuma chamada real, nenhum orçamento real."""
 
 import hashlib
@@ -76,7 +76,7 @@ def dados_fiscais(db, tenant_id, cnpj="11222333000181"):
     db.commit()
 
 
-def liberar_lusha(db, linha="Starter"):
+def liberar_contatos(db, linha="Starter"):
     """Plano com a franquia da matriz + política e orçamento aprovados: a pesquisa (e a compra de créditos) fica liberada."""
     cenario(db, padrao=None)
     aplicar_linha(db, linha)
@@ -116,7 +116,7 @@ def test_configuracao_anterior_com_5_decisores_e_substituida_pelo_teto_do_teste_
 
 
 def test_teste_gratuito_permite_no_maximo_3_decisores_nunca_5(client, db_session):
-    liberar_lusha(db_session, "Teste gratuito")
+    liberar_contatos(db_session, "Teste gratuito")
     solic, prov = eu(db_session), ProvedorPago()
     cs = contas(db_session, 2)
     with pytest.raises(ValidacaoFalhou, match=r"excede o máximo do seu plano \(3\)"):
@@ -133,7 +133,7 @@ def test_nenhuma_configuracao_do_projeto_permite_5_decisores_no_teste_gratuito()
 
 
 def test_creditos_por_pesquisa_sao_limitados_pela_franquia_e_o_bloqueio_mostra_alternativas_sem_mudar_a_selecao(client, db_session):
-    liberar_lusha(db_session, "Starter")  # 30 créditos por pesquisa, até 5 decisores por empresa
+    liberar_contatos(db_session, "Starter")  # 30 créditos por pesquisa, até 5 decisores por empresa
     solic, prov = eu(db_session), ProvedorPago()
     cabe = previa(db_session, solic, contas(db_session, 6), prov, d=5)  # 6 × 5 = 30
     assert cabe.estimativa["viavel"] is True and cabe.estimativa["creditos_maximos"] == 30
@@ -178,7 +178,7 @@ def test_linha_inexistente_no_mapeamento_e_recusada(client, db_session):
 
 
 def test_concessao_mensal_e_idempotente_e_o_ciclo_vira_no_mes_de_brasilia(client, db_session):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     cfg, _ = config.config_vigente(db_session, A)
     for _ in range(3):  # reprocessar a renovação no mesmo ciclo não duplica
         ledger.preparar(db_session, A, cfg, AGORA)
@@ -196,7 +196,7 @@ def test_concessao_mensal_e_idempotente_e_o_ciclo_vira_no_mes_de_brasilia(client
 
 
 def test_o_que_foi_consumido_no_mes_nao_expira_so_o_resto(client, db_session):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     cfg, _ = config.config_vigente(db_session, A)
     ledger.preparar(db_session, A, cfg, AGORA)
     ledger.travar_carteira(db_session, A)
@@ -209,7 +209,7 @@ def test_o_que_foi_consumido_no_mes_nao_expira_so_o_resto(client, db_session):
 
 
 def test_a_rotina_mensal_renova_e_expira_de_forma_idempotente_e_isolada_por_tenant(client, db_session):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     primeiro = renovacao.renovar_todos(db_session, AGORA)
     assert primeiro["franquias_concedidas"] == 1 and primeiro["erros"] == 0
     de_novo = renovacao.renovar_todos(db_session, AGORA)
@@ -265,7 +265,7 @@ def test_pacote_novo_nasce_pendente_e_a_versao_aprovada_continua_valendo_ate_apr
 
 
 def test_compra_exige_aceite_da_expiracao_e_pacote_negociado_nao_tem_checkout(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     base = dict(payment_provider=pagamento, email_pagador="a@b.com", provider=prov, ator_id="1", agora=AGORA)
@@ -276,7 +276,7 @@ def test_compra_exige_aceite_da_expiracao_e_pacote_negociado_nao_tem_checkout(cl
     assert db_session.query(EnriquecimentoCompra).count() == 0 and pagamento._preferencias == {}
 
 
-def test_compra_e_bloqueada_enquanto_a_pesquisa_lusha_esta_indisponivel(client, db_session):
+def test_compra_e_bloqueada_enquanto_a_pesquisa_contatos_esta_indisponivel(client, db_session):
     catalogo(db_session)  # sem plano, política nem orçamento aprovados
     pagamento = StubPaymentProvider()
     erro = pytest.raises(PesquisaBloqueada, pacotes.iniciar_compra, db_session, A, "ENRIQ_400", aceite_expiracao=True, payment_provider=pagamento,
@@ -285,7 +285,7 @@ def test_compra_e_bloqueada_enquanto_a_pesquisa_lusha_esta_indisponivel(client, 
 
 
 def test_compra_aprovada_pelo_webhook_vira_saldo_adicional_separado_e_o_limite_por_pesquisa_passa_a_ser_o_do_pacote(client, db_session):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     cfg_antes, _ = config.config_vigente(db_session, A)
@@ -313,7 +313,7 @@ def test_compra_aprovada_pelo_webhook_vira_saldo_adicional_separado_e_o_limite_p
 
 
 def test_webhook_repetido_valor_divergente_e_pagamento_pendente_nao_creditam_errado(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     base = dict(aceite_expiracao=True, payment_provider=pagamento, email_pagador="a@b.com", provider=prov, ator_id="1", agora=AGORA)
@@ -349,7 +349,7 @@ def test_pagamentos_de_outras_categorias_sao_ignorados_pelo_webhook_de_enriqueci
 
 
 def test_credito_comprado_vence_30_dias_depois_e_a_franquia_no_fim_do_mes_sem_acumular(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     cfg, _ = config.config_vigente(db_session, A)
@@ -378,7 +378,7 @@ def test_credito_comprado_vence_30_dias_depois_e_a_franquia_no_fim_do_mes_sem_ac
 
 
 def test_compra_vale_30_dias_contados_da_confirmacao_do_pagamento(client, db_session):
-    liberar_lusha(db_session)
+    liberar_contatos(db_session)
     catalogo(db_session)
     pagamento, prov = StubPaymentProvider(), ProvedorPago()
     ultimo_minuto = datetime(2026, 11, 1, 2, 58)
@@ -394,10 +394,10 @@ def test_rentabilidade_usa_o_custo_contratual_e_ignora_a_compra_pontual_de_400_c
     from tests.integration.test_pesquisa_decisores_governanca import custo_contratual, lote
 
     lote(db_session)  # a compra pontual R$ 269,94 / 400 existe como linha, mas NÃO pode participar de custo, preço, margem nem configuração
-    sem_contrato = pacotes.rentabilidade(db_session, "lusha")
+    sem_contrato = pacotes.rentabilidade(db_session, "contatos")
     assert sem_contrato["origem_custo"] is None and all("margem_bruta_percentual" not in p for p in sem_contrato["pacotes"])
     custo_contratual(db_session)  # aprovado; a validação do contrato não muda a conta
-    r = pacotes.rentabilidade(db_session, "lusha")
+    r = pacotes.rentabilidade(db_session, "contatos")
     assert r["origem_custo"] == "contrato_v1" and r["custo_unitario_provedor_brl"] == "0.529411765" and Decimal(r["cambio_planejamento_brl"]) == Decimal("6")
     ativos = {p["codigo"]: p for p in r["pacotes"] if p["status"] == "ATIVO"}
     assert {c: p["markup_percentual"] for c, p in ativos.items()} == {"ENRIQ_400": "155.0", "ENRIQ_660": "141.8", "ENRIQ_1200": "128.6", "ENRIQ_3000": "104.0"}
@@ -405,10 +405,10 @@ def test_rentabilidade_usa_o_custo_contratual_e_ignora_a_compra_pontual_de_400_c
     assert (ativos["ENRIQ_400"]["custo_total_brl"], ativos["ENRIQ_400"]["lucro_bruto_brl"]) == ("211.76", "328.24")  # 400 × R$ 0,529411765
     assert [p for p in r["pacotes"] if p["status"] == "CONTACT_SALES"][0].keys() == {"codigo", "creditos", "status"}
     # um câmbio de planejamento diferente (nova versão aprovada) recalcula sem tocar nos pacotes
-    nova = custo.definir_custo(db_session, provedor="lusha", custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="5.00", ator_id="1",
+    nova = custo.definir_custo(db_session, provedor="contatos", custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="5.00", ator_id="1",
                                tenant_auditoria=A, motivo="câmbio de planejamento 5,00", aprovar=True)
     assert nova.versao == 2
-    depois = pacotes.rentabilidade(db_session, "lusha")
+    depois = pacotes.rentabilidade(db_session, "contatos")
     assert depois["origem_custo"] == "contrato_v2" and depois["custo_unitario_provedor_brl"] == "0.441176471"
     assert next(p for p in depois["pacotes"] if p["codigo"] == "ENRIQ_400")["margem_bruta_percentual"] == "67.3"
 
@@ -431,17 +431,17 @@ def test_poc_sem_autorizacao_aprovada_fica_bloqueada_sem_franquia_inventada(clie
 
 def test_poc_calcula_o_teto_pelas_tarifas_confirmadas_e_exige_politica_aprovada(client, db_session):
     with pytest.raises(ValidacaoFalhou, match="Não há teto calculável"):
-        poc.calcular_teto(db_session, "lusha", 20)
+        poc.calcular_teto(db_session, "contatos", 20)
     cenario(db_session)  # tarifas de teste: busca 0, e-mail 1, página 10, fator 1
-    teto = poc.calcular_teto(db_session, "lusha", 20, 1)
+    teto = poc.calcular_teto(db_session, "contatos", 20, 1)
     assert (teto["creditos_provedor_por_empresa"], teto["creditos_provedor_teto"], teto["creditos_cliente_teto"]) == (1, 20, 20)
     assert teto["custo_maximo_brl"] == "13.50" and teto["valor_venda_maximo_brl"] == "26.99"  # 20 × 0,67485 e 20 × 1,3497 = 26,994
-    assert poc.calcular_teto(db_session, "lusha", 20, 3)["creditos_cliente_teto"] == 60
+    assert poc.calcular_teto(db_session, "contatos", 20, 3)["creditos_cliente_teto"] == 60
 
 
 def test_poc_autorizacao_gera_config_do_tenant_pendente_e_so_depois_de_aprovada_libera_1_decisor(client, db_session):
     config_poc(db_session)
-    resultado = poc.autorizar(db_session, A, provedor="lusha", empresas=20, decisores_por_empresa=1, ator_id="1", tenant_auditoria=A, motivo="POC cliente X")
+    resultado = poc.autorizar(db_session, A, provedor="contatos", empresas=20, decisores_por_empresa=1, ator_id="1", tenant_auditoria=A, motivo="POC cliente X")
     assert resultado["pendente_aprovacao"] is True and resultado["teto"]["creditos_cliente_teto"] == 20
     esperar_bloqueio("poc_sem_autorizacao", lambda: previa(db_session, eu(db_session), contas(db_session, 1), ProvedorPago(), d=1))
     config.aprovar_config(db_session, resultado["config_id"], "1", A)
@@ -457,16 +457,16 @@ def test_poc_autorizacao_gera_config_do_tenant_pendente_e_so_depois_de_aprovada_
 def test_poc_so_pode_ser_autorizada_para_tenant_de_plano_poc_e_respeita_o_limite_de_1_decisor(client, db_session):
     cenario(db_session)  # plano comum, sem modo POC
     with pytest.raises(ValidacaoFalhou, match="não é uma POC"):
-        poc.autorizar(db_session, A, provedor="lusha", empresas=5, ator_id="1", tenant_auditoria=A, motivo="x")
+        poc.autorizar(db_session, A, provedor="contatos", empresas=5, ator_id="1", tenant_auditoria=A, motivo="x")
     aplicar_linha(db_session, "POC")
     with pytest.raises(ValidacaoFalhou, match="até 1 decisor"):
-        poc.autorizar(db_session, A, provedor="lusha", empresas=5, decisores_por_empresa=2, ator_id="1", tenant_auditoria=A, motivo="x")
+        poc.autorizar(db_session, A, provedor="contatos", empresas=5, decisores_por_empresa=2, ator_id="1", tenant_auditoria=A, motivo="x")
 
 
 
 def test_poc_faz_ate_3_pesquisas_com_1_decisor_e_a_quarta_e_recusada_mesmo_em_outro_mes(client, db_session):
     config_poc(db_session)
-    resultado = poc.autorizar(db_session, A, provedor="lusha", empresas=20, decisores_por_empresa=1, ator_id="1", tenant_auditoria=A, motivo="POC cliente X")
+    resultado = poc.autorizar(db_session, A, provedor="contatos", empresas=20, decisores_por_empresa=1, ator_id="1", tenant_auditoria=A, motivo="POC cliente X")
     config.aprovar_config(db_session, resultado["config_id"], "1", A)
     cfg, _ = config.config_vigente(db_session, A)
     assert cfg.limite_pesquisas_periodo == 3 and cfg.periodicidade == "unica" and cfg.decisores_por_empresa_max == 1  # herdado do plano POC
@@ -553,7 +553,7 @@ def test_limites_do_enterprise_sao_validados_versionados_e_auditados(client, db_
 
 
 def test_icp_com_milhares_de_empresas_nao_tem_limite_e_so_a_selecao_explicita_consome_credito(client, db_session):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     db_session.add_all([Conta(tenant_id=A, nome=f"Empresa ICP {i}", dominio=f"icp{i}.com.br", cnpj=f"{i:014d}", status="prospectada", icp_id=None)
                         for i in range(1, 2001)])
     db_session.commit()
@@ -566,23 +566,23 @@ def test_icp_com_milhares_de_empresas_nao_tem_limite_e_so_a_selecao_explicita_co
 
 
 def test_a_rota_de_previa_recusa_o_icp_inteiro_mesmo_com_franquia(client, db_session, prov_api):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     for corpo in ({"icp_id": 1}, {"todas": True}, {"conta_ids": [], "icp_id": 1}):
         assert client.post(f"{URL}/previa", json=corpo).status_code == 422
     assert prov_api.chamadas == []
 
 
-def test_analise_de_site_fica_fora_da_franquia_lusha_e_usa_a_franquia_de_ia(client, db_session, fake_llm, fake_web_search):
+def test_analise_de_site_fica_fora_da_franquia_contatos_e_usa_a_franquia_de_ia(client, db_session, fake_llm, fake_web_search):
     from app.services import conta_service
 
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     ledger.preparar(db_session, A, config.config_vigente(db_session, A)[0], AGORA)
     db_session.commit()
     conta = contas(db_session, 1)[0]
     antes = (ledger.saldo(db_session, A), db_session.query(EnriquecimentoMovimento).count())
     conta_service.enriquecer(db_session, A, "1", conta.id, fake_llm, lambda dominio: "=== https://x.com.br ===\nConteúdo institucional.", fake_web_search,
                              StubPlanLimitsProvider())
-    assert (ledger.saldo(db_session, A), db_session.query(EnriquecimentoMovimento).count()) == antes  # nada de Lusha: razão intacto
+    assert (ledger.saldo(db_session, A), db_session.query(EnriquecimentoMovimento).count()) == antes  # nada de provedor de contatos: razão intacto
     assert db_session.query(ExecucaoIa).filter_by(tenant_id=A, workload_codigo="website_analysis").count() >= 1  # contabilizada na categoria de IA
 
 
@@ -590,7 +590,7 @@ def test_analise_de_site_respeita_o_proprio_limite_semanal_do_plano(client, db_s
     from app.services import conta_service
     from app.services.errors import RegraNegocioViolada
 
-    liberar_lusha(db_session, "Starter")  # a franquia Lusha cheia não muda nada para o site
+    liberar_contatos(db_session, "Starter")  # a franquia cheia não muda nada para o site
     limites = StubPlanLimitsProvider(limite_enriquecimento_site_semanal={A: 1})
     c1, c2 = contas(db_session, 2)
     site = lambda dominio: "=== https://x.com.br ===\nConteúdo."  # noqa: E731
@@ -603,7 +603,7 @@ def test_analise_de_site_respeita_o_proprio_limite_semanal_do_plano(client, db_s
 
 
 def test_painel_do_tenant_mostra_composicao_validade_limites_e_disponibilidade_de_compra(client, db_session, prov_api):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     d = client.get(f"{URL}/painel").json()
     assert d["plano"]["modo"] == "franquia_fixa" and d["plano"]["limite_creditos_pesquisa"] == 30 and d["plano"]["decisores_por_empresa_max"] == 5
     assert d["composicao"]["franquia_restante"] == 30 and d["composicao"]["adicional_restante"] == 0 and d["composicao"]["acumula"] is False
@@ -612,7 +612,7 @@ def test_painel_do_tenant_mostra_composicao_validade_limites_e_disponibilidade_d
 
 
 def test_rotas_de_pacotes_e_compras_para_o_tenant(client, db_session, prov_api):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     catalogo(db_session)
     pagamento = StubPaymentProvider()
     app.dependency_overrides[get_payment_provider] = lambda: pagamento
@@ -631,7 +631,7 @@ def test_rotas_de_pacotes_e_compras_para_o_tenant(client, db_session, prov_api):
     assert client.post(f"{URL}/compras", json={"pacote": "NAO_EXISTE", "aceite_expiracao": True}).status_code == 404
 
 
-def test_vendedor_nao_compra_nem_ve_compras_e_compra_bloqueada_sem_lusha_explica_o_motivo(client, db_session, prov_api):
+def test_vendedor_nao_compra_nem_ve_compras_e_compra_bloqueada_sem_contatos_explica_o_motivo(client, db_session, prov_api):
     catalogo(db_session)
     bloqueada = client.post(f"{URL}/compras", json={"pacote": "ENRIQ_400", "aceite_expiracao": True})
     assert bloqueada.status_code == 409 and bloqueada.json()["codigo"] and bloqueada.json()["bloqueios"]
@@ -644,7 +644,7 @@ def test_vendedor_nao_compra_nem_ve_compras_e_compra_bloqueada_sem_lusha_explica
 
 
 def test_webhook_assinado_do_mercado_pago_credita_a_compra_e_assinatura_invalida_nao(client, db_session, prov_api, monkeypatch):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     catalogo(db_session)
     pagamento = StubPaymentProvider()
     app.dependency_overrides[get_payment_provider] = lambda: pagamento
@@ -669,7 +669,7 @@ def test_webhook_assinado_do_mercado_pago_credita_a_compra_e_assinatura_invalida
 
 
 def test_compras_e_saldo_de_um_tenant_nao_aparecem_para_outro(client, db_session, prov_api):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     catalogo(db_session)
     preparar_tenant_b(db_session)  # B tem licença no mesmo plano (mesma franquia), mas carteira e compras próprias
     dados_fiscais(db_session, B, "99888777000166")
@@ -703,7 +703,7 @@ def test_rota_publica_de_franquias_e_pacotes_nao_exige_login_e_nao_expoe_custo_n
 
 
 def test_rotas_administrativas_exigem_super_admin_e_registram_auditoria(client, db_session, prov_api):
-    liberar_lusha(db_session, "Starter")
+    liberar_contatos(db_session, "Starter")
     # o usuário de teste é super_admin: as rotas respondem; um admin comum não passa
     assert client.get(f"{ADMIN}/matriz").status_code == 200
     aplicar = client.post(f"{ADMIN}/matriz/aplicar", json={"mapeamento": {"Professional": plano_id(db_session)}})

@@ -285,10 +285,10 @@ def _por_categoria(politica: PoliticaResolvida, elegiveis: list[dict], emails: b
     return {
         "ia": {"creditos": 0, "observacao": "Esta operação não usa IA."},
         "enriquecimento": {
-            "lusha_busca": {"creditos_provedor_max": busca, "creditos_cliente_max": busca * fator},
-            "lusha_revelacao": {"creditos_provedor_max": revelacao, "creditos_cliente_max": revelacao * fator},
+            "busca_contatos": {"creditos_provedor_max": busca, "creditos_cliente_max": busca * fator},
+            "revelacao_contatos": {"creditos_provedor_max": revelacao, "creditos_cliente_max": revelacao * fator},
             "receita_qsa": {"creditos_cliente_max": 0, "observacao": "Fluxo separado, sem consumo de crédito."},
-            "brasilapi": {"creditos_cliente_max": 0, "observacao": "Fluxo separado, sem consumo de crédito."},
+            "cadastro_publico": {"creditos_cliente_max": 0, "observacao": "Fluxo separado, sem consumo de crédito."},
         },
     }
 

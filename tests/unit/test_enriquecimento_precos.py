@@ -47,7 +47,7 @@ def test_custo_que_nao_divide_exato_usa_12_casas_meio_par():
     assert precos.custo_unitario(Decimal("200"), 3) == Decimal("66.666666666667")
 
 
-def test_custo_contratual_da_lusha_e_uma_dizima_guardada_em_12_casas():
+def test_custo_contratual_da_contatos_e_uma_dizima_guardada_em_12_casas():
     """USD 600 ÷ 6.800 créditos = USD 0,088235294; × câmbio de planejamento R$ 6,00 = R$ 0,529411765 por crédito (9 casas na exibição)."""
     usd = precos.interna(Decimal(600) / Decimal(6800))
     brl = precos.interna(Decimal(600) * Decimal(6) / Decimal(6800))

@@ -399,7 +399,7 @@ def importar_participantes(
         # (enriquecimento_fila_service chama de volta funções deste
         # arquivo). Enriquecimento roda em lote pelo cron depois, nunca
         # aqui — uma planilha grande travando o request esperando LLM/
-        # busca web/Lusha por empresa estouraria o timeout do proxy do
+        # busca web/provedor de contatos por empresa estouraria o timeout do proxy do
         # Render (raio-X, mesmo raciocínio do recorte de CNPJ).
         from app.services import enriquecimento_fila_service
 
@@ -1154,7 +1154,7 @@ def _texto_seguro_pdf(texto: str) -> str:
     colado do Word) derruba a exportação com `FPDFUnicodeEncodingException`.
     Troca o que não é suportado por "?" em vez de deixar a exceção estourar.
 
-    Normaliza pra NFC antes: nome vindo de fornecedor externo (Lusha) pode
+    Normaliza pra NFC antes: nome vindo de fornecedor externo pode
     chegar com acento em forma decomposta (\"e\" + acento agudo combinante,
     em vez de \"é\" pré-composto) — o acento combinante sozinho fica fora
     do Latin-1 e virava \"?\" (ex.: \"César\" -> \"Ce?sar\"), mesmo o

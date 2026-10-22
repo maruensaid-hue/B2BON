@@ -60,7 +60,7 @@ type Aba = "escrever" | "enviados" | "recebidos" | "arquivar" | "configuracoes";
 /** Webmail / agente de e-mail direto (raio-X 2026-09-24) — comunicação
  * direta com leads do CRM, síncrona (sem fila de aprovação, diferente
  * das mensagens de cadência), com histórico registrado por conta.
- * Reaproveita o MESMO provider (SendGrid/SMTP) já configurado pro
+ * Reaproveita o MESMO provider de e-mail já configurado pro
  * tenant — nunca uma conta pessoal de Gmail/Outlook via OAuth, que não
  * existe no projeto. */
 export function Webmail() {

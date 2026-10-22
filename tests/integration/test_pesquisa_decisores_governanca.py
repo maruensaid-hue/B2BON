@@ -1,6 +1,6 @@
 """Governança de créditos de enriquecimento: configuração e política aprovadas, seleção explícita, decisores por empresa, estimativa e confirmação,
 reserva atômica e idempotente, consumo MEDIDO pelo provedor, custo/markup/preço, falhas/ambiguidade/reconciliação, deduplicação, orçamento global,
-separação IA × enriquecimento, QSA sem Lusha, isolamento de tenant e permissões. Provedor sempre simulado: nenhuma chamada real, nenhum orçamento real."""
+separação IA × enriquecimento, QSA sem provedor de contatos, isolamento de tenant e permissões. Provedor sempre simulado: nenhuma chamada real, nenhum orçamento real."""
 
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -36,7 +36,7 @@ ADMIN = "/api/v1/admin/enriquecimento"
 class ProvedorPago(ContactEnrichmentProvider):
     """Duplo do provedor com custo. Sem roteiro, revela `limite_contatos` por empresa e MEDE `custo_busca + n × custo_por_contato` créditos."""
 
-    nome_provedor = "lusha"
+    nome_provedor = "contatos"
     pago = True
     max_contatos_por_consulta = 100
     tamanho_pagina_minimo = 10
@@ -61,7 +61,7 @@ class ProvedorPago(ContactEnrichmentProvider):
         return ResultadoBuscaContatos(
             estado="ok", ids_provedor=[f"id{i}" for i in range(n)], creditos_busca=self.custo_busca, creditos_revelacao=n * self.custo_por_contato,
             creditos_provedor=self.custo_busca + n * self.custo_por_contato,
-            contatos=[ContatoCandidato(nome=f"{filtro.nome_empresa} Pessoa {i}", cargo="CEO", email=f"p{i}@{filtro.dominio}", fonte="lusha") for i in range(n)],
+            contatos=[ContatoCandidato(nome=f"{filtro.nome_empresa} Pessoa {i}", cargo="CEO", email=f"p{i}@{filtro.dominio}", fonte="contatos") for i in range(n)],
         )
 
     def consultar_uso(self):
@@ -73,7 +73,7 @@ class ProvedorPago(ContactEnrichmentProvider):
 def ok(n, medido=None, prefixo="Fulano"):
     """n contatos revelados; `medido` = créditos do provedor informados na resposta (padrão: n, como na política de teste)."""
     return ResultadoBuscaContatos(estado="ok", ids_provedor=[f"i{k}" for k in range(n)], creditos_provedor=n if medido is None else medido,
-                                  contatos=[ContatoCandidato(nome=f"{prefixo} {k}", cargo="CEO", fonte="lusha") for k in range(n)])
+                                  contatos=[ContatoCandidato(nome=f"{prefixo} {k}", cargo="CEO", fonte="contatos") for k in range(n)])
 
 
 def erro_seguro(cobrado_pela_busca=None):
@@ -93,20 +93,20 @@ def plano_id(db):
 
 
 def lote(db, referencia="APORTE-TESTE-1", quantidade=400, custo="269.94"):
-    existente = db.query(EnriquecimentoLoteCompra).filter_by(provedor="lusha", referencia=referencia).one_or_none()
-    return existente or config.registrar_lote_compra(db, provedor="lusha", referencia=referencia, quantidade_creditos=quantidade,
+    existente = db.query(EnriquecimentoLoteCompra).filter_by(provedor="contatos", referencia=referencia).one_or_none()
+    return existente or config.registrar_lote_compra(db, provedor="contatos", referencia=referencia, quantidade_creditos=quantidade,
                                                      custo_total_brl=Decimal(custo), comprado_em=datetime(2026, 10, 21), ator_id="1", tenant_auditoria=A)
 
 
 def politica(db, *, busca=0, email=1, telefone=None, revelar_telefones=False, pagina=10, fator=1, markup="100", aprovar=True, metodo="lote_referencia"):
     return config.definir_politica(
-        db, provedor="lusha", creditos_busca_por_resultado=busca, creditos_email=email, creditos_telefone=telefone, revelar_emails=True,
+        db, provedor="contatos", creditos_busca_por_resultado=busca, creditos_email=email, creditos_telefone=telefone, revelar_emails=True,
         revelar_telefones=revelar_telefones, tamanho_pagina_busca=pagina, creditos_cliente_por_credito_provedor=fator, markup_percentual=Decimal(markup),
         metodo_custo=metodo, lote_compra_id=lote(db).id if metodo == "lote_referencia" else None, casas_exibicao=2, fonte_tarifas="manual",
         ator_id="1", tenant_auditoria=A, motivo="teste", tamanho_pagina_minimo=10, tamanho_pagina_maximo=100, aprovar=aprovar)
 
 
-def custo_contratual(db, provedor="lusha", *, aprovar=True):
+def custo_contratual(db, provedor="contatos", *, aprovar=True):
     """Custo contratual (USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00): decisão comercial já aprovada pelo PO."""
     return custo.definir_custo(db, provedor=provedor, custo_mensal_usd="600", creditos_anuais=81600, cambio_planejamento_brl="6.00", ator_id="1",
                                tenant_auditoria=A, motivo="teste", aprovar=aprovar)
@@ -124,7 +124,7 @@ def cenario(db, *, franquia=10, itens=10, padrao=2, maximo=5, limite_periodo=Non
     if com_politica:
         politica(db, **kw_politica)
     if orcamento is not None:
-        config.definir_orcamento_global(db, provedor="lusha", limite_creditos=orcamento, alerta_percentual=80, ator_id="1", tenant_auditoria=A,
+        config.definir_orcamento_global(db, provedor="contatos", limite_creditos=orcamento, alerta_percentual=80, ator_id="1", tenant_auditoria=A,
                                         motivo="teste", aprovar=True)
 
 
@@ -296,7 +296,7 @@ def test_politica_pendente_de_aprovacao_ou_incompleta_nao_libera(client, db_sess
     config.aprovar_politica(db_session, pendente.id, "1", A)
     assert previa(db_session, eu(db_session), contas(db_session, 1), ProvedorPago()).estimativa["viavel"] is True
     sem_tarifa = config.definir_politica(
-        db_session, provedor="lusha", creditos_busca_por_resultado=1, creditos_email=None, creditos_telefone=None, revelar_emails=True, revelar_telefones=False,
+        db_session, provedor="contatos", creditos_busca_por_resultado=1, creditos_email=None, creditos_telefone=None, revelar_emails=True, revelar_telefones=False,
         tamanho_pagina_busca=10, creditos_cliente_por_credito_provedor=1, markup_percentual=Decimal("100"), metodo_custo="lote_referencia",
         lote_compra_id=lote(db_session).id, casas_exibicao=2, fonte_tarifas="manual", ator_id="1", tenant_auditoria=A, motivo="rascunho")
     with pytest.raises(ValidacaoFalhou, match="creditos_email"):
@@ -305,7 +305,7 @@ def test_politica_pendente_de_aprovacao_ou_incompleta_nao_libera(client, db_sess
 
 def test_orcamento_global_pendente_de_aprovacao_bloqueia(client, db_session):
     cenario(db_session, orcamento=None)
-    config.definir_orcamento_global(db_session, provedor="lusha", limite_creditos=500, alerta_percentual=80, ator_id="1", tenant_auditoria=A, motivo="rascunho")
+    config.definir_orcamento_global(db_session, provedor="contatos", limite_creditos=500, alerta_percentual=80, ator_id="1", tenant_auditoria=A, motivo="rascunho")
     prov = ProvedorPago()
     p = previa(db_session, eu(db_session), contas(db_session, 1), prov)
     assert p.estimativa["bloqueios"][0]["codigo"] == "orcamento_global_pendente_aprovacao"
@@ -341,7 +341,7 @@ def test_icp_inteiro_nao_dispara_pesquisa_a_api_so_aceita_lista_explicita(client
 
 def test_mapeamento_avulso_e_fila_automatica_trazem_so_qsa_e_nao_chamam_o_provedor(client, db_session, fake_graph, fake_account_data, fake_plan_limits,
                                                                                     fake_llm, fake_site_fetcher, fake_web_search):
-    """Importar planilha/gerar lista/enriquecer enfileira contas, mas só o QSA é consultado: a Lusha exige pesquisa confirmada."""
+    """Importar planilha/gerar lista/enriquecer enfileira contas, mas só o QSA é consultado: o provedor de contatos exige pesquisa confirmada."""
     from app.contexts.predator import contract as predator
     from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
     from app.providers.account_data.base import DecisorCandidato
@@ -362,7 +362,7 @@ def test_mapeamento_avulso_e_fila_automatica_trazem_so_qsa_e_nao_chamam_o_proved
     assert resultado["processados"] == 1 and prov.chamadas == []
     assert db_session.query(PesquisaDecisores).count() == 0 and "RESERVA" not in tipos(db_session) and "CONSUMO" not in tipos(db_session)
     assert db_session.query(FilaEnriquecimentoConta).filter_by(conta_id=outra.id).one().status in ("concluido", "falhou")
-    assert not db_session.query(Decisor).filter(Decisor.origem == "lusha").count()
+    assert not db_session.query(Decisor).filter(Decisor.origem == "contatos").count()
 
 
 def test_qsa_funciona_sem_nenhuma_configuracao_de_enriquecimento_e_e_contabilizado_por_fonte(client, db_session, fake_graph, fake_account_data,
@@ -371,7 +371,7 @@ def test_qsa_funciona_sem_nenhuma_configuracao_de_enriquecimento_e_e_contabiliza
     from app.contexts.predator import contract as predator
     from app.providers.account_data.base import DecisorCandidato
 
-    assert config.config_vigente(db_session, A)[0] is None and config.politica_vigente(db_session, "lusha")[0] is None
+    assert config.config_vigente(db_session, A)[0] is None and config.politica_vigente(db_session, "contatos")[0] is None
     conta = contas(db_session, 1)[0]
     fake_account_data.decisores[conta.cnpj] = [DecisorCandidato(cnpj=conta.cnpj, nome="Sócio Um", qualificacao="Sócio", fonte="receita_federal")]
     assert [d.nome for d in predator.mapear_decisores(db_session, A, "1", conta.id, fake_account_data, fake_graph, fake_plan_limits)] == ["Sócio Um"]
@@ -381,9 +381,9 @@ def test_qsa_funciona_sem_nenhuma_configuracao_de_enriquecimento_e_e_contabiliza
 
 def test_brasilapi_tambem_e_contabilizada_por_fonte(client, db_session):
     conta = client.post("/api/v1/leads/contas", json={"nome": "Empresa BR", "cnpj": "11222333000181", "dominio": "br.com.br"}).json()
-    resposta = client.post(f"/api/v1/contas/{conta['id']}/enriquecer-brasilapi")
+    resposta = client.post(f"/api/v1/contas/{conta['id']}/enriquecer-cadastro")
     assert resposta.status_code == 200
-    assert ledger.uso_por_fonte(db_session, A, config.periodo_de(config.agora_utc())).get("brasilapi") == 1
+    assert ledger.uso_por_fonte(db_session, A, config.periodo_de(config.agora_utc())).get("cadastro_publico") == 1
 
 
 def test_selecao_de_outro_tenant_ou_inexistente_responde_igual(client, db_session, prov_api):
@@ -460,22 +460,22 @@ def test_previa_mostra_estimativa_por_categoria_incertezas_e_nao_reserva_nem_cha
     e = p.estimativa
     assert (e["creditos_maximos"], e["creditos_provedor_maximos"], e["empresas_selecionadas"], e["empresas_a_consultar"], e["disponivel"], e["viavel"]) == (6, 6, 3, 3, 10, True)
     assert e["limites"]["decisores_por_empresa_max"] == 5 and e["config"] == {"origem": "plano", "versao": 1} and e["politica"] == {"versao": 1}
-    assert e["por_categoria"]["ia"]["creditos"] == 0 and e["por_categoria"]["enriquecimento"]["lusha_revelacao"]["creditos_cliente_max"] == 6
+    assert e["por_categoria"]["ia"]["creditos"] == 0 and e["por_categoria"]["enriquecimento"]["revelacao_contatos"]["creditos_cliente_max"] == 6
     assert e["por_categoria"]["enriquecimento"]["receita_qsa"]["creditos_cliente_max"] == 0
     assert any("TETO" in i and "informado pelo próprio provedor" in i for i in e["incertezas"])
     assert any("cobrada por resultado" in i for i in e["incertezas"]) and any("estimativa de apresentação" in i for i in e["incertezas"])
     assert prov.chamadas == [] and ledger.reservado(db_session, A) == 0 and "RESERVA" not in tipos(db_session)
 
 
-def test_estimativa_com_as_tarifas_da_lusha_busca_email_e_telefone(client, db_session):
-    """Tarifas publicadas pela Lusha: e-mail 1, telefone 5; a busca cobra por resultado devolvido (página inteira)."""
+def test_estimativa_com_as_tarifas_da_busca_contatos_email_e_telefone(client, db_session):
+    """Tarifas publicadas pelo provedor de contatos: e-mail 1, telefone 5; a busca cobra por resultado devolvido (página inteira)."""
     cenario(db_session, franquia=1000, maximo=5, busca=1, email=1, telefone=5, revelar_telefones=True, pagina=10)
     p = previa(db_session, eu(db_session), contas(db_session, 2), ProvedorPago(), d=2, revelar_telefones=True)
     e = p.estimativa
     # por empresa: 10 resultados × 1 (busca) + 2 contatos × (1 + 5) = 22; duas empresas = 44
     assert e["creditos_provedor_maximos"] == 44 and e["creditos_maximos"] == 44
-    assert e["por_categoria"]["enriquecimento"]["lusha_busca"]["creditos_provedor_max"] == 20
-    assert e["por_categoria"]["enriquecimento"]["lusha_revelacao"]["creditos_provedor_max"] == 24
+    assert e["por_categoria"]["enriquecimento"]["busca_contatos"]["creditos_provedor_max"] == 20
+    assert e["por_categoria"]["enriquecimento"]["revelacao_contatos"]["creditos_provedor_max"] == 24
     assert e["valor_maximo_brl"] == "59.39" and e["preco_credito_provedor_brl"] == "1.35"  # 44 × 1,3497 = 59,3868 (só a exibição arredonda)
 
 
@@ -540,7 +540,7 @@ def test_decisores_obtidos_entre_a_previa_e_a_confirmacao_invalidam_a_estimativa
     cenario(db_session)
     prov, solic, cs = ProvedorPago(), eu(db_session), contas(db_session, 1)
     p = previa(db_session, solic, cs, prov)
-    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já veio", email="x@exemplo.com.br", origem="lusha"))
+    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já veio", email="x@exemplo.com.br", origem="contatos"))
     db_session.commit()
     esperar_bloqueio("estimativa_desatualizada", lambda: confirmar(db_session, solic, p, prov))
 
@@ -568,7 +568,7 @@ def test_fluxo_feliz_reserva_o_teto_consome_o_medido_e_grava_decisores(client, d
     assert all(f.tamanho_pagina == 10 and f.revelar == ["emails"] for f in prov.chamadas)  # tudo vem da política aprovada
     assert ledger.disponivel(db_session, A) == 6 and ledger.reservado(db_session, A) == 0
     assert tipos(db_session) == ["CONCESSAO", "RESERVA", "CONSUMO", "CONSUMO"]
-    assert db_session.query(Decisor).filter_by(tenant_id=A, origem="lusha").count() == 4
+    assert db_session.query(Decisor).filter_by(tenant_id=A, origem="contatos").count() == 4
     detalhe = painel.serializar_pesquisa(db_session, p, com_itens=True, com_transicoes=True)
     assert [t["para"] for t in detalhe["transicoes"] if t["item_id"] is None] == ["criada", "validada", "reservada", "enviada", "concluida"]
     assert {i["estado"] for i in detalhe["itens"]} == {"concluido"}
@@ -607,10 +607,10 @@ def test_falha_da_revelacao_depois_de_a_busca_ser_cobrada_debita_a_busca(client,
 
 def test_resposta_sem_medicao_de_provedor_pago_e_ambigua_e_nao_cobra_estimativa(client, db_session, fake_graph):
     cenario(db_session, franquia=10)
-    sem_medicao = ResultadoBuscaContatos(estado="ok", contatos=[ContatoCandidato(nome="Alguém", cargo="CEO", fonte="lusha")], creditos_provedor=None)
+    sem_medicao = ResultadoBuscaContatos(estado="ok", contatos=[ContatoCandidato(nome="Alguém", cargo="CEO", fonte="contatos")], creditos_provedor=None)
     p = rodar(db_session, fake_graph, eu(db_session), contas(db_session, 1), ProvedorPago([sem_medicao]))
     assert p.estado == "em_processamento" and p.requer_reconciliacao and "CONSUMO" not in tipos(db_session)
-    assert ledger.reservado(db_session, A) == 2 and db_session.query(Decisor).filter_by(origem="lusha").count() == 0  # nada gravado, nada cobrado
+    assert ledger.reservado(db_session, A) == 2 and db_session.query(Decisor).filter_by(origem="contatos").count() == 0  # nada gravado, nada cobrado
     item = db_session.query(PesquisaDecisoresEmpresa).one()
     assert item.estado == "ambiguo" and "medicao_ausente" in item.motivo
 
@@ -622,7 +622,7 @@ def test_custo_de_aquisicao_markup_e_valor_de_venda_ficam_no_razao_sem_arredonda
     assert (consumo.provedor_delta_consumido, consumo.delta_saldo) == (3, -3)
     assert Decimal(str(consumo.custo_unitario_brl)) == Decimal("0.67485") and Decimal(str(consumo.preco_unitario_brl)) == Decimal("1.3497")
     assert Decimal(str(consumo.custo_total_brl)) == Decimal("2.02455") and Decimal(str(consumo.valor_venda_brl)) == Decimal("4.0491")  # 4,0491, não 4,05
-    resultado = ledger.resultado_financeiro(db_session, "lusha")
+    resultado = ledger.resultado_financeiro(db_session, "contatos")
     assert (resultado["custo_brl"], resultado["venda_brl"], resultado["margem_brl"]) == (Decimal("2.02455"), Decimal("4.0491"), Decimal("2.02455"))
     assert resultado["margem_percentual"] == Decimal("50")
 
@@ -633,7 +633,7 @@ def test_credito_do_cliente_nao_e_igual_ao_do_provedor_quando_a_politica_diz_out
     p = rodar(db_session, fake_graph, eu(db_session), contas(db_session, 1), ProvedorPago([ok(2, medido=3)]))  # teto: 2 do provedor = 4 do cliente
     assert (p.provedor_reservados, p.creditos_reservados, p.provedor_consumidos, p.creditos_consumidos) == (2, 4, 3, 6)  # medido > reservado
     assert p.requer_reconciliacao  # o provedor consumiu acima do reservado: lançado por inteiro e sinalizado
-    assert ledger.disponivel(db_session, A) == 34 and ledger.situacao_global(db_session, "lusha")["consumido"] == 3
+    assert ledger.disponivel(db_session, A) == 34 and ledger.situacao_global(db_session, "contatos")["consumido"] == 3
     invariantes(db_session)
 
 
@@ -675,7 +675,7 @@ def test_chamada_ao_provedor_so_acontece_depois_da_reserva_gravada(client, db_se
     class Espiao(ProvedorPago):
         def buscar_contatos_governado(self, filtro):
             visto["reservado"] = ledger.reservado(db_session, A)
-            visto["reservado_provedor"] = ledger.reservado_do_provedor(db_session, "lusha")
+            visto["reservado_provedor"] = ledger.reservado_do_provedor(db_session, "contatos")
             visto["estado_item"] = db_session.query(PesquisaDecisoresEmpresa).filter_by(estado="enviado").count()
             return super().buscar_contatos_governado(filtro)
 
@@ -759,7 +759,7 @@ def test_desfecho_ambiguo_nao_repete_nao_libera_e_aguarda_reconciliacao(client, 
     item = db_session.query(PesquisaDecisoresEmpresa).filter_by(pesquisa_id=p.id).one()
     assert item.estado == "ambiguo" and item.ids_provedor == ["x1"] and item.tentativas == 1
 
-    p = execucao.reconciliar_item(db_session, pesquisa_id=p.id, item_id=item.id, creditos_provedor_consumidos=1, motivo="relatório de uso Lusha de 20/10",
+    p = execucao.reconciliar_item(db_session, pesquisa_id=p.id, item_id=item.id, creditos_provedor_consumidos=1, motivo="relatório de uso provedor de contatos de 20/10",
                                   ator_id="1", tenant_auditoria=A)
     assert p.estado == "reconciliada" and not p.requer_reconciliacao and p.creditos_consumidos == 1 and p.provedor_consumidos == 1
     assert ledger.reservado(db_session, A) == 0 and ledger.disponivel(db_session, A) == 9
@@ -816,7 +816,7 @@ def test_duplicidade_na_selecao_e_decisores_ja_obtidos_ficam_fora_da_consulta(cl
     prov, solic = ProvedorPago(), eu(db_session)
     a, b, c = contas(db_session, 3)
     b.cnpj = a.cnpj  # a mesma empresa duas vezes (CNPJ repetido)
-    db_session.add_all([Decisor(tenant_id=A, conta_id=c.id, nome="Pessoa X", email="x@exemplo.com.br", origem="lusha"), Decisor(tenant_id=A, conta_id=c.id, nome="Pessoa Y", email="x@exemplo.com.br", origem="lusha")])
+    db_session.add_all([Decisor(tenant_id=A, conta_id=c.id, nome="Pessoa X", email="x@exemplo.com.br", origem="contatos"), Decisor(tenant_id=A, conta_id=c.id, nome="Pessoa Y", email="x@exemplo.com.br", origem="contatos")])
     db_session.commit()
     p = previa(db_session, solic, [a, b, c], prov)
     assert p.total_maximo == 2 and p.estimativa["empresas_deduplicadas"] == 2
@@ -832,7 +832,7 @@ def test_duplicidade_na_selecao_e_decisores_ja_obtidos_ficam_fora_da_consulta(cl
 def test_so_o_que_falta_e_pedido_ao_provedor(client, db_session, fake_graph):
     cenario(db_session, franquia=20, padrao=3)
     prov, cs = ProvedorPago(), contas(db_session, 1)
-    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já tenho", email="x@exemplo.com.br", origem="lusha"))
+    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já tenho", email="x@exemplo.com.br", origem="contatos"))
     db_session.commit()
     p = rodar(db_session, fake_graph, eu(db_session), cs, prov)
     assert prov.chamadas[0].limite_contatos == 2 and p.creditos_reservados == 2
@@ -841,7 +841,7 @@ def test_so_o_que_falta_e_pedido_ao_provedor(client, db_session, fake_graph):
 def test_nada_a_consultar_conclui_sem_reservar(client, db_session, fake_graph):
     cenario(db_session, franquia=20, padrao=1)
     prov, cs, solic = ProvedorPago(), contas(db_session, 1), eu(db_session)
-    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já tenho", email="x@exemplo.com.br", origem="lusha"))
+    db_session.add(Decisor(tenant_id=A, conta_id=cs[0].id, nome="Já tenho", email="x@exemplo.com.br", origem="contatos"))
     db_session.commit()
     p = confirmar(db_session, solic, previa(db_session, solic, cs, prov), prov)
     assert p.estado == "concluida" and "RESERVA" not in tipos(db_session) and prov.chamadas == []
@@ -876,10 +876,10 @@ def test_orcamento_global_soma_reservas_e_consumo_medido_de_todos_os_tenants(cli
     pb = previa(db_session, sb, contas(db_session, 2, B), prov)    # teto 4; orçamento 5
     confirmar(db_session, sa, pa, prov, "chave-do-tenant-a")
     esperar_bloqueio("orcamento_global_esgotado", lambda: confirmar(db_session, sb, pb, prov, "chave-do-tenant-b"))  # 4 reservados + 4 > 5
-    assert ledger.situacao_global(db_session, "lusha")["reservado"] == 4
+    assert ledger.situacao_global(db_session, "contatos")["reservado"] == 4
     execucao.executar(db_session, tenant_id=A, pesquisa_id=pa.id, provider=prov, graph=fake_graph, ator_id="1")
     esperar_bloqueio("orcamento_global_esgotado", lambda: confirmar(db_session, sb, pb, prov, "chave-do-tenant-b"))  # agora 4 medidos
-    g = ledger.situacao_global(db_session, "lusha")
+    g = ledger.situacao_global(db_session, "contatos")
     assert (g["consumido"], g["reservado"], g["restante"], g["nivel"]) == (4, 0, 1, "alerta")
     invariantes(db_session, A)
 
@@ -897,7 +897,7 @@ def test_orcamento_global_e_economia_da_cyberfort_so_aparecem_na_area_administra
     comum = criar_usuario_autenticado(A, papel="admin", email="adm@x.com.br")
     for rota in (f"{ADMIN}/orcamento-global", f"{ADMIN}/politica", f"{ADMIN}/planos"):
         assert client.get(rota, headers=comum).status_code == 403
-    assert client.put(f"{ADMIN}/orcamento-global", json={"provedor": "lusha", "limite_creditos": 9, "motivo": "tentativa"}, headers=comum).status_code == 403
+    assert client.put(f"{ADMIN}/orcamento-global", json={"provedor": "contatos", "limite_creditos": 9, "motivo": "tentativa"}, headers=comum).status_code == 403
 
 
 def test_extrato_do_tenant_nao_traz_custo_nem_margem(client, db_session, fake_graph, prov_api):
@@ -911,14 +911,14 @@ def test_alteracao_do_orcamento_global_e_versionada_aprovada_e_auditada(client, 
     from app.models.auditoria import AuditLog
 
     cenario(db_session, orcamento=100)
-    r = client.put(f"{ADMIN}/orcamento-global", json={"provedor": "lusha", "limite_creditos": 300, "alerta_percentual": 70, "motivo": "contrato ampliado"})
+    r = client.put(f"{ADMIN}/orcamento-global", json={"provedor": "contatos", "limite_creditos": 300, "alerta_percentual": 70, "motivo": "contrato ampliado"})
     assert r.status_code == 200 and r.json()["versao"] == 2 and r.json()["aprovado"] is False
-    assert config.orcamento_vigente(db_session, "lusha").limite_creditos == 100  # pendente: ainda vale a versão aprovada
+    assert config.orcamento_vigente(db_session, "contatos").limite_creditos == 100  # pendente: ainda vale a versão aprovada
     assert client.post(f"{ADMIN}/orcamento-global/{r.json()['id']}/aprovar").json()["aprovado"] is True
-    assert config.orcamento_vigente(db_session, "lusha").limite_creditos == 300
+    assert config.orcamento_vigente(db_session, "contatos").limite_creditos == 300
     log = db_session.query(AuditLog).filter_by(evento_tipo="enriquecimento_orcamento_global_aprovado").order_by(AuditLog.id.desc()).first()
     assert log.detalhes["limite_anterior"] == 100 and log.detalhes["limite_novo"] == 300
-    assert client.put(f"{ADMIN}/orcamento-global", json={"provedor": "lusha", "limite_creditos": 300, "motivo": ""}).status_code == 422
+    assert client.put(f"{ADMIN}/orcamento-global", json={"provedor": "contatos", "limite_creditos": 300, "motivo": ""}).status_code == 422
 
 
 # =================================================== lotes de compra e política =======================================================
@@ -927,11 +927,11 @@ def test_alteracao_do_orcamento_global_e_versionada_aprovada_e_auditada(client, 
 def test_lote_de_compra_guarda_custo_quantidade_data_e_referencia_e_nao_sobrescreve(client, db_session):
     primeiro = lote(db_session)
     assert (primeiro.quantidade_creditos, primeiro.referencia) == (400, "APORTE-TESTE-1") and Decimal(str(primeiro.custo_unitario_brl)) == Decimal("0.67485")
-    segundo = config.registrar_lote_compra(db_session, provedor="lusha", referencia="APORTE-TESTE-2", quantidade_creditos=1000, custo_total_brl=Decimal("600"),
+    segundo = config.registrar_lote_compra(db_session, provedor="contatos", referencia="APORTE-TESTE-2", quantidade_creditos=1000, custo_total_brl=Decimal("600"),
                                            comprado_em=datetime(2026, 11, 5), ator_id="1", tenant_auditoria=A)
     assert Decimal(str(segundo.custo_unitario_brl)) == Decimal("0.6")
     assert Decimal(str(db_session.get(EnriquecimentoLoteCompra, primeiro.id).custo_unitario_brl)) == Decimal("0.67485")  # o anterior segue intacto
-    base = dict(provedor="lusha", referencia="X-1", quantidade_creditos=10, custo_total_brl=Decimal("1"), comprado_em=datetime(2026, 11, 6), ator_id="1", tenant_auditoria=A)
+    base = dict(provedor="contatos", referencia="X-1", quantidade_creditos=10, custo_total_brl=Decimal("1"), comprado_em=datetime(2026, 11, 6), ator_id="1", tenant_auditoria=A)
     with pytest.raises(ValidacaoFalhou, match="Já existe um lote"):
         config.registrar_lote_compra(db_session, **{**base, "referencia": "APORTE-TESTE-1"})
     for invalido in (dict(quantidade_creditos=0), dict(custo_total_brl=Decimal("0"))):
@@ -949,16 +949,16 @@ def test_lote_e_historico_append_only(client, db_session):
 
 def test_novo_lote_nao_muda_o_preco_vigente_so_uma_nova_politica_aprovada(client, db_session):
     cenario(db_session)
-    config.registrar_lote_compra(db_session, provedor="lusha", referencia="APORTE-TESTE-2", quantidade_creditos=600, custo_total_brl=Decimal("480"),
+    config.registrar_lote_compra(db_session, provedor="contatos", referencia="APORTE-TESTE-2", quantidade_creditos=600, custo_total_brl=Decimal("480"),
                                  comprado_em=datetime(2026, 11, 5), ator_id="1", tenant_auditoria=A)
-    assert config.politica_vigente(db_session, "lusha")[0].preco_unitario_brl == Decimal("1.3497")  # nada mudou sozinho
+    assert config.politica_vigente(db_session, "contatos")[0].preco_unitario_brl == Decimal("1.3497")  # nada mudou sozinho
     nova = politica(db_session, metodo="media_ponderada", markup="100")  # (269,94 + 480) / 1000 = 0,74994; × 2 = 1,49988
-    assert Decimal(str(nova.custo_unitario_brl)) == Decimal("0.74994") and config.politica_vigente(db_session, "lusha")[0].preco_unitario_brl == Decimal("1.49988")
+    assert Decimal(str(nova.custo_unitario_brl)) == Decimal("0.74994") and config.politica_vigente(db_session, "contatos")[0].preco_unitario_brl == Decimal("1.49988")
 
 
 def test_politica_valida_os_campos_e_exige_motivo(client, db_session):
     cenario(db_session)
-    base = dict(provedor="lusha", creditos_busca_por_resultado=1, creditos_email=1, creditos_telefone=5, revelar_emails=True, revelar_telefones=True,
+    base = dict(provedor="contatos", creditos_busca_por_resultado=1, creditos_email=1, creditos_telefone=5, revelar_emails=True, revelar_telefones=True,
                 tamanho_pagina_busca=10, creditos_cliente_por_credito_provedor=1, markup_percentual=Decimal("100"), metodo_custo="lote_referencia",
                 lote_compra_id=lote(db_session).id, casas_exibicao=2, fonte_tarifas="manual", ator_id="1", tenant_auditoria=A, motivo="ok")
     for ajuste, trecho in [(dict(motivo=""), "motivo"), (dict(markup_percentual=None), "markup"), (dict(markup_percentual=Decimal("-1")), "markup"),
@@ -972,19 +972,19 @@ def test_politica_valida_os_campos_e_exige_motivo(client, db_session):
 
 
 def test_api_de_politica_lote_e_aprovacao(client, db_session, prov_api):
-    r = client.post(f"{ADMIN}/lotes-compra", json={"provedor": "lusha", "referencia": "APORTE-API-1", "quantidade_creditos": 400, "custo_total_brl": "269.94",
+    r = client.post(f"{ADMIN}/lotes-compra", json={"provedor": "contatos", "referencia": "APORTE-API-1", "quantidade_creditos": 400, "custo_total_brl": "269.94",
                                                    "comprado_em": "2026-10-21T00:00:00"})
     assert r.status_code == 201 and r.json()["custo_unitario_brl"] == "0.674850000000"
-    assert client.post(f"{ADMIN}/lotes-compra", json={"provedor": "lusha", "referencia": "APORTE-API-2", "quantidade_creditos": 1, "custo_total_brl": "abc",
+    assert client.post(f"{ADMIN}/lotes-compra", json={"provedor": "contatos", "referencia": "APORTE-API-2", "quantidade_creditos": 1, "custo_total_brl": "abc",
                                                       "comprado_em": "2026-10-21T00:00:00"}).status_code == 422
-    corpo = {"provedor": "lusha", "creditos_busca_por_resultado": 1, "creditos_email": 1, "creditos_telefone": 5, "revelar_emails": True, "revelar_telefones": True,
+    corpo = {"provedor": "contatos", "creditos_busca_por_resultado": 1, "creditos_email": 1, "creditos_telefone": 5, "revelar_emails": True, "revelar_telefones": True,
              "tamanho_pagina_busca": 10, "creditos_cliente_por_credito_provedor": 1, "markup_percentual": "100", "metodo_custo": "lote_referencia",
              "lote_compra_id": r.json()["id"], "motivo": "tarifas conferidas em account/usage"}
     pendente = client.put(f"{ADMIN}/politica", json=corpo)
     assert pendente.status_code == 200 and pendente.json()["aprovada"] is False and pendente.json()["preco_unitario_brl"] == "1.349700000000"
-    assert config.politica_vigente(db_session, "lusha")[0] is None
+    assert config.politica_vigente(db_session, "contatos")[0] is None
     aprovada = client.post(f"{ADMIN}/politica/{pendente.json()['id']}/aprovar")
-    assert aprovada.status_code == 200 and aprovada.json()["aprovada"] is True and config.politica_vigente(db_session, "lusha")[0].utilizavel
+    assert aprovada.status_code == 200 and aprovada.json()["aprovada"] is True and config.politica_vigente(db_session, "contatos")[0].utilizavel
     assert client.put(f"{ADMIN}/politica", json={**corpo, "tamanho_pagina_busca": 5}).status_code == 422  # abaixo do mínimo do provedor
 
 
@@ -1018,7 +1018,7 @@ def test_divergencia_entre_provedor_e_razao_vira_alerta_sem_ajuste_automatico(cl
 
 
 def client_visao_diverge(db):
-    return painel.visao_administrativa(db, "lusha")["leituras_de_uso"][0]["divergencia"] == 7
+    return painel.visao_administrativa(db, "contatos")["leituras_de_uso"][0]["divergencia"] == 7
 
 
 def test_provedor_sem_consulta_de_uso_nao_concilia(client, db_session):
@@ -1037,12 +1037,12 @@ def test_falha_na_consulta_de_uso_nao_vaza_detalhe(client, db_session):
 def test_api_de_conciliacao_e_tarifas_so_super_admin_e_provedor_certo(client, db_session, criar_usuario_autenticado):
     provedor = ProvedorPago(uso=UsoProvedor(creditos_total=10, creditos_usados=1, creditos_restantes=9, tarifas={"revealPhone": {"credits": 5, "perQuantity": 1}}))
     app.dependency_overrides[get_contact_enrichment_provider] = lambda: provedor
-    assert client.get(f"{ADMIN}/provedores/lusha/tarifas-do-provedor").json()["tarifas"]["revealPhone"]["credits"] == 5
-    assert client.post(f"{ADMIN}/provedores/lusha/conciliar").status_code == 200
+    assert client.get(f"{ADMIN}/provedores/contatos/tarifas-do-provedor").json()["tarifas"]["revealPhone"]["credits"] == 5
+    assert client.post(f"{ADMIN}/provedores/contatos/conciliar").status_code == 200
     assert client.post(f"{ADMIN}/provedores/outro/conciliar").status_code == 422
     comum = criar_usuario_autenticado(A, papel="admin", email="adm@x.com.br")
-    assert client.post(f"{ADMIN}/provedores/lusha/conciliar", headers=comum).status_code == 403
-    assert client.get(f"{ADMIN}/provedores/lusha/tarifas-do-provedor", headers=comum).status_code == 403
+    assert client.post(f"{ADMIN}/provedores/contatos/conciliar", headers=comum).status_code == 403
+    assert client.get(f"{ADMIN}/provedores/contatos/tarifas-do-provedor", headers=comum).status_code == 403
 
 
 # =================================================== razão, franquia, separação =======================================================
@@ -1108,7 +1108,7 @@ def test_ajuste_e_estorno_administrativos_exigem_motivo_e_respeitam_limites(clie
     assert client.post(f"{ADMIN}/tenants/{A}/estornos", json={"quantidade": 3, "motivo": "crédito do provedor", "pesquisa_id": p.id}).status_code == 422  # só 2 consumidos
     assert client.post(f"{ADMIN}/tenants/{A}/estornos", json={"quantidade": 1, "motivo": "crédito do provedor", "pesquisa_id": p.id,
                                                               "provedor_devolvidos": 1}).status_code == 200
-    assert ledger.disponivel(db_session, A) == 14 and ledger.situacao_global(db_session, "lusha")["consumido"] == 1  # o provedor devolveu 1
+    assert ledger.disponivel(db_session, A) == 14 and ledger.situacao_global(db_session, "contatos")["consumido"] == 1  # o provedor devolveu 1
     invariantes(db_session)
 
 
@@ -1184,8 +1184,8 @@ def test_rotas_administrativas_exigem_super_admin(client, db_session, criar_usua
         ("post", f"{ADMIN}/config/1/aprovar", None),
         ("post", f"{ADMIN}/orcamento-global/1/aprovar", None),
         ("post", f"{ADMIN}/politica/1/aprovar", None),
-        ("put", f"{ADMIN}/politica", {"provedor": "lusha", "markup_percentual": "100", "metodo_custo": "media_ponderada", "motivo": "tentativa"}),
-        ("post", f"{ADMIN}/lotes-compra", {"provedor": "lusha", "referencia": "XXX", "quantidade_creditos": 1, "custo_total_brl": "1", "comprado_em": "2026-10-21T00:00:00"}),
+        ("put", f"{ADMIN}/politica", {"provedor": "contatos", "markup_percentual": "100", "metodo_custo": "media_ponderada", "motivo": "tentativa"}),
+        ("post", f"{ADMIN}/lotes-compra", {"provedor": "contatos", "referencia": "XXX", "quantidade_creditos": 1, "custo_total_brl": "1", "comprado_em": "2026-10-21T00:00:00"}),
         ("post", f"{ADMIN}/tenants/{A}/ajustes", {"quantidade": 9, "motivo": "tentativa"}),
         ("post", f"{ADMIN}/tenants/{A}/estornos", {"quantidade": 1, "motivo": "tentativa"}),
         ("post", f"{ADMIN}/pesquisas/x/itens/1/reconciliar", {"creditos_provedor_consumidos": 0, "motivo": "tentativa"}),
@@ -1198,11 +1198,11 @@ def test_painel_do_tenant_mostra_franquia_saldos_fontes_pesquisas_e_estimado_vs_
     cenario(db_session, franquia=10, limite_periodo=3)
     rodar(db_session, fake_graph, eu(db_session), contas(db_session, 1), ProvedorPago([ok(1)]))
     d = client.get(f"{URL}/painel").json()
-    assert d["plano"]["franquia_creditos"] == 10 and d["plano"]["disponivel"] is True and d["lusha"] == {"disponivel": True, "motivos": []}
+    assert d["plano"]["franquia_creditos"] == 10 and d["plano"]["disponivel"] is True and d["contatos"] == {"disponivel": True, "motivos": []}
     assert d["creditos"] == {"disponivel": 9, "reservado": 0, "saldo": 9, "consumido_no_periodo": 1, "expirado_no_periodo": 0, "concedido_no_periodo": 10,
                             "comprado_no_periodo": 0}
     assert d["pesquisas_por_estado"] == {"concluida": 1} and d["estimado_vs_reconciliado"] == {"estimado_maximo": 2, "consumido": 1}
-    assert "AI Credits" in d["categorias"]["ia"] and set(d["uso_por_fonte"]) <= {"receita_qsa", "brasilapi", "lusha"}
+    assert "AI Credits" in d["categorias"]["ia"] and set(d["uso_por_fonte"]) <= {"receita_qsa", "cadastro_publico", "contatos"}
     extrato = client.get(f"{URL}/movimentacoes", params={"tipo": "CONSUMO"}).json()
     assert [m["delta_saldo"] for m in extrato] == [-1] and extrato[0]["creditos_provedor"] == 1
     assert d["alertas"] == []
@@ -1213,11 +1213,11 @@ def test_painel_do_tenant_mostra_franquia_saldos_fontes_pesquisas_e_estimado_vs_
     (lambda db: cenario(db, com_politica=False, orcamento=None), "politica_provedor_nao_configurada"),
     (lambda db: cenario(db, orcamento=None), "orcamento_global_nao_configurado"),
 ])
-def test_painel_explica_por_que_a_pesquisa_lusha_esta_indisponivel(client, db_session, prov_api, montar, codigo):
+def test_painel_explica_por_que_a_pesquisa_contatos_esta_indisponivel(client, db_session, prov_api, montar, codigo):
     montar(db_session)
     d = client.get(f"{URL}/painel").json()
-    assert d["lusha"]["disponivel"] is False and codigo in [m["codigo"] for m in d["lusha"]["motivos"]]
-    assert all(m["mensagem"] for m in d["lusha"]["motivos"]) and d["alertas"][0]["codigo"] == "pesquisa_lusha_indisponivel"
+    assert d["contatos"]["disponivel"] is False and codigo in [m["codigo"] for m in d["contatos"]["motivos"]]
+    assert all(m["mensagem"] for m in d["contatos"]["motivos"]) and d["alertas"][0]["codigo"] == "pesquisa_indisponivel"
 
 
 def test_previa_pela_api_traz_estimativa_completa_e_codigos_estaveis_de_bloqueio(client, db_session, prov_api):
@@ -1290,7 +1290,7 @@ def test_nenhum_dado_marcado_ou_telefone_nao_oferecido_nao_geram_pesquisa(client
 def test_decisor_so_com_email_nao_conta_como_obtido_quando_o_usuario_pede_telefone(client, db_session, fake_graph):
     cenario(db_session, franquia=100, telefone=5, revelar_telefones=True)
     c = contas(db_session, 1)[0]
-    db_session.add(Decisor(tenant_id=A, conta_id=c.id, nome="Só e-mail", email="a@exemplo.com.br", origem="lusha"))
+    db_session.add(Decisor(tenant_id=A, conta_id=c.id, nome="Só e-mail", email="a@exemplo.com.br", origem="contatos"))
     db_session.commit()
     solic, prov = eu(db_session), ProvedorPago()
     assert previa(db_session, solic, [c], prov, d=1).estimativa["empresas_a_consultar"] == 0  # e-mail pedido: já tem
@@ -1300,8 +1300,8 @@ def test_decisor_so_com_email_nao_conta_como_obtido_quando_o_usuario_pede_telefo
 
 def test_link_do_linkedin_chega_ao_decisor_e_a_contagem_aparece_por_empresa(client, db_session, fake_graph):
     cenario(db_session, franquia=100)
-    contatos = [ContatoCandidato(nome="Ana Souza", cargo="CEO", email="ana@x.com.br", linkedin_url="https://www.linkedin.com/in/ana", fonte="lusha"),
-                ContatoCandidato(nome="Beto Lima", cargo="CFO", email="beto@x.com.br", fonte="lusha")]
+    contatos = [ContatoCandidato(nome="Ana Souza", cargo="CEO", email="ana@x.com.br", linkedin_url="https://www.linkedin.com/in/ana", fonte="contatos"),
+                ContatoCandidato(nome="Beto Lima", cargo="CFO", email="beto@x.com.br", fonte="contatos")]
     resultado = ResultadoBuscaContatos(estado="ok", ids_provedor=["1", "2"], creditos_provedor=2, contatos=contatos)
     c = contas(db_session, 1)[0]
     p = rodar(db_session, fake_graph, eu(db_session), [c], ProvedorPago([resultado]), d=2)
@@ -1314,7 +1314,7 @@ def test_link_do_linkedin_chega_ao_decisor_e_a_contagem_aparece_por_empresa(clie
 def test_so_telefone_define_o_canal_provavel_como_whatsapp(client, db_session, fake_graph):
     cenario(db_session, franquia=100, telefone=5, revelar_telefones=True)
     resultado = ResultadoBuscaContatos(estado="ok", ids_provedor=["1"], creditos_provedor=5,
-                                       contatos=[ContatoCandidato(nome="Carla Dias", cargo="COO", telefone="+5511999990000", fonte="lusha")])
+                                       contatos=[ContatoCandidato(nome="Carla Dias", cargo="COO", telefone="+5511999990000", fonte="contatos")])
     c = contas(db_session, 1)[0]
     rodar(db_session, fake_graph, eu(db_session), [c], ProvedorPago([resultado]), d=1, revelar_emails=False, revelar_telefones=True)
     assert db_session.query(Decisor).filter_by(conta_id=c.id, nome="Carla Dias").one().canal_provavel == "whatsapp"
@@ -1406,7 +1406,7 @@ def liberar_super_admin(db, monkeypatch, *, orcamento=6800):
     monkeypatch.setattr(settings, "enriquecimento_super_admin_sem_limites", True)
     custo_contratual(db)
     politica(db)
-    config.definir_orcamento_global(db, provedor="lusha", limite_creditos=orcamento, alerta_percentual=80, ator_id="1", tenant_auditoria=A, motivo="teste",
+    config.definir_orcamento_global(db, provedor="contatos", limite_creditos=orcamento, alerta_percentual=80, ator_id="1", tenant_auditoria=A, motivo="teste",
                                     aprovar=True)
 
 
@@ -1450,5 +1450,5 @@ def test_orcamento_global_do_provedor_continua_valendo_para_o_super_admin(client
 def test_painel_do_super_admin_mostra_a_pesquisa_liberada_sem_limites(client, db_session, prov_api, monkeypatch):
     liberar_super_admin(db_session, monkeypatch)  # o usuário padrão da fixture `client` é super_admin
     d = client.get(f"{URL}/painel").json()
-    assert d["lusha"]["disponivel"] is True and d["plano"]["disponivel"] is True and d["plano"]["origem"] == "super_admin"
+    assert d["contatos"]["disponivel"] is True and d["plano"]["disponivel"] is True and d["plano"]["origem"] == "super_admin"
     assert d["plano"]["limite_creditos_pesquisa"] is None and d["plano"]["itens_por_lote_max"] is None and d["plano"]["decisores_por_empresa_max"] == 10

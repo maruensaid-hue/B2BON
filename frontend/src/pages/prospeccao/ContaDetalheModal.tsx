@@ -278,9 +278,9 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
     });
   }
 
-  async function enriquecerBrasilApi() {
-    await executar("enriquecer-brasilapi", async () => {
-      const resposta = await api.post<{ campos: CampoEnriquecido[] }>(`/contas/${contaId}/enriquecer-brasilapi`);
+  async function enriquecerCadastro() {
+    await executar("enriquecer-cadastro", async () => {
+      const resposta = await api.post<{ campos: CampoEnriquecido[] }>(`/contas/${contaId}/enriquecer-cadastro`);
       setCampos(resposta.campos);
     });
   }
@@ -475,9 +475,9 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
               size="sm"
               disabled={carregando !== null || !conta.cnpj}
               title={!conta.cnpj ? "Sem CNPJ cadastrado — preencha o CNPJ da conta pra habilitar este enriquecimento." : undefined}
-              onClick={enriquecerBrasilApi}
+              onClick={enriquecerCadastro}
             >
-              Enriquecer (BrasilAPI)
+              Enriquecer (dados cadastrais)
             </Button>
             <Button
               size="sm"
@@ -512,7 +512,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
           </div>
           {!conta.cnpj && (
             <div className="mb-4 text-[11px] text-amber">
-              "Enriquecer (BrasilAPI)" precisa do CNPJ da conta pra funcionar — é a chave que a BrasilAPI usa pra
+              "Enriquecer (dados cadastrais)" precisa do CNPJ da conta pra funcionar — é a chave usada pra
               buscar os dados. Preencha o CNPJ em "Editar dados da conta" acima pra habilitar esse enriquecimento.
             </div>
           )}

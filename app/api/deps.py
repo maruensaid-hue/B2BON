@@ -49,7 +49,7 @@ from app.providers.meeting_bot.recall import RecallMeetingBotProvider
 from app.providers.meeting_bot.stub import StubMeetingBotProvider
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider
 from app.providers.contact_enrichment.desativado import ContactEnrichmentDesativadoProvider
-from app.providers.contact_enrichment.lusha import LushaContactEnrichmentProvider
+from app.providers.contact_enrichment.contatos_b2b import ProvedorContatosB2B
 from app.providers.contact_enrichment.stub import StubContactEnrichmentProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.email.desativado import EmailDesativadoProvider
@@ -132,10 +132,10 @@ def get_account_data_provider(db: Session = Depends(get_db)) -> AccountDataProvi
 
 
 def get_contact_enrichment_provider() -> ContactEnrichmentProvider:
-    if demo_contexto.ativo():  # D-083: contatos fictícios, sem consumir créditos do Lusha
+    if demo_contexto.ativo():  # D-083: contatos fictícios, sem consumir créditos do provedor de contatos
         return StubContactEnrichmentProvider()
     if settings.contact_enrichment_api_key:
-        return LushaContactEnrichmentProvider(settings.contact_enrichment_api_key)
+        return ProvedorContatosB2B(settings.contact_enrichment_api_key)
     if settings.e_ambiente_producao:
         # `mapear_decisores` chama `buscar_contatos` sem nenhuma trava — o
         # stub de dados fictícios não pode vazar pra fora de dev/teste

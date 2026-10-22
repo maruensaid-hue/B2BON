@@ -3,8 +3,8 @@
 * Precisão: custos e preços por crédito passam a 12 casas (o custo contratual USD 600 ÷ 6.800 × R$ 6,00 é uma dízima: R$ 0,529411764706). Só amplia a coluna.
 * Novas tabelas: `enriquecimento_custo_provedor` (versionada e aprovada), `enriquecimento_pagamento_provedor` (append-only), `enriquecimento_nota_fiscal`
   e `enriquecimento_estorno_compra`. Novas colunas (nulas) em `enriquecimento_compra` para a conciliação e a contestação.
-* Dados inseridos, todos informados pelo PO: a base econômica Lusha (USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00), aprovada MAS COM O
-  CONTRATO NÃO VALIDADO (a validação é ato humano: a pesquisa Lusha continua bloqueada até ela), e o orçamento global de 6.800 créditos/mês (a capacidade
+* Dados inseridos, todos informados pelo PO: a base econômica do provedor de contatos (USD 600/mês, 81.600 créditos/ano, câmbio de planejamento R$ 6,00), aprovada MAS COM O
+  CONTRATO NÃO VALIDADO (a validação é ato humano: a pesquisa de decisores continua bloqueada até ela), e o orçamento global de 6.800 créditos/mês (a capacidade
   equivalente ao teto de USD 600), só se ainda não houver nenhum orçamento do provedor.
 * Dado removido: o lote de compra pontual de 400 créditos por R$ 269,94, semeado pela migração anterior, que o PO mandou desconsiderar. Só é removido se
   nenhuma política o referencia (se alguma referenciar, permanece e o fato fica visível na tela de administração).
@@ -25,10 +25,10 @@ from alembic import op
 from app.contexts.enriquecimento.matriz_dados import (
     ALERTA_ORCAMENTO_PERCENTUAL,
     APROVADOR_CUSTO,
-    CUSTO_LUSHA,
+    CUSTO_CONTATOS,
     LOTE_DESCONSIDERADO,
     MOTIVO_CUSTO,
-    ORCAMENTO_LUSHA_CREDITOS_MES,
+    ORCAMENTO_CONTATOS_CREDITOS_MES,
 )
 
 revision = "b5d7f9a1c3e5"
@@ -154,7 +154,7 @@ def upgrade() -> None:
     if alvo is not None and conexao.execute(sa.select(sa.func.count()).select_from(politica).where(politica.c.lote_compra_id == alvo[0])).scalar() == 0:
         conexao.execute(lote.delete().where(lote.c.id == alvo[0]))
 
-    # 2) Base econômica Lusha (aprovada pelo PO; contrato NÃO validado: a pesquisa continua bloqueada até um humano validar).
+    # 2) Base econômica do provedor de contatos (aprovada pelo PO; contrato NÃO validado: a pesquisa continua bloqueada até um humano validar).
     custo = sa.table(
         "enriquecimento_custo_provedor",
         sa.column("provedor", sa.String), sa.column("versao", sa.Integer), sa.column("custo_mensal_usd", sa.Numeric), sa.column("creditos_anuais", sa.Integer),
@@ -162,13 +162,13 @@ def upgrade() -> None:
         sa.column("custo_unitario_brl", sa.Numeric), sa.column("custo_mensal_brl", sa.Numeric), sa.column("motivo", sa.String), sa.column("criado_por", sa.String),
         sa.column("aprovado_por", sa.String), sa.column("aprovado_em", sa.DateTime), sa.column("valido_de", sa.DateTime),
     )
-    existe_custo = conexao.execute(sa.select(sa.func.count()).select_from(custo).where(custo.c.provedor == CUSTO_LUSHA["provedor"])).scalar()
+    existe_custo = conexao.execute(sa.select(sa.func.count()).select_from(custo).where(custo.c.provedor == CUSTO_CONTATOS["provedor"])).scalar()
     if not existe_custo:
-        usd, cambio = Decimal(CUSTO_LUSHA["custo_mensal_usd"]), Decimal(CUSTO_LUSHA["cambio_planejamento_brl"])
-        mensais = CUSTO_LUSHA["creditos_anuais"] // 12
+        usd, cambio = Decimal(CUSTO_CONTATOS["custo_mensal_usd"]), Decimal(CUSTO_CONTATOS["cambio_planejamento_brl"])
+        mensais = CUSTO_CONTATOS["creditos_anuais"] // 12
         casas = Decimal("0.000000000001")
         op.bulk_insert(custo, [{
-            "provedor": CUSTO_LUSHA["provedor"], "versao": 1, "custo_mensal_usd": usd, "creditos_anuais": CUSTO_LUSHA["creditos_anuais"], "creditos_mensais": mensais,
+            "provedor": CUSTO_CONTATOS["provedor"], "versao": 1, "custo_mensal_usd": usd, "creditos_anuais": CUSTO_CONTATOS["creditos_anuais"], "creditos_mensais": mensais,
             "cambio_planejamento_brl": cambio, "custo_unitario_usd": (usd / mensais).quantize(casas), "custo_unitario_brl": (usd * cambio / mensais).quantize(casas),
             "custo_mensal_brl": (usd * cambio).quantize(Decimal("0.01")), "motivo": MOTIVO_CUSTO, "criado_por": "migracao", "aprovado_por": APROVADOR_CUSTO,
             "aprovado_em": agora, "valido_de": agora,
@@ -181,9 +181,9 @@ def upgrade() -> None:
         sa.column("motivo", sa.String), sa.column("criado_por", sa.String), sa.column("aprovado_por", sa.String), sa.column("aprovado_em", sa.DateTime),
         sa.column("valido_de", sa.DateTime),
     )
-    if not conexao.execute(sa.select(sa.func.count()).select_from(orcamento).where(orcamento.c.provedor == CUSTO_LUSHA["provedor"])).scalar():
+    if not conexao.execute(sa.select(sa.func.count()).select_from(orcamento).where(orcamento.c.provedor == CUSTO_CONTATOS["provedor"])).scalar():
         op.bulk_insert(orcamento, [{
-            "provedor": CUSTO_LUSHA["provedor"], "versao": 1, "limite_creditos": ORCAMENTO_LUSHA_CREDITOS_MES, "alerta_percentual": ALERTA_ORCAMENTO_PERCENTUAL,
+            "provedor": CUSTO_CONTATOS["provedor"], "versao": 1, "limite_creditos": ORCAMENTO_CONTATOS_CREDITOS_MES, "alerta_percentual": ALERTA_ORCAMENTO_PERCENTUAL,
             "motivo": MOTIVO_CUSTO, "criado_por": "migracao", "aprovado_por": APROVADOR_CUSTO, "aprovado_em": agora, "valido_de": agora,
         }])
 

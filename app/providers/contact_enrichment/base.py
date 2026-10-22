@@ -59,7 +59,7 @@ class UsoProvedor(BaseModel):
 
 
 class ContactEnrichmentProvider(ABC):
-    """Porta para bases de dados B2B licenciadas (Apollo/Hunter/Lusha etc.).
+    """Porta para bases de dados B2B licenciadas (Apollo/Hunter/provedor de contatos etc.).
 
     Provedor `pago` (cada consulta e cada contato revelado consomem crédito contratado) só pode ser chamado pelo caminho governado
     (`buscar_contatos_governado`, via `app/contexts/enriquecimento`): seleção explícita, confirmação, política aprovada, reserva de créditos

@@ -33,7 +33,7 @@ class _Provedor(ContactEnrichmentProvider):
 
     def __init__(self) -> None:
         # Nome exclusivo por teste: o Postgres do CI persiste entre os testes, e reservas/orçamento de um provedor não podem vazar para outro cenário.
-        self.nome_provedor = f"lusha-teste-pg-{uuid.uuid4().hex[:8]}"
+        self.nome_provedor = f"contatos-teste-pg-{uuid.uuid4().hex[:8]}"
 
     def buscar_contatos(self, filtro):  # nunca usado: o teste só reserva
         raise AssertionError("não deve chamar o provedor")

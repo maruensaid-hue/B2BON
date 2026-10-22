@@ -233,10 +233,10 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
                                                   ("SOFTWARE_LICENSE", "1.05", "2800", "2026-01-01", "2027-01-01")]
             # os perfis da D-075 ficam no histórico, encerrados na própria vigência (nunca vigentes junto com os novos)
             assert conexao.execute(sa.text("SELECT count(*) FROM perfil_tributario WHERE vigente_ate = vigente_de")).scalar() == 3
-            # D-077: preços públicos verificados; só Render (workspace + web service), Neon e Lusha Premium entram no pool
+            # D-077: preços públicos verificados; só Render (workspace + web service), Neon e provedor de contatos Premium entram no pool
             no_pool = conexao.execute(sa.text("SELECT fornecedor, servico, custo_referencia FROM componente_infra WHERE provisionado_para_comissao "
                                               "AND status_arquitetura <> 'AVAILABLE_NOT_ALLOCATED' ORDER BY fornecedor, servico")).fetchall()
-            assert [tuple(c) for c in no_pool] == [("LUSHA", "SALES_INTELLIGENCE", 399.9), ("NEON", "POSTGRES", None),
+            assert [tuple(c) for c in no_pool] == [("CONTATOS_B2B", "SALES_INTELLIGENCE", 399.9), ("NEON", "POSTGRES", None),
                                                    ("RENDER", "WEB_SERVICE_COMPUTE", None), ("RENDER", "WORKSPACE", 499)]
             # D-079: o Web Service 12c-96g é CUSTOM (sem preço público), com a alteração auditada
             assert conexao.execute(sa.text("SELECT modelo_preco FROM componente_infra WHERE servico = 'WEB_SERVICE_COMPUTE'")).scalar() == "CUSTOM"

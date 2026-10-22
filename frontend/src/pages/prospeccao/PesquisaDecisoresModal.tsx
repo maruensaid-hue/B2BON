@@ -32,7 +32,7 @@ interface Estimativa {
   dados_a_revelar: { emails: boolean; telefones: boolean; rotulo: string; creditos_por_decisor: number };
   por_categoria: {
     ia: { creditos: number; observacao: string };
-    enriquecimento: { lusha_busca: CategoriaFonte; lusha_revelacao: CategoriaFonte; receita_qsa: CategoriaFonte; brasilapi: CategoriaFonte };
+    enriquecimento: { busca_contatos: CategoriaFonte; revelacao_contatos: CategoriaFonte; receita_qsa: CategoriaFonte; cadastro_publico: CategoriaFonte };
   };
   empresas_selecionadas: number;
   empresas_a_consultar: number;
@@ -97,7 +97,7 @@ interface PainelResumo {
     limite_creditos_pesquisa?: number | null;
     orientacao?: string | null;
   };
-  lusha: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
+  contatos: { disponivel: boolean; motivos: { codigo: string; mensagem: string }[] };
   composicao?: { franquia_restante: number; adicional_restante: number; expira_em: string };
   dados_a_revelar?: {
     emails: { disponivel: boolean; creditos_por_decisor: number };
@@ -180,8 +180,8 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
   }, []);
 
   const plano = painel?.plano;
-  const lusha = painel?.lusha;
-  const liberado = lusha === undefined ? plano?.disponivel !== false : lusha.disponivel;
+  const contatos = painel?.contatos;
+  const liberado = contatos === undefined ? plano?.disponivel !== false : contatos.disponivel;
   // Sem padrão no plano, o número de decisores é escolha obrigatória do usuário (nunca é assumido em silêncio).
   const semPadrao = plano !== undefined && !plano.decisores_por_empresa_padrao;
   const dadosPainel = painel?.dados_a_revelar ?? null;
@@ -280,12 +280,12 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
             </p>
             {!liberado && (
               <div className="rounded-md bg-surf2 p-2 text-amber">
-                <p className="mb-1 font-semibold">A pesquisa de decisores (Lusha) está indisponível agora.</p>
+                <p className="mb-1 font-semibold">A pesquisa de decisores está indisponível agora.</p>
                 <ul className="list-disc space-y-0.5 pl-4">
-                  {(lusha?.motivos ?? []).map((m) => (
+                  {(contatos?.motivos ?? []).map((m) => (
                     <li key={m.codigo}>{m.mensagem}</li>
                   ))}
-                  {!lusha && <li>{plano?.orientacao ?? "A pesquisa de decisores não está liberada no seu plano."}</li>}
+                  {!contatos && <li>{plano?.orientacao ?? "A pesquisa de decisores não está liberada no seu plano."}</li>}
                 </ul>
                 <p className="mt-1 text-[10.5px] text-muted">O mapeamento de decisores pelo QSA da Receita continua funcionando normalmente.</p>
               </div>
@@ -379,8 +379,8 @@ export function PesquisaDecisoresModal({ contaIds, onClose, onConcluida }: Props
             </div>
             <div className="rounded-md bg-surf2 p-2 text-[11px] text-muted">
               <p className="mb-0.5 font-semibold text-text">Teto por categoria (créditos do provedor)</p>
-              <p>Busca: até {e.por_categoria.enriquecimento.lusha_busca.creditos_provedor_max} · Revelação de contatos: até {e.por_categoria.enriquecimento.lusha_revelacao.creditos_provedor_max}</p>
-              <p>IA: {e.por_categoria.ia.creditos} (esta operação não usa IA) · QSA da Receita e Brasil API: sem consumo de crédito</p>
+              <p>Busca: até {e.por_categoria.enriquecimento.busca_contatos.creditos_provedor_max} · Revelação de contatos: até {e.por_categoria.enriquecimento.revelacao_contatos.creditos_provedor_max}</p>
+              <p>IA: {e.por_categoria.ia.creditos} (esta operação não usa IA) · QSA da Receita e dados cadastrais públicos: sem consumo de crédito</p>
               <p>Preço por crédito do provedor ≈ R$ {e.preco_credito_provedor_brl.replace(".", ",")} (valor de apresentação). O que se cobra é o consumo medido pelo provedor, que pode ser menor.</p>
             </div>
             {(e.limites.limite_pesquisas_periodo !== null || e.limites.limite_empresas_periodo !== null || e.limites.limite_contatos_periodo !== null) && (

@@ -354,7 +354,7 @@ def registrar_uso_fonte(db: Session, tenant_id: str, fonte: str, operacao: str, 
 
 
 def uso_por_fonte(db: Session, tenant_id: str, periodo: str) -> dict[str, int]:
-    """Quantidade de operações registradas por fonte no mês (QSA, Brasil API, Lusha…)."""
+    """Quantidade de operações registradas por fonte no mês (QSA, Brasil API, provedor de contatos…)."""
     linhas = (
         db.query(EnriquecimentoMovimento.fonte, func.count(EnriquecimentoMovimento.id))
         .filter(EnriquecimentoMovimento.tenant_id == tenant_id, EnriquecimentoMovimento.tipo == "USO", EnriquecimentoMovimento.periodo == periodo)

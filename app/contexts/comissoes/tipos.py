@@ -117,7 +117,7 @@ class Contabilizacao(StrEnum):
     """Pool de custo de cada despesa (D-077): uma despesa pertence a um pool só."""
 
     INFRAESTRUTURA = "INFRASTRUCTURE"
-    PROVEDOR_DADOS = "DATA_PROVIDER"  # ex.: Lusha — entra no cost-to-serve conforme a política de infraestrutura
+    PROVEDOR_DADOS = "DATA_PROVIDER"  # ex.: provedor de contatos — entra no cost-to-serve conforme a política de infraestrutura
     CUSTO_IA = "AI_COST"  # já contado no custo de IA do FinOps: nunca entra de novo como infraestrutura
 
 

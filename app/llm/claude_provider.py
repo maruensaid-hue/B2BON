@@ -21,7 +21,7 @@ class ClaudeProvider(LLMProvider):
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         if not settings.anthropic_api_key:
-            raise LLMFalhaDeProvedor("ANTHROPIC_API_KEY não configurada no servidor.")
+            raise LLMFalhaDeProvedor("Chave do provedor de IA não configurada no servidor.")
         try:
             message = self._client.messages.create(
                 model=request.model or self._model,

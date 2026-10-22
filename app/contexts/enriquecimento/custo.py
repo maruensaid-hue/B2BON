@@ -9,7 +9,7 @@ Como o custo mensal é fixo, o custo POR CRÉDITO CONSUMIDO sobe com a ociosidad
 do ciclo) e `custo mensal efetivo ÷ créditos realmente consumidos`.
 
 Estes números são decisões comerciais já aprovadas pelo PO: não dependem de nova aprovação nem de "validação de contrato". O que o sistema confere sozinho,
-com os dados que a própria Lusha devolve, é a **medição** (`billing.creditsCharged` de cada resposta), a **conciliação** com `GET /v3/account/usage` e a
+com os dados que o próprio provedor devolve, é a **medição** (`billing.creditsCharged` de cada resposta), a **conciliação** com `GET /v3/account/usage` e a
 capacidade (créditos totais informados pelo provedor × créditos anuais do contrato)."""
 
 import logging

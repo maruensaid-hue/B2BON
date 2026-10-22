@@ -61,7 +61,7 @@ def enriquecer_empresa(
     cnpj = "".join(ch for ch in dados.cnpj if ch.isdigit())
     if len(cnpj) != 14:
         raise ValidacaoFalhou("CNPJ deve ter 14 dígitos.")
-    return {"cnpj": cnpj, "origin": DataOrigin.OFFICIAL, "source": {"system": "brasilapi", "entity": "cnpj", "external_id": cnpj}, "dados": brasilapi(cnpj)}
+    return {"cnpj": cnpj, "origin": DataOrigin.OFFICIAL, "source": {"system": "cadastro_publico", "entity": "cnpj", "external_id": cnpj}, "dados": brasilapi(cnpj)}
 
 
 @router.post("/lists/generate", status_code=201)

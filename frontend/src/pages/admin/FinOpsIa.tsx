@@ -10,6 +10,7 @@ import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { brl, type Pacote } from "@/lib/aiCredits";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { ocultarFornecedor } from "@/lib/fornecedores";
 
 /** AI FinOps — painel da plataforma (Fases 5 e 15, só super_admin).
  * Receita dos AI Credits × custo real de IA, margens por dimensão com
@@ -269,7 +270,7 @@ function Margens({ dias }: { dias: number }) {
         <tbody>
           {(dados ?? []).map((linha) => (
             <tr key={linha.chave ?? "—"} className="border-b border-border">
-              <td className="p-2">{linha.chave ?? "—"}</td>
+              <td className="p-2">{ocultarFornecedor(linha.chave)}</td>
               <td className="p-2 text-right">{linha.execucoes}</td>
               <td className="p-2 text-right">
                 {linha.creditos.toLocaleString("pt-BR")}
@@ -328,7 +329,7 @@ function AlertasERecomendacoes({ dias }: { dias: number }) {
             className="flex justify-between py-1 text-[12px]"
           >
             <span>
-              {a.dimensao}: {a.chave} ({a.janela_dias}d)
+              {a.dimensao}: {ocultarFornecedor(a.chave)} ({a.janela_dias}d)
             </span>
             <span>
               {pct(a.margem_bruta)} <Nivel nivel={a.alerta} />
@@ -344,7 +345,7 @@ function AlertasERecomendacoes({ dias }: { dias: number }) {
         {inadequados.map((l) => (
           <div key={l.chave} className="flex justify-between py-1 text-[12px]">
             <span>
-              {l.modulo} · {l.chave}
+              {l.modulo} · {ocultarFornecedor(l.chave)}
             </span>
             <span>{pct(l.margem_bruta)}</span>
           </div>
