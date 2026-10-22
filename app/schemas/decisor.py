@@ -23,6 +23,12 @@ class DecisorSchema(BaseModel):
     criado_em: datetime
 
 
+class LeadDecisorSchema(DecisorSchema):
+    """Contato da lista de contatos: traz o nome da empresa (que pode estar numa lista de prospecção, fora dos leads avulsos)."""
+
+    conta_nome: str | None = None
+
+
 class DecisorCreateSchema(BaseModel):
     nome: str
     cargo: str | None = None

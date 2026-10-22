@@ -61,6 +61,7 @@ const PREDATOR_NAV_ITEMS: NavItem[] = [
   { path: "/webmail", label: "Webmail", icon: "📧", descricao: "E-mail direto com seus leads" },
   { path: "/historico-coletas", label: "Histórico de Coletas", icon: "🗂️", descricao: "Pesquisas de site e indicadores" },
   { path: "/relatorio-entrega", label: "Relatório de Entrega", icon: "📊", descricao: "Taxas de entrega" },
+  { path: "/linkedin", label: "Conectar LinkedIn", icon: "🔗", descricao: "Importar conexões como contatos" },
   { path: "/regras-aprendidas", label: "Regras Aprendidas", icon: "🧠", descricao: "Regras de estilo" },
   { path: "/creditos-enriquecimento", label: "Créditos de Enriquecimento", icon: "🔎", descricao: "Saldo e pesquisas de decisores" },
   { path: "/inteligencia-rede", label: "Sinais de Oportunidade", icon: "🧭", descricao: "Fit e matches" },

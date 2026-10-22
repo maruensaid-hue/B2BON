@@ -1523,3 +1523,21 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Decisão**: leitura pura dos razões existentes, em tela e CSV, para admin (escopo da subárvore) e super admin (todas as empresas). "Empresa" = tenant (empresa usuária do B2B ON). Consumo adicional separado do da franquia; IA e Lusha nunca somadas. Sem tabela nova nem migração.
 - **Limite conhecido**: a origem franquia × pacote do consumo de Lusha é reconstruída do razão (a franquia vence antes e é consumida primeiro), não gravada em cada lançamento.
 - **Status**: ACEITA no staging. Sem promoção a master. Ver `GOVERNANCA_CREDITOS_ENRIQUECIMENTO.md` §23.
+
+
+## D-101 · 2026-10-22 · A plataforma não expõe fornecedores
+
+- **Regra do PO**: nenhum nome de fornecedor em tela, API, mensagem ou dado visível. O provedor de contatos passou a `contatos` (adaptador `contatos_b2b`), o cadastro público de CNPJ a `cadastro_publico`; e-mail, pagamento e IA aparecem com nomes genéricos. `ocultarFornecedor` mascara nomes que venham de dados (FinOps). Migração `a1c3e5b7d9f1` corrige o que já estava gravado; `test_nao_expoe_fornecedores` impede o retorno.
+- **Restos por necessidade técnica**: URL do endpoint do provedor no adaptador e caminhos de webhook. Documentos internos (`docs/`) ainda citam fornecedores; o registro de suboperadores é exigência da LGPD.
+- **Status**: ACEITA e em produção (master 6b5286c).
+
+
+## D-102 · 2026-10-22 · Conexões do LinkedIn viram contatos e empresas (lista "Importação LinkedIn")
+
+- **Pedido do PO**: botão de conectar ao LinkedIn visível; ao importar as conexões, cadastrá-las como contatos e levar as empresas para uma fila "Importação LinkedIn", sem duplicar empresas (a IA confere variações de nome e homônimos), com e-mail, cargo e perfil do LinkedIn, e telefones via provedor dentro dos limites do perfil.
+- **Decisão**: continua valendo D-anterior (LinkedIn sem integração ao vivo: o LinkedIn não expõe conexões por API e automatizar login/raspagem leva ao banimento do perfil). "Conectar" = enviar o `Connections.csv` oficial, agora em página própria (`/linkedin`, item de menu "Conectar LinkedIn" e card no topo de Configuração). A importação cria/atualiza contatos e contas na `ListaProspeccao` "Importação LinkedIn" **de cada vendedor** (a lista é por usuário, como as demais, para respeitar a visibilidade de vendedor).
+- **Empresas**: nome normalizado (acento, caixa, sufixo jurídico) = mesma empresa; nomes parecidos (palavra distintiva rara em comum, subconjunto ou similaridade ≥ 0,85) vão à IA, com cargos e domínios de e-mail como evidência; junta só variações do mesmo nome, mantém homônimos separados e, sem resposta válida da IA, **não junta**. Até 4 chamadas por importação, feitas pelo AI Gateway (feature `predator.unificar_empresas_linkedin`, carga `classification_simple`): medidas e cobradas em créditos de IA do tenant; sem crédito ou com IA fora do ar, a importação segue sem juntar nomes parecidos. Empresas já cadastradas no CRM (visíveis ao usuário) são reaproveitadas; empresa avulsa passa a aparecer na lista.
+- **Contatos**: não duplica (nome, e-mail ou URL do perfil); reimportar só completa campo vazio. Aparecem em Leads → Contatos mesmo com a empresa numa lista, com o link do perfil.
+- **Telefone**: o export não traz. Fica pela pesquisa de decisores governada (franquia, limite por pesquisa, decisores por empresa) nas empresas da lista, completando o contato se o provedor devolver a mesma pessoa; a busca não consegue pedir uma pessoa específica ao provedor.
+- **Não feito de propósito**: não enfileira as empresas novas no enriquecimento em lote (evita custo de IA em massa sem pedido).
+- **Status**: ACEITA no staging. Sem promoção a master.

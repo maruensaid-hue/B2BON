@@ -1,7 +1,17 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_tenant_id, get_usuario_atual
+from app.api.deps import (
+    get_ator_id,
+    get_db,
+    get_graph_client,
+    get_llm_provider,
+    get_tenant_id,
+    get_usuario_atual,
+    limitar_ia_por_tenant,
+)
+from app.graph.client import Neo4jClient
+from app.llm.base import LLMProvider
 from app.models.usuario import Usuario
 from app.schemas.conexao_linkedin import (
     ImportarConexoesLinkedinRequestSchema,
@@ -35,16 +45,17 @@ def marcar_tarefa(
     return linkedin_service.marcar(db, tenant_id, ator_id, tarefa_id, dados.executada)
 
 
-@router.post("/conexoes/importar", response_model=ImportarConexoesLinkedinResponseSchema)
+@router.post("/conexoes/importar", response_model=ImportarConexoesLinkedinResponseSchema, dependencies=[Depends(limitar_ia_por_tenant(10, 300))])
 def importar_conexoes(
     dados: ImportarConexoesLinkedinRequestSchema,
     usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
+    llm: LLMProvider = Depends(get_llm_provider),
+    graph: Neo4jClient = Depends(get_graph_client),
 ) -> ImportarConexoesLinkedinResponseSchema:
-    """Upload do CSV oficial de conexões do LinkedIn (export próprio do
-    usuário) — nunca automatiza login/scraping na plataforma."""
-    total = linkedin_conexao_service.importar_csv(db, usuario.tenant_id, usuario.id, dados.conteudo_csv)
-    return ImportarConexoesLinkedinResponseSchema(total_importado=total)
+    """Upload do CSV oficial de conexões do LinkedIn (export próprio do usuário) — nunca automatiza login/scraping na plataforma. As conexões viram
+    contatos e as empresas, contas da lista "Importação LinkedIn" (sem duplicar; a IA confere nomes parecidos)."""
+    return ImportarConexoesLinkedinResponseSchema(**linkedin_conexao_service.importar_csv_e_criar_contatos(db, usuario, dados.conteudo_csv, llm, graph))
 
 
 @router.get("/conexoes/status", response_model=StatusConexoesLinkedinSchema)

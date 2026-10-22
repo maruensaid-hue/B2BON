@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Conectar ao LinkedIn: conexões viram contatos e empresas (2026-10-22, D-102)
+
+- Novo item de menu **Conectar LinkedIn** e card em destaque no topo de Configuração. Você sobe o arquivo de conexões que baixa do próprio LinkedIn e o sistema cria os contatos (cargo, e-mail quando houver, link do perfil) e leva as empresas para a lista **Importação LinkedIn**, sem duplicar.
+- A IA confere nomes de empresa parecidos: junta quando é a mesma empresa e mantém separadas as que só têm nome parecido. Se a IA estiver indisponível, nada é juntado.
+- Os contatos importados aparecem em Leads → Contatos com o link do perfil. Para buscar telefones, use "Pesquisar decisores" (Telefone marcado) nas empresas da lista, dentro dos limites do seu perfil.
+
 ## Relatório de consumo de créditos de IA e de Lusha (2026-10-22, D-100)
 
 - Nova tela em Admin → Consumo de créditos (e planilha CSV): consumo por empresa e por usuário, franquia e limites do perfil contratado, quanto foi consumido além da franquia, e os créditos adicionais adquiridos (quantidade, data e valor). O super admin vê todas as empresas; o admin, a sua.

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.conexao_linkedin import ConexaoLinkedin
 from app.models.decisor import Decisor
+from app.models.usuario import Usuario
 from app.services.errors import ValidacaoFalhou
 
 # LinkedIn embute o blob direto na resposta (sem multipart) — mesmo teto já
@@ -94,6 +95,16 @@ def importar_csv(db: Session, tenant_id: str, usuario_id: int, conteudo_csv: str
     db.add_all(conexoes)
     db.commit()
     return len(conexoes)
+
+
+def importar_csv_e_criar_contatos(db: Session, usuario: Usuario, conteudo_csv: str, llm, graph) -> dict:
+    """Importa o CSV (como antes) e, na sequência, transforma as conexões em contatos e empresas do CRM na lista "Importação LinkedIn"."""
+    from app.services import linkedin_importacao_service  # import tardio: o outro módulo usa utilitários deste
+
+    total = importar_csv(db, usuario.tenant_id, usuario.id, conteudo_csv)
+    conexoes = db.query(ConexaoLinkedin).filter_by(tenant_id=usuario.tenant_id, usuario_id=usuario.id).all()
+    resultado = linkedin_importacao_service.importar_como_contatos(db, usuario.tenant_id, usuario, conexoes, llm, graph)
+    return {"total_importado": total, **resultado}
 
 
 def status(db: Session, tenant_id: str, usuario_id: int) -> dict:

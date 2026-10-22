@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 
 import { AvisoWhatsAppTemplate } from "@/components/AvisoWhatsAppTemplate";
 import { Badge } from "@/components/ui/Badge";
@@ -330,12 +331,9 @@ export function Configuracao() {
   const [testandoEmailSmtp, setTestandoEmailSmtp] = useState(false);
   const [resultadoTesteSmtp, setResultadoTesteSmtp] = useState<{ sucesso: boolean; mensagem: string } | null>(null);
   const [statusLinkedin, setStatusLinkedin] = useState<StatusConexoesLinkedin | null>(null);
-  const [nomeArquivoLinkedin, setNomeArquivoLinkedin] = useState<string | null>(null);
-  const [conteudoCsvLinkedin, setConteudoCsvLinkedin] = useState<string | null>(null);
   const [ofertaEmEdicaoId, setOfertaEmEdicaoId] = useState<number | null>(null);
   const [salvandoOferta, setSalvandoOferta] = useState(false);
   const [salvandoWhatsapp, setSalvandoWhatsapp] = useState(false);
-  const [importandoLinkedin, setImportandoLinkedin] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [templateProposta, setTemplateProposta] = useState<TemplateProposta | null>(null);
@@ -678,34 +676,6 @@ export function Configuracao() {
     await carregarTemplateProposta();
   }
 
-  function selecionarArquivoLinkedin(arquivo: File) {
-    const leitor = new FileReader();
-    leitor.onload = () => {
-      setNomeArquivoLinkedin(arquivo.name);
-      setConteudoCsvLinkedin(String(leitor.result ?? ""));
-    };
-    leitor.readAsText(arquivo);
-  }
-
-  async function importarConexoesLinkedin() {
-    if (!conteudoCsvLinkedin || importandoLinkedin) return;
-    setImportandoLinkedin(true);
-    setErro(null);
-    try {
-      const resultado = await api.post<{ total_importado: number }>("/linkedin/conexoes/importar", {
-        conteudo_csv: conteudoCsvLinkedin,
-      });
-      setMensagem(`${resultado.total_importado} conexões importadas.`);
-      setNomeArquivoLinkedin(null);
-      setConteudoCsvLinkedin(null);
-      setStatusLinkedin(await api.get<StatusConexoesLinkedin>("/linkedin/conexoes/status"));
-    } catch (error) {
-      setErro(error instanceof ApiError ? error.message : "Não foi possível importar as conexões.");
-    } finally {
-      setImportandoLinkedin(false);
-    }
-  }
-
   return (
     <div className="p-5.5">
       <AvisoWhatsAppTemplate />
@@ -723,6 +693,24 @@ export function Configuracao() {
 
       {erro && <div className="mb-4 text-[12px] text-red">{erro}</div>}
       {mensagem && <div className="mb-4 text-[12px] text-green">{mensagem}</div>}
+
+      <Card className="mb-4 border-cyan/40" data-tutorial-id="configuracao:linkedin">
+        <SectionLabel>Conectar ao LinkedIn</SectionLabel>
+        <div className="mb-3 text-[11px] text-muted">
+          Traga as suas conexões do LinkedIn: cada uma vira um contato (com cargo, e-mail quando houver e o link do perfil) e as empresas entram na lista “Importação
+          LinkedIn”, sem duplicar. A conexão usa o arquivo oficial que você baixa do LinkedIn — o sistema nunca entra na sua conta nem faz nada nela.
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link to="/linkedin">
+            <Button type="button">{statusLinkedin && statusLinkedin.total > 0 ? "Atualizar conexões do LinkedIn" : "Conectar ao LinkedIn"}</Button>
+          </Link>
+          <span className="text-[12px] text-muted">
+            {statusLinkedin && statusLinkedin.total > 0
+              ? `${statusLinkedin.total} conexões importadas${statusLinkedin.atualizado_em ? ` em ${new Date(statusLinkedin.atualizado_em).toLocaleString("pt-BR")}` : ""}.`
+              : "Nenhuma conexão importada ainda."}
+          </span>
+        </div>
+      </Card>
 
       <Card className="mb-4" data-tutorial-id="configuracao:oferta">
         <SectionLabel>Oferta</SectionLabel>
@@ -903,41 +891,6 @@ export function Configuracao() {
             Salvar
           </Button>
         </form>
-      </Card>
-
-      <Card className="mt-4">
-        <SectionLabel>Minhas conexões do LinkedIn</SectionLabel>
-        <div className="mb-3 text-[11px] text-muted">
-          Sobe o CSV de conexões que você mesmo exporta do LinkedIn
-          (Configurações → Privacidade de dados → "Obter uma cópia dos seus
-          dados"). O sistema usa isso só para indicar, ao mapear decisores
-          de uma conta, quem já é sua conexão e quem vale sugerir conectar —
-          nunca envia convite nem faz nada automaticamente no LinkedIn.
-        </div>
-        <div className="mb-3 text-[12px] text-muted">
-          {statusLinkedin && statusLinkedin.total > 0
-            ? `${statusLinkedin.total} conexões importadas${
-                statusLinkedin.atualizado_em
-                  ? ` em ${new Date(statusLinkedin.atualizado_em).toLocaleString("pt-BR")}`
-                  : ""
-              }.`
-            : "Nenhuma conexão importada ainda."}
-        </div>
-        <div className="flex flex-col gap-3">
-          <SeletorArquivo accept=".csv" onSelecionar={selecionarArquivoLinkedin} />
-          <Button
-            type="button"
-            disabled={!conteudoCsvLinkedin || importandoLinkedin}
-            onClick={importarConexoesLinkedin}
-            className="w-full justify-center"
-          >
-            {importandoLinkedin
-              ? "Importando..."
-              : nomeArquivoLinkedin
-                ? `Importar conexões (${nomeArquivoLinkedin})`
-                : "Importar conexões"}
-          </Button>
-        </div>
       </Card>
 
       {isGestor && (

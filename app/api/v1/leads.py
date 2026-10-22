@@ -2,9 +2,10 @@ from fastapi import APIRouter, Body, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_tenant_id, get_usuario_atual
+from app.models.conta import Conta
 from app.models.usuario import Usuario
 from app.schemas.conta import ContaSchema, CriarLeadRequestSchema
-from app.schemas.decisor import DecisorSchema
+from app.schemas.decisor import LeadDecisorSchema
 from app.schemas.lista_prospeccao import (
     ElegibilidadeContaSchema,
     ExcluirContasRequestSchema,
@@ -121,11 +122,13 @@ def executar_limpeza_leads_nao_trabalhados(
     return ExcluirContasResponseSchema(**resultado)
 
 
-@router.get("/decisores", response_model=list[DecisorSchema])
+@router.get("/decisores", response_model=list[LeadDecisorSchema])
 def listar_decisores_leads(
     vendedor_usuario_id: int | None = None,
     tenant_id: str = Depends(get_tenant_id),
     usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
-) -> list[DecisorSchema]:
-    return conta_service.listar_decisores_leads(db, tenant_id, usuario, vendedor_usuario_id)
+) -> list[LeadDecisorSchema]:
+    decisores = conta_service.listar_decisores_leads(db, tenant_id, usuario, vendedor_usuario_id)
+    nomes = {c.id: (c.nome_fantasia or c.nome) for c in db.query(Conta).filter(Conta.tenant_id == tenant_id, Conta.id.in_({d.conta_id for d in decisores})).all()} if decisores else {}
+    return [LeadDecisorSchema.model_validate(d).model_copy(update={"conta_nome": nomes.get(d.conta_id)}) for d in decisores]

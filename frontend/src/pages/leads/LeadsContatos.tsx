@@ -15,6 +15,7 @@ interface LeadDecisor {
   nome: string;
   cargo: string | null;
   linkedin_url: string | null;
+  conta_nome?: string | null;
   email: string | null;
   telefone: string | null;
 }
@@ -72,7 +73,8 @@ export function LeadsContatos() {
 
   function nomeEmpresa(contaId: number): string {
     const empresa = empresas.find((item) => item.id === contaId);
-    return empresa ? empresa.nome_fantasia || empresa.nome : `Conta #${contaId}`;
+    if (empresa) return empresa.nome_fantasia || empresa.nome;
+    return contatos.find((item) => item.conta_id === contaId)?.conta_nome || `Conta #${contaId}`;
   }
 
   const contatosFiltrados = useMemo(() => {
@@ -190,6 +192,7 @@ export function LeadsContatos() {
               <th className="p-2 text-left">Empresa</th>
               <th className="p-2 text-left">E-mail</th>
               <th className="p-2 text-left">Telefone</th>
+              <th className="p-2 text-left">LinkedIn</th>
               <th className="p-2 text-left">Ações</th>
             </tr>
           </thead>
@@ -208,6 +211,21 @@ export function LeadsContatos() {
                 <td className="p-2 text-muted">{contato.email ?? "—"}</td>
                 <td className="p-2 text-muted">{contato.telefone ?? "—"}</td>
                 <td className="p-2">
+                  {contato.linkedin_url ? (
+                    <a
+                      className="text-cyan underline"
+                      href={contato.linkedin_url.startsWith("http") ? contato.linkedin_url : `https://${contato.linkedin_url}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      Perfil
+                    </a>
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
+                </td>
+                <td className="p-2">
                   <Button
                     size="sm"
                     onClick={(event) => {
@@ -222,7 +240,7 @@ export function LeadsContatos() {
             ))}
             {contatosFiltrados.length === 0 && (
               <tr>
-                <td colSpan={5} className="p-4 text-center text-muted">
+                <td colSpan={6} className="p-4 text-center text-muted">
                   {contatos.length === 0 ? "Nenhum contato cadastrado ainda." : "Nenhum contato encontrado para essa busca."}
                 </td>
               </tr>

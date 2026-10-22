@@ -109,6 +109,7 @@ da rede — tudo com motivo explicável, nunca um número opaco.
   - Agente Corporativo: um assistente de IA que responde perguntas sobre a SUA empresa (produtos/serviços, \
 FAQ, ofertas) feitas por OUTRAS empresas conectadas no Shoal — modo desligado, só interno (você testa) ou \
 assistido (a resposta da IA sempre passa por aprovação humana antes de ser enviada).
+  - Conectar LinkedIn (menu do PREDATOR e card no topo de Configuração): o vendedor sobe o arquivo oficial de conexões (Connections.csv) que ele mesmo baixa do LinkedIn — o sistema nunca entra na conta nem faz nada no LinkedIn. Cada conexão vira contato (cargo, e-mail se houver, link do perfil) e as empresas entram na lista "Importação LinkedIn" de Prospecção sem duplicar; a IA confere nomes de empresa parecidos e só junta quando é a mesma empresa (homônimos ficam separados). Telefones: usar "Pesquisar decisores" com Telefone marcado nas empresas dessa lista, dentro dos limites do perfil contratado.
   - Configuração: oferta e tom de comunicação (usados pela IA para escrever as mensagens), conexões do \
 LinkedIn, WhatsApp Business (número próprio via Meta, obrigatório para disparar WhatsApp), E-mail (SMTP \
 próprio, obrigatório para disparar e-mail de cadência/campanha), e modelo de proposta comercial.

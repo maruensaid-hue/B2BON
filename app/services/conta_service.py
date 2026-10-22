@@ -3,6 +3,7 @@ import unicodedata
 from datetime import datetime
 
 from fpdf import FPDF
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
@@ -246,9 +247,10 @@ def listar_decisores_leads(
     db: Session, tenant_id: str, usuario: Usuario, vendedor_usuario_id: int | None = None
 ) -> list[Decisor]:
     conta_ids = [conta.id for conta in _leads_visiveis(db, tenant_id, usuario, vendedor_usuario_id).all()]
-    if not conta_ids:
-        return []
-    consulta = db.query(Decisor).filter(Decisor.tenant_id == tenant_id, Decisor.conta_id.in_(conta_ids))
+    # Conexões importadas do LinkedIn também são "contatos", mesmo quando a empresa está na lista de prospecção "Importação LinkedIn" (e por isso fora
+    # dos leads avulsos): aparecem aqui com o perfil do LinkedIn de cada uma.
+    do_linkedin = Decisor.origem == "linkedin"
+    consulta = db.query(Decisor).filter(Decisor.tenant_id == tenant_id, or_(Decisor.conta_id.in_(conta_ids), do_linkedin) if conta_ids else do_linkedin)
     if usuario.papel == "user":
         consulta = consulta.filter(Decisor.criado_por_usuario_id == usuario.id)
     return consulta.order_by(Decisor.id.desc()).all()

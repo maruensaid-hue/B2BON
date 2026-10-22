@@ -114,3 +114,19 @@ def test_status_sem_importacao_retorna_zero(client):
     status = client.get("/api/v1/linkedin/conexoes/status").json()
 
     assert status == {"total": 0, "atualizado_em": None}
+
+
+def test_importar_conexoes_pela_api_cria_contatos_empresas_e_a_lista_importacao_linkedin(client, onboarding_completo):
+    csv = _CSV_EXPORT_LINKEDIN + "Caio,Dias,https://www.linkedin.com/in/caio,caio@alpha.com,ALPHA TECH Ltda,CTO,02 Jan 2024\n"
+    r = client.post("/api/v1/linkedin/conexoes/importar", json={"conteudo_csv": csv})
+    assert r.status_code == 200
+    d = r.json()
+    assert (d["total_importado"], d["contas_criadas"], d["contatos_criados"], d["lista_nome"]) == (3, 2, 3, "Importação LinkedIn")
+    listas = client.get("/api/v1/listas-prospeccao").json()
+    assert [lista["nome"] for lista in listas if lista["id"] == d["lista_id"]] == ["Importação LinkedIn"]
+    contas = client.get(f"/api/v1/listas-prospeccao/{d['lista_id']}/contas").json()
+    assert sorted(c["nome"] for c in contas) == ["Alpha Tech", "Beta Clinica"]
+    contatos = {c["nome"]: c for c in client.get("/api/v1/leads/decisores").json()}  # a lista de contatos traz o perfil do LinkedIn de cada conexão
+    assert contatos["Joao Silva"]["linkedin_url"] == "https://linkedin.com/in/joao-silva" and contatos["Joao Silva"]["cargo"] == "CEO"
+    assert contatos["Caio Dias"]["email"] == "caio@alpha.com"
+    assert client.post("/api/v1/linkedin/conexoes/importar", json={"conteudo_csv": csv}).json()["contatos_criados"] == 0  # idempotente
