@@ -11,6 +11,7 @@ class CadenciaSchema(BaseModel):
     conta_id: int | None
     icp_id: int | None
     oferta_id: int | None
+    lista_prospeccao_id: int | None = None
     nome: str
     canais: list
     status: str
@@ -79,6 +80,8 @@ class CadenciaCreateSchema(BaseModel):
     # informar, cai no ICP ativo (o primeiro encontrado, mesmo
     # comportamento de antes desta correção).
     icp_id: int | None = None
+    # Cadência para uma lista de prospecção (sem ICP): gera mensagens só para as empresas dela. Não combina com `icp_id`.
+    lista_prospeccao_id: int | None = None
     # Raio-X 2026-09-15: desligado por padrão — uma resposta do decisor
     # não interrompe mais a cadência a menos que isto seja marcado.
     cancelar_ao_responder: bool = False

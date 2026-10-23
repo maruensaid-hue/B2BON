@@ -88,8 +88,9 @@ comprado (ao acabar o crédito ou vencer o prazo, volta ao do plano); o administ
 compra. Gerar a lista do ICP, mapear decisores pelo QSA e analisar sites nunca consomem esses créditos. Se o plano \
 ainda não tem isso configurado, o assinante deve falar com o comercial.
   - Cadências: sequência de toques multicanal (e-mail, WhatsApp, LinkedIn) gerada por IA — criar cadência \
-(mínimo 5 toques, 2 canais, trava o ICP/Oferta usados na criação), selecionar contas (por ICP, Lista de \
-Prospecção ou Clientes Cadastrados), gerar mensagens, aprovar em Aprovações, e só depois ativar a cadência \
+(mínimo 5 toques, 2 canais; é criada para um ICP OU para uma Lista de Prospecção — como a "Importação LinkedIn", que não tem ICP — e \
+trava esse alvo e a Oferta usados na criação; a cadência de lista só gera mensagens para empresas da própria lista), selecionar contas (por ICP, \
+Lista de Prospecção ou Clientes Cadastrados), gerar mensagens, aprovar em Aprovações, e só depois ativar a cadência \
 (dispara os envios agendados). O toque de WhatsApp sempre usa um template aprovado pela Meta.
   - Campanhas: disparo de e-mail/WhatsApp em massa para uma lista, fora do fluxo de cadência de toques.
   - Aprovações: fila de mensagens geradas por IA aguardando revisão humana antes de entrar na fila de \

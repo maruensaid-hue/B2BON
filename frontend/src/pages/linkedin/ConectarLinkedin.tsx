@@ -128,6 +128,10 @@ export function ConectarLinkedin() {
               <Link className="text-cyan underline" to="/leads/contatos">
                 Ver os contatos
               </Link>
+              <span className="text-muted">·</span>
+              <Link className="text-cyan underline" to="/cadencias">
+                Criar uma cadência para esta lista
+              </Link>
             </div>
             {!resultado.ia_disponivel && (
               <p className="mb-2 rounded-md bg-surf2 p-2 text-[12px] text-amber">

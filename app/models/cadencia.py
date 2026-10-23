@@ -28,6 +28,9 @@ class Cadencia(Base):
     # essas continuam caindo no fallback "o que estiver ativo agora".
     icp_id: Mapped[int | None] = mapped_column(ForeignKey("icp.id"), nullable=True)
     oferta_id: Mapped[int | None] = mapped_column(ForeignKey("oferta.id"), nullable=True)
+    # Cadência criada para uma LISTA DE PROSPECÇÃO (ex.: "Importação LinkedIn"), que não tem ICP: só pode gerar mensagens para empresas dessa lista. Se a lista
+    # referencia um ICP, `icp_id` o herda; senão fica nulo e o contexto da mensagem vem da lista e da oferta.
+    lista_prospeccao_id: Mapped[int | None] = mapped_column(ForeignKey("lista_prospeccao.id"), nullable=True)
     nome: Mapped[str] = mapped_column(String)
     canais: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(

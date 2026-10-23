@@ -46,6 +46,7 @@ INDICES_FK: tuple[tuple[str, str], ...] = (
     ("cadencia", "conta_id"),
     ("cadencia", "icp_id"),
     ("cadencia", "oferta_id"),
+    ("cadencia", "lista_prospeccao_id"),
     ("campo_enriquecido", "conta_id"),
     ("conta_franquia_consumo", "conta_id"),
     ("decisor", "conta_id"),

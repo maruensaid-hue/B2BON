@@ -1541,3 +1541,11 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Telefone**: o export não traz. Fica pela pesquisa de decisores governada (franquia, limite por pesquisa, decisores por empresa) nas empresas da lista, completando o contato se o provedor devolver a mesma pessoa; a busca não consegue pedir uma pessoa específica ao provedor.
 - **Não feito de propósito**: não enfileira as empresas novas no enriquecimento em lote (evita custo de IA em massa sem pedido).
 - **Status**: ACEITA no staging. Sem promoção a master.
+
+
+## D-103 · 2026-10-23 · Cadência para lista de prospecção (sem ICP)
+
+- **Problema do PO**: as empresas importadas do LinkedIn ficam numa Lista de Prospecção (sem ICP) e não havia como criar uma cadência para elas: a cadência só nascia atrelada a um ICP e a geração recusava ("Sem ICP ativo") quando não havia nenhum.
+- **Decisão**: `cadencia.lista_prospeccao_id` (migração `b2d4f6a8c0e3`). Ao criar, o alvo é um ICP **ou** uma lista (os dois juntos são recusados). Lista com ICP vinculado herda o ICP; sem ICP, a cadência fica sem `icp_id` e **nunca cai no "ICP ativo agora"**. O prompt usa "lista de prospecção X" no lugar do ICP (sem dores/gatilhos). A geração só aceita empresas da lista da cadência. Vendedor (papel `user`) só cria para lista própria. Cadência de ICP segue exatamente como antes (inclusive exigir ICP).
+- **Limite conhecido**: a geração continua sendo por empresa, com o primeiro contato de cada uma; empresas com várias conexões importadas não geram uma mensagem por conexão.
+- **Status**: ACEITA no staging. Sem promoção a master.

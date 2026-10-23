@@ -26,7 +26,7 @@ from app.schemas.cadencia import (
     RenomearCadenciaRequestSchema,
     ToqueCadenciaSchema,
 )
-from app.services import ab_teste_service, cadencia_service
+from app.services import ab_teste_service, cadencia_service, lista_prospeccao_service
 
 router = APIRouter(prefix="/cadencias", tags=["cadencias"])
 
@@ -41,10 +41,12 @@ def criar_cadencia(
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> CadenciaSchema:
     if usuario.papel == "user":
-        if dados.icp_id is None or db.query(ICP.id).filter_by(
+        if dados.lista_prospeccao_id is not None:
+            lista_prospeccao_service.obter(db, tenant_id, dados.lista_prospeccao_id, usuario.id, True)  # só uma lista do próprio vendedor
+        elif dados.icp_id is None or db.query(ICP.id).filter_by(
             id=dados.icp_id, tenant_id=tenant_id, criador_usuario_id=usuario.id
         ).one_or_none() is None:
-            raise NaoEncontrado("Selecione um ICP próprio para criar a cadência.")
+            raise NaoEncontrado("Selecione um ICP ou uma lista de prospecção próprios para criar a cadência.")
     return cadencia_service.criar(db, tenant_id, ator_id, dados, plan_limits)
 
 

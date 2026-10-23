@@ -14,6 +14,7 @@ from app.models.configuracao_comunicacao import ConfiguracaoComunicacao
 from app.models.decisor import Decisor
 from app.models.icp import ICP
 from app.models.mensagem import Mensagem
+from app.models.lista_prospeccao import ListaProspeccao
 from app.models.oferta import Oferta
 from app.models.toque_cadencia import ToqueCadencia
 from app.providers.plan_limits.base import PlanLimitsProvider
@@ -354,7 +355,16 @@ def criar(
     # tem mais de um ICP ativo simultâneo (comparação de campanhas); a
     # Oferta nunca tem essa ambiguidade — só uma fica ativa por vez
     # (`oferta_service.ativar`).
-    if dados.icp_id is not None:
+    lista_id: int | None = None
+    if dados.lista_prospeccao_id is not None:
+        if dados.icp_id is not None:
+            raise RegraNegocioViolada("Escolha um ICP ou uma lista de prospecção para a cadência, não os dois.")
+        lista = db.query(ListaProspeccao).filter_by(id=dados.lista_prospeccao_id, tenant_id=tenant_id).one_or_none()
+        if lista is None:
+            raise NaoEncontrado(f"Lista de prospecção {dados.lista_prospeccao_id} não encontrada")
+        lista_id = lista.id
+        icp_id = lista.icp_id  # a lista pode referenciar um ICP; sem ele, o contexto vem da lista e da oferta (nunca de "o ICP ativo")
+    elif dados.icp_id is not None:
         icp = db.query(ICP).filter_by(id=dados.icp_id, tenant_id=tenant_id).one_or_none()
         if icp is None:
             raise NaoEncontrado(f"ICP {dados.icp_id} não encontrado")
@@ -369,7 +379,7 @@ def criar(
         tenant_id=tenant_id,
         criado_por_usuario_id=int(ator_id) if ator_id is not None and str(ator_id).isdigit() else None,
         nome=dados.nome, canais=sorted(canais), status="rascunho", tipo=dados.tipo,
-        icp_id=icp_id, oferta_id=oferta_id, cancelar_ao_responder=dados.cancelar_ao_responder,
+        icp_id=icp_id, oferta_id=oferta_id, lista_prospeccao_id=lista_id, cancelar_ao_responder=dados.cancelar_ao_responder,
     )
     db.add(cadencia)
     db.flush()
@@ -396,8 +406,8 @@ def criar(
 
 
 def _contexto_de_geracao(
-    db: Session, tenant_id: str, icp_id: int | None = None, oferta_id: int | None = None
-) -> tuple[ICP, Oferta, ConfiguracaoComunicacao]:
+    db: Session, tenant_id: str, icp_id: int | None = None, oferta_id: int | None = None, lista: ListaProspeccao | None = None
+) -> tuple[ICP | None, Oferta, ConfiguracaoComunicacao]:
     """`icp_id`/`oferta_id` vêm de `Cadencia.icp_id`/`Cadencia.oferta_id`
     (capturados na criação) — busca por id, não mais "o que estiver ativo
     agora" (raio-X: bug real de produção, ver docstring de
@@ -406,9 +416,11 @@ def _contexto_de_geracao(
     agora" ainda é usado."""
     if icp_id is not None:
         icp = db.query(ICP).filter_by(id=icp_id, tenant_id=tenant_id).one_or_none()
+    elif lista is not None:
+        icp = None  # cadência de lista de prospecção sem ICP: não cai no fallback "ICP ativo agora"
     else:
         icp = db.query(ICP).filter_by(tenant_id=tenant_id, ativo=True).first()
-    if icp is None:
+    if icp is None and lista is None:
         raise RegraNegocioViolada("Sem ICP ativo, o motor não inicia prospecção.")
     if oferta_id is not None:
         oferta = db.query(Oferta).filter_by(id=oferta_id, tenant_id=tenant_id).one_or_none()
@@ -440,7 +452,7 @@ _TENTATIVAS_POR_TOQUE = 3
 def _gerar_conteudo_toque(
     db: Session,
     llm: LLMProvider,
-    icp: ICP,
+    icp: ICP | None,
     oferta: Oferta,
     config: ConfiguracaoComunicacao,
     conta: Conta,
@@ -448,6 +460,7 @@ def _gerar_conteudo_toque(
     toque: ToqueCadencia,
     variante: str | None = None,
     regras_aprendidas: str = "",
+    lista: ListaProspeccao | None = None,
 ) -> tuple[str | None, str | None, bool]:
     """Mensagem personalizada por conta/decisor — não mala direta (E3-H1).
 
@@ -485,8 +498,16 @@ def _gerar_conteudo_toque(
     `conteudo`) — nunca perde a mensagem por causa de formatação."""
     enquadramento_variante = f" {_ENQUADRAMENTO_VARIANTE[variante]}" if variante else ""
     dores_e_gatilhos = (
-        f" Dores prováveis desse perfil de cliente: {', '.join(icp.dores)}." if icp.dores else ""
-    ) + (f" Gatilhos de abordagem: {', '.join(icp.gatilhos)}." if icp.gatilhos else "")
+        (f" Dores prováveis desse perfil de cliente: {', '.join(icp.dores)}." if icp.dores else "")
+        + (f" Gatilhos de abordagem: {', '.join(icp.gatilhos)}." if icp.gatilhos else "")
+        if icp is not None
+        else ""
+    )
+    perfil = (
+        f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento})"
+        if icp is not None
+        else f"da lista de prospecção '{lista.nome if lista is not None else 'sem nome'}' (sem ICP definido: use só o que se sabe da pessoa, do cargo e da empresa)"
+    )
     diferenciais = f" Diferenciais: {', '.join(oferta.diferenciais)}." if oferta.diferenciais else ""
     provas_sociais = f" Provas sociais: {', '.join(oferta.provas_sociais)}." if oferta.provas_sociais else ""
     instrucao_formato_email = (
@@ -497,7 +518,7 @@ def _gerar_conteudo_toque(
     prompt = (
         f"Escreva o toque {toque.ordem} (canal {toque.canal}) de uma cadência de prospecção "
         f"para {decisor.nome} ({decisor.cargo or 'decisor'}) na empresa {conta.nome}, "
-        f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento}).{dores_e_gatilhos} "
+        f"{perfil}.{dores_e_gatilhos} "
         f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais}{regras_aprendidas} "
         f"Tom: {config.tom}.{enquadramento_variante} Nunca mencione: "
         f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
@@ -565,7 +586,23 @@ def gerar_para_lote(
     cadencia = obter(db, tenant_id, cadencia_id)
     _exigir_nao_cancelada(cadencia)
     toques = toques_da_cadencia(db, cadencia.id)
-    icp, oferta, config = _contexto_de_geracao(db, tenant_id, cadencia.icp_id, cadencia.oferta_id)
+    lista = (
+        db.query(ListaProspeccao).filter_by(id=cadencia.lista_prospeccao_id, tenant_id=tenant_id).one_or_none() if cadencia.lista_prospeccao_id is not None else None
+    )
+    if cadencia.lista_prospeccao_id is not None and lista is None:
+        raise NaoEncontrado("A lista de prospecção desta cadência não existe mais.")
+    icp, oferta, config = _contexto_de_geracao(db, tenant_id, cadencia.icp_id, cadencia.oferta_id, lista)
+    if lista is not None:
+        fora_da_lista = [
+            conta_id for (conta_id,) in db.query(Conta.id).filter(
+                Conta.tenant_id == tenant_id, Conta.id.in_(conta_ids), (Conta.lista_prospeccao_id.is_(None)) | (Conta.lista_prospeccao_id != lista.id)
+            ).all()
+        ]
+        if fora_da_lista:
+            raise RegraNegocioViolada(
+                f"Esta cadência foi criada para a lista de prospecção '{lista.nome}' e só gera mensagens para empresas dela "
+                f"({len(fora_da_lista)} da seleção não estão na lista)."
+            )
     # Loop de aprendizado (raio-X 2026-09-17) — uma consulta por canal
     # distinto dos toques, não por (conta x toque): o escopo (tenant/ICP/
     # oferta/canal) é o mesmo pra todas as contas deste lote.
@@ -621,7 +658,7 @@ def gerar_para_lote(
         for toque in toques:
             variante = variante_ab_para_decisor(decisor.id) if toque.ab_teste_habilitado else None
             conteudo, assunto, falhou_por_erro_ia = _gerar_conteudo_toque(
-                db, llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal]
+                db, llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal], lista
             )
             if conteudo is None:
                 if falhou_por_erro_ia:

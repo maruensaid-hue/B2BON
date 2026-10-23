@@ -1,5 +1,10 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Cadências para listas de prospecção (2026-10-23, D-103)
+
+- Ao criar uma cadência, agora dá para escolher **Uma lista de prospecção** (como a "Importação LinkedIn") em vez de um ICP. A cadência da lista gera mensagens só para as empresas dela e não depende de existir um ICP.
+- Na tela da cadência, a origem das empresas fica fixa na lista; cadências de ICP continuam iguais.
+
 ## Conectar ao LinkedIn: conexões viram contatos e empresas (2026-10-22, D-102)
 
 - Novo item de menu **Conectar LinkedIn** e card em destaque no topo de Configuração. Você sobe o arquivo de conexões que baixa do próprio LinkedIn e o sistema cria os contatos (cargo, e-mail quando houver, link do perfil) e leva as empresas para a lista **Importação LinkedIn**, sem duplicar.

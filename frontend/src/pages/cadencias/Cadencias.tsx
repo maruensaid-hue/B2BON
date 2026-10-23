@@ -21,6 +21,8 @@ interface Cadencia {
   data_inicio: string | null;
   icp_id: number | null;
   oferta_id: number | null;
+  /** Cadência criada para uma lista de prospecção (sem ICP): só gera mensagens para as empresas dela. */
+  lista_prospeccao_id?: number | null;
   /** Raio-X 2026-09-15: se `true`, uma resposta do decisor cancela todos
    * os toques pendentes dessa cadência (comportamento antigo); se
    * `false` (padrão), a nutrição continua e o cancelamento passa a ser
@@ -120,6 +122,9 @@ export function Cadencias() {
   const [icps, setIcps] = useState<ICP[]>([]);
   const [ofertas, setOfertas] = useState<OfertaResumo[]>([]);
   const [icpParaCriacaoId, setIcpParaCriacaoId] = useState<number | null>(null);
+  // Uma cadência pertence a um ICP (campanha) OU a uma lista de prospecção (ex.: "Importação LinkedIn"), que não tem ICP.
+  const [alvoCriacao, setAlvoCriacao] = useState<"icp" | "lista">("icp");
+  const [listaParaCriacaoId, setListaParaCriacaoId] = useState<number | null>(null);
   const [listas, setListas] = useState<ListaProspeccao[]>([]);
   const [templatesWhatsapp, setTemplatesWhatsapp] = useState<TemplateWhatsApp[]>([]);
   const [origemLote, setOrigemLote] = useState<"icp" | "lista" | "leads">("icp");
@@ -155,6 +160,15 @@ export function Cadencias() {
   const [mensagem, setMensagem] = useState<string | null>(null);
 
   const cadenciaSelecionada = cadencias.find((c) => c.id === cadenciaSelecionadaId) ?? null;
+  const listaDaCadenciaId = cadenciaSelecionada?.lista_prospeccao_id ?? null;
+  const listaDaCadencia = listas.find((l) => l.id === listaDaCadenciaId) ?? null;
+  // Cadência de lista: as empresas vêm sempre da lista dela (o servidor recusa as de fora).
+  useEffect(() => {
+    if (listaDaCadenciaId !== null) {
+      setOrigemLote("lista");
+      setListaParaLoteId(listaDaCadenciaId);
+    }
+  }, [listaDaCadenciaId]);
 
   async function carregarCadencias() {
     try {
@@ -294,12 +308,17 @@ export function Cadencias() {
       setErro("O toque de WhatsApp precisa de um template aprovado selecionado.");
       return;
     }
+    if (alvoCriacao === "lista" && listaParaCriacaoId === null) {
+      setErro("Escolha a lista de prospecção desta cadência.");
+      return;
+    }
     const form = new FormData(event.currentTarget);
     try {
       await api.post("/cadencias", {
         nome: String(form.get("nome")),
         tipo: String(form.get("tipo")),
-        icp_id: icpParaCriacaoId,
+        icp_id: alvoCriacao === "icp" ? icpParaCriacaoId : null,
+        lista_prospeccao_id: alvoCriacao === "lista" ? listaParaCriacaoId : null,
         cancelar_ao_responder: cancelarAoResponderNaCriacao,
         toques: rascunhoToques.map((toque) => ({
           ordem: toque.ordem,
@@ -311,6 +330,8 @@ export function Cadencias() {
       });
       setModalCriarAberto(false);
       setIcpParaCriacaoId(null);
+      setAlvoCriacao("icp");
+      setListaParaCriacaoId(null);
       setCancelarAoResponderNaCriacao(false);
       setRascunhoToques([
         toqueVazio(1, "email"),
@@ -635,8 +656,10 @@ export function Cadencias() {
               </div>
             </div>
             <div className="mb-2 text-[11px] text-muted">
-              Campanha: {ofertas.find((o) => o.id === cadenciaSelecionada.oferta_id)?.nome ?? "—"} · ICP:{" "}
-              {icps.find((i) => i.id === cadenciaSelecionada.icp_id)?.nome ?? "—"}
+              Campanha: {ofertas.find((o) => o.id === cadenciaSelecionada.oferta_id)?.nome ?? "—"} ·{" "}
+              {listaDaCadenciaId !== null
+                ? `Lista de prospecção: ${listaDaCadencia?.nome ?? "—"}`
+                : `ICP: ${icps.find((i) => i.id === cadenciaSelecionada.icp_id)?.nome ?? "—"}`}
             </div>
             {cadenciaSelecionada.status !== "cancelada" && (
               <label className="mb-2 flex items-center gap-1.5 text-[11px] text-muted">
@@ -788,6 +811,12 @@ export function Cadencias() {
           {cadenciaSelecionada.status !== "cancelada" && (
             <Card>
               <SectionLabel>Selecionar contas para gerar mensagens</SectionLabel>
+              {listaDaCadenciaId !== null ? (
+                <p className="mb-3 rounded-md bg-surf2 p-2 text-[12px] text-muted">
+                  Esta cadência é da lista de prospecção <strong className="text-text">{listaDaCadencia?.nome ?? "—"}</strong>: as mensagens são geradas só para as
+                  empresas dela.
+                </p>
+              ) : (
               <div className="mb-3 flex gap-2">
                 <button
                   type="button"
@@ -817,8 +846,9 @@ export function Cadencias() {
                   Clientes Cadastrados
                 </button>
               </div>
+              )}
 
-              {origemLote === "icp" && (
+              {origemLote === "icp" && listaDaCadenciaId === null && (
                 <div className="mb-3">
                   <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">ICP</div>
                   <Select
@@ -835,7 +865,7 @@ export function Cadencias() {
                 </div>
               )}
 
-              {origemLote === "lista" && (
+              {origemLote === "lista" && listaDaCadenciaId === null && (
                 <div className="mb-3">
                   <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Lista de Prospecção</div>
                   <Select
@@ -950,7 +980,49 @@ export function Cadencias() {
             </Select>
           </div>
 
-          {icps.filter((icp) => icp.ativo).length > 1 && (
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Esta cadência é para</div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAlvoCriacao("icp")}
+                className={`flex-1 rounded-lg border px-3 py-1.5 text-[12px] ${alvoCriacao === "icp" ? "border-cyan bg-cyan/15 text-cyan" : "border-border text-muted"}`}
+              >
+                Um ICP (campanha)
+              </button>
+              <button
+                type="button"
+                onClick={() => setAlvoCriacao("lista")}
+                className={`flex-1 rounded-lg border px-3 py-1.5 text-[12px] ${alvoCriacao === "lista" ? "border-cyan bg-cyan/15 text-cyan" : "border-border text-muted"}`}
+              >
+                Uma lista de prospecção
+              </button>
+            </div>
+          </div>
+
+          {alvoCriacao === "lista" && (
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Lista de prospecção</div>
+              <Select
+                value={listaParaCriacaoId ?? ""}
+                onChange={(event) => setListaParaCriacaoId(event.target.value ? Number(event.target.value) : null)}
+              >
+                <option value="">Selecione uma lista</option>
+                {listas.map((lista) => (
+                  <option key={lista.id} value={lista.id}>
+                    {lista.nome}
+                  </option>
+                ))}
+              </Select>
+              <div className="mt-1 text-[11px] text-muted">
+                {listas.length === 0
+                  ? "Nenhuma lista de prospecção ainda — importe as conexões do LinkedIn ou crie uma lista na tela de Prospecção."
+                  : "Não precisa de ICP: as mensagens são geradas só para as empresas dessa lista, com a sua oferta e o tom configurados."}
+              </div>
+            </div>
+          )}
+
+          {alvoCriacao === "icp" && icps.filter((icp) => icp.ativo).length > 1 && (
             <div>
               <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
                 ICP desta campanha
