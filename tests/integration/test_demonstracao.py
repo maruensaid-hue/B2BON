@@ -291,8 +291,8 @@ def test_ataques_de_quem_tem_um_token_de_demonstracao(client, db_session, demo):
     assert db_session.get(Conta, conta_real_id).nome == "Cliente Real Ltda"
 
     # 4) Virar outro usuário ou ganhar senha/papel: rotas de conta e usuários fechadas.
-    for metodo, rota in (("post", "/api/v1/auth/login"), ("post", "/api/v1/auth/trocar-senha"), ("post", "/api/v1/auth/registrar"),
-                         ("put", "/api/v1/usuarios/1"), ("post", "/api/v1/auth/impersonar"), ("get", "/api/v1/auth/tokens")):
+    for metodo, rota in (("post", "/api/v1/auth/trocar-senha"), ("put", "/api/v1/usuarios/1"), ("post", "/api/v1/auth/impersonar"),
+                         ("get", "/api/v1/auth/tokens")):
         resposta = client.request(metodo.upper(), rota, headers=headers, json={})
         assert resposta.status_code == 403, (metodo, rota, resposta.status_code)
 
@@ -350,3 +350,23 @@ def test_teto_global_de_ia_somando_todas_as_demonstracoes(client, db_session, de
     carteira.conceder(db_session, "tenant-teste", TipoLote.PROMOTIONAL, Decimal(500), "TESTE")
     db_session.commit()
     assert execucoes.abrir(db_session, "tenant-teste", "tender_analysis", confirmado=True).status == "RESERVADA"
+
+
+def test_token_de_demonstracao_esquecido_no_navegador_nao_impede_entrar_com_a_propria_conta(client, db_session, demo):
+    """Bug real (2026-10-23): quem abriu a demonstração e depois tentava entrar via login recebia "Indisponível na demonstração" (o cookie/token da demo
+    seguia valendo e a rota de login não é de produto). Login, cadastro e recuperação de senha são anônimos: ignoram o token de demonstração."""
+    from app.services.auth_service import hash_senha
+    from app.models.usuario import Usuario
+
+    db_session.add(Usuario(tenant_id="tenant-teste", nome="Real", email="real@teste.com.br", papel="admin", ativo=True, senha_hash=hash_senha("senha-forte-1")))
+    db_session.commit()
+    _, headers = _abrir(client)  # cookie + Authorization da sessão de demonstração
+
+    entrada = client.post("/api/v1/auth/login", headers=headers, json={"email": "real@teste.com.br", "senha": "senha-forte-1"})
+    assert entrada.status_code == 200, entrada.text
+    assert entrada.json()["usuario"]["email"] == "real@teste.com.br"
+    for rota in ("/api/v1/auth/registrar", "/api/v1/auth/registrar-publico", "/api/v1/auth/esqueci-senha", "/api/v1/auth/redefinir-senha", "/api/v1/auth/google"):
+        resposta = client.post(rota, headers=headers, json={})
+        assert "Indisponível na demonstração" not in resposta.text, rota  # chega à validação da própria rota (422/400), não ao bloqueio da demo
+    # a demonstração continua fechada para o que exige estar logado
+    assert client.post("/api/v1/auth/trocar-senha", headers=headers, json={}).status_code == 403

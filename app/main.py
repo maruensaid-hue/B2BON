@@ -111,13 +111,22 @@ app.add_middleware(
 )
 
 
+# Rotas que qualquer pessoa pode chamar SEM estar logada (entrar, criar conta, recuperar senha, sair). Um token de demonstração esquecido no navegador (cookie
+# ou localStorage) não pode barrar nem "sequestrar" essas chamadas: sem esta exceção, quem abriu a demonstração um dia não conseguia mais entrar com a própria
+# conta ("Indisponível na demonstração") e um cadastro real feito nesse navegador usaria os provedores simulados da demonstração.
+ROTAS_ANONIMAS_DE_AUTH = frozenset({
+    "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/registrar", "/api/v1/auth/registrar-vitrine", "/api/v1/auth/registrar-publico",
+    "/api/v1/auth/esqueci-senha", "/api/v1/auth/redefinir-senha", "/api/v1/auth/logout",
+})
+
+
 @app.middleware("http")
 async def bloqueio_demonstracao(request: Request, call_next):
     """D-082/D-083: sessão de demonstração (token marcado `demo`): negação por padrão (só as rotas das telas de produto) e
     todo provedor externo simulado. Com a demonstração desligada, tokens de demonstração antigos deixam de valer."""
     autorizacao = request.headers.get("authorization", "")
     token = autorizacao[len("Bearer "):] if autorizacao.startswith("Bearer ") else request.cookies.get(settings.sessao_cookie_nome)
-    if token:
+    if token and request.url.path.rstrip("/") not in ROTAS_ANONIMAS_DE_AUTH:
         try:
             payload = jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"])
         except jwt.PyJWTError:
