@@ -1,8 +1,19 @@
-from fastapi import APIRouter, Depends
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends
 
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_plan_limits_provider, get_tenant_id
+from app.api.deps import (
+    get_ator_id,
+    get_db,
+    get_plan_limits_provider,
+    get_sessao_factory,
+    get_tenant_id,
+    resolver_email_provider,
+    resolver_whatsapp_provider,
+)
+from app.models.tenant import Tenant
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.campanha import (
     AdicionarDestinatariosAvulsosRequestSchema,
@@ -15,7 +26,28 @@ from app.schemas.campanha import (
 )
 from app.services import campanha_service
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/campanhas", tags=["campanhas"])
+
+
+def _disparar_em_segundo_plano(sessao_factory, tenant_id: str, campanha_id: int) -> None:
+    """Começa o envio logo depois da resposta de "Marcar como pronta", sem esperar o agendador externo (que o GitHub atrasa ou descarta). Sessão
+    própria. Se falhar ou o processo cair, a campanha segue `pronta`/`enviando` e o agendador continua de onde parou; a reserva da campanha impede que
+    os dois enviem ao mesmo tempo. Ambientes de demonstração e tenants inativos ficam de fora, como no agendador."""
+    sessao = sessao_factory()
+    try:
+        tenant = sessao.get(Tenant, tenant_id)
+        if tenant is None or not tenant.ativo or tenant.demo_expira_em is not None:
+            return
+        whatsapp = resolver_whatsapp_provider(tenant_id, sessao)
+        email = resolver_email_provider(tenant_id, sessao)
+        campanha_service.processar_pendentes(sessao, tenant_id, email, whatsapp, campanha_id=campanha_id)
+    except Exception:  # noqa: BLE001 — tarefa sem chamador para propagar
+        logger.exception("CAMPANHA_DISPARO_IMEDIATO_FALHOU campanha=%s", campanha_id)
+        sessao.rollback()
+    finally:
+        sessao.close()
 
 
 @router.post("", response_model=CampanhaSchema, status_code=201)
@@ -132,8 +164,13 @@ def remover_destinatario(
 @router.post("/{campanha_id}/marcar-pronta", response_model=CampanhaSchema)
 def marcar_pronta(
     campanha_id: int,
+    tarefas: BackgroundTasks,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
+    sessao_factory=Depends(get_sessao_factory),
 ) -> CampanhaSchema:
-    return campanha_service.marcar_pronta(db, tenant_id, ator_id, campanha_id)
+    campanha = campanha_service.marcar_pronta(db, tenant_id, ator_id, campanha_id)
+    if sessao_factory is not None:  # nos testes a fábrica é `None`: o envio é exercitado direto no serviço
+        tarefas.add_task(_disparar_em_segundo_plano, sessao_factory, tenant_id, campanha_id)
+    return campanha

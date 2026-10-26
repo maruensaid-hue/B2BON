@@ -1,7 +1,8 @@
 import hashlib
 import hmac
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -15,6 +16,7 @@ from app.services import atividade_service, auditoria_service, limite_criacao_se
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 _SEPARADOR = ":"
+_RESERVA_MINUTOS = 10
 
 _REMETENTE_NOME = "B2B ON"
 
@@ -267,62 +269,94 @@ def marcar_pronta(db: Session, tenant_id: str, ator_id: str | None, campanha_id:
     return campanha
 
 
-def processar_pendentes(db: Session, tenant_id: str, email_provider: EmailProvider, whatsapp_provider: WhatsAppProvider) -> dict:
-    """Dispatcher chamado por cron externo (mesmo padrão síncrono e
-    idempotente de `envio_service.processar_pendentes`) — cada campanha
-    `pronta` ou já `enviando` tem seus destinatários `pendente` disparados
-    nesta chamada; ao esgotar, a campanha vira `concluida`."""
+def _agora() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _reservar_disparo(db: Session, campanha_id: int) -> bool:
+    """Reserva atômica da campanha: só um processo envia por vez (o envio imediato e o agendador podem coincidir). A reserva vence sozinha em
+    `_RESERVA_MINUTOS`, então um processo que caiu no meio não trava a campanha — o ciclo seguinte continua de onde parou."""
+    agora = _agora()
+    reservada = (
+        db.query(Campanha)
+        .filter(
+            Campanha.id == campanha_id,
+            Campanha.status.in_(["pronta", "enviando"]),
+            or_(Campanha.processando_ate.is_(None), Campanha.processando_ate < agora),
+        )
+        .update({"status": "enviando", "processando_ate": agora + timedelta(minutes=_RESERVA_MINUTOS)}, synchronize_session=False)
+    )
+    db.commit()
+    return bool(reservada)
+
+
+def processar_pendentes(
+    db: Session, tenant_id: str, email_provider: EmailProvider, whatsapp_provider: WhatsAppProvider, campanha_id: int | None = None
+) -> dict:
+    """Dispatcher chamado logo após "Marcar como pronta" (em segundo plano, com `campanha_id`) e pelo cron externo (todas as campanhas do tenant;
+    mesmo padrão síncrono e idempotente de `envio_service.processar_pendentes`). Cada destinatário `pendente` é disparado e gravado na hora (um commit
+    por destinatário): se o processo cair no meio, ninguém que já recebeu volta a ser enviado, e a reserva da campanha vence sozinha para o ciclo
+    seguinte continuar. Ao esgotar os pendentes, a campanha vira `concluida`."""
     resultado = {"enviadas": 0, "falhas": 0, "adiadas": 0}
 
-    campanhas = db.query(Campanha).filter(Campanha.tenant_id == tenant_id, Campanha.status.in_(["pronta", "enviando"])).all()
-    for campanha in campanhas:
-        campanha.status = "enviando"
-        pendentes = (
-            db.query(CampanhaDestinatario)
-            .filter_by(campanha_id=campanha.id, tenant_id=tenant_id, status="pendente")
-            .all()
-        )
-        algum_adiado_nesta_campanha = False
-        for destinatario in pendentes:
-            sucesso, motivo_falha, adiado = _disparar_destinatario(
-                db, campanha, destinatario, email_provider, whatsapp_provider
-            )
-            if sucesso:
-                destinatario.status = "enviado"
-                destinatario.enviado_em = datetime.now(UTC)
-                if destinatario.decisor_id is not None:
-                    decisor = db.query(Decisor).filter_by(id=destinatario.decisor_id).one_or_none()
-                    if decisor is not None:
-                        atividade_service.registrar(
-                            db, tenant_id, conta_id=decisor.conta_id, tipo="sistema",
-                            descricao=f"Campanha '{campanha.nome}' enviada",
-                        )
-                resultado["enviadas"] += 1
-            elif adiado:
-                # Canal de e-mail pausado por reputação (raio-X 2026-09-16)
-                # — não é falha, fica "pendente" pra tentar de novo no
-                # próximo cron, quando o canal for reativado.
-                algum_adiado_nesta_campanha = True
-                resultado["adiadas"] += 1
-            else:
-                destinatario.status = "falhou"
-                destinatario.motivo_falha = motivo_falha
-                resultado["falhas"] += 1
-
-        # `pendentes` é a lista inteira de destinatários pendentes desta
-        # campanha (sem lote/limite artificial); se nenhum ficou adiado,
-        # todos foram atualizados no laço acima e a campanha está
-        # concluída. Com algum adiado, a campanha volta pro cron seguinte
-        # (fica "enviando", não "concluida") até o canal reabrir — senão
-        # "concluida" com destinatários ainda "pendente" nunca mais
-        # seria reprocessada. (Reconsultar o banco aqui seria arriscado:
-        # a sessão usa `autoflush=False`, então a query não veria as
-        # mudanças de status ainda não commitadas.)
-        if not algum_adiado_nesta_campanha:
-            campanha.status = "concluida"
-
-    db.commit()
+    consulta = db.query(Campanha.id).filter(Campanha.tenant_id == tenant_id, Campanha.status.in_(["pronta", "enviando"]))
+    if campanha_id is not None:
+        consulta = consulta.filter(Campanha.id == campanha_id)
+    for (id_da_campanha,) in consulta.order_by(Campanha.id).all():
+        if not _reservar_disparo(db, id_da_campanha):
+            continue  # outro processo está enviando esta campanha agora
+        try:
+            _enviar_pendentes(db, tenant_id, id_da_campanha, email_provider, whatsapp_provider, resultado)
+        except Exception:
+            db.rollback()
+            db.query(Campanha).filter_by(id=id_da_campanha).update({"processando_ate": None}, synchronize_session=False)
+            db.commit()
+            raise
     return resultado
+
+
+def _enviar_pendentes(
+    db: Session, tenant_id: str, campanha_id: int, email_provider: EmailProvider, whatsapp_provider: WhatsAppProvider, resultado: dict
+) -> None:
+    campanha = db.query(Campanha).filter_by(id=campanha_id, tenant_id=tenant_id).one()
+    ids_pendentes = [
+        i for (i,) in db.query(CampanhaDestinatario.id).filter_by(campanha_id=campanha_id, tenant_id=tenant_id, status="pendente")
+        .order_by(CampanhaDestinatario.id).all()
+    ]
+    algum_adiado = False
+    for destinatario_id in ids_pendentes:
+        destinatario = db.get(CampanhaDestinatario, destinatario_id)
+        if destinatario is None or destinatario.status != "pendente":
+            continue  # saiu da lista (descadastro, remoção) desde a consulta
+        sucesso, motivo_falha, adiado = _disparar_destinatario(db, campanha, destinatario, email_provider, whatsapp_provider)
+        if sucesso:
+            destinatario.status = "enviado"
+            destinatario.enviado_em = datetime.now(UTC)
+            if destinatario.decisor_id is not None:
+                decisor = db.query(Decisor).filter_by(id=destinatario.decisor_id).one_or_none()
+                if decisor is not None:
+                    atividade_service.registrar(
+                        db, tenant_id, conta_id=decisor.conta_id, tipo="sistema",
+                        descricao=f"Campanha '{campanha.nome}' enviada",
+                    )
+            resultado["enviadas"] += 1
+        elif adiado:
+            # Canal de e-mail pausado por reputação (raio-X 2026-09-16) — não é falha, fica "pendente" pra tentar de novo
+            # no próximo ciclo, quando o canal for reativado.
+            algum_adiado = True
+            resultado["adiadas"] += 1
+        else:
+            destinatario.status = "falhou"
+            destinatario.motivo_falha = motivo_falha
+            resultado["falhas"] += 1
+        campanha.processando_ate = _agora() + timedelta(minutes=_RESERVA_MINUTOS)  # renova a reserva a cada destinatário
+        db.commit()
+
+    # Com algum adiado a campanha volta pro ciclo seguinte (fica "enviando", não "concluida") até o canal reabrir — senão
+    # "concluida" com destinatários ainda "pendente" nunca mais seria reprocessada.
+    campanha.status = "enviando" if algum_adiado else "concluida"
+    campanha.processando_ate = None
+    db.commit()
 
 
 def _disparar_destinatario(

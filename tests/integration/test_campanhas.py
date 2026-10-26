@@ -118,3 +118,36 @@ def test_campanha_de_outro_tenant_nao_aparece(client, criar_usuario_autenticado)
     resposta = client.get("/api/v1/campanhas", headers=headers_outro_tenant)
     assert resposta.status_code == 200
     assert resposta.json() == []
+
+
+def test_marcar_pronta_comeca_o_envio_logo_em_seguida(client, db_session, fake_email, fake_whatsapp, monkeypatch):
+    """O envio não espera o agendador externo: ao marcar como pronta, a campanha sai em segundo plano."""
+    from sqlalchemy.orm import Session
+
+    from app.api.deps import get_sessao_factory
+    from app.api.v1 import campanhas as rota
+    from app.main import app
+    from app.models.tenant import Tenant
+    from tests.conftest import TENANT_ID
+
+    if db_session.get(Tenant, TENANT_ID) is None:
+        db_session.add(Tenant(id=TENANT_ID, razao_social="Tenant de teste"))
+        db_session.commit()
+    monkeypatch.setattr(rota, "resolver_email_provider", lambda tenant_id, db: fake_email)
+    monkeypatch.setattr(rota, "resolver_whatsapp_provider", lambda tenant_id, db: fake_whatsapp)
+    monkeypatch.setattr(db_session, "close", lambda: None)  # a "sessão própria" da tarefa é a mesma dos testes
+    app.dependency_overrides[get_sessao_factory] = lambda: (lambda: db_session)
+
+    decisor_id = _criar_decisor(client)
+    criada = client.post(
+        "/api/v1/campanhas",
+        json={"nome": "Imediata", "tipo": "marketing", "canais": ["email"], "assunto": "Assunto", "conteudo_email": "Corpo"},
+    ).json()
+    client.post(f"/api/v1/campanhas/{criada['id']}/destinatarios/decisores", json={"decisor_ids": [decisor_id]})
+
+    pronta = client.post(f"/api/v1/campanhas/{criada['id']}/marcar-pronta")
+
+    assert pronta.status_code == 200 and pronta.json()["status"] == "pronta"
+    assert [e["destinatario"] for e in fake_email.envios] == ["fulano@teste.com"]
+    detalhe = client.get(f"/api/v1/campanhas/{criada['id']}").json()
+    assert detalhe["status"] == "concluida" and detalhe["metricas"]["enviado"] == 1

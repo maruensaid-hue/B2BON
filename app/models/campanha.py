@@ -27,6 +27,9 @@ class Campanha(Base):
     # janela de 24h não é permitida pela própria plataforma.
     template_whatsapp_id: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default="rascunho")  # rascunho | pronta | enviando | concluida
+    # Reserva do disparo: enquanto um processo envia esta campanha, `processando_ate` fica no futuro e os outros (o envio imediato e o agendador)
+    # passam adiante; se o processo morrer, a reserva vence sozinha e o ciclo seguinte continua de onde parou.
+    processando_ate: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

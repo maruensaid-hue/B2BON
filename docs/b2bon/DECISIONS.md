@@ -1568,3 +1568,14 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Como**: novos tiers `BUSINESS` e `CORPORATE`; os planos Business/Corporate passam a usá-los; migração `d4f6b8c0e2a5` publica uma versão nova da política preservando todos os outros valores já ajustados (se o peso do Enterprise foi alterado, o acréscimo é calculado sobre o valor atual). Pesos editáveis depois em Admin → Parâmetros financeiros (nova versão auditada).
 - **Não muda**: preço cobrado do cliente, limites dos planos e custo dos demais tiers.
 - **Status**: ACEITA (interpretação a confirmar com o PO).
+
+
+## D-106 · 2026-10-26 · Campanha: envio imediato, gravação por destinatário e limite de tempo no agendador
+
+- **Problema**: uma campanha com 611 destinatários ficou `pronta` sem que nada fosse enviado. O envio dependia só do agendador do GitHub Actions (`cron-envios.yml`, a cada 15 minutos), que o GitHub atrasa ou descarta (nenhuma execução entre 12:44 e 15:41 UTC em 2026-10-26), e as chamadas `curl` sem limite de tempo prendiam execuções por horas.
+- **Envio imediato**: "Marcar como pronta" passa a iniciar o envio em segundo plano (`_disparar_em_segundo_plano`); o agendador continua como reserva. Demonstrações e tenants inativos ficam de fora, como no agendador.
+- **Sem reenvio**: antes, os status só eram gravados no fim; uma queda no meio faria o ciclo seguinte reenviar a todos. Agora cada destinatário é gravado na hora (um commit por destinatário), e quem saiu da lista durante o envio (descadastro) é pulado.
+- **Reserva da campanha**: `campanha.processando_ate` (migração `e5a7c9d1f3b6`) impede que o envio imediato e o agendador enviem a mesma campanha ao mesmo tempo; vence em 10 minutos, então um processo que cai não trava a campanha.
+- **Agendador**: toda chamada `curl` do workflow ganhou `--max-time` (300 s; 1.200 s para campanhas) e os jobs `processar-envios` e `creditos-ia` ganharam `timeout-minutes`. O GitHub continua podendo atrasar execuções agendadas; isso agora afeta só a reserva, não o envio de campanhas.
+- **Tela**: o andamento da campanha se atualiza a cada 5 segundos enquanto ela está `pronta` ou `enviando`.
+- **Status**: ACEITA.

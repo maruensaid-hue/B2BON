@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Campanhas saem logo após "Marcar como pronta" (2026-10-26, D-106)
+
+- O envio da campanha começa assim que ela é marcada como pronta, em vez de esperar o ciclo automático (que o GitHub atrasa ou descarta). O ciclo automático continua como reserva.
+- Cada destinatário é registrado assim que recebe; se o servidor cair no meio, ninguém recebe duas vezes e o envio continua de onde parou.
+- A tela de campanhas atualiza sozinha o andamento enquanto a campanha está sendo enviada.
+
 ## Custo de infraestrutura de Business (+30%) e Corporate (+40%) (2026-10-24, D-105)
 
 - O custo de infraestrutura atribuído a cada cliente Business passa a ser 30% maior que o de um Enterprise, e o de cada cliente Corporate 40% maior (pesos 5,2 e 5,6 contra 4,0). A mudança vale para a comissão e para os painéis de custo; o preço cobrado não muda. Os pesos podem ser revistos em Admin → Parâmetros financeiros.

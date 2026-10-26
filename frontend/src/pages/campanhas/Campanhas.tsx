@@ -197,6 +197,17 @@ export function Campanhas() {
     else setDetalhe(null);
   }, [campanhaSelecionadaId]);
 
+  // Enquanto a campanha está sendo enviada, o andamento (enviados/pendentes) se atualiza sozinho.
+  const emEnvio = campanhaSelecionada?.status === "pronta" || campanhaSelecionada?.status === "enviando";
+  useEffect(() => {
+    if (!emEnvio || campanhaSelecionadaId === null) return;
+    const id = window.setInterval(() => {
+      carregarCampanhas();
+      carregarDetalhe(campanhaSelecionadaId);
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [emEnvio, campanhaSelecionadaId]);
+
   useEffect(() => {
     setContasSelecionadas(new Set());
     if (origemContas === "leads") {
@@ -323,7 +334,7 @@ export function Campanhas() {
     setErro(null);
     try {
       await api.post(`/campanhas/${campanhaSelecionadaId}/marcar-pronta`);
-      setMensagem("Campanha marcada como pronta — o disparo entra na fila do próximo ciclo automático.");
+      setMensagem("Campanha marcada como pronta — o envio começou agora. Acompanhe o andamento abaixo; se algo interromper, o ciclo automático continua de onde parou.");
       await carregarCampanhas();
       await carregarDetalhe(campanhaSelecionadaId);
     } catch (error) {

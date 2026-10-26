@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -293,3 +293,85 @@ def test_optout_por_token_suprime_destinatario_e_decisor(db_session):
 def test_optout_por_token_invalido_falha(db_session):
     with pytest.raises(ValidacaoFalhou):
         campanha_service.processar_optout_por_token(db_session, "token-invalido")
+
+
+class _EmailQueCaiNoTerceiro(FakeEmailProvider):
+    """Simula o processo morrendo no meio do disparo: os dois primeiros saem, o terceiro levanta."""
+
+    def enviar(self, *args, **kwargs):
+        if len(self.envios) == 2:
+            raise RuntimeError("processo caiu")
+        return super().enviar(*args, **kwargs)
+
+
+def _campanha_pronta_com_destinatarios(db_session, quantidade: int) -> int:
+    campanha_id = _criar_campanha_email(db_session)
+    for i in range(quantidade):
+        decisor = _criar_decisor(db_session, f"Pessoa {i}", email=f"pessoa{i}@teste.com")
+        campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    return campanha_id
+
+
+def test_queda_no_meio_nao_reenvia_quem_ja_recebeu(db_session):
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 5)
+
+    queda = _EmailQueCaiNoTerceiro()
+    with pytest.raises(RuntimeError):
+        campanha_service.processar_pendentes(db_session, TENANT_ID, queda, FakeWhatsAppProvider())
+
+    estados = [d.status for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)]
+    assert estados.count("enviado") == 2 and estados.count("pendente") == 3  # os dois primeiros ficaram gravados
+    campanha = campanha_service.obter(db_session, TENANT_ID, campanha_id)
+    assert campanha.status == "enviando" and campanha.processando_ate is None  # a reserva é devolvida, o ciclo seguinte continua
+
+    seguinte = FakeEmailProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, seguinte, FakeWhatsAppProvider())
+    assert resultado["enviadas"] == 3
+    assert {e["destinatario"] for e in seguinte.envios}.isdisjoint({e["destinatario"] for e in queda.envios})  # ninguém recebeu duas vezes
+    assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "concluida"
+
+
+def test_campanha_reservada_por_outro_processo_e_pulada_ate_a_reserva_vencer(db_session):
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 2)
+    campanha = campanha_service.obter(db_session, TENANT_ID, campanha_id)
+    campanha.status, campanha.processando_ate = "enviando", datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=5)
+    db_session.commit()
+
+    fake_email = FakeEmailProvider()
+    assert campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())["enviadas"] == 0
+    assert fake_email.envios == []
+
+    campanha.processando_ate = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1)  # o outro processo caiu: a reserva venceu
+    db_session.commit()
+    assert campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())["enviadas"] == 2
+    assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "concluida"
+
+
+def test_processar_com_campanha_id_envia_so_aquela_campanha(db_session):
+    alvo = _campanha_pronta_com_destinatarios(db_session, 1)
+    outra = _campanha_pronta_com_destinatarios(db_session, 1)
+
+    fake_email = FakeEmailProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider(), campanha_id=alvo)
+
+    assert resultado["enviadas"] == 1
+    assert campanha_service.obter(db_session, TENANT_ID, alvo).status == "concluida"
+    assert campanha_service.obter(db_session, TENANT_ID, outra).status == "pronta"
+
+
+def test_destinatario_que_saiu_da_lista_durante_o_envio_nao_recebe(db_session):
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 3)
+    ultimo = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)[-1]
+
+    class _DescadastraOUltimoNoPrimeiroEnvio(FakeEmailProvider):
+        def enviar(self, *args, **kwargs):
+            if not self.envios:
+                ultimo.status = "optout"
+                db_session.commit()
+            return super().enviar(*args, **kwargs)
+
+    fake_email = _DescadastraOUltimoNoPrimeiroEnvio()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
+
+    assert resultado["enviadas"] == 2 and len(fake_email.envios) == 2
