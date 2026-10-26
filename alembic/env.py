@@ -7,6 +7,7 @@ from alembic import context
 import app.models  # noqa: F401 — registra todas as tabelas em Base.metadata
 from app.core.config import settings
 from app.db.base import Base
+from app.db.migracao import comando_limite_de_espera
 from app.db.session import normalizar_database_url
 
 # this is the Alembic Config object, which provides
@@ -67,6 +68,9 @@ def run_migrations_online() -> None:
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
+            limite = comando_limite_de_espera(connection.dialect.name)
+            if limite:
+                context.execute(limite)
             context.run_migrations()
 
 
