@@ -122,7 +122,6 @@ def test_campanha_de_outro_tenant_nao_aparece(client, criar_usuario_autenticado)
 
 def test_marcar_pronta_comeca_o_envio_logo_em_seguida(client, db_session, fake_email, fake_whatsapp, monkeypatch):
     """O envio não espera o agendador externo: ao marcar como pronta, a campanha sai em segundo plano."""
-    from sqlalchemy.orm import Session
 
     from app.api.deps import get_sessao_factory
     from app.api.v1 import campanhas as rota
