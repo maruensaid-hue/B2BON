@@ -62,8 +62,12 @@ class SendGridEmailProvider(EmailProvider):
                 timeout=15,
             )
         except httpx.HTTPError as erro:
-            return ResultadoEnvio(sucesso=False, motivo_falha=str(erro))
+            return ResultadoEnvio(sucesso=False, motivo_falha=str(erro), transitoria=True)
 
         if resposta.status_code != 202:
-            return ResultadoEnvio(sucesso=False, motivo_falha=f"Falha do serviço de e-mail ({resposta.status_code}): {resposta.text}")
+            return ResultadoEnvio(
+                sucesso=False,
+                motivo_falha=f"Falha do serviço de e-mail ({resposta.status_code}): {resposta.text}",
+                transitoria=resposta.status_code == 429 or resposta.status_code >= 500,
+            )
         return ResultadoEnvio(sucesso=True, id_externo=resposta.headers.get("X-Message-Id"))

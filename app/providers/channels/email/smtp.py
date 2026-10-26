@@ -1,8 +1,13 @@
 import smtplib
+import time
 from email.message import EmailMessage
 
 from app.core.config import settings
 from app.providers.channels.email.base import EmailProvider, ResultadoEnvio, montar_html_com_pixel
+
+
+_TENTATIVAS = 3
+_ESPERA_ENTRE_TENTATIVAS = 2.0  # segundos, multiplicado pelo número da tentativa
 
 
 class SmtpEmailProvider(EmailProvider):
@@ -57,6 +62,16 @@ class SmtpEmailProvider(EmailProvider):
             # pixel só existe pra quem renderiza a parte HTML.
             mensagem.add_alternative(montar_html_com_pixel(corpo, pixel_url), subtype="html")
 
+        ultimo: ResultadoEnvio | None = None
+        for tentativa in range(1, _TENTATIVAS + 1):
+            ultimo = self._enviar_uma_vez(mensagem)
+            if ultimo.sucesso or not ultimo.transitoria:
+                return ultimo
+            if tentativa < _TENTATIVAS:
+                time.sleep(_ESPERA_ENTRE_TENTATIVAS * tentativa)  # a rede costuma voltar em segundos (reinício do serviço, oscilação)
+        return ultimo
+
+    def _enviar_uma_vez(self, mensagem: EmailMessage) -> ResultadoEnvio:
         try:
             with smtplib.SMTP(self.host, self.porta, timeout=15) as servidor:
                 if self.usar_tls:
@@ -65,5 +80,10 @@ class SmtpEmailProvider(EmailProvider):
                     servidor.login(self.usuario, self.senha)
                 servidor.send_message(mensagem)
             return ResultadoEnvio(sucesso=True)
-        except (smtplib.SMTPException, OSError) as erro:
+        except smtplib.SMTPResponseException as erro:
+            # 4xx é recusa temporária do servidor (caixa cheia, limite de envio, greylisting); 5xx é definitiva (credencial, remetente, destinatário).
+            return ResultadoEnvio(sucesso=False, motivo_falha=str(erro), transitoria=400 <= erro.smtp_code < 500)
+        except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, OSError) as erro:
+            return ResultadoEnvio(sucesso=False, motivo_falha=str(erro), transitoria=True)
+        except smtplib.SMTPException as erro:
             return ResultadoEnvio(sucesso=False, motivo_falha=str(erro))

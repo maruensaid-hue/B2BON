@@ -20,6 +20,9 @@ class ResultadoEnvio(BaseModel):
     sucesso: bool
     id_externo: str | None = None
     motivo_falha: str | None = None
+    # Falha de rede ou indisponibilidade passageira do servidor de e-mail (sem rota, conexão recusada ou caída, tempo esgotado, 4xx/5xx):
+    # o e-mail não saiu, mas tentar de novo mais tarde pode funcionar. Quem envia em lote não deve dar o destinatário por perdido.
+    transitoria: bool = False
 
 
 class EmailProvider(ABC):

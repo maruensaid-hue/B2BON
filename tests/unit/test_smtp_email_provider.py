@@ -87,3 +87,54 @@ def test_pixel_url_com_caractere_html_e_escapado(mock_smtp: MagicMock):
     assert "<tag>" not in html
     assert "&lt;tag&gt;" in html
     assert "a?b=1&amp;c=2" in html
+
+
+def _enviar(provider):
+    return provider.enviar("dest@empresa.com", "Assunto", "Corpo", "Vendas", "vendas@predator.com", "tenant-teste")
+
+
+@patch("app.providers.channels.email.smtp.time.sleep")
+@patch("app.providers.channels.email.smtp.smtplib.SMTP")
+def test_rede_fora_do_ar_tenta_tres_vezes_e_marca_a_falha_como_transitoria(mock_smtp: MagicMock, mock_sleep: MagicMock):
+    mock_smtp.side_effect = OSError(101, "Network is unreachable")
+
+    resultado = _enviar(SmtpEmailProvider())
+
+    assert resultado.sucesso is False and resultado.transitoria is True
+    assert "Network is unreachable" in resultado.motivo_falha
+    assert mock_smtp.call_count == 3 and mock_sleep.call_count == 2
+
+
+@patch("app.providers.channels.email.smtp.time.sleep")
+@patch("app.providers.channels.email.smtp.smtplib.SMTP")
+def test_rede_que_volta_na_segunda_tentativa_envia_normalmente(mock_smtp: MagicMock, mock_sleep: MagicMock):
+    servidor = MagicMock()
+    mock_smtp.side_effect = [OSError(101, "Network is unreachable"), MagicMock(__enter__=MagicMock(return_value=servidor))]
+
+    resultado = _enviar(SmtpEmailProvider())
+
+    assert resultado.sucesso is True and mock_smtp.call_count == 2
+    servidor.send_message.assert_called_once()
+
+
+@patch("app.providers.channels.email.smtp.time.sleep")
+@patch("app.providers.channels.email.smtp.smtplib.SMTP")
+def test_recusa_definitiva_do_servidor_nao_e_repetida(mock_smtp: MagicMock, mock_sleep: MagicMock):
+    import smtplib
+
+    mock_smtp.side_effect = smtplib.SMTPResponseException(550, b"mailbox unavailable")
+
+    resultado = _enviar(SmtpEmailProvider())
+
+    assert resultado.sucesso is False and resultado.transitoria is False
+    assert mock_smtp.call_count == 1 and mock_sleep.call_count == 0
+
+
+@patch("app.providers.channels.email.smtp.time.sleep")
+@patch("app.providers.channels.email.smtp.smtplib.SMTP")
+def test_recusa_temporaria_4xx_do_servidor_e_transitoria(mock_smtp: MagicMock, mock_sleep: MagicMock):
+    import smtplib
+
+    mock_smtp.side_effect = smtplib.SMTPResponseException(451, b"try again later")
+
+    assert _enviar(SmtpEmailProvider()).transitoria is True

@@ -375,3 +375,43 @@ def test_destinatario_que_saiu_da_lista_durante_o_envio_nao_recebe(db_session):
     resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
 
     assert resultado["enviadas"] == 2 and len(fake_email.envios) == 2
+
+
+class _EmailSemRede(FakeEmailProvider):
+    """Servidor de e-mail inalcançável: toda tentativa falha de forma passageira."""
+
+    def enviar(self, *args, **kwargs):
+        self.tentativas = getattr(self, "tentativas", 0) + 1
+        from app.providers.channels.email.base import ResultadoEnvio
+
+        return ResultadoEnvio(sucesso=False, motivo_falha="[Errno 101] Network is unreachable", transitoria=True)
+
+
+def test_falha_de_rede_nao_perde_destinatarios_e_o_ciclo_seguinte_continua(db_session):
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 4)
+
+    sem_rede = _EmailSemRede()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, sem_rede, FakeWhatsAppProvider())
+
+    assert sem_rede.tentativas == 1  # com a rede fora, não insiste nos outros destinatários
+    assert resultado == {"enviadas": 0, "falhas": 0, "adiadas": 1}
+    estados = [d.status for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)]
+    assert estados == ["pendente"] * 4  # ninguém foi marcado como falha
+    campanha = campanha_service.obter(db_session, TENANT_ID, campanha_id)
+    assert campanha.status == "enviando" and campanha.processando_ate is None
+
+    com_rede = FakeEmailProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, com_rede, FakeWhatsAppProvider())
+    assert resultado["enviadas"] == 4 and len(com_rede.envios) == 4
+    assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "concluida"
+
+
+def test_recusa_definitiva_continua_marcando_o_destinatario_como_falha(db_session):
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 2)
+    fake_email = FakeEmailProvider()
+    fake_email.falhar_proximos = 1
+
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
+
+    assert resultado["falhas"] == 1 and resultado["enviadas"] == 1
+    assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "concluida"

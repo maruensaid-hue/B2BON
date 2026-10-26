@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import or_
@@ -14,6 +15,8 @@ from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.campanha import DestinatarioAvulsoSchema
 from app.services import atividade_service, auditoria_service, limite_criacao_service, optout_service, reputacao_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
+
+logger = logging.getLogger(__name__)
 
 _SEPARADOR = ":"
 _RESERVA_MINUTOS = 10
@@ -324,6 +327,7 @@ def _enviar_pendentes(
         .order_by(CampanhaDestinatario.id).all()
     ]
     algum_adiado = False
+    interrompido = False
     for destinatario_id in ids_pendentes:
         destinatario = db.get(CampanhaDestinatario, destinatario_id)
         if destinatario is None or destinatario.status != "pendente":
@@ -341,16 +345,21 @@ def _enviar_pendentes(
                     )
             resultado["enviadas"] += 1
         elif adiado:
-            # Canal de e-mail pausado por reputação (raio-X 2026-09-16) — não é falha, fica "pendente" pra tentar de novo
-            # no próximo ciclo, quando o canal for reativado.
+            # Canal de e-mail pausado por reputação (raio-X 2026-09-16) ou falha passageira de rede — não é falha do destinatário, fica
+            # "pendente" pra tentar de novo no próximo ciclo.
             algum_adiado = True
             resultado["adiadas"] += 1
+            if motivo_falha:  # falha de rede: os próximos também falhariam; para por aqui e retoma no ciclo seguinte
+                logger.warning("CAMPANHA_ENVIO_INTERROMPIDO campanha=%s motivo=%s", campanha_id, motivo_falha)
+                interrompido = True
         else:
             destinatario.status = "falhou"
             destinatario.motivo_falha = motivo_falha
             resultado["falhas"] += 1
         campanha.processando_ate = _agora() + timedelta(minutes=_RESERVA_MINUTOS)  # renova a reserva a cada destinatário
         db.commit()
+        if interrompido:
+            break
 
     # Com algum adiado a campanha volta pro ciclo seguinte (fica "enviando", não "concluida") até o canal reabrir — senão
     # "concluida" com destinatários ainda "pendente" nunca mais seria reprocessada.
@@ -374,6 +383,7 @@ def _disparar_destinatario(
     enviou_algum = False
     ultimo_motivo: str | None = None
     email_adiado = False
+    falha_transitoria: str | None = None
 
     if "email" in campanha.canais and destinatario.email:
         if reputacao_service.canal_pausado(db, campanha.tenant_id, "email"):
@@ -391,6 +401,8 @@ def _disparar_destinatario(
             )
             if resultado.sucesso:
                 enviou_algum = True
+            elif resultado.transitoria:
+                falha_transitoria = resultado.motivo_falha or "Falha temporária de rede ao enviar o e-mail."
             else:
                 ultimo_motivo = resultado.motivo_falha
 
@@ -401,7 +413,9 @@ def _disparar_destinatario(
         else:
             ultimo_motivo = resultado.motivo_falha
 
-    adiado = email_adiado and not enviou_algum and ultimo_motivo is None
+    adiado = (email_adiado or falha_transitoria is not None) and not enviou_algum and ultimo_motivo is None
+    if adiado and falha_transitoria is not None:
+        return False, falha_transitoria, True  # com motivo: o chamador interrompe o ciclo (a rede está fora), sem dar o destinatário por perdido
     if not enviou_algum and not adiado and ultimo_motivo is None:
         ultimo_motivo = "Destinatário sem e-mail/telefone compatível com os canais da campanha."
     return enviou_algum, ultimo_motivo, adiado
