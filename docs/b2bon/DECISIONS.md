@@ -1549,3 +1549,22 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Decisão**: `cadencia.lista_prospeccao_id` (migração `b2d4f6a8c0e3`). Ao criar, o alvo é um ICP **ou** uma lista (os dois juntos são recusados). Lista com ICP vinculado herda o ICP; sem ICP, a cadência fica sem `icp_id` e **nunca cai no "ICP ativo agora"**. O prompt usa "lista de prospecção X" no lugar do ICP (sem dores/gatilhos). A geração só aceita empresas da lista da cadência. Vendedor (papel `user`) só cria para lista própria. Cadência de ICP segue exatamente como antes (inclusive exigir ICP).
 - **Limite conhecido**: a geração continua sendo por empresa, com o primeiro contato de cada uma; empresas com várias conexões importadas não geram uma mensagem por conexão.
 - **Status**: ACEITA no staging. Sem promoção a master.
+
+
+## D-104 · 2026-10-24 · Planos da suíte: novos limites e os planos Business e Corporate
+
+- **Fonte**: `Planos.xlsx` do PO (mensalidade, usuários, contas/mês, enriquecimento de site e de contatos por semana, cadências e campanhas por mês).
+- **Valores**: POC 0 / 3 / 50 / 15 / 15 / 5 / 2; Starter 924,50 / 5 / 200 / 50 / 50 / 20 / 10; Professional 1.664,10 / 10 / 800 / 100 / 100 / 80 / 40; Enterprise 2.958,40 / 20 / 1.200 / 250 / 250 / 150 / 100; **Business 6.485,00 / 50 / 2.500 / 500 / 500 / 300 / 200**; **Corporate 11.100,00 / 100 / 5.000 / 1.000 / 1.000 / 500 / 400**; Teste 0 / sem limite / 200 / 30 / 15 / 20 / 10. Acima de 100 usuários: On Demand, sob consulta (não é plano).
+- **Como os acessos são limitados**: todos esses números vivem na tabela `plano` e são lidos pelo `NucleoPlanLimitsProvider` (usuários, franquia de contas, enriquecimento semanal, cadências e campanhas por mês), então a aplicação passa a limitar por eles sem outra mudança de lógica. O que mudou foram os dados: migração `c3e5a7b9d1f4` (altera só o que ainda tem o valor anterior, cria Business/Corporate a partir do Enterprise e liga a franquia de decisores da matriz, 120/120/20 e 180/180/30), o seed `scripts/bootstrap_tenant.py` e a página pública de planos.
+- **Business/Corporate**: módulos MAP, PREDATOR e CRM; visíveis no autoatendimento; tier de infraestrutura próprio (`BUSINESS` e `CORPORATE`, ver D-105); **recursos de escala (A/B, auto-aprovação, webhook, API de parceiros, sub-tenants) como o Enterprise de produção** — a planilha não os define; ajustáveis em Admin → Planos.
+- **Testes**: `tests/integration/test_planos_suite_limites.py` (seed × planilha, leitura pelo provedor, bloqueio de cadências, migração) e o congelamento de preços ganhou Business e Corporate.
+- **Status**: ACEITA.
+
+
+## D-105 · 2026-10-24 · Custo de infraestrutura: Business +30% e Corporate +40%
+
+- **Pedido**: acrescentar 30% de custo de infraestrutura ao plano Business e 40% ao Corporate.
+- **Interpretação adotada**: o custo de infraestrutura de cada cliente é o pool provisionado dividido por unidades ponderadas, e o peso vem do tier do plano na política versionada `INFRASTRUCTURE_COST_POLICY`. O Enterprise pesa 4,0, então **Business = 4,0 × 1,30 = 5,2** e **Corporate = 4,0 × 1,40 = 5,6**. Ou seja, o cliente Business passa a ter 30% a mais de custo de infraestrutura atribuído do que um Enterprise, e o Corporate 40% a mais. Isso entra na margem comissionável (comissão de representante) e nos painéis de custo.
+- **Como**: novos tiers `BUSINESS` e `CORPORATE`; os planos Business/Corporate passam a usá-los; migração `d4f6b8c0e2a5` publica uma versão nova da política preservando todos os outros valores já ajustados (se o peso do Enterprise foi alterado, o acréscimo é calculado sobre o valor atual). Pesos editáveis depois em Admin → Parâmetros financeiros (nova versão auditada).
+- **Não muda**: preço cobrado do cliente, limites dos planos e custo dos demais tiers.
+- **Status**: ACEITA (interpretação a confirmar com o PO).

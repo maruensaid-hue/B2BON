@@ -24,7 +24,7 @@ from app.services.errors import ValidacaoFalhou
 
 INICIAIS = {
     CODIGO_POLITICA_MARGEM: (POLITICA_MARGEM_INICIAL, "Política inicial (D-075): custo de IA fora da margem"),
-    CODIGO_POLITICA_INFRA: (POLITICA_INFRA_INICIAL, "Política do PO (D-076/D-077): plano máximo aplicável, pesos 1/1/2/4/2/4"),
+    CODIGO_POLITICA_INFRA: (POLITICA_INFRA_INICIAL, "Política do PO (D-076/D-077): plano máximo aplicável, pesos 1/1/2/4/2/4; Business 5,2 e Corporate 5,6 (D-105)"),
 }
 
 

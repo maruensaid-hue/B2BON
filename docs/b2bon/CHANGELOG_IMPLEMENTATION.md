@@ -1,5 +1,15 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Custo de infraestrutura de Business (+30%) e Corporate (+40%) (2026-10-24, D-105)
+
+- O custo de infraestrutura atribuído a cada cliente Business passa a ser 30% maior que o de um Enterprise, e o de cada cliente Corporate 40% maior (pesos 5,2 e 5,6 contra 4,0). A mudança vale para a comissão e para os painéis de custo; o preço cobrado não muda. Os pesos podem ser revistos em Admin → Parâmetros financeiros.
+
+## Novos planos Business e Corporate e limites atualizados (2026-10-24, D-104)
+
+- **Business** (21 a 50 usuários, R$ 6.485,00/mês) e **Corporate** (51 a 100 usuários, R$ 11.100,00/mês) passam a existir como planos da suíte, com autoatendimento. Acima de 100 usuários continua sob consulta.
+- Limites atualizados: Professional (enriquecimento 100 por semana), Enterprise (1.200 contas, enriquecimento 250, 150 cadências e 100 campanhas por mês) e Teste (enriquecimento de site 30 e de contatos 15 por semana). Os acessos de cada empresa passam a ser limitados por esses números.
+- A página pública de planos mostra as seis faixas.
+
 ## Cadências para listas de prospecção (2026-10-23, D-103)
 
 - Ao criar uma cadência, agora dá para escolher **Uma lista de prospecção** (como a "Importação LinkedIn") em vez de um ICP. A cadência da lista gera mensagens só para as empresas dela e não depende de existir um ICP.

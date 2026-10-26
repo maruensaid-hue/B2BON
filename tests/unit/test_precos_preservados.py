@@ -12,6 +12,7 @@ RAIZ = Path(__file__).resolve().parents[2]
 # Valores vigentes (PRICING_CURRENT_STATE.md §2), em R$/mês.
 PRECOS = {
     "Starter": 924.50, "Professional": 1664.10, "Enterprise": 2958.40,
+    "Business": 6485.00, "Corporate": 11100.00,
     "MAP Starter": 149.50, "MAP Professional": 269.10, "MAP Enterprise": 478.40,
     "PREDATOR Starter": 475.50, "PREDATOR Professional": 855.90, "PREDATOR Enterprise": 1521.60,
     "CRM Starter": 299.50, "CRM Professional": 539.10, "CRM Enterprise": 958.40,

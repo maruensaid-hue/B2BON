@@ -180,15 +180,35 @@ const PLANOS: Plano[] = [
     ],
   },
   {
-    nome: "On Demand",
-    usuarios: "Acima de 20 usuários",
-    total: "R$ 129,70",
-    porUsuario: "por usuário / mês",
+    nome: "Business",
+    usuarios: "De 21 a 50 usuários",
+    total: "R$ 6.485,00",
+    porUsuario: "R$ 129,70 por usuário · 30% de desconto",
+    checkoutPlanoNome: "Business",
     linhas: [
       { nome: "Rede social", valor: "Grátis" },
-      { nome: "MAP", valor: "R$ 20,90" },
-      { nome: "PREDATOR", valor: "R$ 66,90" },
-      { nome: "CRM", valor: "R$ 41,90" },
+      { nome: "MAP, PREDATOR e CRM", valor: "Incluídos" },
+    ],
+  },
+  {
+    nome: "Corporate",
+    usuarios: "De 51 a 100 usuários",
+    total: "R$ 11.100,00",
+    porUsuario: "R$ 111,00 por usuário · 40% de desconto",
+    checkoutPlanoNome: "Corporate",
+    linhas: [
+      { nome: "Rede social", valor: "Grátis" },
+      { nome: "MAP, PREDATOR e CRM", valor: "Incluídos" },
+    ],
+  },
+  {
+    nome: "On Demand",
+    usuarios: "Acima de 100 usuários",
+    total: "Sob consulta",
+    porUsuario: "valor negociado com o comercial",
+    linhas: [
+      { nome: "Rede social", valor: "Grátis" },
+      { nome: "MAP, PREDATOR e CRM", valor: "Sob medida" },
     ],
   },
 ];
@@ -197,8 +217,8 @@ const PLANOS: Plano[] = [
  * partir do botão "Planos e Valores" da página de boas-vindas, sem
  * exigir login. Preço por módulo (Shoal grátis, MAP/PREDATOR/CRM pagos)
  * e preço da suíte completa por faixa de usuários, com desconto
- * progressivo (Starter 0%, Professional 10%, Enterprise 20%, On Demand
- * ~30%) — mesma lógica da planilha comercial validada com o usuário. */
+ * progressivo (Starter 0%, Professional 10%, Enterprise 20%, Business 30%,
+ * Corporate 40%, On Demand negociado) — mesma lógica da planilha comercial validada com o usuário. */
 export function Planos() {
   return (
     <div className="min-h-screen bg-bg">
@@ -324,7 +344,7 @@ export function Planos() {
           <div className="mt-1.5 font-head text-xl font-bold text-text">Planos por número de usuários</div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {PLANOS.map((plano) => (
             <div
               key={plano.nome}

@@ -166,14 +166,15 @@ MENSAGENS_CAPACIDADE = {
                                     "parceria estratégica.",
     StatusCapacidade.ESGOTADA.value: "Contracted capacity reached.",
 }
-TIERS_INFRA = ("STARTER", "DEPARTMENT", "PROFESSIONAL", "ENTERPRISE", "BID_INTELLIGENCE", "STRATEGIC_SOURCING")
+TIERS_INFRA = ("STARTER", "DEPARTMENT", "PROFESSIONAL", "ENTERPRISE", "BUSINESS", "CORPORATE", "BID_INTELLIGENCE", "STRATEGIC_SOURCING")
 
 # Política de infraestrutura (D-076), versionada em `politica_comissao`: pesos por tier, limiares de capacidade e a base
 # de custo da comissão. Valores iniciais do PO; mudar = nova versão auditada.
 CODIGO_POLITICA_INFRA = "INFRASTRUCTURE_COST_POLICY"
 POLITICA_INFRA_INICIAL = {
-    "pesos": {"STARTER": 1.0, "DEPARTMENT": 1.0, "PROFESSIONAL": 2.0, "ENTERPRISE": 4.0, "BID_INTELLIGENCE": 2.0,
-              "STRATEGIC_SOURCING": 4.0},
+    # D-105: Business = Enterprise + 30% (4,0 × 1,3) e Corporate = Enterprise + 40% (4,0 × 1,4).
+    "pesos": {"STARTER": 1.0, "DEPARTMENT": 1.0, "PROFESSIONAL": 2.0, "ENTERPRISE": 4.0, "BUSINESS": 5.2, "CORPORATE": 5.6,
+              "BID_INTELLIGENCE": 2.0, "STRATEGIC_SOURCING": 4.0},
     "limiares": {"ATTENTION": 0.70, "REVIEW": 0.80, "CRITICAL": 0.90, "CAPACITY_REACHED": 1.0},
     "custo_comissao": "PROVISIONED",
     # D-077: pools que formam o custo de infraestrutura da comissão (cost-to-serve) e capacidade compartilhada (em unidades

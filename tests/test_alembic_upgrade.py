@@ -219,8 +219,9 @@ def test_migracao_government_cria_ofertas_e_volta(monkeypatch):
             # D-073 (adicionais 10%); BASE_LIQUIDA saiu na D-074; D-075: política da margem; D-076: política de infraestrutura
             # D-080: políticas do MAP Performance (performance, comissão privada recorrente e Summer Sales Challenge)
             # D-081: v2 da campanha (meta de equipe = individual × ativos) e da performance (contato efetivo a confirmar)
+            # D-105: v3 da infraestrutura (pesos de Business e Corporate)
             assert [tuple(linha) for linha in ativas] == [("CAMPAIGN:SUMMER_SALES_CHALLENGE_2026", 2), ("GOVERNMENT", 2),
-                                                          ("INFRASTRUCTURE_COST_POLICY", 2), ("MAP_PERFORMANCE_POLICY", 2),
+                                                          ("INFRASTRUCTURE_COST_POLICY", 3), ("MAP_PERFORMANCE_POLICY", 2),
                                                           ("NET_COMMISSIONABLE_MARGIN", 1), ("PRIVATE_RECURRING_COMMISSION", 1)]
             quotas = conexao.execute(sa.text("SELECT competencia, valor, pipeline_alvo FROM quota_comercial WHERE representante_id IS NULL "
                                              "AND ativa ORDER BY competencia")).fetchall()

@@ -59,7 +59,8 @@ def _receber(db, planos, tenant_id, valor=1000.0, rep=None):
 
 def test_pesos_iniciais_e_alocacao_ponderada(db_session, tenants):
     assert comissoes.politica.vigente_infra(db_session).regras["pesos"] == {
-        "STARTER": 1.0, "DEPARTMENT": 1.0, "PROFESSIONAL": 2.0, "ENTERPRISE": 4.0, "BID_INTELLIGENCE": 2.0, "STRATEGIC_SOURCING": 4.0}
+        "STARTER": 1.0, "DEPARTMENT": 1.0, "PROFESSIONAL": 2.0, "ENTERPRISE": 4.0, "BUSINESS": 5.2, "CORPORATE": 5.6,
+        "BID_INTELLIGENCE": 2.0, "STRATEGIC_SOURCING": 4.0}
     _criar(db_session, 7000.0)
     dados = comissoes.infraestrutura.pool(db_session, HOJE)
     assert dados["unidades"] == 7  # 1 + 2 + 4: não é custo ÷ número de clientes
