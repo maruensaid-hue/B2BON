@@ -22,6 +22,8 @@ interface NavItem {
   /** Resumo de 3-4 palavras mostrado no flyout do grupo (redesign
    * Salesforce, raio-X 2026-09-21) — não usado nos itens de topo soltos. */
   descricao?: string;
+  /** Contador mostrado ao lado do nome (ex.: tarefas pendentes); some quando é zero. */
+  badge?: number;
 }
 
 interface NotificacaoRedeSocial {
@@ -56,12 +58,13 @@ const PREDATOR_NAV_ITEMS: NavItem[] = [
   { path: "/cadencias", label: "Cadências", icon: "📨", descricao: "Sequências de toques" },
   { path: "/campanhas", label: "Campanhas", icon: "📣", descricao: "Disparo em massa" },
   { path: "/aprovacoes", label: "Aprovações", icon: "✅", descricao: "Revisar mensagens da IA" },
+  { path: "/linkedin/tarefas", label: "Tarefas de LinkedIn", icon: "💼", descricao: "Mensagens para enviar à mão" },
   { path: "/reunioes", label: "Reuniões", icon: "📅", descricao: "Lembretes e transcrição" },
   { path: "/agenda", label: "Agenda", icon: "🗓️", descricao: "Visão semanal de compromissos" },
   { path: "/webmail", label: "Webmail", icon: "📧", descricao: "E-mail direto com seus leads" },
   { path: "/historico-coletas", label: "Histórico de Coletas", icon: "🗂️", descricao: "Pesquisas de site e indicadores" },
   { path: "/relatorio-entrega", label: "Relatório de Entrega", icon: "📊", descricao: "Taxas de entrega" },
-  { path: "/linkedin", label: "Conectar LinkedIn", icon: "🔗", descricao: "Importar conexões como contatos" },
+  { path: "/linkedin", label: "Conectar LinkedIn", icon: "🔗", end: true, descricao: "Importar conexões como contatos" },
   { path: "/regras-aprendidas", label: "Regras Aprendidas", icon: "🧠", descricao: "Regras de estilo" },
   { path: "/creditos-enriquecimento", label: "Créditos de Enriquecimento", icon: "🔎", descricao: "Saldo e pesquisas de decisores" },
   { path: "/inteligencia-rede", label: "Sinais de Oportunidade", icon: "🧭", descricao: "Fit e matches" },
@@ -167,7 +170,7 @@ function NavButton({ path, label, icon, end, collapsed }: NavItem & { collapsed?
  * descritivo (3-4 palavras) abaixo, não só o nome (redesign Salesforce,
  * raio-X 2026-09-21). Mantém `data-tour-id={nav:${path}}` igual ao
  * `NavButton`, pro Tour Guiado continuar achando o elemento. */
-function FlyoutItem({ path, label, icon, end, descricao, onNavegar }: NavItem & { onNavegar: () => void }) {
+function FlyoutItem({ path, label, icon, end, descricao, badge, onNavegar }: NavItem & { onNavegar: () => void }) {
   return (
     <NavLink
       to={path}
@@ -183,7 +186,12 @@ function FlyoutItem({ path, label, icon, end, descricao, onNavegar }: NavItem & 
     >
       <span className="mt-0.5 w-5 flex-shrink-0 text-center text-[14px]">{icon}</span>
       <span className="flex min-w-0 flex-col">
-        <span className="overflow-hidden text-[12.5px] font-semibold text-ellipsis whitespace-nowrap">{label}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="overflow-hidden text-[12.5px] font-semibold text-ellipsis whitespace-nowrap">{label}</span>
+          {badge !== undefined && badge > 0 && (
+            <span className="flex-shrink-0 rounded-full bg-red px-1.5 text-[9px] font-semibold text-on-accent">{badge}</span>
+          )}
+        </span>
         {descricao && (
           <span className="overflow-hidden text-[10px] text-nav-muted text-ellipsis whitespace-nowrap">
             {descricao}
@@ -225,6 +233,7 @@ function NavGroup({
   const algumFilhoAtivo = itens.some(
     (item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
   );
+  const totalBadge = itens.reduce((soma, item) => soma + (item.badge ?? 0), 0);
   const [flyoutAberto, setFlyoutAberto] = useState(false);
   const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -288,6 +297,9 @@ function NavGroup({
         {!collapsed && (
           <>
             <span className="flex-1 overflow-hidden text-left text-ellipsis">{label}</span>
+            {totalBadge > 0 && (
+              <span className="flex-shrink-0 rounded-full bg-red px-1.5 text-[9px] font-semibold text-on-accent">{totalBadge}</span>
+            )}
             <span className="flex-shrink-0 text-[10px]">▸</span>
           </>
         )}
@@ -638,6 +650,30 @@ export function AppShell() {
       ]
     : [NAV_ITEM_REDE_SOCIAL];
 
+  // Tarefas de LinkedIn pendentes (contador do menu): consulta ao entrar, a cada minuto e quando a tela de tarefas avisa que mudou.
+  const [tarefasLinkedinPendentes, setTarefasLinkedinPendentes] = useState(0);
+  useEffect(() => {
+    if (!usuario || emDemonstracao || !temModuloPredator) return;
+    async function buscarPendentes() {
+      try {
+        const resposta = await api.get<{ pendentes: number }>("/linkedin/tarefas/contagem");
+        setTarefasLinkedinPendentes(resposta.pendentes);
+      } catch {
+        // silencioso: o contador é só um aviso
+      }
+    }
+    buscarPendentes();
+    const intervalo = setInterval(buscarPendentes, 60_000);
+    window.addEventListener("b2bon:tarefas-linkedin", buscarPendentes);
+    return () => {
+      clearInterval(intervalo);
+      window.removeEventListener("b2bon:tarefas-linkedin", buscarPendentes);
+    };
+  }, [usuario, emDemonstracao, temModuloPredator]);
+  const itensPredator = PREDATOR_NAV_ITEMS.map((item) =>
+    item.path === "/linkedin/tarefas" ? { ...item, badge: tarefasLinkedinPendentes } : item,
+  );
+
   return (
     <div className="flex h-screen overflow-hidden">
       <InstallBanner />
@@ -769,7 +805,7 @@ export function AppShell() {
               <NavGroup
                 label="PREDATOR"
                 icon="🐾"
-                itens={PREDATOR_NAV_ITEMS}
+                itens={itensPredator}
                 tourToggleId="predator"
                 collapsed={collapsed}
                 descricao="Motor de prospecção"

@@ -55,6 +55,7 @@ const RelatorioConsumoCreditos = lazy(() =>
   import("@/pages/relatorios/RelatorioConsumoCreditos").then((m) => ({ default: m.RelatorioConsumoCreditos })),
 );
 const ConectarLinkedin = lazy(() => import("@/pages/linkedin/ConectarLinkedin").then((m) => ({ default: m.ConectarLinkedin })));
+const TarefasLinkedin = lazy(() => import("@/pages/linkedin/TarefasLinkedin").then((m) => ({ default: m.TarefasLinkedin })));
 const AiCredits = lazy(() => import("@/pages/AiCredits").then((m) => ({ default: m.AiCredits })));
 const FinOpsIa = lazy(() => import("@/pages/admin/FinOpsIa").then((m) => ({ default: m.FinOpsIa })));
 const ApiPlataforma = lazy(() => import("@/pages/admin/ApiPlataforma").then((m) => ({ default: m.ApiPlataforma })));
@@ -444,6 +445,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <ConectarLinkedin />
+              </Suspense>
+            }
+          />
+          <Route
+            path="linkedin/tarefas"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <TarefasLinkedin />
               </Suspense>
             }
           />

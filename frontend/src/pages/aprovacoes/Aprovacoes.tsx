@@ -193,7 +193,7 @@ export function Aprovacoes() {
             <option value="">Todos os canais</option>
             <option value="email">E-mail</option>
             <option value="whatsapp">WhatsApp</option>
-            <option value="linkedin">LinkedIn</option>
+            <option value="linkedin">LinkedIn (manual)</option>
           </Select>
           {filtroStatus === "pendente" && (
             <Button size="sm" variant="violet" data-tutorial-id="aprovacoes:aprovar-todas" disabled={itens.length === 0} onClick={aprovarTudoVisivel}>
@@ -247,6 +247,12 @@ export function Aprovacoes() {
                   </span>
                 </button>
               ) : null}
+              {item.canal === "linkedin" && (
+                <div className="mb-2 text-[11px] text-muted">
+                  Toque manual: depois de aprovada, vira uma tarefa em <strong className="text-text">Tarefas de LinkedIn</strong> e você envia pelo
+                  LinkedIn (o B2B ON não envia pela sua conta).
+                </div>
+              )}
               {(!isEmail || expandido) && (
                 <Textarea
                   rows={4}

@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Tarefas de LinkedIn e LinkedIn como toque manual (2026-10-27, D-107)
+
+- Nova tela "Tarefas de LinkedIn" (menu PREDATOR, com contador de pendentes): a mensagem pronta de cada toque de LinkedIn, para copiar, abrir o perfil e marcar como enviada ou ignorar.
+- O B2B ON continua sem enviar pela sua conta do LinkedIn (para protegê-la); agora isso está claro na cadência ("LinkedIn (manual)") e nas aprovações.
+- Marcar como enviada atualiza a mensagem e registra a atividade no histórico da conta.
+
 ## Envio por API do cliente e pixel de abertura nas campanhas (2026-10-27, D-106)
 
 - Em Configuração há o "Envio por API": cada cliente cadastra a chave do serviço de envio dele, o remetente verificado e a chave de verificação dos avisos. Com isso o relatório mede entrega, bounce, spam e abertura de verdade, e o envio não depende do limite diário nem do login de uma caixa de e-mail.

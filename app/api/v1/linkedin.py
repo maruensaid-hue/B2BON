@@ -18,7 +18,11 @@ from app.schemas.conexao_linkedin import (
     ImportarConexoesLinkedinResponseSchema,
     StatusConexoesLinkedinSchema,
 )
-from app.schemas.tarefa_linkedin import MarcarTarefaLinkedinRequestSchema, TarefaLinkedinSchema
+from app.schemas.tarefa_linkedin import (
+    ContagemTarefasLinkedinSchema,
+    MarcarTarefaLinkedinRequestSchema,
+    TarefaLinkedinSchema,
+)
 from app.services import linkedin_conexao_service, linkedin_service
 
 router = APIRouter(prefix="/linkedin", tags=["linkedin"])
@@ -32,6 +36,12 @@ def listar_tarefas(
 ) -> list[TarefaLinkedinSchema]:
     """Tarefa diária com texto copiável e atalho para o perfil (E3-H4)."""
     return linkedin_service.listar_tarefas(db, tenant_id, status)
+
+
+@router.get("/tarefas/contagem", response_model=ContagemTarefasLinkedinSchema)
+def contar_tarefas_pendentes(tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)) -> ContagemTarefasLinkedinSchema:
+    """Número mostrado no menu ao lado de "Tarefas de LinkedIn"."""
+    return ContagemTarefasLinkedinSchema(pendentes=linkedin_service.contar_pendentes(db, tenant_id))
 
 
 @router.post("/tarefas/{tarefa_id}/marcar", response_model=TarefaLinkedinSchema)

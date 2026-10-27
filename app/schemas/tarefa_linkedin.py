@@ -15,6 +15,15 @@ class TarefaLinkedinSchema(BaseModel):
     status: str
     criado_em: datetime
     atualizado_em: datetime
+    # Quem é o contato e de qual empresa, para a pessoa saber a quem está enviando sem abrir outra tela.
+    decisor_nome: str | None = None
+    decisor_cargo: str | None = None
+    conta_id: int | None = None
+    conta_nome: str | None = None
+
+
+class ContagemTarefasLinkedinSchema(BaseModel):
+    pendentes: int
 
 
 class MarcarTarefaLinkedinRequestSchema(BaseModel):

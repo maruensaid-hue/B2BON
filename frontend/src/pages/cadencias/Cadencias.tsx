@@ -672,6 +672,9 @@ export function Cadencias() {
                 Parar esta cadência automaticamente se o cliente responder
               </label>
             )}
+            {toques.some((toque) => toque.canal === "linkedin") && (
+              <div className="mb-2 rounded-md bg-surf2 p-2 text-[11px] text-muted"><strong className="text-text">LinkedIn é um toque manual.</strong> O B2B ON prepara a mensagem e cria uma tarefa em “Tarefas de LinkedIn”; você envia pelo LinkedIn e marca como enviada. Não enviamos pela sua conta, para protegê-la de restrições.</div>
+            )}
             <div data-tutorial-id="cadencias:toques" className="flex flex-col gap-1.5">
               {toques.map((toque) => (
                 <div key={toque.id} className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
@@ -680,7 +683,7 @@ export function Cadencias() {
                     <Badge tone="cyan">{toque.canal}</Badge>
                   ) : (
                     <Select
-                      className="w-28 flex-shrink-0 text-[11px]"
+                      className="w-36 flex-shrink-0 text-[11px]"
                       value={toque.canal}
                       onChange={(event) => atualizarToqueReal(toque.id, "canal", event.target.value)}
                     >
@@ -688,7 +691,7 @@ export function Cadencias() {
                       <option value="whatsapp" disabled={outroToqueJaUsaWhatsapp(toques, toque)}>
                         WhatsApp
                       </option>
-                      <option value="linkedin">LinkedIn</option>
+                      <option value="linkedin">LinkedIn (manual)</option>
                     </Select>
                   )}
                   {toque.ordem === 1 ? (
@@ -769,7 +772,7 @@ export function Cadencias() {
             {cadenciaSelecionada.status !== "cancelada" && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border pt-2">
                 <Select
-                  className="w-28 flex-shrink-0 text-[11px]"
+                  className="w-36 flex-shrink-0 text-[11px]"
                   value={novoToqueCanal}
                   onChange={(event) => setNovoToqueCanal(event.target.value)}
                 >
@@ -777,7 +780,7 @@ export function Cadencias() {
                   <option value="whatsapp" disabled={outroToqueJaUsaWhatsapp(toques, null)}>
                     WhatsApp
                   </option>
-                  <option value="linkedin">LinkedIn</option>
+                  <option value="linkedin">LinkedIn (manual)</option>
                 </Select>
                 <Input
                   type="number"
@@ -1066,12 +1069,15 @@ export function Cadencias() {
           <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
             Toques (mínimo 5, em pelo menos 2 canais)
           </div>
+          {rascunhoToques.some((toque) => toque.canal === "linkedin") && (
+            <div className="mb-2 rounded-md bg-surf2 p-2 text-[11px] text-muted"><strong className="text-text">LinkedIn é um toque manual.</strong> O B2B ON prepara a mensagem e cria uma tarefa em “Tarefas de LinkedIn”; você envia pelo LinkedIn e marca como enviada. Não enviamos pela sua conta, para protegê-la de restrições.</div>
+          )}
           <div className="flex flex-col gap-2">
             {rascunhoToques.map((toque, indice) => (
               <div key={indice} className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border p-2">
                 <span className="w-5 flex-shrink-0 text-center text-[11px] text-muted">#{toque.ordem}</span>
                 <Select
-                  className="w-28 flex-shrink-0"
+                  className="w-36 flex-shrink-0"
                   value={toque.canal}
                   onChange={(event) => atualizarToque(indice, "canal", event.target.value)}
                 >
@@ -1079,7 +1085,7 @@ export function Cadencias() {
                   <option value="whatsapp" disabled={outroToqueJaUsaWhatsapp(rascunhoToques, toque)}>
                     WhatsApp
                   </option>
-                  <option value="linkedin">LinkedIn</option>
+                  <option value="linkedin">LinkedIn (manual)</option>
                 </Select>
                 {toque.canal === "whatsapp" &&
                   (templatesWhatsapp.length > 0 ? (

@@ -130,3 +130,71 @@ def test_importar_conexoes_pela_api_cria_contatos_empresas_e_a_lista_importacao_
     assert contatos["Joao Silva"]["linkedin_url"] == "https://linkedin.com/in/joao-silva" and contatos["Joao Silva"]["cargo"] == "CEO"
     assert contatos["Caio Dias"]["email"] == "caio@alpha.com"
     assert client.post("/api/v1/linkedin/conexoes/importar", json={"conteudo_csv": csv}).json()["contatos_criados"] == 0  # idempotente
+
+
+def _tarefa_pendente(client, criar_conta_com_decisor):
+    conta, decisor = criar_conta_com_decisor()
+    _criar_gerar_aprovar_ativar(client, conta.id, _TOQUES_LINKEDIN_PRIMEIRO)
+    client.post("/api/v1/envios/processar")
+    return conta, decisor, client.get("/api/v1/linkedin/tarefas").json()[0]
+
+
+def test_tarefa_traz_o_contato_e_a_empresa_para_a_tela(client, onboarding_completo, criar_conta_com_decisor):
+    conta, decisor, tarefa = _tarefa_pendente(client, criar_conta_com_decisor)
+
+    assert tarefa["decisor_nome"] == decisor.nome
+    assert tarefa["conta_id"] == conta.id and tarefa["conta_nome"] == (conta.nome_fantasia or conta.nome)
+
+
+def test_contagem_do_menu_cai_quando_a_tarefa_e_marcada(client, onboarding_completo, criar_conta_com_decisor):
+    _, _, tarefa = _tarefa_pendente(client, criar_conta_com_decisor)
+    assert client.get("/api/v1/linkedin/tarefas/contagem").json() == {"pendentes": 1}
+
+    client.post(f"/api/v1/linkedin/tarefas/{tarefa['id']}/marcar", json={"executada": True})
+
+    assert client.get("/api/v1/linkedin/tarefas/contagem").json() == {"pendentes": 0}
+    assert client.get("/api/v1/linkedin/tarefas", params={"status": "pendente"}).json() == []
+    assert [t["status"] for t in client.get("/api/v1/linkedin/tarefas", params={"status": "executada"}).json()] == ["executada"]
+
+
+def test_marcar_enviada_atualiza_a_mensagem_e_a_linha_do_tempo_da_conta(client, onboarding_completo, criar_conta_com_decisor, db_session):
+    from app.models.atividade import Atividade
+    from app.models.mensagem import Mensagem
+
+    conta, decisor, tarefa = _tarefa_pendente(client, criar_conta_com_decisor)
+
+    client.post(f"/api/v1/linkedin/tarefas/{tarefa['id']}/marcar", json={"executada": True})
+
+    db_session.expire_all()
+    mensagem = db_session.get(Mensagem, tarefa["mensagem_id"])
+    assert mensagem.status == "enviado" and mensagem.enviado_em is not None
+    atividades = db_session.query(Atividade).filter_by(conta_id=conta.id, tipo="linkedin").all()
+    assert len(atividades) == 1 and decisor.nome in atividades[0].descricao
+
+
+def test_marcar_a_mesma_tarefa_de_novo_nao_duplica_e_a_marcacao_contraria_e_recusada(
+    client, onboarding_completo, criar_conta_com_decisor, db_session
+):
+    from app.models.atividade import Atividade
+
+    conta, _, tarefa = _tarefa_pendente(client, criar_conta_com_decisor)
+    url = f"/api/v1/linkedin/tarefas/{tarefa['id']}/marcar"
+
+    assert client.post(url, json={"executada": True}).status_code == 200
+    repetida = client.post(url, json={"executada": True})  # duplo clique
+
+    assert repetida.status_code == 200 and repetida.json()["status"] == "executada"
+    assert db_session.query(Atividade).filter_by(conta_id=conta.id, tipo="linkedin").count() == 1
+    contraria = client.post(url, json={"executada": False})
+    assert contraria.status_code in (409, 422) and "já foi marcada" in contraria.text
+
+
+def test_tarefa_de_linkedin_de_outro_tenant_nao_aparece_nem_pode_ser_marcada(
+    client, onboarding_completo, criar_conta_com_decisor, criar_usuario_autenticado
+):
+    _, _, tarefa = _tarefa_pendente(client, criar_conta_com_decisor)
+    outro = criar_usuario_autenticado("outro-tenant-linkedin")
+
+    assert client.get("/api/v1/linkedin/tarefas", headers=outro).json() == []
+    assert client.get("/api/v1/linkedin/tarefas/contagem", headers=outro).json() == {"pendentes": 0}
+    assert client.post(f"/api/v1/linkedin/tarefas/{tarefa['id']}/marcar", json={"executada": True}, headers=outro).status_code == 404
