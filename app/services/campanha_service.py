@@ -8,12 +8,20 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.campanha import Campanha, CampanhaDestinatario
+from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.campanha import DestinatarioAvulsoSchema
-from app.services import atividade_service, auditoria_service, limite_criacao_service, optout_service, reputacao_service
+from app.services import (
+    atividade_service,
+    auditoria_service,
+    campanha_personalizacao,
+    limite_criacao_service,
+    optout_service,
+    reputacao_service,
+)
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 logger = logging.getLogger(__name__)
@@ -256,7 +264,12 @@ def remover_destinatario(db: Session, tenant_id: str, ator_id: str | None, campa
     db.commit()
 
 
-def marcar_pronta(db: Session, tenant_id: str, ator_id: str | None, campanha_id: int) -> Campanha:
+def marcar_pronta(
+    db: Session, tenant_id: str, ator_id: str | None, campanha_id: int, destinatario_ids: list[int] | None = None
+) -> Campanha:
+    """Sem `destinatario_ids` envia a todos os `pendente` (quem falhou antes é tentado de novo; quem já recebeu nunca é reenviado). Com a lista, envia só a
+    esses (ex.: um teste com poucos): os demais `pendente` ficam `retido` até o fim desta rodada, quando voltam a `pendente` e a campanha volta ao rascunho
+    (`_enviar_pendentes`) — assim nem o envio imediato nem o agendador de reserva os alcançam enquanto a rodada dura."""
     campanha = obter(db, tenant_id, campanha_id)
     _exigir_rascunho(campanha)
     if "email" in campanha.canais:
@@ -265,8 +278,38 @@ def marcar_pronta(db: Session, tenant_id: str, ator_id: str | None, campanha_id:
     if total == 0:
         raise ValidacaoFalhou("Adicione ao menos um destinatário antes de marcar a campanha como pronta.")
     _validar_canais(campanha.canais, campanha.assunto, campanha.conteudo_email, campanha.template_whatsapp_id)
+
+    do_envio = db.query(CampanhaDestinatario).filter_by(campanha_id=campanha.id, tenant_id=tenant_id)
+    elegiveis = {
+        i: status
+        for i, status in do_envio.filter(CampanhaDestinatario.status.in_(["pendente", "falhou"]))
+        .with_entities(CampanhaDestinatario.id, CampanhaDestinatario.status)
+        .all()
+    }
+    retidos: list[int] = []
+    if destinatario_ids is None:
+        escolhidos = set(elegiveis)
+    else:
+        escolhidos = set(destinatario_ids) & set(elegiveis)
+        retidos = [i for i, status in elegiveis.items() if status == "pendente" and i not in escolhidos]
+    if not escolhidos:
+        raise ValidacaoFalhou(
+            "Selecione ao menos um destinatário que ainda não recebeu."
+            if destinatario_ids is not None
+            else "Todos os destinatários já receberam esta campanha."
+        )
+    refazer = [i for i in escolhidos if elegiveis[i] == "falhou"]
+    if refazer:
+        do_envio.filter(CampanhaDestinatario.id.in_(refazer)).update(
+            {"status": "pendente", "motivo_falha": None}, synchronize_session=False
+        )
+    if retidos:
+        do_envio.filter(CampanhaDestinatario.id.in_(retidos)).update({"status": "retido"}, synchronize_session=False)
     campanha.status = "pronta"
-    auditoria_service.registrar(db, tenant_id, "campanha_marcada_pronta", "campanha", campanha.id, ator_id, {})
+    auditoria_service.registrar(
+        db, tenant_id, "campanha_marcada_pronta", "campanha", campanha.id, ator_id,
+        {"destinatarios": len(escolhidos), "retidos": len(retidos)},
+    )
     db.commit()
     db.refresh(campanha)
     return campanha
@@ -278,9 +321,11 @@ def voltar_para_rascunho(db: Session, tenant_id: str, ator_id: str | None, campa
     campanha = obter(db, tenant_id, campanha_id)
     if campanha.status == "rascunho":
         return campanha
-    db.query(CampanhaDestinatario).filter_by(campanha_id=campanha.id, tenant_id=tenant_id, status="falhou").update(
-        {"status": "pendente", "motivo_falha": None}, synchronize_session=False
-    )
+    db.query(CampanhaDestinatario).filter(
+        CampanhaDestinatario.campanha_id == campanha.id,
+        CampanhaDestinatario.tenant_id == tenant_id,
+        CampanhaDestinatario.status.in_(["falhou", "retido"]),
+    ).update({"status": "pendente", "motivo_falha": None}, synchronize_session=False)
     campanha.status = "rascunho"
     campanha.processando_ate = None
     auditoria_service.registrar(db, tenant_id, "campanha_voltou_para_rascunho", "campanha", campanha.id, ator_id, {})
@@ -385,9 +430,55 @@ def _enviar_pendentes(
     # "concluida" com destinatários ainda "pendente" nunca mais seria reprocessada.
     db.refresh(campanha)
     if campanha.status in ("pronta", "enviando"):  # não sobrescreve um rascunho que o usuário acabou de abrir para editar
-        campanha.status = "enviando" if algum_adiado else "concluida"
+        if algum_adiado:
+            campanha.status = "enviando"
+        else:
+            # Rodada só para os selecionados: quem ficou retido volta a pendente e a campanha ao rascunho, pronta para o próximo envio.
+            liberados = (
+                db.query(CampanhaDestinatario)
+                .filter_by(campanha_id=campanha_id, tenant_id=tenant_id, status="retido")
+                .update({"status": "pendente"}, synchronize_session=False)
+            )
+            campanha.status = "rascunho" if liberados else "concluida"
     campanha.processando_ate = None
     db.commit()
+
+
+def _empresa_do_destinatario(db: Session, destinatario: CampanhaDestinatario) -> str | None:
+    """Empresa do cadastro (nome fantasia, senão razão social) do contato de origem; destinatário avulso não tem empresa."""
+    if destinatario.decisor_id is None:
+        return None
+    conta = (
+        db.query(Conta)
+        .join(Decisor, Decisor.conta_id == Conta.id)
+        .filter(Decisor.id == destinatario.decisor_id, Decisor.tenant_id == destinatario.tenant_id)
+        .one_or_none()
+    )
+    return (conta.nome_fantasia or conta.nome) if conta is not None else None
+
+
+def _personalizar(db: Session, texto: str | None, destinatario: CampanhaDestinatario) -> str:
+    return campanha_personalizacao.renderizar(texto, destinatario.nome, _empresa_do_destinatario(db, destinatario))
+
+
+def previa(db: Session, tenant_id: str, campanha_id: int, destinatario_id: int | None = None) -> dict:
+    """Como o e-mail chega para um destinatário (o indicado ou o primeiro da lista), com os marcadores já trocados — sem o rodapé de descadastro."""
+    campanha = obter(db, tenant_id, campanha_id)
+    consulta = db.query(CampanhaDestinatario).filter_by(campanha_id=campanha.id, tenant_id=tenant_id)
+    if destinatario_id is not None:
+        consulta = consulta.filter_by(id=destinatario_id)
+    destinatario = consulta.order_by(CampanhaDestinatario.id).first()
+    if destinatario is None:
+        return {
+            "destinatario_nome": None,
+            "assunto": campanha_personalizacao.renderizar(campanha.assunto, None, None),
+            "corpo": campanha_personalizacao.renderizar(campanha.conteudo_email, None, None),
+        }
+    return {
+        "destinatario_nome": destinatario.nome,
+        "assunto": _personalizar(db, campanha.assunto, destinatario),
+        "corpo": _personalizar(db, campanha.conteudo_email, destinatario),
+    }
 
 
 def _disparar_destinatario(
@@ -411,10 +502,10 @@ def _disparar_destinatario(
         if reputacao_service.canal_pausado(db, campanha.tenant_id, "email"):
             email_adiado = True
         else:
-            corpo = f"{campanha.conteudo_email}\n\n{_link_optout(campanha.tenant_id, destinatario.id)}"
+            corpo = f"{_personalizar(db, campanha.conteudo_email, destinatario)}\n\n{_link_optout(campanha.tenant_id, destinatario.id)}"
             resultado = email_provider.enviar(
                 destinatario.email,
-                campanha.assunto or "",
+                _personalizar(db, campanha.assunto, destinatario),
                 corpo,
                 _REMETENTE_NOME,
                 settings.sendgrid_remetente_email,

@@ -1,5 +1,16 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Campanha: [Nome] e [Empresa] no e-mail (2026-10-27, D-106)
+
+- O texto e o assunto do e-mail da campanha aceitam `[Nome]` (primeiro nome), `[Nome completo]` e `[Empresa]`, trocados pelos dados de cada destinatário na hora do envio.
+- Sem o nome, "Olá, [Nome]," vira "Olá!"; sem a empresa entra "a sua empresa".
+- Em "Ver o texto do e-mail" aparece como o e-mail chega para o primeiro destinatário da lista.
+
+## Campanha: enviar só para os destinatários selecionados (2026-10-27, D-106)
+
+- Na tabela de destinatários de uma campanha em rascunho, marque quem deve receber agora e clique em "Enviar só para os selecionados" — útil para um teste com poucas pessoas antes de enviar para a lista toda.
+- Os demais continuam pendentes e a campanha volta para rascunho ao terminar. Ao enviar para todos depois, quem já recebeu não recebe de novo e quem falhou é tentado de novo.
+
 ## Campanhas saem logo após "Marcar como pronta" (2026-10-26, D-106)
 
 - O envio da campanha começa assim que ela é marcada como pronta, em vez de esperar o ciclo automático (que o GitHub atrasa ou descarta). O ciclo automático continua como reserva.

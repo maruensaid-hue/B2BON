@@ -456,3 +456,173 @@ def test_voltar_para_rascunho_durante_o_envio_faz_o_envio_parar(db_session):
     campanha = campanha_service.obter(db_session, TENANT_ID, campanha_id)
     assert campanha.status == "rascunho" and campanha.processando_ate is None
     assert [d.status for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)].count("pendente") == 2
+
+
+def _campanha_rascunho_com_destinatarios(db_session, quantidade: int) -> tuple[int, list[int]]:
+    campanha_id = _criar_campanha_email(db_session)
+    for i in range(quantidade):
+        decisor = _criar_decisor(db_session, f"Pessoa {i}", email=f"pessoa{i}@teste.com")
+        campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+    ids = [d.id for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)]
+    return campanha_id, ids
+
+
+def _estados(db_session, campanha_id: int) -> list[str]:
+    return [d.status for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)]
+
+
+def test_envio_so_para_os_selecionados_retem_os_demais_e_volta_ao_rascunho(db_session):
+    campanha_id, ids = _campanha_rascunho_com_destinatarios(db_session, 5)
+
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id, [ids[0], ids[2]])
+    assert sorted(_estados(db_session, campanha_id)) == ["pendente", "pendente", "retido", "retido", "retido"]
+
+    fake_email = FakeEmailProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
+
+    assert resultado["enviadas"] == 2
+    assert {e["destinatario"] for e in fake_email.envios} == {"pessoa0@teste.com", "pessoa2@teste.com"}
+    assert sorted(_estados(db_session, campanha_id)) == ["enviado", "enviado", "pendente", "pendente", "pendente"]
+    campanha = campanha_service.obter(db_session, TENANT_ID, campanha_id)
+    assert campanha.status == "rascunho" and campanha.processando_ate is None
+
+
+def test_enviar_para_todos_depois_do_teste_pula_quem_ja_recebeu(db_session):
+    campanha_id, ids = _campanha_rascunho_com_destinatarios(db_session, 5)
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id, [ids[0], ids[2]])
+    teste = FakeEmailProvider()
+    campanha_service.processar_pendentes(db_session, TENANT_ID, teste, FakeWhatsAppProvider())
+
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    todos = FakeEmailProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, todos, FakeWhatsAppProvider())
+
+    assert resultado["enviadas"] == 3
+    assert {e["destinatario"] for e in todos.envios}.isdisjoint({e["destinatario"] for e in teste.envios})
+    assert _estados(db_session, campanha_id).count("enviado") == 5
+    assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "concluida"
+
+
+def test_selecao_vazia_ou_so_de_quem_ja_recebeu_e_recusada(db_session):
+    campanha_id, ids = _campanha_rascunho_com_destinatarios(db_session, 2)
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id, [ids[0]])
+    campanha_service.processar_pendentes(db_session, TENANT_ID, FakeEmailProvider(), FakeWhatsAppProvider())  # ids[0] já recebeu
+
+    with pytest.raises(ValidacaoFalhou):
+        campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id, [])
+    with pytest.raises(ValidacaoFalhou):
+        campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id, [ids[0]])
+    with pytest.raises(ValidacaoFalhou):
+        campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id, [999999])
+    assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "rascunho"
+    assert sorted(_estados(db_session, campanha_id)) == ["enviado", "pendente"]  # a recusa não mexeu em ninguém
+
+
+def test_enviar_para_todos_sem_ninguem_pendente_e_recusado(db_session):
+    campanha_id, _ = _campanha_rascunho_com_destinatarios(db_session, 1)
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    campanha_service.processar_pendentes(db_session, TENANT_ID, FakeEmailProvider(), FakeWhatsAppProvider())
+    campanha_service.voltar_para_rascunho(db_session, TENANT_ID, None, campanha_id)
+
+    with pytest.raises(ValidacaoFalhou):
+        campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+
+
+def test_queda_no_meio_do_envio_parcial_nao_libera_os_retidos_para_o_agendador(db_session):
+    campanha_id, ids = _campanha_rascunho_com_destinatarios(db_session, 5)
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id, ids[:3])
+
+    queda = _EmailQueCaiNoTerceiro()
+    with pytest.raises(RuntimeError):
+        campanha_service.processar_pendentes(db_session, TENANT_ID, queda, FakeWhatsAppProvider())
+    assert sorted(_estados(db_session, campanha_id)) == ["enviado", "enviado", "pendente", "retido", "retido"]
+
+    seguinte = FakeEmailProvider()
+    campanha_service.processar_pendentes(db_session, TENANT_ID, seguinte, FakeWhatsAppProvider())  # o ciclo de reserva
+
+    assert {e["destinatario"] for e in seguinte.envios} == {"pessoa2@teste.com"}  # só o selecionado que faltava
+    assert sorted(_estados(db_session, campanha_id)) == ["enviado", "enviado", "enviado", "pendente", "pendente"]
+    assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "rascunho"
+
+
+def test_enviar_para_todos_tenta_de_novo_quem_falhou_no_envio_parcial(db_session):
+    campanha_id, ids = _campanha_rascunho_com_destinatarios(db_session, 3)
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id, ids[:2])
+    falha = FakeEmailProvider()
+    falha.falhar_proximos = 1
+    campanha_service.processar_pendentes(db_session, TENANT_ID, falha, FakeWhatsAppProvider())
+    assert sorted(_estados(db_session, campanha_id)) == ["enviado", "falhou", "pendente"]
+
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    reenvio = FakeEmailProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, reenvio, FakeWhatsAppProvider())
+
+    assert resultado["enviadas"] == 2
+    assert _estados(db_session, campanha_id).count("enviado") == 3
+    assert all(d.motivo_falha is None for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id))
+
+
+def test_voltar_para_rascunho_devolve_os_retidos_a_fila(db_session):
+    campanha_id, ids = _campanha_rascunho_com_destinatarios(db_session, 3)
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id, [ids[0]])
+    assert _estados(db_session, campanha_id).count("retido") == 2
+
+    campanha_service.voltar_para_rascunho(db_session, TENANT_ID, None, campanha_id)
+
+    assert _estados(db_session, campanha_id) == ["pendente", "pendente", "pendente"]
+
+
+def _campanha_personalizada(db_session) -> int:
+    return campanha_service.criar(
+        db_session, TENANT_ID, None, "Personalizada", "marketing", ["email"],
+        "Novidade para a [Empresa]", "Olá, [Nome],\n\nUma conversa sobre a [Empresa].", None, PLAN_LIMITS,
+    ).id
+
+
+def test_envio_troca_nome_e_empresa_pelo_cadastro_de_cada_destinatario(db_session):
+    campanha_id = _campanha_personalizada(db_session)
+    maria = _criar_decisor(db_session, "Maria Souza", email="maria@teste.com")
+    campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [maria.id])
+    campanha_service.adicionar_avulsos(
+        db_session, TENANT_ID, None, campanha_id, [DestinatarioAvulsoSchema(nome="JOAO PEREIRA", email="joao@teste.com")]
+    )
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+
+    fake_email = FakeEmailProvider()
+    campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
+
+    por_email = {e["destinatario"]: e for e in fake_email.envios}
+    assert por_email["maria@teste.com"]["assunto"] == "Novidade para a Empresa de Maria Souza"
+    assert por_email["maria@teste.com"]["corpo"].startswith("Olá, Maria,\n\nUma conversa sobre a Empresa de Maria Souza.")
+    assert por_email["joao@teste.com"]["assunto"] == "Novidade para a a sua empresa"  # avulso não tem empresa no cadastro
+    assert por_email["joao@teste.com"]["corpo"].startswith("Olá, Joao,\n\nUma conversa sobre a a sua empresa.")
+    assert "[" not in por_email["maria@teste.com"]["corpo"].split("\n\n")[0]
+
+
+def test_empresa_usa_o_nome_fantasia_quando_existe(db_session):
+    campanha_id = _campanha_personalizada(db_session)
+    decisor = _criar_decisor(db_session, "Carla Dias", email="carla@teste.com")
+    db_session.get(Conta, decisor.conta_id).nome_fantasia = "Fantasia Ltda"
+    db_session.commit()
+    campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+
+    fake_email = FakeEmailProvider()
+    campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
+
+    assert fake_email.envios[0]["assunto"] == "Novidade para a Fantasia Ltda"
+
+
+def test_previa_mostra_como_o_email_chega_para_um_destinatario(db_session):
+    campanha_id = _campanha_personalizada(db_session)
+    sem_lista = campanha_service.previa(db_session, TENANT_ID, campanha_id)
+    assert sem_lista["destinatario_nome"] is None and sem_lista["corpo"].startswith("Olá!")
+
+    decisor = _criar_decisor(db_session, "Maria Souza", email="maria@teste.com")
+    campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+
+    previa = campanha_service.previa(db_session, TENANT_ID, campanha_id)
+
+    assert previa["destinatario_nome"] == "Maria Souza"
+    assert previa["assunto"] == "Novidade para a Empresa de Maria Souza"
+    assert previa["corpo"].startswith("Olá, Maria,")

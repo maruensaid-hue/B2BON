@@ -120,8 +120,13 @@ function toneStatusCampanha(status: string): "cyan" | "amber" | "green" | "muted
 function toneStatusDestinatario(status: string): "cyan" | "green" | "red" | "muted" {
   if (status === "enviado") return "green";
   if (status === "falhou") return "red";
-  if (status === "optout") return "muted";
+  if (status === "optout" || status === "retido") return "muted";
   return "cyan";
+}
+
+// "retido" é o pendente que ficou fora de um envio só para selecionados; volta a pendente quando essa rodada termina.
+function rotuloStatusDestinatario(status: string): string {
+  return status === "retido" ? "fora desta rodada" : status;
 }
 
 export function Campanhas() {
@@ -158,6 +163,8 @@ export function Campanhas() {
   const [canaisEdicao, setCanaisEdicao] = useState<Set<string>>(new Set(["email"]));
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [destinatariosMarcados, setDestinatariosMarcados] = useState<Set<number>>(new Set());
+  const [previa, setPrevia] = useState<{ destinatario_nome: string | null; assunto: string; corpo: string } | null>(null);
 
   const campanhaSelecionada = campanhas.find((c) => c.id === campanhaSelecionadaId) ?? null;
 
@@ -196,12 +203,30 @@ export function Campanhas() {
   }, []);
 
   useEffect(() => {
+    setDestinatariosMarcados(new Set());
     if (campanhaSelecionadaId !== null) carregarDetalhe(campanhaSelecionadaId);
     else setDetalhe(null);
   }, [campanhaSelecionadaId]);
 
+  // Prévia do e-mail já personalizado ([Nome], [Empresa]) para o primeiro destinatário da lista; refaz quando o texto ou a lista muda.
+  const textoDoEmail = campanhaSelecionada?.canais.includes("email") ? campanhaSelecionada.conteudo_email : null;
+  useEffect(() => {
+    setPrevia(null);
+    if (campanhaSelecionadaId === null || !textoDoEmail) return;
+    api
+      .get<{ destinatario_nome: string | null; assunto: string; corpo: string }>(`/campanhas/${campanhaSelecionadaId}/previa`)
+      .then(setPrevia)
+      .catch(() => undefined);
+  }, [campanhaSelecionadaId, textoDoEmail, campanhaSelecionada?.assunto, detalhe?.destinatarios.length]);
+
   // Enquanto a campanha está sendo enviada, o andamento (enviados/pendentes) se atualiza sozinho.
   const emEnvio = campanhaSelecionada?.status === "pronta" || campanhaSelecionada?.status === "enviando";
+
+  // Quem ainda não recebeu pode ser marcado para um envio só a algumas pessoas (ex.: teste); quem já recebeu nunca recebe de novo.
+  const idsElegiveis = (detalhe?.destinatarios ?? [])
+    .filter((destinatario) => destinatario.status === "pendente" || destinatario.status === "falhou")
+    .map((destinatario) => destinatario.id);
+  const idsMarcados = idsElegiveis.filter((id) => destinatariosMarcados.has(id));
   useEffect(() => {
     if (!emEnvio || campanhaSelecionadaId === null) return;
     const id = window.setInterval(() => {
@@ -332,12 +357,31 @@ export function Campanhas() {
     }
   }
 
-  async function marcarPronta() {
+  function alternarDestinatario(destinatarioId: number) {
+    setDestinatariosMarcados((atual) => {
+      const nova = new Set(atual);
+      if (nova.has(destinatarioId)) nova.delete(destinatarioId);
+      else nova.add(destinatarioId);
+      return nova;
+    });
+  }
+
+  function alternarTodosOsElegiveis() {
+    setDestinatariosMarcados(idsMarcados.length === idsElegiveis.length ? new Set() : new Set(idsElegiveis));
+  }
+
+  // Sem `ids` envia a todos os pendentes; com `ids`, só a esses (os demais continuam pendentes para o próximo envio).
+  async function marcarPronta(ids?: number[]) {
     if (campanhaSelecionadaId === null) return;
     setErro(null);
     try {
-      await api.post(`/campanhas/${campanhaSelecionadaId}/marcar-pronta`);
-      setMensagem("Campanha marcada como pronta — o envio começou agora. Acompanhe o andamento abaixo; se algo interromper, o ciclo automático continua de onde parou.");
+      await api.post(`/campanhas/${campanhaSelecionadaId}/marcar-pronta`, ids ? { destinatario_ids: ids } : undefined);
+      setDestinatariosMarcados(new Set());
+      setMensagem(
+        ids
+          ? `Envio iniciado para ${ids.length} destinatário(s) selecionado(s). Os demais continuam pendentes e a campanha volta para rascunho quando terminar.`
+          : "Campanha marcada como pronta — o envio começou agora. Acompanhe o andamento abaixo; se algo interromper, o ciclo automático continua de onde parou.",
+      );
       await carregarCampanhas();
       await carregarDetalhe(campanhaSelecionadaId);
     } catch (error) {
@@ -494,7 +538,17 @@ export function Campanhas() {
                 )}
                 {campanhaSelecionada.status === "rascunho" && !confirmandoExclusao && (
                   <>
-                    <Button size="sm" data-tutorial-id="campanhas:pronta" onClick={marcarPronta}>
+                    {idsMarcados.length > 0 && (
+                      <Button size="sm" onClick={() => marcarPronta(idsMarcados)}>
+                        Enviar só para os selecionados ({idsMarcados.length})
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant={idsMarcados.length > 0 ? "ghost" : "primary"}
+                      data-tutorial-id="campanhas:pronta"
+                      onClick={() => marcarPronta()}
+                    >
                       Marcar como pronta
                     </Button>
                     <Button size="sm" variant="danger" onClick={() => setConfirmandoExclusao(true)}>
@@ -530,6 +584,15 @@ export function Campanhas() {
                 <summary className="cursor-pointer text-muted">Ver o texto do e-mail</summary>
                 <div className="mt-2 font-semibold">{campanhaSelecionada.assunto}</div>
                 <div className="mt-1 whitespace-pre-wrap text-muted">{campanhaSelecionada.conteudo_email}</div>
+                {previa && (
+                  <div className="mt-3 rounded-md bg-surf2 p-2">
+                    <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">
+                      {previa.destinatario_nome ? `Como chega para ${previa.destinatario_nome}` : "Como chega (sem destinatário ainda)"}
+                    </div>
+                    <div className="font-semibold">{previa.assunto}</div>
+                    <div className="mt-1 whitespace-pre-wrap">{previa.corpo}</div>
+                  </div>
+                )}
               </details>
             )}
 
@@ -655,9 +718,26 @@ export function Campanhas() {
 
           <Card data-tutorial-id="campanhas:destinatarios">
             <SectionLabel>Destinatários ({detalhe.destinatarios.length})</SectionLabel>
+            {campanhaSelecionada.status === "rascunho" && idsElegiveis.length > 0 && (
+              <div className="mb-2 text-[11px] text-muted">
+                Marque as caixas para enviar só a algumas pessoas (por exemplo, um teste). “Marcar como pronta” envia a todos os que ainda não
+                receberam; quem já recebeu nunca recebe de novo.
+              </div>
+            )}
             <table className="w-full border-collapse text-[12px]">
               <thead>
                 <tr className="border-b border-border text-[9.5px] tracking-wide text-muted uppercase">
+                  {campanhaSelecionada.status === "rascunho" && (
+                    <th className="w-8 p-2 text-left">
+                      <input
+                        type="checkbox"
+                        aria-label="Selecionar todos os que ainda não receberam"
+                        disabled={idsElegiveis.length === 0}
+                        checked={idsElegiveis.length > 0 && idsMarcados.length === idsElegiveis.length}
+                        onChange={alternarTodosOsElegiveis}
+                      />
+                    </th>
+                  )}
                   <th className="p-2 text-left">Nome</th>
                   <th className="p-2 text-left">E-mail</th>
                   <th className="p-2 text-left">Telefone</th>
@@ -668,11 +748,22 @@ export function Campanhas() {
               <tbody>
                 {detalhe.destinatarios.map((destinatario) => (
                   <tr key={destinatario.id} className="border-b border-border">
+                    {campanhaSelecionada.status === "rascunho" && (
+                      <td className="p-2">
+                        <input
+                          type="checkbox"
+                          aria-label={`Enviar para ${destinatario.nome}`}
+                          disabled={!idsElegiveis.includes(destinatario.id)}
+                          checked={destinatariosMarcados.has(destinatario.id)}
+                          onChange={() => alternarDestinatario(destinatario.id)}
+                        />
+                      </td>
+                    )}
                     <td className="p-2 font-semibold">{destinatario.nome}</td>
                     <td className="p-2 text-muted">{destinatario.email ?? "—"}</td>
                     <td className="p-2 text-muted">{destinatario.telefone ?? "—"}</td>
                     <td className="p-2">
-                      <Badge tone={toneStatusDestinatario(destinatario.status)}>{destinatario.status}</Badge>
+                      <Badge tone={toneStatusDestinatario(destinatario.status)}>{rotuloStatusDestinatario(destinatario.status)}</Badge>
                       {destinatario.motivo_falha && (
                         <div className="mt-0.5 text-[10px] text-red">{destinatario.motivo_falha}</div>
                       )}
@@ -688,7 +779,7 @@ export function Campanhas() {
                 ))}
                 {detalhe.destinatarios.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-4 text-center text-muted">
+                    <td colSpan={6} className="p-4 text-center text-muted">
                       Nenhum destinatário adicionado ainda.
                     </td>
                   </tr>
@@ -744,6 +835,7 @@ export function Campanhas() {
               <div>
                 <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Conteúdo do e-mail</div>
                 <Textarea name="conteudo_email" required rows={5} placeholder="Corpo do e-mail em texto simples." />
+                <div className="mt-1 text-[10px] text-muted">Personalize com [Nome] (primeiro nome), [Nome completo] e [Empresa]. Sem o nome fica só “Olá!”; sem a empresa entra “a sua empresa”.</div>
               </div>
             </>
           )}
@@ -812,6 +904,7 @@ export function Campanhas() {
                 <div>
                   <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Conteúdo do e-mail</div>
                   <Textarea name="conteudo_email" required rows={8} defaultValue={campanhaSelecionada.conteudo_email ?? ""} />
+                  <div className="mt-1 text-[10px] text-muted">Personalize com [Nome] (primeiro nome), [Nome completo] e [Empresa]. Sem o nome fica só “Olá!”; sem a empresa entra “a sua empresa”.</div>
                 </div>
               </>
             )}

@@ -175,3 +175,49 @@ def test_voltar_para_rascunho_pela_api_permite_editar_o_conteudo(client):
     )
     assert editada.status_code == 200
     assert editada.json()["assunto"] == "Novo" and editada.json()["conteudo_email"] == "Corpo novo"
+
+
+def test_marcar_pronta_so_para_os_selecionados_pela_api(client, db_session, fake_email, fake_whatsapp):
+    from tests.conftest import TENANT_ID
+
+    criada = client.post(
+        "/api/v1/campanhas",
+        json={"nome": "Teste parcial", "tipo": "marketing", "canais": ["email"], "assunto": "Assunto", "conteudo_email": "Corpo"},
+    ).json()
+    client.post(
+        f"/api/v1/campanhas/{criada['id']}/destinatarios/avulsos",
+        json={"destinatarios": [{"nome": f"Pessoa {i}", "email": f"pessoa{i}@teste.com"} for i in range(3)]},
+    )
+    ids = [d["id"] for d in client.get(f"/api/v1/campanhas/{criada['id']}").json()["destinatarios"]]
+
+    vazia = client.post(f"/api/v1/campanhas/{criada['id']}/marcar-pronta", json={"destinatario_ids": []})
+    assert vazia.status_code == 422
+
+    pronta = client.post(f"/api/v1/campanhas/{criada['id']}/marcar-pronta", json={"destinatario_ids": [ids[1]]})
+    assert pronta.status_code == 200 and pronta.json()["status"] == "pronta"
+    metricas = client.get(f"/api/v1/campanhas/{criada['id']}").json()["metricas"]
+    assert metricas["pendente"] == 1 and metricas["retido"] == 2
+
+    campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, fake_whatsapp)
+
+    assert [e["destinatario"] for e in fake_email.envios] == ["pessoa1@teste.com"]
+    detalhe = client.get(f"/api/v1/campanhas/{criada['id']}").json()
+    assert detalhe["status"] == "rascunho"
+    assert detalhe["metricas"]["enviado"] == 1 and detalhe["metricas"]["pendente"] == 2
+
+
+def test_previa_da_campanha_pela_api(client):
+    criada = client.post(
+        "/api/v1/campanhas",
+        json={"nome": "Previa", "tipo": "marketing", "canais": ["email"], "assunto": "Oi [Nome]", "conteudo_email": "Olá, [Nome],\nA [Empresa]."},
+    ).json()
+    client.post(
+        f"/api/v1/campanhas/{criada['id']}/destinatarios/avulsos",
+        json={"destinatarios": [{"nome": "Maria da Silva", "email": "maria@teste.com"}]},
+    )
+
+    resposta = client.get(f"/api/v1/campanhas/{criada['id']}/previa")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {"destinatario_nome": "Maria da Silva", "assunto": "Oi Maria", "corpo": "Olá, Maria,\nA a sua empresa."}
+    assert client.get("/api/v1/campanhas/999999/previa").status_code == 404

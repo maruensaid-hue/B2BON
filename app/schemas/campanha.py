@@ -39,6 +39,12 @@ class CampanhaDetalheSchema(CampanhaSchema):
     metricas: dict[str, int]
 
 
+class CampanhaPreviaSchema(BaseModel):
+    destinatario_nome: str | None
+    assunto: str
+    corpo: str
+
+
 class CampanhaCreateSchema(BaseModel):
     nome: str
     tipo: str  # vendas | marketing
@@ -55,6 +61,11 @@ class CampanhaUpdateSchema(BaseModel):
     assunto: str | None = None
     conteudo_email: str | None = None
     template_whatsapp_id: str | None = None
+
+
+class MarcarProntaRequestSchema(BaseModel):
+    # Nulo = todos os pendentes; lista = só estes (os demais pendentes aguardam o próximo envio).
+    destinatario_ids: list[int] | None = None
 
 
 class AdicionarDestinatariosDeDecisoresRequestSchema(BaseModel):

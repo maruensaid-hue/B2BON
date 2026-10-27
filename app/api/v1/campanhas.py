@@ -21,8 +21,10 @@ from app.schemas.campanha import (
     CampanhaCreateSchema,
     CampanhaDestinatarioSchema,
     CampanhaDetalheSchema,
+    CampanhaPreviaSchema,
     CampanhaSchema,
     CampanhaUpdateSchema,
+    MarcarProntaRequestSchema,
 )
 from app.services import campanha_service
 
@@ -94,6 +96,16 @@ def obter_campanha(
         destinatarios=[CampanhaDestinatarioSchema.model_validate(d) for d in destinatarios],
         metricas=metricas,
     )
+
+
+@router.get("/{campanha_id}/previa", response_model=CampanhaPreviaSchema)
+def previa_campanha(
+    campanha_id: int,
+    destinatario_id: int | None = None,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> CampanhaPreviaSchema:
+    return CampanhaPreviaSchema(**campanha_service.previa(db, tenant_id, campanha_id, destinatario_id))
 
 
 @router.put("/{campanha_id}", response_model=CampanhaSchema)
@@ -175,12 +187,15 @@ def remover_destinatario(
 def marcar_pronta(
     campanha_id: int,
     tarefas: BackgroundTasks,
+    dados: MarcarProntaRequestSchema | None = None,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
     sessao_factory=Depends(get_sessao_factory),
 ) -> CampanhaSchema:
-    campanha = campanha_service.marcar_pronta(db, tenant_id, ator_id, campanha_id)
+    campanha = campanha_service.marcar_pronta(
+        db, tenant_id, ator_id, campanha_id, dados.destinatario_ids if dados is not None else None
+    )
     if sessao_factory is not None:  # nos testes a fábrica é `None`: o envio é exercitado direto no serviço
         tarefas.add_task(_disparar_em_segundo_plano, sessao_factory, tenant_id, campanha_id)
     return campanha
