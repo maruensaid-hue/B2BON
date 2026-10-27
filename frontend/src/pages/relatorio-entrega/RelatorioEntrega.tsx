@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
+import { Textarea } from "@/components/ui/Input";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { TutorialRelatorioEntrega } from "@/pages/relatorio-entrega/TutorialRelatorioEntrega";
@@ -129,6 +130,8 @@ export function RelatorioEntrega() {
   const [reativando, setReativando] = useState(false);
   const [suprimindoDecisorId, setSuprimindoDecisorId] = useState<number | null>(null);
   const [contaEmEdicaoId, setContaEmEdicaoId] = useState<number | null>(null);
+  const [textoBounces, setTextoBounces] = useState("");
+  const [registrandoBounces, setRegistrandoBounces] = useState(false);
 
   async function carregar() {
     try {
@@ -176,6 +179,33 @@ export function RelatorioEntrega() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível reativar o canal.");
     } finally {
       setReativando(false);
+    }
+  }
+
+  // Com conta de e-mail própria (SMTP) o aviso de "não entregue" chega na caixa de entrada do usuário, não ao sistema: ele cola aqui os endereços.
+  async function registrarBounces() {
+    if (registrandoBounces || !textoBounces.trim()) return;
+    setRegistrandoBounces(true);
+    setErro(null);
+    setMensagem(null);
+    try {
+      const resposta = await api.post<{ registrados: string[]; ja_registrados: string[]; nao_encontrados: string[] }>(
+        "/relatorio-entrega/bounces-manuais",
+        { texto: textoBounces },
+      );
+      const partes = [`${resposta.registrados.length} endereço(s) registrado(s) como erro`];
+      if (resposta.ja_registrados.length > 0) partes.push(`${resposta.ja_registrados.length} já estavam registrados`);
+      if (resposta.nao_encontrados.length > 0) {
+        partes.push(`não encontrados entre os e-mails enviados: ${resposta.nao_encontrados.slice(0, 8).join(", ")}${resposta.nao_encontrados.length > 8 ? "…" : ""}`);
+      }
+      setMensagem(partes.join("; ") + ".");
+      if (resposta.registrados.length > 0) setTextoBounces("");
+      await carregar();
+      await carregarEnvios(filtroStatus, pagina);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível registrar os e-mails.");
+    } finally {
+      setRegistrandoBounces(false);
     }
   }
 
@@ -284,6 +314,25 @@ export function RelatorioEntrega() {
           sistema só vê a recusa que o servidor de e-mail dá na hora do envio, que aparece como "Erro" ou "Não enviado" no
           detalhamento abaixo. Um endereço que não existe costuma ser recusado depois, com um aviso de falha na sua caixa
           de entrada, e esse aviso o sistema ainda não lê.
+        </div>
+      </Card>
+
+      <Card className="mb-4">
+        <SectionLabel>Registrar e-mails que voltaram</SectionLabel>
+        <div className="mb-2 text-[11px] text-muted">
+          Quando o Gmail devolve um e-mail por endereço inexistente, o aviso de falha chega na sua caixa de entrada, não aqui. Cole abaixo os endereços
+          que voltaram (um por linha, ou o próprio aviso): eles passam a constar como erro, e o sistema deixa de enviar para esses endereços nas próximas campanhas.
+        </div>
+        <Textarea
+          rows={3}
+          value={textoBounces}
+          onChange={(event) => setTextoBounces(event.target.value)}
+          placeholder={"fulano@empresa.com.br\nbeltrano@outraempresa.com"}
+        />
+        <div className="mt-2">
+          <Button size="sm" disabled={registrandoBounces || !textoBounces.trim()} onClick={registrarBounces}>
+            {registrandoBounces ? "Registrando..." : "Registrar como erro"}
+          </Button>
         </div>
       </Card>
 

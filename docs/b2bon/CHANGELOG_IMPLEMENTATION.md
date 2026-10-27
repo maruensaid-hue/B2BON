@@ -1,5 +1,10 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Registrar e-mails que voltaram no Relatório de Entrega (2026-10-27, D-106)
+
+- No Relatório de Entrega há uma caixa para colar os endereços que voltaram como não entregues (os avisos de falha do Gmail); eles passam a constar como erro e o sistema informa quais não foram encontrados entre os e-mails enviados.
+- Endereço que já voltou não recebe novas campanhas: fica como "não enviado", com o motivo.
+
 ## Relatório de Entrega reflete os envios reais (2026-10-27, D-106)
 
 - O topo do relatório passa a mostrar os envios de verdade dos últimos 7 dias (enviados, com erro, não enviados), em vez de zero quando a conta de e-mail é própria (SMTP).

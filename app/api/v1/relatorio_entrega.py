@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_tenant_id
-from app.schemas.relatorio_entrega import ListaEnviosEmailSchema, RelatorioEntregaSchema
+from app.api.deps import get_ator_id, get_db, get_tenant_id
+from app.schemas.relatorio_entrega import (
+    ListaEnviosEmailSchema,
+    RegistrarBouncesManuaisRequestSchema,
+    RegistroBouncesManuaisSchema,
+    RelatorioEntregaSchema,
+)
 from app.services import relatorio_entrega_service
 
 router = APIRouter(prefix="/relatorio-entrega", tags=["relatorio-entrega"])
@@ -35,3 +40,15 @@ def listar_envios_email(
     destinatários mostravam "2"). Esta lista mostra cada mensagem/
     destinatário de e-mail individualmente, com status e motivo real."""
     return ListaEnviosEmailSchema(**relatorio_entrega_service.listar_envios_email(db, tenant_id, status, limite, offset))
+
+
+@router.post("/bounces-manuais", response_model=RegistroBouncesManuaisSchema)
+def registrar_bounces_manuais(
+    dados: RegistrarBouncesManuaisRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> RegistroBouncesManuaisSchema:
+    """Com conta SMTP própria o provedor não avisa quando um e-mail volta como não entregue (o aviso chega na caixa de entrada do usuário): aqui o
+    usuário cola os endereços que voltaram e eles passam a constar como erro no relatório."""
+    return RegistroBouncesManuaisSchema(**relatorio_entrega_service.registrar_bounces_manuais(db, tenant_id, ator_id, dados.texto))

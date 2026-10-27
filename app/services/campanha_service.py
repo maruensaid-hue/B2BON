@@ -4,7 +4,7 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -12,6 +12,7 @@ from app.core.texto import corrigir_codificacao
 from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.conta import Conta
 from app.models.decisor import Decisor
+from app.models.mensagem import Mensagem
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
@@ -42,14 +43,30 @@ def _email_valido(email: str | None) -> bool:
     return bool(email) and _EMAIL_VALIDO.match(email.strip()) is not None
 
 
-def _motivo_sem_destino(campanha: Campanha, destinatario: CampanhaDestinatario) -> str | None:
+def _emails_devolvidos(db: Session, tenant_id: str) -> set[str]:
+    """Endereços que já voltaram como não entregues (aviso do provedor ou registro manual) em campanhas ou cadências do tenant."""
+    de_campanhas = db.query(func.lower(CampanhaDestinatario.email)).filter(
+        CampanhaDestinatario.tenant_id == tenant_id, CampanhaDestinatario.bounce_em.isnot(None), CampanhaDestinatario.email.isnot(None)
+    )
+    de_cadencias = (
+        db.query(func.lower(Decisor.email))
+        .join(Mensagem, Mensagem.decisor_id == Decisor.id)
+        .filter(Mensagem.tenant_id == tenant_id, Mensagem.bounce_em.isnot(None), Decisor.email.isnot(None))
+    )
+    return {email for (email,) in [*de_campanhas.all(), *de_cadencias.all()]}
+
+
+def _motivo_sem_destino(campanha: Campanha, destinatario: CampanhaDestinatario, devolvidos: set[str] | None = None) -> str | None:
     """Motivo pelo qual não existe para onde enviar nos canais da campanha (e-mail que não é e-mail e sem telefone/template de WhatsApp), ou `None`
     se há ao menos um destino. Esse destinatário vira `nao_enviado`, nunca `falhou`: não houve tentativa, então não entra em retentativa nem em bounce."""
-    tem_email = "email" in campanha.canais and _email_valido(destinatario.email)
+    devolvido = bool(destinatario.email) and destinatario.email.strip().lower() in (devolvidos or set())
+    tem_email = "email" in campanha.canais and _email_valido(destinatario.email) and not devolvido
     tem_whatsapp = "whatsapp" in campanha.canais and bool(destinatario.telefone) and bool(campanha.template_whatsapp_id)
     if tem_email or tem_whatsapp:
         return None
     if "email" in campanha.canais and destinatario.email:
+        if devolvido:
+            return f"E-mail devolvido em envio anterior: {destinatario.email.strip()[:80]}"  # não insiste em endereço que já voltou
         return f"E-mail inválido: {destinatario.email.strip()[:80]}"
     return "Sem e-mail ou telefone compatível com os canais da campanha."
 
@@ -422,6 +439,7 @@ def _enviar_pendentes(
     ]
     algum_adiado = False
     interrompido = False
+    devolvidos = _emails_devolvidos(db, tenant_id)
     for destinatario_id in ids_pendentes:
         db.refresh(campanha)
         if campanha.status not in ("pronta", "enviando"):
@@ -429,7 +447,7 @@ def _enviar_pendentes(
         destinatario = db.get(CampanhaDestinatario, destinatario_id)
         if destinatario is None or destinatario.status != "pendente":
             continue  # saiu da lista (descadastro, remoção) desde a consulta
-        motivo_ignorado = _motivo_sem_destino(campanha, destinatario)
+        motivo_ignorado = _motivo_sem_destino(campanha, destinatario, devolvidos)
         if motivo_ignorado is not None:
             destinatario.status = "nao_enviado"  # sem tentativa: nem falha, nem retentativa, nem bounce
             destinatario.motivo_falha = motivo_ignorado

@@ -792,3 +792,30 @@ def test_destinatario_so_com_telefone_em_campanha_de_email_fica_nao_enviado(db_s
     estados = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)
     assert [d.status for d in estados] == ["nao_enviado", "enviado"]
     assert estados[0].motivo_falha.startswith("Sem e-mail ou telefone compatível")
+
+
+def test_endereco_que_ja_voltou_em_outra_campanha_nao_recebe_de_novo(db_session):
+    primeira = _criar_campanha_email(db_session)
+    campanha_service.adicionar_avulsos(
+        db_session, TENANT_ID, None, primeira,
+        [DestinatarioAvulsoSchema(nome="Voltou", email="Voltou@Teste.com")],
+    )
+    antigo = campanha_service.listar_destinatarios(db_session, TENANT_ID, primeira)[0]
+    antigo.status = "enviado"
+    antigo.bounce_em = datetime.now(UTC)  # o e-mail voltou como não entregue
+    db_session.commit()
+
+    segunda = _criar_campanha_email(db_session)
+    campanha_service.adicionar_avulsos(
+        db_session, TENANT_ID, None, segunda,
+        [DestinatarioAvulsoSchema(nome="Voltou de novo", email="voltou@teste.com"), DestinatarioAvulsoSchema(nome="Certo", email="certo@teste.com")],
+    )
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, segunda)
+
+    fake_email = FakeEmailProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider(), campanha_id=segunda)
+
+    assert [e["destinatario"] for e in fake_email.envios] == ["certo@teste.com"]
+    assert resultado["ignoradas"] == 1
+    voltou = campanha_service.listar_destinatarios(db_session, TENANT_ID, segunda)[0]
+    assert voltou.status == "nao_enviado" and voltou.motivo_falha.startswith("E-mail devolvido em envio anterior")

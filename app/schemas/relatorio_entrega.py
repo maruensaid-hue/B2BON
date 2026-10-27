@@ -29,6 +29,16 @@ class ContatoComBounceSchema(BaseModel):
     bounce_em: datetime
 
 
+class RegistrarBouncesManuaisRequestSchema(BaseModel):
+    texto: str
+
+
+class RegistroBouncesManuaisSchema(BaseModel):
+    registrados: list[str]
+    ja_registrados: list[str]
+    nao_encontrados: list[str]
+
+
 class ResumoEnviosSchema(BaseModel):
     enviados: int = 0
     erros: int = 0

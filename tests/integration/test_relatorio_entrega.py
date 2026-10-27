@@ -277,3 +277,55 @@ def test_com_conta_smtp_propria_o_relatorio_avisa_que_bounce_e_spam_nao_sao_medi
     corpo = client.get("/api/v1/relatorio-entrega").json()
 
     assert corpo["saude_email"]["medido_pelo_provedor"] is False
+
+
+def test_registrar_bounces_manuais_marca_campanha_e_cadencia_e_informa_o_que_nao_achou(
+    client, onboarding_completo, criar_conta_com_decisor, db_session
+):
+    campanha = _campanha_email(db_session)
+    for nome, email in [("Maria", "maria@teste.com"), ("Joao", "joao@teste.com"), ("Ana", "ana@teste.com")]:
+        db_session.add(CampanhaDestinatario(tenant_id=TENANT_ID, campanha_id=campanha.id, nome=nome, email=email, status="enviado"))
+    conta, decisor = criar_conta_com_decisor()
+    mensagem = aprovacao_service.criar_proposta(db_session, TENANT_ID, None, decisor.id, "email", None, "Oi", StubPlanLimitsProvider())
+    mensagem.status = "enviado"
+    db_session.commit()
+
+    resposta = client.post(
+        "/api/v1/relatorio-entrega/bounces-manuais",
+        json={
+            "texto": f"MARIA@teste.com, joao@teste.com;\nAddress not found: {decisor.email}\nmailer-daemon@googlemail.com maria@teste.com"
+        },
+    )
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert sorted(corpo["registrados"]) == sorted(["maria@teste.com", "joao@teste.com", decisor.email.lower()])  # sem repetir, sem diferenciar maiúsculas
+    assert corpo["nao_encontrados"] == ["mailer-daemon@googlemail.com"]
+    assert corpo["ja_registrados"] == []
+
+    erros = client.get("/api/v1/relatorio-entrega/envios", params={"status": "erro"}).json()
+    assert sorted(item["email"] for item in erros["itens"]) == sorted(["maria@teste.com", "joao@teste.com", decisor.email])
+    assert all("Informado manualmente" in item["detalhe"] for item in erros["itens"])
+    assert [i["nome"] for i in client.get("/api/v1/relatorio-entrega/envios", params={"status": "enviado"}).json()["itens"]] == ["Ana"]
+    assert client.get("/api/v1/relatorio-entrega").json()["saude_email"]["pausado"] is False  # não mexe na reputação do canal
+
+    de_novo = client.post("/api/v1/relatorio-entrega/bounces-manuais", json={"texto": "maria@teste.com"}).json()
+    assert de_novo["registrados"] == [] and de_novo["ja_registrados"] == ["maria@teste.com"]
+
+
+def test_registrar_bounces_manuais_sem_endereco_e_recusado(client, onboarding_completo):
+    resposta = client.post("/api/v1/relatorio-entrega/bounces-manuais", json={"texto": "  sem nenhum endereço aqui  "})
+
+    assert resposta.status_code == 422
+
+
+def test_registrar_bounces_manuais_so_enxerga_os_envios_do_proprio_tenant(client, onboarding_completo, db_session):
+    campanha = Campanha(tenant_id="outro-tenant", nome="De outro", tipo="marketing", canais=["email"])
+    db_session.add(campanha)
+    db_session.flush()
+    db_session.add(CampanhaDestinatario(tenant_id="outro-tenant", campanha_id=campanha.id, nome="X", email="x@teste.com", status="enviado"))
+    db_session.commit()
+
+    corpo = client.post("/api/v1/relatorio-entrega/bounces-manuais", json={"texto": "x@teste.com"}).json()
+
+    assert corpo["registrados"] == [] and corpo["nao_encontrados"] == ["x@teste.com"]

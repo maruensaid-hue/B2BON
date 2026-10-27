@@ -1,6 +1,7 @@
+import re
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.cadencia import Cadencia
@@ -10,7 +11,8 @@ from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.icp import ICP
 from app.models.mensagem import Mensagem
-from app.services import panel_service, reputacao_service
+from app.services import auditoria_service, panel_service, reputacao_service
+from app.services.errors import ValidacaoFalhou
 
 # Só e-mail tem um sinal real de entrega/bounce hoje (webhook do
 # SendGrid) — WhatsApp/LinkedIn não têm confirmação de entrega/leitura
@@ -26,6 +28,10 @@ _LIMITE_CONTATOS_COM_BOUNCE = 200
 _STATUS_MENSAGEM_PENDENTE = {"rascunho", "aguardando_aprovacao", "aprovado"}
 _STATUS_FILTROS_VALIDOS = {"todos", "erro", "enviado", "aberto", "pendente", "nao_enviado", "cancelado"}
 _JANELA_RESUMO_DIAS = 7
+
+_EMAIL_NO_TEXTO = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}")
+_MAXIMO_BOUNCES_POR_VEZ = 500
+MOTIVO_BOUNCE_MANUAL = "Informado manualmente: o e-mail voltou como não entregue."
 _LIMITE_MAXIMO_ENVIOS = 200
 
 
@@ -278,6 +284,72 @@ def _resumo_envios(db: Session, tenant_id: str) -> dict:
         elif item["status"] == "pendente":
             resumo["pendentes"] += 1
     return resumo
+
+
+def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, texto: str) -> dict:
+    """Marca como bounce os e-mails que o usuário informou ter voltado como não entregues (aviso de falha na caixa de entrada). Com conta SMTP própria
+    o provedor não devolve esse retorno ao sistema. Aceita texto livre (endereços separados por linha, vírgula, ponto e vírgula ou o próprio aviso colado):
+    todo endereço encontrado é procurado nos e-mails de campanha e de cadência já enviados. Não mexe nos contadores de reputação do canal: sem o retorno
+    do provedor eles não têm o total de envios, e uma taxa calculada em cima deles pausaria o canal por engano."""
+    enderecos: list[str] = []
+    for achado in _EMAIL_NO_TEXTO.findall(texto or ""):
+        endereco = achado.lower()
+        if endereco not in enderecos:
+            enderecos.append(endereco)
+    if not enderecos:
+        raise ValidacaoFalhou("Cole ao menos um endereço de e-mail.")
+    if len(enderecos) > _MAXIMO_BOUNCES_POR_VEZ:
+        raise ValidacaoFalhou(f"Informe até {_MAXIMO_BOUNCES_POR_VEZ} endereços por vez.")
+
+    de_campanhas: dict[str, list] = {}
+    for destinatario in (
+        db.query(CampanhaDestinatario)
+        .filter(
+            CampanhaDestinatario.tenant_id == tenant_id,
+            CampanhaDestinatario.status == "enviado",
+            func.lower(CampanhaDestinatario.email).in_(enderecos),
+        )
+        .all()
+    ):
+        de_campanhas.setdefault(destinatario.email.lower(), []).append(destinatario)
+    de_cadencias: dict[str, list] = {}
+    for mensagem, decisor in (
+        db.query(Mensagem, Decisor)
+        .join(Decisor, Mensagem.decisor_id == Decisor.id)
+        .filter(
+            Mensagem.tenant_id == tenant_id,
+            Mensagem.canal == "email",
+            Mensagem.status == "enviado",
+            func.lower(Decisor.email).in_(enderecos),
+        )
+        .all()
+    ):
+        de_cadencias.setdefault(decisor.email.lower(), []).append(mensagem)
+
+    agora = datetime.now(UTC)
+    registrados: list[str] = []
+    ja_registrados: list[str] = []
+    nao_encontrados: list[str] = []
+    for endereco in enderecos:
+        itens = de_campanhas.get(endereco, []) + de_cadencias.get(endereco, [])
+        if not itens:
+            nao_encontrados.append(endereco)
+            continue
+        novos = [item for item in itens if item.bounce_em is None]
+        if not novos:
+            ja_registrados.append(endereco)
+            continue
+        for item in novos:
+            item.bounce_em = agora
+            item.motivo_bounce = MOTIVO_BOUNCE_MANUAL
+        registrados.append(endereco)
+
+    auditoria_service.registrar(
+        db, tenant_id, "bounce_registrado_manualmente", "relatorio_entrega", 0, ator_id,
+        {"registrados": len(registrados), "ja_registrados": len(ja_registrados), "nao_encontrados": len(nao_encontrados)},
+    )
+    db.commit()
+    return {"registrados": registrados, "ja_registrados": ja_registrados, "nao_encontrados": nao_encontrados}
 
 
 def obter(db: Session, tenant_id: str) -> dict:
