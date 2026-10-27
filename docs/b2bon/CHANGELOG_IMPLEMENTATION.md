@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Campanha: e-mail inválido não trava mais o envio (2026-10-27, D-106)
+
+- Um endereço que o servidor de e-mail recusa deixou de parar a campanha: só aquele destinatário é afetado e o envio segue com os demais.
+- Destinatário sem e-mail válido (link, sigla, lista de certificações no lugar do e-mail) fica como **não enviado**, com o motivo, sem tentar o servidor: não conta como falha, não é refeito e não gera bounce.
+- A lista colada ignora o que não é e-mail e informa quantos destinatários foram ignorados.
+
 ## Campanha: acentos corrompidos na lista colada são consertados (2026-10-27, D-106)
 
 - Ao colar uma lista de planilha aberta com a codificação errada ("JoÃ£o", "BoticÃ¡rio"), o nome, o telefone e a empresa são consertados na entrada ("João", "Boticário"). Texto que já está correto não é alterado.

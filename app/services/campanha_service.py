@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import or_
@@ -31,6 +32,26 @@ _SEPARADOR = ":"
 _RESERVA_MINUTOS = 10
 
 _REMETENTE_NOME = "B2B ON"
+
+# Formato mínimo de um endereço (algo@dominio.ext, sem espaços): barra o que não é e-mail antes de chegar ao servidor ("https://linkedin.com/in/...", "SM",
+# lista de certificações) — colunas deslocadas numa planilha colada põem esse tipo de texto no campo de e-mail.
+_EMAIL_VALIDO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _email_valido(email: str | None) -> bool:
+    return bool(email) and _EMAIL_VALIDO.match(email.strip()) is not None
+
+
+def _motivo_sem_destino(campanha: Campanha, destinatario: CampanhaDestinatario) -> str | None:
+    """Motivo pelo qual não existe para onde enviar nos canais da campanha (e-mail que não é e-mail e sem telefone/template de WhatsApp), ou `None`
+    se há ao menos um destino. Esse destinatário vira `nao_enviado`, nunca `falhou`: não houve tentativa, então não entra em retentativa nem em bounce."""
+    tem_email = "email" in campanha.canais and _email_valido(destinatario.email)
+    tem_whatsapp = "whatsapp" in campanha.canais and bool(destinatario.telefone) and bool(campanha.template_whatsapp_id)
+    if tem_email or tem_whatsapp:
+        return None
+    if "email" in campanha.canais and destinatario.email:
+        return f"E-mail inválido: {destinatario.email.strip()[:80]}"
+    return "Sem e-mail ou telefone compatível com os canais da campanha."
 
 
 def _validar_canais(canais: list[str], assunto: str | None, conteudo_email: str | None, template_whatsapp_id: str | None) -> None:
@@ -138,7 +159,7 @@ def listar_destinatarios(db: Session, tenant_id: str, campanha_id: int) -> list[
 
 def metricas(db: Session, tenant_id: str, campanha_id: int) -> dict[str, int]:
     destinatarios = listar_destinatarios(db, tenant_id, campanha_id)
-    contagem = {"total": len(destinatarios), "pendente": 0, "enviado": 0, "falhou": 0, "optout": 0}
+    contagem = {"total": len(destinatarios), "pendente": 0, "enviado": 0, "falhou": 0, "nao_enviado": 0, "optout": 0}
     for destinatario in destinatarios:
         contagem[destinatario.status] = contagem.get(destinatario.status, 0) + 1
     return contagem
@@ -166,6 +187,8 @@ def adicionar_de_decisores(
         decisor = db.query(Decisor).filter_by(id=decisor_id, tenant_id=tenant_id).one_or_none()
         if decisor is None or optout_service.existe_supressao(db, decisor.id):
             continue
+        if decisor.email and not _email_valido(decisor.email) and not decisor.telefone:
+            continue  # o único contato cadastrado não é um e-mail (ex.: link): não há como enviar
         conta = db.query(Conta).filter_by(id=decisor.conta_id, tenant_id=tenant_id).one_or_none()
         destinatario = CampanhaDestinatario(
             tenant_id=tenant_id,
@@ -226,6 +249,8 @@ def adicionar_avulsos(
         empresa = (corrigir_codificacao(item.empresa) or "").strip() or None
         corrigidos += (nome, telefone, empresa) != (item.nome.strip(), (item.telefone or "").strip() or None, (item.empresa or "").strip() or None)
         email = (item.email or "").strip() or None
+        if email and not _email_valido(email):
+            email = None  # não é um e-mail (link, sigla, certificações): não entra como endereço de envio
         if not nome or not (email or telefone):
             continue
         if email and email.lower() in ja_existentes:
@@ -404,6 +429,14 @@ def _enviar_pendentes(
         destinatario = db.get(CampanhaDestinatario, destinatario_id)
         if destinatario is None or destinatario.status != "pendente":
             continue  # saiu da lista (descadastro, remoção) desde a consulta
+        motivo_ignorado = _motivo_sem_destino(campanha, destinatario)
+        if motivo_ignorado is not None:
+            destinatario.status = "nao_enviado"  # sem tentativa: nem falha, nem retentativa, nem bounce
+            destinatario.motivo_falha = motivo_ignorado
+            resultado["ignoradas"] = resultado.get("ignoradas", 0) + 1
+            campanha.processando_ate = _agora() + timedelta(minutes=_RESERVA_MINUTOS)
+            db.commit()
+            continue
         sucesso, motivo_falha, adiado = _disparar_destinatario(db, campanha, destinatario, email_provider, whatsapp_provider)
         if sucesso:
             destinatario.status = "enviado"
@@ -510,7 +543,7 @@ def _disparar_destinatario(
     email_adiado = False
     falha_transitoria: str | None = None
 
-    if "email" in campanha.canais and destinatario.email:
+    if "email" in campanha.canais and _email_valido(destinatario.email):  # endereço que não é e-mail nunca chega ao servidor
         if reputacao_service.canal_pausado(db, campanha.tenant_id, "email"):
             email_adiado = True
         else:

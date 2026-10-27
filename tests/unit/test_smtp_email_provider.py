@@ -169,3 +169,48 @@ def test_recusa_de_credencial_diz_que_falhou_ao_autenticar(mock_smtp: MagicMock)
     resultado = _enviar(SmtpEmailProvider(host="smtp.gmail.com", porta=587, usuario="u", senha="s"))
 
     assert resultado.transitoria is False and resultado.motivo_falha.startswith("Falha ao autenticar em smtp.gmail.com:587")
+
+
+@patch("app.providers.channels.email.smtp.time.sleep")
+@patch("app.providers.channels.email.smtp.smtplib.SMTP")
+def test_endereco_recusado_pelo_servidor_e_falha_definitiva_so_desse_destinatario(mock_smtp: MagicMock, mock_sleep: MagicMock):
+    import smtplib
+
+    servidor = MagicMock()
+    servidor.send_message.side_effect = smtplib.SMTPRecipientsRefused(
+        {"//www.linkedin.com/in/fulano": (553, b"5.1.3 The recipient address is not a\n5.1.3 valid RFC 5321 address.")}
+    )
+    mock_smtp.return_value.__enter__.return_value = servidor
+
+    resultado = _enviar(SmtpEmailProvider(host="smtp.gmail.com", porta=587))
+
+    assert resultado.sucesso is False and resultado.transitoria is False  # não é queda de rede: não trava a campanha nem é repetido
+    assert mock_smtp.call_count == 1 and mock_sleep.call_count == 0
+    assert "destinatário recusado" in resultado.motivo_falha and "553" in resultado.motivo_falha
+    assert "//www.linkedin.com/in/fulano" in resultado.motivo_falha and "\n" not in resultado.motivo_falha
+
+
+@patch("app.providers.channels.email.smtp.time.sleep")
+@patch("app.providers.channels.email.smtp.smtplib.SMTP")
+def test_recusa_temporaria_do_destinatario_e_transitoria(mock_smtp: MagicMock, mock_sleep: MagicMock):
+    import smtplib
+
+    servidor = MagicMock()
+    servidor.send_message.side_effect = smtplib.SMTPRecipientsRefused({"a@b.com": (451, b"4.7.1 try later")})
+    mock_smtp.return_value.__enter__.return_value = servidor
+
+    assert _enviar(SmtpEmailProvider()).transitoria is True
+
+
+@patch("app.providers.channels.email.smtp.time.sleep")
+@patch("app.providers.channels.email.smtp.smtplib.SMTP")
+def test_outras_falhas_do_protocolo_nao_sao_tratadas_como_queda_de_rede(mock_smtp: MagicMock, mock_sleep: MagicMock):
+    import smtplib
+
+    servidor = MagicMock()
+    servidor.send_message.side_effect = smtplib.SMTPNotSupportedError("SMTPUTF8 não suportado")
+    mock_smtp.return_value.__enter__.return_value = servidor
+
+    resultado = _enviar(SmtpEmailProvider())
+
+    assert resultado.sucesso is False and resultado.transitoria is False and mock_smtp.call_count == 1

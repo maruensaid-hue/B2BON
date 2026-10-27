@@ -705,3 +705,90 @@ def test_lista_colada_com_acentos_corrompidos_e_consertada_na_entrada(db_session
 
     campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
     assert campanha_service.previa(db_session, TENANT_ID, campanha_id)["corpo"].startswith("Olá, João,")
+
+
+def test_destinatario_com_email_invalido_fica_nao_enviado_e_o_envio_continua(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    for i in range(3):
+        decisor = _criar_decisor(db_session, f"Pessoa {i}", email=f"pessoa{i}@teste.com")
+        campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+    do_meio = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)[1]
+    do_meio.email = "https://www.linkedin.com/in/fulano"  # entrou assim por coluna deslocada numa lista colada
+    db_session.commit()
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+
+    fake_email = FakeEmailProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
+
+    assert resultado == {"enviadas": 2, "falhas": 0, "adiadas": 0, "ignoradas": 1}
+    assert [e["destinatario"] for e in fake_email.envios] == ["pessoa0@teste.com", "pessoa2@teste.com"]  # o servidor nem foi chamado para o inválido
+    estados = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)
+    assert [d.status for d in estados] == ["enviado", "nao_enviado", "enviado"]  # nem "falhou" (retentativa) nem tentativa no servidor
+    assert estados[1].motivo_falha.startswith("E-mail inválido: https://www.linkedin.com")
+    assert campanha_service.metricas(db_session, TENANT_ID, campanha_id)["nao_enviado"] == 1
+    assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "concluida"
+
+
+def test_lista_colada_ignora_o_que_nao_e_email_e_so_entra_com_telefone(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+
+    adicionados = campanha_service.adicionar_avulsos(
+        db_session, TENANT_ID, None, campanha_id,
+        [
+            DestinatarioAvulsoSchema(nome="Link", email="https://www.linkedin.com/in/fulano"),
+            DestinatarioAvulsoSchema(nome="Sigla", email="SM"),
+            DestinatarioAvulsoSchema(nome="Certificações", email="CISM, CISSP"),
+            DestinatarioAvulsoSchema(nome="Com telefone", email="PMI-RMP", telefone="11999990000"),
+            DestinatarioAvulsoSchema(nome="Certo", email="certo@teste.com"),
+        ],
+    )
+
+    assert [d.nome for d in adicionados] == ["Com telefone", "Certo"]
+    assert adicionados[0].email is None and adicionados[0].telefone == "11999990000"  # o falso e-mail não vira endereço de envio
+
+
+def test_contato_do_crm_cujo_unico_contato_nao_e_email_nao_entra_na_campanha(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    sem_email = _criar_decisor(db_session, "Sem Email", email="https://www.linkedin.com/in/sem-email")
+    sem_email.telefone = None
+    db_session.commit()
+    certo = _criar_decisor(db_session, "Certo", email="certo@teste.com")
+
+    adicionados = campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [sem_email.id, certo.id])
+
+    assert [d.nome for d in adicionados] == ["Certo"]
+
+
+def test_nao_enviado_nao_e_repetido_nem_selecionavel_no_proximo_envio(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    for i in range(2):
+        decisor = _criar_decisor(db_session, f"Pessoa {i}", email=f"pessoa{i}@teste.com")
+        campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+    invalido = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)[0]
+    invalido.email = "SM"
+    db_session.commit()
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    campanha_service.processar_pendentes(db_session, TENANT_ID, FakeEmailProvider(), FakeWhatsAppProvider())
+    assert invalido.status == "nao_enviado"
+
+    campanha_service.voltar_para_rascunho(db_session, TENANT_ID, None, campanha_id)
+
+    assert db_session.get(type(invalido), invalido.id).status == "nao_enviado"  # editar a campanha não devolve à fila quem nunca teve destino
+    with pytest.raises(ValidacaoFalhou):
+        campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id, [invalido.id])
+
+
+def test_destinatario_so_com_telefone_em_campanha_de_email_fica_nao_enviado(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    campanha_service.adicionar_avulsos(
+        db_session, TENANT_ID, None, campanha_id,
+        [DestinatarioAvulsoSchema(nome="So telefone", telefone="11999990000"), DestinatarioAvulsoSchema(nome="Certo", email="certo@teste.com")],
+    )
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, FakeEmailProvider(), FakeWhatsAppProvider())
+
+    assert resultado == {"enviadas": 1, "falhas": 0, "adiadas": 0, "ignoradas": 1}
+    estados = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)
+    assert [d.status for d in estados] == ["nao_enviado", "enviado"]
+    assert estados[0].motivo_falha.startswith("Sem e-mail ou telefone compatível")

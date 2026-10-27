@@ -88,13 +88,29 @@ class SmtpEmailProvider(EmailProvider):
                 etapa = "enviar a mensagem"
                 servidor.send_message(mensagem)
             return ResultadoEnvio(sucesso=True)
+        except smtplib.SMTPRecipientsRefused as erro:
+            # O servidor recusou o endereço de destino (RCPT TO). 5xx = endereço inválido ou inexistente: falha só desse destinatário, o envio segue com os
+            # outros; 4xx = recusa temporária. Atenção: esta classe herda de OSError, então precisa vir antes da captura de rede abaixo — do contrário um
+            # endereço inválido era tratado como queda de rede e a campanha ficava repetindo o mesmo destinatário sem avançar.
+            codigos = [codigo for codigo, _ in erro.recipients.values()]
+            detalhe = "; ".join(
+                f"{endereco}: {codigo} {' '.join(texto.decode(errors='replace').split())}"
+                for endereco, (codigo, texto) in erro.recipients.items()
+            )
+            return ResultadoEnvio(
+                sucesso=False,
+                motivo_falha=self._motivo(etapa, ip, f"destinatário recusado pelo servidor ({detalhe})"),
+                transitoria=bool(codigos) and all(400 <= codigo < 500 for codigo in codigos),
+            )
         except smtplib.SMTPResponseException as erro:
             # 4xx é recusa temporária do servidor (caixa cheia, limite de envio, greylisting); 5xx é definitiva (credencial, remetente, destinatário).
             return ResultadoEnvio(sucesso=False, motivo_falha=self._motivo(etapa, ip, erro), transitoria=400 <= erro.smtp_code < 500)
-        except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, OSError) as erro:
+        except smtplib.SMTPServerDisconnected as erro:
             return ResultadoEnvio(sucesso=False, motivo_falha=self._motivo(etapa, ip, erro), transitoria=True)
         except smtplib.SMTPException as erro:
             return ResultadoEnvio(sucesso=False, motivo_falha=self._motivo(etapa, ip, erro))
+        except OSError as erro:  # rede (SMTPException já foi tratada acima: ela também é OSError)
+            return ResultadoEnvio(sucesso=False, motivo_falha=self._motivo(etapa, ip, erro), transitoria=True)
 
     @staticmethod
     def _ip_conectado(servidor: smtplib.SMTP) -> str:
@@ -103,6 +119,6 @@ class SmtpEmailProvider(EmailProvider):
         except (AttributeError, OSError):
             return ""
 
-    def _motivo(self, etapa: str, ip: str, erro: Exception) -> str:
+    def _motivo(self, etapa: str, ip: str, erro: Exception | str) -> str:
         onde = f"{self.host}:{self.porta}" + (f" (IP {ip})" if ip else "")
         return f"Falha ao {etapa} em {onde}: {erro}"

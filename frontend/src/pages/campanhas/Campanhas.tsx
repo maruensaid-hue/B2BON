@@ -140,13 +140,15 @@ function toneStatusCampanha(status: string): "cyan" | "amber" | "green" | "muted
 function toneStatusDestinatario(status: string): "cyan" | "green" | "red" | "muted" {
   if (status === "enviado") return "green";
   if (status === "falhou") return "red";
-  if (status === "optout" || status === "retido") return "muted";
+  if (status === "optout" || status === "retido" || status === "nao_enviado") return "muted";
   return "cyan";
 }
 
 // "retido" é o pendente que ficou fora de um envio só para selecionados; volta a pendente quando essa rodada termina.
 function rotuloStatusDestinatario(status: string): string {
-  return status === "retido" ? "fora desta rodada" : status;
+  if (status === "retido") return "fora desta rodada";
+  if (status === "nao_enviado") return "não enviado";
+  return status;
 }
 
 export function Campanhas() {
@@ -356,10 +358,14 @@ export function Campanhas() {
     setAdicionandoDestinatarios(true);
     setErro(null);
     try {
-      await api.post(`/campanhas/${campanhaSelecionadaId}/destinatarios/avulsos`, { destinatarios });
+      const adicionados = await api.post<unknown[]>(`/campanhas/${campanhaSelecionadaId}/destinatarios/avulsos`, { destinatarios });
       formulario.reset();
       await carregarDetalhe(campanhaSelecionadaId);
-      setMensagem(`${destinatarios.length} destinatário(s) adicionado(s).`);
+      const ignorados = destinatarios.length - adicionados.length;
+      setMensagem(
+        `${adicionados.length} destinatário(s) adicionado(s)` +
+          (ignorados > 0 ? `; ${ignorados} ignorado(s) por não ter e-mail válido nem telefone, ou já estar na lista.` : "."),
+      );
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível adicionar a lista.");
     } finally {
@@ -619,7 +625,7 @@ export function Campanhas() {
             <div className="mt-3 grid grid-cols-4 gap-2">
               {Object.entries(detalhe.metricas).map(([chave, valor]) => (
                 <div key={chave} className="rounded-lg border border-border p-2 text-center">
-                  <div className="text-[9.5px] tracking-wide text-muted uppercase">{chave}</div>
+                  <div className="text-[9.5px] tracking-wide text-muted uppercase">{rotuloStatusDestinatario(chave).replace("fora desta rodada", "fora da rodada")}</div>
                   <div className="font-head text-lg font-bold">{valor}</div>
                 </div>
               ))}
@@ -791,7 +797,7 @@ export function Campanhas() {
                     <td className="p-2">
                       <Badge tone={toneStatusDestinatario(destinatario.status)}>{rotuloStatusDestinatario(destinatario.status)}</Badge>
                       {destinatario.motivo_falha && (
-                        <div className="mt-0.5 text-[10px] text-red">{destinatario.motivo_falha}</div>
+                        <div className={`mt-0.5 text-[10px] ${destinatario.status === "nao_enviado" ? "text-muted" : "text-red"}`}>{destinatario.motivo_falha}</div>
                       )}
                     </td>
                     {campanhaSelecionada.status === "rascunho" && (
