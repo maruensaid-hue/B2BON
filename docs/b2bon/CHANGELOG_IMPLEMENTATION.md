@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Relatório de Entrega reflete os envios reais (2026-10-27, D-106)
+
+- O topo do relatório passa a mostrar os envios de verdade dos últimos 7 dias (enviados, com erro, não enviados), em vez de zero quando a conta de e-mail é própria (SMTP).
+- Bounce e spam mostram "não medido" com conta de e-mail própria, em vez de 0,0%, que parecia "nenhum problema".
+- Nova aba "Não enviado" (e-mails inválidos, sem tentativa de envio); antes eles apareciam como "Enviado".
+- Os avisos de falha que o Gmail manda para a caixa de entrada depois do envio ainda não são lidos pelo sistema.
+
 ## Campanha: e-mail inválido não trava mais o envio (2026-10-27, D-106)
 
 - Um endereço que o servidor de e-mail recusa deixou de parar a campanha: só aquele destinatário é afetado e o envio segue com os demais.

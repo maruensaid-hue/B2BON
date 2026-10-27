@@ -1,6 +1,7 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.models.campanha import Campanha, CampanhaDestinatario
+from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.services import aprovacao_service
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 
@@ -203,3 +204,76 @@ def test_envios_email_pendente_explica_quando_canal_esta_pausado(
     pausado = client.get("/api/v1/relatorio-entrega/envios").json()["itens"][0]
     assert pausado["status"] == "pendente"
     assert pausado["detalhe"] == "Aguardando — canal de e-mail pausado"
+
+
+def _campanha_email(db_session) -> Campanha:
+    campanha = Campanha(tenant_id=TENANT_ID, nome="Campanha E-mail", tipo="marketing", canais=["email"])
+    db_session.add(campanha)
+    db_session.flush()
+    return campanha
+
+
+def test_envios_de_campanha_classificam_cada_status_inclusive_nao_enviado(client, onboarding_completo, db_session):
+    campanha = _campanha_email(db_session)
+    for nome, status, motivo in [
+        ("Enviado", "enviado", None),
+        ("Falhou", "falhou", "550 caixa inexistente"),
+        ("Sem email", "nao_enviado", "E-mail inválido: https://www.linkedin.com/in/fulano"),
+        ("Adiado", "pendente", "Envio adiado, nova tentativa automática em breve."),
+        ("Retido", "retido", None),
+        ("Saiu", "optout", None),
+    ]:
+        db_session.add(
+            CampanhaDestinatario(
+                tenant_id=TENANT_ID, campanha_id=campanha.id, nome=nome, email=f"{nome.replace(' ', '').lower()}@teste.com",
+                status=status, motivo_falha=motivo, empresa="Acme" if nome == "Enviado" else None,
+            )
+        )
+    db_session.commit()
+
+    corpo = client.get("/api/v1/relatorio-entrega/envios").json()
+
+    por_nome = {item["nome"]: item for item in corpo["itens"]}
+    assert por_nome["Enviado"]["status"] == "enviado" and por_nome["Enviado"]["conta_nome"] == "Acme"
+    assert por_nome["Falhou"]["status"] == "erro" and por_nome["Falhou"]["detalhe"] == "550 caixa inexistente"
+    assert por_nome["Sem email"]["status"] == "nao_enviado"  # antes caía em "enviado"
+    assert por_nome["Sem email"]["detalhe"].startswith("E-mail inválido")
+    assert por_nome["Adiado"]["status"] == "pendente" and "nova tentativa" in por_nome["Adiado"]["detalhe"]
+    assert por_nome["Retido"]["status"] == "pendente"
+    assert por_nome["Saiu"]["status"] == "cancelado"
+    assert corpo["contagem_por_status"] == {"enviado": 1, "erro": 1, "nao_enviado": 1, "pendente": 2, "cancelado": 1}
+
+    so_nao_enviados = client.get("/api/v1/relatorio-entrega/envios", params={"status": "nao_enviado"}).json()
+    assert [item["nome"] for item in so_nao_enviados["itens"]] == ["Sem email"]
+
+
+def test_resumo_conta_os_envios_reais_dos_ultimos_7_dias_mesmo_sem_retorno_do_provedor(client, onboarding_completo, db_session):
+    campanha = _campanha_email(db_session)
+    agora = datetime.now(UTC)
+    antigo = agora - timedelta(days=10)
+    for nome, status, quando in [
+        ("A", "enviado", agora), ("B", "enviado", agora), ("C", "falhou", agora), ("D", "nao_enviado", agora), ("E", "pendente", agora),
+        ("Velho", "enviado", antigo),
+    ]:
+        db_session.add(
+            CampanhaDestinatario(
+                tenant_id=TENANT_ID, campanha_id=campanha.id, nome=nome, email=f"{nome.lower()}@teste.com", status=status,
+                enviado_em=quando if status == "enviado" else None, criado_em=quando,
+            )
+        )
+    db_session.commit()
+
+    corpo = client.get("/api/v1/relatorio-entrega").json()
+
+    assert corpo["resumo_envios"] == {"enviados": 2, "erros": 1, "nao_enviados": 1, "pendentes": 1}
+    assert corpo["saude_email"]["enviados"] == 0  # o contador de reputação só conhece o retorno do provedor
+    assert corpo["saude_email"]["medido_pelo_provedor"] is True  # sem conta SMTP própria, o provedor da plataforma devolve bounce
+
+
+def test_com_conta_smtp_propria_o_relatorio_avisa_que_bounce_e_spam_nao_sao_medidos(client, onboarding_completo, db_session):
+    db_session.add(ConfiguracaoEmailSmtp(tenant_id=TENANT_ID, host="smtp.gmail.com", porta=587, usuario="eu@teste.com", senha="senha-de-app", usar_tls=True))
+    db_session.commit()
+
+    corpo = client.get("/api/v1/relatorio-entrega").json()
+
+    assert corpo["saude_email"]["medido_pelo_provedor"] is False

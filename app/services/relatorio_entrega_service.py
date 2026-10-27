@@ -1,7 +1,11 @@
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.cadencia import Cadencia
 from app.models.campanha import Campanha, CampanhaDestinatario
+from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.icp import ICP
@@ -20,7 +24,8 @@ _LIMITE_CONTATOS_COM_BOUNCE = 200
 # visão granular classifica cada mensagem/destinatário de e-mail
 # individualmente, sem depender só do webhook.
 _STATUS_MENSAGEM_PENDENTE = {"rascunho", "aguardando_aprovacao", "aprovado"}
-_STATUS_FILTROS_VALIDOS = {"todos", "erro", "enviado", "aberto", "pendente", "cancelado"}
+_STATUS_FILTROS_VALIDOS = {"todos", "erro", "enviado", "aberto", "pendente", "nao_enviado", "cancelado"}
+_JANELA_RESUMO_DIAS = 7
 _LIMITE_MAXIMO_ENVIOS = 200
 
 
@@ -119,11 +124,17 @@ def _classificar_destinatario_campanha(destinatario: CampanhaDestinatario) -> tu
         return "erro", destinatario.motivo_bounce
     if destinatario.status == "falhou":
         return "erro", destinatario.motivo_falha
+    if destinatario.status == "nao_enviado":  # sem destino válido (ex.: link no lugar do e-mail): nunca houve tentativa, então não é erro nem enviado
+        return "nao_enviado", destinatario.motivo_falha
     if destinatario.status == "optout":
         return "cancelado", None
     if destinatario.status == "pendente":
-        return "pendente", None
-    return "enviado", None
+        return "pendente", destinatario.motivo_falha  # traz o aviso de envio adiado, se houver
+    if destinatario.status == "retido":  # fora de uma rodada de envio parcial: aguarda o próximo envio
+        return "pendente", "Aguardando o próximo envio da campanha"
+    if destinatario.status == "enviado":
+        return "enviado", None
+    return destinatario.status, None
 
 
 def _envios_email_de_mensagens(db: Session, tenant_id: str) -> list[dict]:
@@ -172,6 +183,11 @@ def _envios_email_de_campanhas(db: Session, tenant_id: str) -> list[dict]:
         .order_by(CampanhaDestinatario.criado_em.desc())
         .all()
     )
+    # Contatos e empresas de uma vez só (a campanha pode ter centenas de destinatários: uma consulta por linha deixava a tela lenta).
+    ids_decisores = {destinatario.decisor_id for destinatario, _ in linhas if destinatario.decisor_id is not None}
+    decisores = {d.id: d for d in db.query(Decisor).filter(Decisor.id.in_(ids_decisores)).all()} if ids_decisores else {}
+    ids_contas = {d.conta_id for d in decisores.values()}
+    contas = {c.id: c for c in db.query(Conta).filter(Conta.id.in_(ids_contas)).all()} if ids_contas else {}
     resultado = []
     for destinatario, campanha in linhas:
         # `CampanhaDestinatario.status` é combinado entre os canais da
@@ -184,12 +200,13 @@ def _envios_email_de_campanhas(db: Session, tenant_id: str) -> list[dict]:
         status, detalhe = _classificar_destinatario_campanha(destinatario)
         conta_nome = None
         conta_id = None
-        if destinatario.decisor_id is not None:
-            decisor = db.query(Decisor).filter_by(id=destinatario.decisor_id).one_or_none()
-            if decisor is not None:
-                conta_id = decisor.conta_id
-                conta = db.query(Conta).filter_by(id=decisor.conta_id).one_or_none()
-                conta_nome = (conta.nome_fantasia or conta.nome) if conta is not None else None
+        decisor = decisores.get(destinatario.decisor_id) if destinatario.decisor_id is not None else None
+        if decisor is not None:
+            conta_id = decisor.conta_id
+            conta = contas.get(decisor.conta_id)
+            conta_nome = (conta.nome_fantasia or conta.nome) if conta is not None else None
+        elif destinatario.empresa:
+            conta_nome = destinatario.empresa  # destinatário de lista colada: a empresa digitada
         resultado.append(
             {
                 "origem": "campanha",
@@ -241,10 +258,37 @@ def listar_envios_email(db: Session, tenant_id: str, status: str = "todos", limi
     }
 
 
+def _resumo_envios(db: Session, tenant_id: str) -> dict:
+    """Totais dos últimos 7 dias contados nos próprios envios (os mesmos da lista abaixo), não só nos retornos do provedor: sem o retorno do provedor
+    (conta SMTP própria) o contador de reputação fica em zero mesmo com centenas de e-mails enviados."""
+    corte = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=_JANELA_RESUMO_DIAS)
+    resumo = {"enviados": 0, "erros": 0, "nao_enviados": 0, "pendentes": 0}
+    for item in _envios_email_de_mensagens(db, tenant_id) + _envios_email_de_campanhas(db, tenant_id):
+        momento = item["enviado_em"] or item["criado_em"]
+        if momento is not None and momento.tzinfo is not None:
+            momento = momento.astimezone(UTC).replace(tzinfo=None)
+        if momento is None or momento < corte:
+            continue
+        if item["status"] in ("enviado", "aberto"):
+            resumo["enviados"] += 1
+        elif item["status"] == "erro":
+            resumo["erros"] += 1
+        elif item["status"] == "nao_enviado":
+            resumo["nao_enviados"] += 1
+        elif item["status"] == "pendente":
+            resumo["pendentes"] += 1
+    return resumo
+
+
 def obter(db: Session, tenant_id: str) -> dict:
     saude_email = reputacao_service.status_saude(db, tenant_id, "email")
+    # Com conta SMTP própria o provedor não devolve entrega/bounce/spam: as taxas abaixo ficam em zero sem querer dizer "nenhum problema".
+    saude_email["medido_pelo_provedor"] = db.execute(
+        select(ConfiguracaoEmailSmtp.id).where(ConfiguracaoEmailSmtp.tenant_id == tenant_id)
+    ).first() is None
     energia = panel_service.indicadores_energia(db, tenant_id, None, None)
     return {
+        "resumo_envios": _resumo_envios(db, tenant_id),
         "saude_email": saude_email,
         "taxa_abertura_email": energia["taxa_abertura_email"],
         "taxa_resposta_por_canal": energia["taxa_resposta_por_canal"],

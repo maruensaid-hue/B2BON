@@ -20,6 +20,7 @@ interface SaudeCanalEmail {
   limiar_bounce: number;
   limiar_spam: number;
   amostra_minima: number;
+  medido_pelo_provedor: boolean;
 }
 
 interface ContatoComBounce {
@@ -33,7 +34,15 @@ interface ContatoComBounce {
   bounce_em: string;
 }
 
+interface ResumoEnvios {
+  enviados: number;
+  erros: number;
+  nao_enviados: number;
+  pendentes: number;
+}
+
 interface RelatorioEntrega {
+  resumo_envios: ResumoEnvios;
   saude_email: SaudeCanalEmail;
   taxa_abertura_email: number | null;
   taxa_resposta_por_canal: Record<string, number>;
@@ -48,7 +57,7 @@ interface EnvioEmail {
   nome: string;
   email: string | null;
   conta_nome: string | null;
-  status: "erro" | "enviado" | "aberto" | "pendente" | "cancelado";
+  status: "erro" | "enviado" | "aberto" | "pendente" | "nao_enviado" | "cancelado";
   detalhe: string | null;
   enviado_em: string | null;
   criado_em: string;
@@ -68,6 +77,7 @@ const ABAS_STATUS: { valor: string; rotulo: string }[] = [
   { valor: "enviado", rotulo: "Enviado" },
   { valor: "aberto", rotulo: "Aberto" },
   { valor: "pendente", rotulo: "Pendente" },
+  { valor: "nao_enviado", rotulo: "Não enviado" },
   { valor: "cancelado", rotulo: "Cancelado" },
 ];
 
@@ -76,6 +86,7 @@ const TOM_STATUS: Record<string, "red" | "green" | "violet" | "amber" | "muted">
   enviado: "green",
   aberto: "violet",
   pendente: "amber",
+  nao_enviado: "muted",
   cancelado: "muted",
 };
 
@@ -84,6 +95,7 @@ const ROTULO_STATUS: Record<string, string> = {
   enviado: "Enviado",
   aberto: "Aberto",
   pendente: "Pendente",
+  nao_enviado: "Não enviado",
   cancelado: "Cancelado",
 };
 
@@ -187,6 +199,8 @@ export function RelatorioEntrega() {
   }
 
   const saude = relatorio?.saude_email;
+  const resumo = relatorio?.resumo_envios;
+  const medidoPeloProvedor = saude?.medido_pelo_provedor ?? true;
   const totalPaginas = envios ? Math.max(1, Math.ceil(envios.total / LIMITE_POR_PAGINA)) : 1;
 
   return (
@@ -211,18 +225,31 @@ export function RelatorioEntrega() {
           <SectionLabel>E-mail — últimos 7 dias</SectionLabel>
           <Badge tone={saude?.pausado ? "red" : "green"}>{saude?.pausado ? "Pausado" : "Saudável"}</Badge>
         </div>
-        <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          <KpiCard label="Enviados" value={saude?.enviados ?? "—"} />
+        <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+          <KpiCard label="Enviados" value={resumo?.enviados ?? "—"} sub="e-mails que saíram" />
+          <KpiCard
+            label="Com erro"
+            value={resumo?.erros ?? "—"}
+            sub="recusados no envio"
+            colorClassName={resumo && resumo.erros > 0 ? "text-red" : "text-cyan"}
+          />
+          <KpiCard label="Não enviados" value={resumo?.nao_enviados ?? "—"} sub="sem e-mail válido" />
           <KpiCard
             label="Taxa de bounce"
-            value={saude ? paraPercentual(saude.taxa_bounce) : "—"}
-            sub={saude ? `limite: ${paraPercentual(saude.limiar_bounce)} (vale a partir de ${saude.amostra_minima} envios)` : undefined}
+            value={saude ? (medidoPeloProvedor ? paraPercentual(saude.taxa_bounce) : "não medido") : "—"}
+            sub={
+              saude
+                ? medidoPeloProvedor
+                  ? `limite: ${paraPercentual(saude.limiar_bounce)} (vale a partir de ${saude.amostra_minima} envios)`
+                  : "sua conta de e-mail não devolve bounce ao sistema"
+                : undefined
+            }
             colorClassName={saude?.pausado ? "text-red" : "text-cyan"}
           />
           <KpiCard
             label="Taxa de spam"
-            value={saude ? paraPercentual(saude.taxa_spam) : "—"}
-            sub={saude ? `limite: ${paraPercentual(saude.limiar_spam)}` : undefined}
+            value={saude ? (medidoPeloProvedor ? paraPercentual(saude.taxa_spam) : "não medido") : "—"}
+            sub={saude && medidoPeloProvedor ? `limite: ${paraPercentual(saude.limiar_spam)}` : undefined}
           />
           <KpiCard label="Taxa de abertura" value={paraPercentual(relatorio?.taxa_abertura_email)} colorClassName="text-violet" />
         </div>
@@ -253,8 +280,10 @@ export function RelatorioEntrega() {
         <div className="mt-3 text-[11px] text-muted">
           WhatsApp e LinkedIn não têm confirmação de entrega/leitura rastreada — só a taxa de resposta acima é
           medida pra esses dois canais. A pausa automática por bounce depende do retorno do provedor de envio e só
-          considera e-mails de cadência e campanha. Contas com SMTP próprio não recebem esse retorno — nesse caso,
-          falhas imediatas de envio aparecem como "Erro" no detalhamento abaixo.
+          considera e-mails de cadência e campanha. Contas com SMTP próprio (como o Gmail) não recebem esse retorno: o
+          sistema só vê a recusa que o servidor de e-mail dá na hora do envio, que aparece como "Erro" ou "Não enviado" no
+          detalhamento abaixo. Um endereço que não existe costuma ser recusado depois, com um aviso de falha na sua caixa
+          de entrada, e esse aviso o sistema ainda não lê.
         </div>
       </Card>
 

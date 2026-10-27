@@ -14,6 +14,8 @@ class SaudeCanalEmailSchema(BaseModel):
     limiar_bounce: float
     limiar_spam: float
     amostra_minima: int
+    # False com conta SMTP própria: o provedor não devolve bounce/spam, então as taxas em zero não provam nada.
+    medido_pelo_provedor: bool = True
 
 
 class ContatoComBounceSchema(BaseModel):
@@ -27,12 +29,20 @@ class ContatoComBounceSchema(BaseModel):
     bounce_em: datetime
 
 
+class ResumoEnviosSchema(BaseModel):
+    enviados: int = 0
+    erros: int = 0
+    nao_enviados: int = 0
+    pendentes: int = 0
+
+
 class RelatorioEntregaSchema(BaseModel):
     """Raio-X 2026-09-16 — combina o que já existia disperso (saúde do
     canal de e-mail, taxa de abertura, taxa de resposta por canal) com a
     lista de contatos que efetivamente causaram bounce, antes só um
     contador agregado sem saber quem."""
 
+    resumo_envios: ResumoEnviosSchema = ResumoEnviosSchema()
     saude_email: SaudeCanalEmailSchema
     taxa_abertura_email: float | None
     taxa_resposta_por_canal: dict[str, float]
@@ -47,7 +57,7 @@ class EnvioEmailSchema(BaseModel):
     nome: str
     email: str | None
     conta_nome: str | None
-    status: str  # erro | enviado | aberto | pendente | cancelado
+    status: str  # erro | enviado | aberto | pendente | nao_enviado | cancelado
     detalhe: str | None
     enviado_em: datetime | None
     criado_em: datetime
