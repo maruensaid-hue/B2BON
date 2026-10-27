@@ -53,6 +53,7 @@ APROVADAS = {
     ("POST", "/api/v1/webhooks/mercadopago"): "webhook_assinado",
     ("POST", "/api/v1/webhooks/recall/eventos"): "webhook_assinado",
     ("POST", "/api/v1/webhooks/reputacao"): "segredo_interno",
+    ("POST", "/api/v1/webhooks/envio/eventos"): "webhook_assinado",
     ("POST", "/api/v1/webhooks/sendgrid/eventos"): "webhook_assinado",
     ("POST", "/api/v1/webhooks/whatsapp"): "segredo_interno",
     ("GET", "/api/v1/webhooks/whatsapp/meta"): "handshake_meta",
