@@ -1,5 +1,10 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Campanha: acentos corrompidos na lista colada são consertados (2026-10-27, D-106)
+
+- Ao colar uma lista de planilha aberta com a codificação errada ("JoÃ£o", "BoticÃ¡rio"), o nome, o telefone e a empresa são consertados na entrada ("João", "Boticário"). Texto que já está correto não é alterado.
+- A lista da campanha 115 foi corrigida no banco.
+
 ## Campanha: empresa na lista colada (2026-10-27, D-106)
 
 - A lista colada de destinatários aceita a empresa: quarta coluna (Nome, E-mail, Telefone, Empresa) ou uma coluna com o cabeçalho "Empresa". Sem cabeçalho, o que não for número de telefone vira empresa.

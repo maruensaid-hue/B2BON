@@ -7,6 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.texto import corrigir_codificacao
 from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.conta import Conta
 from app.models.decisor import Decisor
@@ -217,11 +218,14 @@ def adicionar_avulsos(
     }
 
     adicionados: list[CampanhaDestinatario] = []
+    corrigidos = 0
     for item in destinatarios:
-        nome = item.nome.strip()
+        # Texto colado de planilha aberta com a codificação errada ("JoÃ£o") é consertado na entrada, para o e-mail não sair com o nome estragado.
+        nome = (corrigir_codificacao(item.nome) or "").strip()
+        telefone = (corrigir_codificacao(item.telefone) or "").strip() or None
+        empresa = (corrigir_codificacao(item.empresa) or "").strip() or None
+        corrigidos += (nome, telefone, empresa) != (item.nome.strip(), (item.telefone or "").strip() or None, (item.empresa or "").strip() or None)
         email = (item.email or "").strip() or None
-        telefone = (item.telefone or "").strip() or None
-        empresa = (item.empresa or "").strip() or None
         if not nome or not (email or telefone):
             continue
         if email and email.lower() in ja_existentes:
@@ -242,7 +246,7 @@ def adicionar_avulsos(
         "campanha",
         campanha.id,
         ator_id,
-        {"quantidade": len(adicionados), "origem": "avulso"},
+        {"quantidade": len(adicionados), "origem": "avulso", "codificacao_corrigida": corrigidos},
     )
     db.commit()
     for destinatario in adicionados:

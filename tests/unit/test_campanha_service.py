@@ -685,3 +685,23 @@ def test_destinatario_antigo_sem_empresa_guardada_ainda_usa_o_cadastro(db_sessio
     db_session.commit()
 
     assert campanha_service.previa(db_session, TENANT_ID, campanha_id)["assunto"] == "Novidade para a Empresa de Antigo Souza"
+
+
+def test_lista_colada_com_acentos_corrompidos_e_consertada_na_entrada(db_session):
+    campanha_id = _campanha_personalizada(db_session)
+
+    adicionados = campanha_service.adicionar_avulsos(
+        db_session, TENANT_ID, None, campanha_id,
+        [
+            DestinatarioAvulsoSchema(nome="JoÃ£o Paulo", email="a@teste.com", empresa="Grupo BoticÃ¡rio"),
+            DestinatarioAvulsoSchema(nome="Ana Lima", email="b@teste.com", empresa="ValCity â€” ServiÃ§os"),
+            DestinatarioAvulsoSchema(nome="José SÃO PAULO", email="c@teste.com", empresa="CÂMBIO Ltda"),
+        ],
+    )
+
+    assert (adicionados[0].nome, adicionados[0].empresa) == ("João Paulo", "Grupo Boticário")
+    assert adicionados[1].empresa == "ValCity — Serviços"
+    assert (adicionados[2].nome, adicionados[2].empresa) == ("José SÃO PAULO", "CÂMBIO Ltda")  # texto correto passa intacto
+
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    assert campanha_service.previa(db_session, TENANT_ID, campanha_id)["corpo"].startswith("Olá, João,")
