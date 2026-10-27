@@ -415,3 +415,44 @@ def test_recusa_definitiva_continua_marcando_o_destinatario_como_falha(db_sessio
 
     assert resultado["falhas"] == 1 and resultado["enviadas"] == 1
     assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "concluida"
+
+
+def test_voltar_para_rascunho_devolve_as_falhas_a_fila_e_preserva_quem_ja_recebeu(db_session):
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 3)
+    fake_email = FakeEmailProvider()
+    fake_email.falhar_proximos = 1
+    campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
+    antes = [d.status for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)]
+    assert antes.count("falhou") == 1 and antes.count("enviado") == 2
+
+    campanha = campanha_service.voltar_para_rascunho(db_session, TENANT_ID, None, campanha_id)
+
+    assert campanha.status == "rascunho"
+    depois = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)
+    assert sorted(d.status for d in depois) == ["enviado", "enviado", "pendente"]
+    assert all(d.motivo_falha is None for d in depois)
+
+    campanha_service.atualizar(db_session, TENANT_ID, None, campanha_id, "Campanha Teste", "marketing", ["email"], "Novo assunto", "Novo corpo", None)
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    reenvio = FakeEmailProvider()
+    resultado = campanha_service.processar_pendentes(db_session, TENANT_ID, reenvio, FakeWhatsAppProvider())
+    assert resultado["enviadas"] == 1 and len(reenvio.envios) == 1  # só quem faltava
+    assert reenvio.envios[0]["assunto"] == "Novo assunto" and "Novo corpo" in reenvio.envios[0]["corpo"]
+
+
+def test_voltar_para_rascunho_durante_o_envio_faz_o_envio_parar(db_session):
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 4)
+
+    class _PausaNoSegundo(FakeEmailProvider):
+        def enviar(self, *args, **kwargs):
+            if len(self.envios) == 1:
+                campanha_service.voltar_para_rascunho(db_session, TENANT_ID, None, campanha_id)
+            return super().enviar(*args, **kwargs)
+
+    fake_email = _PausaNoSegundo()
+    campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
+
+    assert len(fake_email.envios) == 2  # o que estava em andamento termina; os seguintes não saem
+    campanha = campanha_service.obter(db_session, TENANT_ID, campanha_id)
+    assert campanha.status == "rascunho" and campanha.processando_ate is None
+    assert [d.status for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)].count("pendente") == 2

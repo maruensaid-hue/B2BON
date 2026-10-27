@@ -118,6 +118,16 @@ def atualizar_campanha(
     )
 
 
+@router.post("/{campanha_id}/voltar-para-rascunho", response_model=CampanhaSchema)
+def voltar_para_rascunho(
+    campanha_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> CampanhaSchema:
+    return campanha_service.voltar_para_rascunho(db, tenant_id, ator_id, campanha_id)
+
+
 @router.delete("/{campanha_id}", status_code=204)
 def excluir_campanha(
     campanha_id: int,

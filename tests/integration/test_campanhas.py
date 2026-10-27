@@ -150,3 +150,28 @@ def test_marcar_pronta_comeca_o_envio_logo_em_seguida(client, db_session, fake_e
     assert [e["destinatario"] for e in fake_email.envios] == ["fulano@teste.com"]
     detalhe = client.get(f"/api/v1/campanhas/{criada['id']}").json()
     assert detalhe["status"] == "concluida" and detalhe["metricas"]["enviado"] == 1
+
+
+def test_voltar_para_rascunho_pela_api_permite_editar_o_conteudo(client):
+    decisor_id = _criar_decisor(client)
+    criada = client.post(
+        "/api/v1/campanhas",
+        json={"nome": "Editavel", "tipo": "marketing", "canais": ["email"], "assunto": "Antigo", "conteudo_email": "Corpo antigo"},
+    ).json()
+    client.post(f"/api/v1/campanhas/{criada['id']}/destinatarios/decisores", json={"decisor_ids": [decisor_id]})
+    client.post(f"/api/v1/campanhas/{criada['id']}/marcar-pronta")
+    bloqueada = client.put(
+        f"/api/v1/campanhas/{criada['id']}",
+        json={"nome": "Editavel", "tipo": "marketing", "canais": ["email"], "assunto": "Novo", "conteudo_email": "Corpo novo"},
+    )
+    assert bloqueada.status_code in (400, 409, 422)  # pronta: só edita depois de voltar ao rascunho
+
+    voltou = client.post(f"/api/v1/campanhas/{criada['id']}/voltar-para-rascunho")
+    assert voltou.status_code == 200 and voltou.json()["status"] == "rascunho"
+
+    editada = client.put(
+        f"/api/v1/campanhas/{criada['id']}",
+        json={"nome": "Editavel", "tipo": "marketing", "canais": ["email"], "assunto": "Novo", "conteudo_email": "Corpo novo"},
+    )
+    assert editada.status_code == 200
+    assert editada.json()["assunto"] == "Novo" and editada.json()["conteudo_email"] == "Corpo novo"

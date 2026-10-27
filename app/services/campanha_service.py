@@ -272,6 +272,23 @@ def marcar_pronta(db: Session, tenant_id: str, ator_id: str | None, campanha_id:
     return campanha
 
 
+def voltar_para_rascunho(db: Session, tenant_id: str, ator_id: str | None, campanha_id: int) -> Campanha:
+    """Devolve a campanha ao rascunho para o conteúdo ser editado antes de (re)enviar. Quem já recebeu continua `enviado` e não recebe de novo; os
+    que falharam voltam à fila (`pendente`). Um envio em andamento para no destinatário seguinte."""
+    campanha = obter(db, tenant_id, campanha_id)
+    if campanha.status == "rascunho":
+        return campanha
+    db.query(CampanhaDestinatario).filter_by(campanha_id=campanha.id, tenant_id=tenant_id, status="falhou").update(
+        {"status": "pendente", "motivo_falha": None}, synchronize_session=False
+    )
+    campanha.status = "rascunho"
+    campanha.processando_ate = None
+    auditoria_service.registrar(db, tenant_id, "campanha_voltou_para_rascunho", "campanha", campanha.id, ator_id, {})
+    db.commit()
+    db.refresh(campanha)
+    return campanha
+
+
 def _agora() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -329,6 +346,9 @@ def _enviar_pendentes(
     algum_adiado = False
     interrompido = False
     for destinatario_id in ids_pendentes:
+        db.refresh(campanha)
+        if campanha.status not in ("pronta", "enviando"):
+            break  # a campanha voltou ao rascunho (edição) durante o envio: para sem mexer no que o usuário acabou de ajustar
         destinatario = db.get(CampanhaDestinatario, destinatario_id)
         if destinatario is None or destinatario.status != "pendente":
             continue  # saiu da lista (descadastro, remoção) desde a consulta
@@ -363,7 +383,9 @@ def _enviar_pendentes(
 
     # Com algum adiado a campanha volta pro ciclo seguinte (fica "enviando", não "concluida") até o canal reabrir — senão
     # "concluida" com destinatários ainda "pendente" nunca mais seria reprocessada.
-    campanha.status = "enviando" if algum_adiado else "concluida"
+    db.refresh(campanha)
+    if campanha.status in ("pronta", "enviando"):  # não sobrescreve um rascunho que o usuário acabou de abrir para editar
+        campanha.status = "enviando" if algum_adiado else "concluida"
     campanha.processando_ate = None
     db.commit()
 

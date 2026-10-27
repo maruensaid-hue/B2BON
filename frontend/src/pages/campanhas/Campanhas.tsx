@@ -153,6 +153,9 @@ export function Campanhas() {
   const [modalCriarAberto, setModalCriarAberto] = useState(false);
   const [adicionandoDestinatarios, setAdicionandoDestinatarios] = useState(false);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+  const [confirmandoEdicao, setConfirmandoEdicao] = useState(false);
+  const [modalEditarAberto, setModalEditarAberto] = useState(false);
+  const [canaisEdicao, setCanaisEdicao] = useState<Set<string>>(new Set(["email"]));
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
 
@@ -342,6 +345,64 @@ export function Campanhas() {
     }
   }
 
+  function abrirEdicao() {
+    if (!campanhaSelecionada) return;
+    setCanaisEdicao(new Set(campanhaSelecionada.canais));
+    setConfirmandoEdicao(false);
+    setModalEditarAberto(true);
+  }
+
+  // Campanha já pronta/enviando/concluída só pode ser editada como rascunho: quem já recebeu não recebe de novo e quem falhou volta para a fila.
+  async function voltarParaRascunhoEEditar() {
+    if (campanhaSelecionadaId === null) return;
+    setErro(null);
+    try {
+      await api.post(`/campanhas/${campanhaSelecionadaId}/voltar-para-rascunho`);
+      await carregarCampanhas();
+      await carregarDetalhe(campanhaSelecionadaId);
+      abrirEdicao();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível voltar a campanha para rascunho.");
+    }
+  }
+
+  function alternarCanalEdicao(canal: string) {
+    setCanaisEdicao((atual) => {
+      const nova = new Set(atual);
+      if (nova.has(canal)) nova.delete(canal);
+      else nova.add(canal);
+      return nova;
+    });
+  }
+
+  async function salvarEdicao(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (campanhaSelecionadaId === null) return;
+    const form = new FormData(event.currentTarget);
+    const canais = Array.from(canaisEdicao);
+    if (canais.length === 0) {
+      setErro("Selecione ao menos um canal.");
+      return;
+    }
+    setErro(null);
+    try {
+      await api.put(`/campanhas/${campanhaSelecionadaId}`, {
+        nome: String(form.get("nome")),
+        tipo: String(form.get("tipo")),
+        canais,
+        assunto: canais.includes("email") ? String(form.get("assunto") || "") || null : null,
+        conteudo_email: canais.includes("email") ? String(form.get("conteudo_email") || "") || null : null,
+        template_whatsapp_id: canais.includes("whatsapp") ? String(form.get("template_whatsapp_id") || "") || null : null,
+      });
+      setModalEditarAberto(false);
+      setMensagem("Campanha atualizada. Revise e clique em “Marcar como pronta” para enviar.");
+      await carregarCampanhas();
+      await carregarDetalhe(campanhaSelecionadaId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível salvar a campanha.");
+    }
+  }
+
   async function excluirCampanha() {
     if (campanhaSelecionadaId === null) return;
     setErro(null);
@@ -408,6 +469,29 @@ export function Campanhas() {
               <SectionLabel>{campanhaSelecionada.nome}</SectionLabel>
               <div className="flex items-center gap-2">
                 <Badge tone={toneStatusCampanha(campanhaSelecionada.status)}>{campanhaSelecionada.status}</Badge>
+                {!confirmandoExclusao && !confirmandoEdicao && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    data-tutorial-id="campanhas:editar"
+                    onClick={() => (campanhaSelecionada.status === "rascunho" ? abrirEdicao() : setConfirmandoEdicao(true))}
+                  >
+                    Editar e-mail e dados
+                  </Button>
+                )}
+                {confirmandoEdicao && (
+                  <>
+                    <span className="max-w-[320px] text-[11px] text-muted">
+                      Para editar, a campanha volta para rascunho. Quem já recebeu não recebe de novo; os que falharam voltam para a fila.
+                    </span>
+                    <Button size="sm" onClick={voltarParaRascunhoEEditar}>
+                      Continuar
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmandoEdicao(false)}>
+                      Cancelar
+                    </Button>
+                  </>
+                )}
                 {campanhaSelecionada.status === "rascunho" && !confirmandoExclusao && (
                   <>
                     <Button size="sm" data-tutorial-id="campanhas:pronta" onClick={marcarPronta}>
@@ -441,6 +525,13 @@ export function Campanhas() {
               {campanhaSelecionada.assunto && <span>· Assunto: {campanhaSelecionada.assunto}</span>}
               {campanhaSelecionada.template_whatsapp_id && <span>· Template: {campanhaSelecionada.template_whatsapp_id}</span>}
             </div>
+            {campanhaSelecionada.canais.includes("email") && campanhaSelecionada.conteudo_email && (
+              <details className="mt-2 rounded-lg border border-border p-2 text-[12px]">
+                <summary className="cursor-pointer text-muted">Ver o texto do e-mail</summary>
+                <div className="mt-2 font-semibold">{campanhaSelecionada.assunto}</div>
+                <div className="mt-1 whitespace-pre-wrap text-muted">{campanhaSelecionada.conteudo_email}</div>
+              </details>
+            )}
 
             <div className="mt-3 grid grid-cols-4 gap-2">
               {Object.entries(detalhe.metricas).map(([chave, valor]) => (
@@ -683,6 +774,67 @@ export function Campanhas() {
             Criar campanha
           </Button>
         </form>
+      </Modal>
+
+      <Modal title="Editar campanha" open={modalEditarAberto} onClose={() => setModalEditarAberto(false)}>
+        {campanhaSelecionada && (
+          <form key={campanhaSelecionada.id} onSubmit={salvarEdicao} className="flex flex-col gap-3">
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome</div>
+              <Input name="nome" required defaultValue={campanhaSelecionada.nome} />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Tipo</div>
+              <Select name="tipo" defaultValue={campanhaSelecionada.tipo}>
+                <option value="marketing">Marketing</option>
+                <option value="vendas">Vendas</option>
+              </Select>
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Canais</div>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-1.5 text-[12px]">
+                  <input type="checkbox" checked={canaisEdicao.has("email")} onChange={() => alternarCanalEdicao("email")} />
+                  E-mail
+                </label>
+                <label className="flex items-center gap-1.5 text-[12px]">
+                  <input type="checkbox" checked={canaisEdicao.has("whatsapp")} onChange={() => alternarCanalEdicao("whatsapp")} />
+                  WhatsApp
+                </label>
+              </div>
+            </div>
+            {canaisEdicao.has("email") && (
+              <>
+                <div>
+                  <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Assunto do e-mail</div>
+                  <Input name="assunto" required defaultValue={campanhaSelecionada.assunto ?? ""} />
+                </div>
+                <div>
+                  <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Conteúdo do e-mail</div>
+                  <Textarea name="conteudo_email" required rows={8} defaultValue={campanhaSelecionada.conteudo_email ?? ""} />
+                </div>
+              </>
+            )}
+            {canaisEdicao.has("whatsapp") && (
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Template do WhatsApp (aprovado)</div>
+                <Select name="template_whatsapp_id" required defaultValue={campanhaSelecionada.template_whatsapp_id ?? ""}>
+                  <option value="" disabled>
+                    Selecione um template
+                  </option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.nome}>
+                      {template.nome}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+            <Button type="submit" className="mt-1 w-full justify-center">
+              Salvar alterações
+            </Button>
+          </form>
+        )}
       </Modal>
 
       <TutorialCampanhas open={tutorialAberto} onClose={fecharTutorial} />
