@@ -221,3 +221,18 @@ def test_previa_da_campanha_pela_api(client):
     assert resposta.status_code == 200
     assert resposta.json() == {"destinatario_nome": "Maria da Silva", "assunto": "Oi Maria", "corpo": "Olá, Maria,\nA a sua empresa."}
     assert client.get("/api/v1/campanhas/999999/previa").status_code == 404
+
+
+def test_lista_colada_guarda_a_empresa_e_a_previa_usa(client):
+    criada = client.post(
+        "/api/v1/campanhas",
+        json={"nome": "Com empresa", "tipo": "marketing", "canais": ["email"], "assunto": "Para [Empresa]", "conteudo_email": "Olá, [Nome]."},
+    ).json()
+    adicionados = client.post(
+        f"/api/v1/campanhas/{criada['id']}/destinatarios/avulsos",
+        json={"destinatarios": [{"nome": "Maria Souza", "email": "maria@teste.com", "empresa": "Acme"}]},
+    )
+
+    assert adicionados.status_code == 201 and adicionados.json()[0]["empresa"] == "Acme"
+    assert client.get(f"/api/v1/campanhas/{criada['id']}/previa").json()["assunto"] == "Para Acme"
+    assert client.get(f"/api/v1/campanhas/{criada['id']}").json()["destinatarios"][0]["empresa"] == "Acme"

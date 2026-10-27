@@ -165,6 +165,7 @@ def adicionar_de_decisores(
         decisor = db.query(Decisor).filter_by(id=decisor_id, tenant_id=tenant_id).one_or_none()
         if decisor is None or optout_service.existe_supressao(db, decisor.id):
             continue
+        conta = db.query(Conta).filter_by(id=decisor.conta_id, tenant_id=tenant_id).one_or_none()
         destinatario = CampanhaDestinatario(
             tenant_id=tenant_id,
             campanha_id=campanha.id,
@@ -172,6 +173,7 @@ def adicionar_de_decisores(
             nome=decisor.nome,
             email=decisor.email,
             telefone=decisor.telefone,
+            empresa=(conta.nome_fantasia or conta.nome) if conta is not None else None,
         )
         db.add(destinatario)
         adicionados.append(destinatario)
@@ -219,12 +221,13 @@ def adicionar_avulsos(
         nome = item.nome.strip()
         email = (item.email or "").strip() or None
         telefone = (item.telefone or "").strip() or None
+        empresa = (item.empresa or "").strip() or None
         if not nome or not (email or telefone):
             continue
         if email and email.lower() in ja_existentes:
             continue
         destinatario = CampanhaDestinatario(
-            tenant_id=tenant_id, campanha_id=campanha.id, decisor_id=None, nome=nome, email=email, telefone=telefone
+            tenant_id=tenant_id, campanha_id=campanha.id, decisor_id=None, nome=nome, email=email, telefone=telefone, empresa=empresa
         )
         db.add(destinatario)
         adicionados.append(destinatario)
@@ -447,7 +450,10 @@ def _enviar_pendentes(
 
 
 def _empresa_do_destinatario(db: Session, destinatario: CampanhaDestinatario) -> str | None:
-    """Empresa do cadastro (nome fantasia, senão razão social) do contato de origem; destinatário avulso não tem empresa."""
+    """Empresa do destinatário: a guardada na campanha (lista colada ou cópia do cadastro) e, nos antigos sem ela, o cadastro do contato de origem
+    (nome fantasia, senão razão social)."""
+    if destinatario.empresa:
+        return destinatario.empresa
     if destinatario.decisor_id is None:
         return None
     conta = (

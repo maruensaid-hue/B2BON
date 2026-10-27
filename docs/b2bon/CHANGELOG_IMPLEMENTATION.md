@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Campanha: empresa na lista colada (2026-10-27, D-106)
+
+- A lista colada de destinatários aceita a empresa: quarta coluna (Nome, E-mail, Telefone, Empresa) ou uma coluna com o cabeçalho "Empresa". Sem cabeçalho, o que não for número de telefone vira empresa.
+- O `[Empresa]` do e-mail passa a trazer essa empresa; antes só funcionava para contatos do CRM, e a lista colada sempre recebia "a sua empresa".
+- A tabela de destinatários mostra a coluna Empresa.
+
 ## Campanha: [Nome] e [Empresa] no e-mail (2026-10-27, D-106)
 
 - O texto e o assunto do e-mail da campanha aceitam `[Nome]` (primeiro nome), `[Nome completo]` e `[Empresa]`, trocados pelos dados de cada destinatário na hora do envio.

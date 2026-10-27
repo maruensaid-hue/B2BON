@@ -51,6 +51,8 @@ class CampanhaDestinatario(Base):
     nome: Mapped[str] = mapped_column(String)
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     telefone: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Empresa para o marcador [Empresa] do e-mail: digitada na lista colada ou copiada do cadastro quando veio de um contato do CRM.
+    empresa: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default="pendente")  # pendente | enviado | falhou | optout | retido (fora da rodada de envio parcial)
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     motivo_falha: Mapped[str | None] = mapped_column(String, nullable=True)

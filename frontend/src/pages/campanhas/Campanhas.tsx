@@ -27,6 +27,7 @@ interface CampanhaDestinatario {
   nome: string;
   email: string | null;
   telefone: string | null;
+  empresa: string | null;
   status: string;
   motivo_falha: string | null;
 }
@@ -49,7 +50,7 @@ interface TemplateWhatsApp {
   status: string;
 }
 
-type CampoDestinatario = "nome" | "email" | "telefone";
+type CampoDestinatario = "nome" | "email" | "telefone" | "empresa";
 
 const SINONIMOS_DESTINATARIO: Record<string, CampoDestinatario> = {
   nome: "nome",
@@ -62,6 +63,10 @@ const SINONIMOS_DESTINATARIO: Record<string, CampoDestinatario> = {
   fone: "telefone",
   celular: "telefone",
   whatsapp: "telefone",
+  empresa: "empresa",
+  "razao social": "empresa",
+  organizacao: "empresa",
+  company: "empresa",
 };
 
 function normalizarCabecalho(texto: string): string {
@@ -85,7 +90,7 @@ function detectarMapaColunas(primeiraLinha: string, separador: string): CampoDes
 /** Aceita colar direto do Excel/Planilhas (TAB) ou CSV (`;`/`,`) — uma
  * linha por destinatário. Mesmo mecanismo de detecção de cabeçalho de
  * `Prospeccao.tsx::parseParticipantes`, adaptado sem exigir "empresa". */
-function parseDestinatarios(texto: string): { nome: string; email?: string; telefone?: string }[] {
+function parseDestinatarios(texto: string): { nome: string; email?: string; telefone?: string; empresa?: string }[] {
   const linhas = texto
     .split("\n")
     .map((linha) => linha.trim())
@@ -101,11 +106,26 @@ function parseDestinatarios(texto: string): { nome: string; email?: string; tele
       const separador = linha.includes("\t") ? "\t" : linha.includes(";") ? ";" : ",";
       const campos = linha.split(separador).map((campo) => campo.trim());
       const valores: Partial<Record<CampoDestinatario, string>> = {};
-      const ordem: CampoDestinatario[] = mapaCabecalho ?? ["nome", "email", "telefone"];
-      ordem.forEach((campo, indice) => {
-        if (campo && campos[indice]) valores[campo] = campos[indice];
-      });
-      return { nome: valores.nome ?? "", email: valores.email || undefined, telefone: valores.telefone || undefined };
+      if (mapaCabecalho) {
+        mapaCabecalho.forEach((campo, indice) => {
+          if (campo && campos[indice]) valores[campo] = campos[indice];
+        });
+      } else {
+        // Sem cabeçalho: nome, e-mail e, nas colunas seguintes, o que parece número é telefone e o resto é empresa.
+        if (campos[0]) valores.nome = campos[0];
+        if (campos[1]) valores.email = campos[1];
+        for (const extra of campos.slice(2)) {
+          if (!extra) continue;
+          if (extra.replace(/\D/g, "").length >= 8 && !valores.telefone) valores.telefone = extra;
+          else if (!valores.empresa) valores.empresa = extra;
+        }
+      }
+      return {
+        nome: valores.nome ?? "",
+        email: valores.email || undefined,
+        telefone: valores.telefone || undefined,
+        empresa: valores.empresa || undefined,
+      };
     })
     .filter((destinatario) => destinatario.nome && (destinatario.email || destinatario.telefone));
 }
@@ -706,8 +726,12 @@ export function Campanhas() {
                   <Textarea
                     name="lista"
                     rows={6}
-                    placeholder={"Nome, E-mail, Telefone\nFulano de Tal, fulano@empresa.com, 11999999999"}
+                    placeholder={"Nome, E-mail, Telefone, Empresa\nFulano de Tal, fulano@empresa.com, 11999999999, Acme Ltda"}
                   />
+                  <div className="text-[10px] text-muted">
+                    Colunas: Nome, E-mail, Telefone e Empresa (a empresa é opcional e alimenta o [Empresa] do e-mail). Sem cabeçalho, o que não for número de
+                    telefone vira empresa; com cabeçalho, use os nomes das colunas.
+                  </div>
                   <Button type="submit" disabled={adicionandoDestinatarios}>
                     {adicionandoDestinatarios ? "Adicionando..." : "Adicionar lista"}
                   </Button>
@@ -741,6 +765,7 @@ export function Campanhas() {
                   <th className="p-2 text-left">Nome</th>
                   <th className="p-2 text-left">E-mail</th>
                   <th className="p-2 text-left">Telefone</th>
+                  <th className="p-2 text-left">Empresa</th>
                   <th className="p-2 text-left">Status</th>
                   {campanhaSelecionada.status === "rascunho" && <th className="p-2 text-left">Ações</th>}
                 </tr>
@@ -762,6 +787,7 @@ export function Campanhas() {
                     <td className="p-2 font-semibold">{destinatario.nome}</td>
                     <td className="p-2 text-muted">{destinatario.email ?? "—"}</td>
                     <td className="p-2 text-muted">{destinatario.telefone ?? "—"}</td>
+                    <td className="p-2 text-muted">{destinatario.empresa ?? "—"}</td>
                     <td className="p-2">
                       <Badge tone={toneStatusDestinatario(destinatario.status)}>{rotuloStatusDestinatario(destinatario.status)}</Badge>
                       {destinatario.motivo_falha && (
@@ -779,7 +805,7 @@ export function Campanhas() {
                 ))}
                 {detalhe.destinatarios.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-4 text-center text-muted">
+                    <td colSpan={7} className="p-4 text-center text-muted">
                       Nenhum destinatário adicionado ainda.
                     </td>
                   </tr>

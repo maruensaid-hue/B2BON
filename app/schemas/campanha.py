@@ -12,6 +12,7 @@ class CampanhaDestinatarioSchema(BaseModel):
     nome: str
     email: str | None
     telefone: str | None
+    empresa: str | None = None
     status: str
     enviado_em: datetime | None
     motivo_falha: str | None
@@ -76,6 +77,7 @@ class DestinatarioAvulsoSchema(BaseModel):
     nome: str
     email: str | None = None
     telefone: str | None = None
+    empresa: str | None = None
 
 
 class AdicionarDestinatariosAvulsosRequestSchema(BaseModel):

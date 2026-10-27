@@ -641,3 +641,47 @@ def test_envio_adiado_por_falha_de_rede_mostra_o_motivo_no_destinatario_e_limpa_
     campanha_service.processar_pendentes(db_session, TENANT_ID, FakeEmailProvider(), FakeWhatsAppProvider())
 
     assert all(d.status == "enviado" and d.motivo_falha is None for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id))
+
+
+def test_lista_colada_com_empresa_usa_a_empresa_digitada_e_sem_empresa_cai_em_a_sua_empresa(db_session):
+    campanha_id = _campanha_personalizada(db_session)
+    adicionados = campanha_service.adicionar_avulsos(
+        db_session, TENANT_ID, None, campanha_id,
+        [
+            DestinatarioAvulsoSchema(nome="Maruen Said", email="com@teste.com", empresa="  CyberFort "),
+            DestinatarioAvulsoSchema(nome="Maruen Ghadieh", email="sem@teste.com", empresa="   "),
+        ],
+    )
+    assert [d.empresa for d in adicionados] == ["CyberFort", None]  # espaços sobrando e vazio não viram empresa
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+
+    fake_email = FakeEmailProvider()
+    campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
+
+    por_email = {e["destinatario"]: e for e in fake_email.envios}
+    assert por_email["com@teste.com"]["assunto"] == "Novidade para a CyberFort"
+    assert por_email["com@teste.com"]["corpo"].startswith("Olá, Maruen,\n\nUma conversa sobre a CyberFort.")
+    assert por_email["sem@teste.com"]["assunto"] == "Novidade para a a sua empresa"
+
+
+def test_contato_do_crm_guarda_a_empresa_do_cadastro_ao_entrar_na_campanha(db_session):
+    campanha_id = _campanha_personalizada(db_session)
+    decisor = _criar_decisor(db_session, "Carla Dias", email="carla@teste.com")
+
+    adicionados = campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+
+    assert adicionados[0].empresa == "Empresa de Carla Dias"
+    db_session.get(Conta, decisor.conta_id).nome = "Nome mudou depois"
+    db_session.commit()
+    assert campanha_service.previa(db_session, TENANT_ID, campanha_id)["assunto"] == "Novidade para a Empresa de Carla Dias"  # cópia do momento
+
+
+def test_destinatario_antigo_sem_empresa_guardada_ainda_usa_o_cadastro(db_session):
+    campanha_id = _campanha_personalizada(db_session)
+    decisor = _criar_decisor(db_session, "Antigo Souza", email="antigo@teste.com")
+    campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+    destinatario = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)[0]
+    destinatario.empresa = None  # linha criada antes da coluna existir
+    db_session.commit()
+
+    assert campanha_service.previa(db_session, TENANT_ID, campanha_id)["assunto"] == "Novidade para a Empresa de Antigo Souza"
