@@ -37,6 +37,8 @@ interface ContatoComBounce {
 
 interface ResumoEnvios {
   enviados: number;
+  entregues: number;
+  abertos: number;
   erros: number;
   nao_enviados: number;
   pendentes: number;
@@ -58,7 +60,7 @@ interface EnvioEmail {
   nome: string;
   email: string | null;
   conta_nome: string | null;
-  status: "erro" | "enviado" | "aberto" | "pendente" | "nao_enviado" | "cancelado";
+  status: "erro" | "enviado" | "entregue" | "aberto" | "pendente" | "nao_enviado" | "cancelado";
   detalhe: string | null;
   enviado_em: string | null;
   criado_em: string;
@@ -76,15 +78,17 @@ const ABAS_STATUS: { valor: string; rotulo: string }[] = [
   { valor: "todos", rotulo: "Todos" },
   { valor: "erro", rotulo: "Erro" },
   { valor: "enviado", rotulo: "Enviado" },
+  { valor: "entregue", rotulo: "Entregue" },
   { valor: "aberto", rotulo: "Aberto" },
   { valor: "pendente", rotulo: "Pendente" },
   { valor: "nao_enviado", rotulo: "Não enviado" },
   { valor: "cancelado", rotulo: "Cancelado" },
 ];
 
-const TOM_STATUS: Record<string, "red" | "green" | "violet" | "amber" | "muted"> = {
+const TOM_STATUS: Record<string, "red" | "green" | "violet" | "amber" | "muted" | "cyan"> = {
   erro: "red",
   enviado: "green",
+  entregue: "cyan",
   aberto: "violet",
   pendente: "amber",
   nao_enviado: "muted",
@@ -94,6 +98,7 @@ const TOM_STATUS: Record<string, "red" | "green" | "violet" | "amber" | "muted">
 const ROTULO_STATUS: Record<string, string> = {
   erro: "Erro",
   enviado: "Enviado",
+  entregue: "Entregue",
   aberto: "Aberto",
   pendente: "Pendente",
   nao_enviado: "Não enviado",
@@ -255,8 +260,14 @@ export function RelatorioEntrega() {
           <SectionLabel>E-mail — últimos 7 dias</SectionLabel>
           <Badge tone={saude?.pausado ? "red" : "green"}>{saude?.pausado ? "Pausado" : "Saudável"}</Badge>
         </div>
-        <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           <KpiCard label="Enviados" value={resumo?.enviados ?? "—"} sub="e-mails que saíram" />
+          <KpiCard
+            label="Entregues"
+            value={resumo ? (medidoPeloProvedor ? resumo.entregues : "não medido") : "—"}
+            sub={medidoPeloProvedor ? "confirmados pelo serviço de envio" : "só com o envio por API (em Configuração)"}
+          />
+          <KpiCard label="Abertos" value={resumo?.abertos ?? "—"} sub="pelo pixel (indicador aproximado)" colorClassName="text-violet" />
           <KpiCard
             label="Com erro"
             value={resumo?.erros ?? "—"}

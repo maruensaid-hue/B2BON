@@ -23,6 +23,7 @@ from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
 from app.llm.base import LLMProvider
 from app.llm.fallback import construir_provedor
 from app.models.chave_api_parceiro import ChaveApiParceiro
+from app.models.configuracao_email_api import ConfiguracaoEmailApi
 from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.licenca import Licenca
@@ -629,6 +630,12 @@ def resolver_email_provider(tenant_id: str, db: Session) -> EmailProvider:
     loop, sem JWT."""
     if demo_contexto.ativo() or _e_demonstracao(db, tenant_id):  # D-082: demonstração "envia" sem sair de verdade
         return StubEmailProvider()
+    # Envio por API do próprio cliente (entrega/bounce/spam/abertura medidos) tem prioridade sobre a conta SMTP, quando configurado.
+    config_api = db.query(ConfiguracaoEmailApi).filter_by(tenant_id=tenant_id).one_or_none()
+    if config_api is not None:
+        return SendGridEmailProvider(
+            api_key=config_api.chave_api, remetente_email=config_api.remetente_email, remetente_nome=config_api.remetente_nome
+        )
     config_tenant = db.query(ConfiguracaoEmailSmtp).filter_by(tenant_id=tenant_id).one_or_none()
     if config_tenant is not None:
         return SmtpEmailProvider(
@@ -640,7 +647,7 @@ def resolver_email_provider(tenant_id: str, db: Session) -> EmailProvider:
         )
     if settings.e_ambiente_producao:
         return EmailDesativadoProvider(
-            "Conta de e-mail (SMTP) não configurada — cadastre a conta do seu e-mail em Configuração → E-mail (SMTP) "
+            "Conta de e-mail não configurada — cadastre o envio por API ou a conta SMTP do seu e-mail em Configuração "
             "antes de enviar."
         )
     return StubEmailProvider()

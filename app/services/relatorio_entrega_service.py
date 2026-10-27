@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.cadencia import Cadencia
 from app.models.campanha import Campanha, CampanhaDestinatario
+from app.models.configuracao_email_api import ConfiguracaoEmailApi
 from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.conta import Conta
 from app.models.decisor import Decisor
@@ -26,7 +27,7 @@ _LIMITE_CONTATOS_COM_BOUNCE = 200
 # visão granular classifica cada mensagem/destinatário de e-mail
 # individualmente, sem depender só do webhook.
 _STATUS_MENSAGEM_PENDENTE = {"rascunho", "aguardando_aprovacao", "aprovado"}
-_STATUS_FILTROS_VALIDOS = {"todos", "erro", "enviado", "aberto", "pendente", "nao_enviado", "cancelado"}
+_STATUS_FILTROS_VALIDOS = {"todos", "erro", "enviado", "entregue", "aberto", "pendente", "nao_enviado", "cancelado"}
 _JANELA_RESUMO_DIAS = 7
 
 _EMAIL_NO_TEXTO = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}")
@@ -121,7 +122,9 @@ def _classificar_mensagem(mensagem: Mensagem) -> tuple[str, str | None]:
     if mensagem.status in _STATUS_MENSAGEM_PENDENTE:
         return "pendente", None
     if mensagem.status == "enviado":
-        return ("aberto" if mensagem.aberto_em is not None else "enviado"), None
+        if mensagem.aberto_em is not None:
+            return "aberto", None
+        return ("entregue" if mensagem.entregue_em is not None else "enviado"), None
     return mensagem.status, None
 
 
@@ -139,7 +142,9 @@ def _classificar_destinatario_campanha(destinatario: CampanhaDestinatario) -> tu
     if destinatario.status == "retido":  # fora de uma rodada de envio parcial: aguarda o próximo envio
         return "pendente", "Aguardando o próximo envio da campanha"
     if destinatario.status == "enviado":
-        return "enviado", None
+        if destinatario.aberto_em is not None:
+            return "aberto", None
+        return ("entregue" if destinatario.entregue_em is not None else "enviado"), None
     return destinatario.status, None
 
 
@@ -268,15 +273,19 @@ def _resumo_envios(db: Session, tenant_id: str) -> dict:
     """Totais dos últimos 7 dias contados nos próprios envios (os mesmos da lista abaixo), não só nos retornos do provedor: sem o retorno do provedor
     (conta SMTP própria) o contador de reputação fica em zero mesmo com centenas de e-mails enviados."""
     corte = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=_JANELA_RESUMO_DIAS)
-    resumo = {"enviados": 0, "erros": 0, "nao_enviados": 0, "pendentes": 0}
+    resumo = {"enviados": 0, "entregues": 0, "abertos": 0, "erros": 0, "nao_enviados": 0, "pendentes": 0}
     for item in _envios_email_de_mensagens(db, tenant_id) + _envios_email_de_campanhas(db, tenant_id):
         momento = item["enviado_em"] or item["criado_em"]
         if momento is not None and momento.tzinfo is not None:
             momento = momento.astimezone(UTC).replace(tzinfo=None)
         if momento is None or momento < corte:
             continue
-        if item["status"] in ("enviado", "aberto"):
+        if item["status"] in ("enviado", "entregue", "aberto"):
             resumo["enviados"] += 1
+            if item["status"] in ("entregue", "aberto"):
+                resumo["entregues"] += 1  # aberto implica entregue
+            if item["status"] == "aberto":
+                resumo["abertos"] += 1
         elif item["status"] == "erro":
             resumo["erros"] += 1
         elif item["status"] == "nao_enviado":
@@ -355,9 +364,9 @@ def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, 
 def obter(db: Session, tenant_id: str) -> dict:
     saude_email = reputacao_service.status_saude(db, tenant_id, "email")
     # Com conta SMTP própria o provedor não devolve entrega/bounce/spam: as taxas abaixo ficam em zero sem querer dizer "nenhum problema".
-    saude_email["medido_pelo_provedor"] = db.execute(
-        select(ConfiguracaoEmailSmtp.id).where(ConfiguracaoEmailSmtp.tenant_id == tenant_id)
-    ).first() is None
+    tem_api = db.execute(select(ConfiguracaoEmailApi.id).where(ConfiguracaoEmailApi.tenant_id == tenant_id)).first() is not None
+    tem_smtp = db.execute(select(ConfiguracaoEmailSmtp.id).where(ConfiguracaoEmailSmtp.tenant_id == tenant_id)).first() is not None
+    saude_email["medido_pelo_provedor"] = tem_api or not tem_smtp  # o envio por API devolve entrega/bounce/spam; a conta SMTP não
     energia = panel_service.indicadores_energia(db, tenant_id, None, None)
     return {
         "resumo_envios": _resumo_envios(db, tenant_id),

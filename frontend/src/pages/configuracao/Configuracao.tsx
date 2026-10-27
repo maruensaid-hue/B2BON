@@ -74,6 +74,15 @@ interface ConfiguracaoEmailSmtp {
   senha_mascarada: string;
 }
 
+interface ConfiguracaoEmailApi {
+  id: number;
+  remetente_email: string;
+  remetente_nome: string | null;
+  chave_mascarada: string;
+  tem_chave_webhook: boolean;
+  url_webhook: string;
+}
+
 interface StatusConexoesLinkedin {
   total: number;
   atualizado_em: string | null;
@@ -330,6 +339,12 @@ export function Configuracao() {
   const [salvandoEmailSmtp, setSalvandoEmailSmtp] = useState(false);
   const [testandoEmailSmtp, setTestandoEmailSmtp] = useState(false);
   const [resultadoTesteSmtp, setResultadoTesteSmtp] = useState<{ sucesso: boolean; mensagem: string } | null>(null);
+  const [emailApi, setEmailApi] = useState<ConfiguracaoEmailApi | null>(null);
+  const [erroEmailApi, setErroEmailApi] = useState<string | null>(null);
+  const [salvandoEmailApi, setSalvandoEmailApi] = useState(false);
+  const [testandoEmailApi, setTestandoEmailApi] = useState(false);
+  const [confirmandoRemocaoApi, setConfirmandoRemocaoApi] = useState(false);
+  const [resultadoTesteApi, setResultadoTesteApi] = useState<{ sucesso: boolean; mensagem: string } | null>(null);
   const [statusLinkedin, setStatusLinkedin] = useState<StatusConexoesLinkedin | null>(null);
   const [ofertaEmEdicaoId, setOfertaEmEdicaoId] = useState<number | null>(null);
   const [salvandoOferta, setSalvandoOferta] = useState(false);
@@ -406,6 +421,14 @@ export function Configuracao() {
           setErroEmailSmtp(
             "Não foi possível carregar a configuração atual de e-mail (credencial salva pode estar " +
               "corrompida). Preencha os campos abaixo de novo pra corrigir.",
+          );
+        }
+        try {
+          setEmailApi(await api.get<ConfiguracaoEmailApi | null>("/configuracao-email-api"));
+        } catch {
+          setErroEmailApi(
+            "Não foi possível carregar a configuração atual do envio por API (a chave salva pode estar corrompida). " +
+              "Preencha os campos abaixo de novo para corrigir.",
           );
         }
         try {
@@ -578,6 +601,58 @@ export function Configuracao() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível salvar a conta de e-mail.");
     } finally {
       setSalvandoEmailSmtp(false);
+    }
+  }
+
+  async function salvarEmailApi(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (salvandoEmailApi) return;
+    const form = new FormData(event.currentTarget);
+    setSalvandoEmailApi(true);
+    setErro(null);
+    try {
+      const salvo = await api.put<ConfiguracaoEmailApi>("/configuracao-email-api", {
+        chave_api: String(form.get("chave_api") ?? "").trim() || null,
+        remetente_email: String(form.get("remetente_email") ?? "").trim(),
+        remetente_nome: String(form.get("remetente_nome") ?? "").trim() || null,
+        chave_webhook: String(form.get("chave_webhook") ?? "").trim() || null,
+      });
+      setEmailApi(salvo);
+      setErroEmailApi(null);
+      setMensagem("Envio por API salvo.");
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível salvar o envio por API.");
+    } finally {
+      setSalvandoEmailApi(false);
+    }
+  }
+
+  async function testarEmailApi() {
+    if (testandoEmailApi) return;
+    setTestandoEmailApi(true);
+    setResultadoTesteApi(null);
+    try {
+      setResultadoTesteApi(await api.post<{ sucesso: boolean; mensagem: string }>("/configuracao-email-api/testar"));
+    } catch (error) {
+      setResultadoTesteApi({
+        sucesso: false,
+        mensagem: error instanceof ApiError ? error.message : "Não foi possível enviar o e-mail de teste.",
+      });
+    } finally {
+      setTestandoEmailApi(false);
+    }
+  }
+
+  async function removerEmailApi() {
+    setErro(null);
+    try {
+      await api.delete("/configuracao-email-api");
+      setEmailApi(null);
+      setResultadoTesteApi(null);
+      setConfirmandoRemocaoApi(false);
+      setMensagem("Envio por API removido. Volta a valer a conta SMTP, se houver.");
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível remover o envio por API.");
     }
   }
 
@@ -930,11 +1005,90 @@ export function Configuracao() {
 
       {isGestor && (
         <Card className="mt-4">
+          <SectionLabel>Envio por API (recomendado para campanhas)</SectionLabel>
+          <div className="mb-3 text-[11px] text-muted">
+            Envie por uma conta de serviço de envio de e-mail só sua (chave de API), em vez de uma caixa de e-mail comum. Com ela o
+            relatório passa a medir entregue, bounce, spam e abertura de verdade, e você não depende do limite diário de uma caixa de
+            e-mail. Quando configurado, tem prioridade sobre a conta SMTP abaixo. O e-mail do remetente precisa estar verificado no seu
+            serviço de envio.
+          </div>
+          {emailApi && (
+            <div className="mb-3 text-[12px] text-muted">
+              Chave atual: <span className="font-mono">{emailApi.chave_mascarada}</span> · Avisos de entrega:{" "}
+              {emailApi.tem_chave_webhook ? "chave de verificação cadastrada" : "sem chave de verificação (entrega e bounce não serão registrados)"}
+            </div>
+          )}
+          {erroEmailApi && <div className="mb-3 text-[12px] text-red">{erroEmailApi}</div>}
+          <form key={emailApi?.id ?? "novo"} onSubmit={salvarEmailApi} className="flex flex-col gap-3">
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+                Chave de API {emailApi && !erroEmailApi ? "(deixe em branco para manter a atual)" : ""}
+              </div>
+              <Input name="chave_api" type="password" required={!emailApi || !!erroEmailApi} autoComplete="off" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">E-mail do remetente (verificado)</div>
+                <Input name="remetente_email" type="email" required defaultValue={emailApi?.remetente_email} placeholder="contato@suaempresa.com.br" />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome do remetente</div>
+                <Input name="remetente_nome" defaultValue={emailApi?.remetente_nome ?? ""} placeholder="Maria da Silva | Sua Empresa" />
+              </div>
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+                Chave de verificação dos avisos de entrega {emailApi?.tem_chave_webhook ? "(deixe em branco para manter a atual)" : "(opcional, mas necessária para medir entrega e bounce)"}
+              </div>
+              <Input name="chave_webhook" type="password" autoComplete="off" />
+              <div className="mt-1 text-[10px] text-muted">
+                No seu serviço de envio, cadastre este endereço para receber os avisos de entrega, bounce e spam e ative a assinatura dos avisos
+                (a chave pública dela é o que vai neste campo):{" "}
+                <span className="font-mono break-all text-text">{emailApi?.url_webhook ?? "(aparece depois de salvar)"}</span>
+              </div>
+            </div>
+            <Button type="submit" disabled={salvandoEmailApi} className="w-full justify-center">
+              {salvandoEmailApi ? "Salvando..." : "Salvar envio por API"}
+            </Button>
+          </form>
+          {emailApi && (
+            <div className="mt-3 border-t border-border pt-3">
+              <div className="mb-2 text-[11px] text-muted">Envia um e-mail de teste para o seu próprio endereço, pelo envio por API salvo acima.</div>
+              <div className="flex gap-2">
+                <Button variant="ghost" disabled={testandoEmailApi} onClick={testarEmailApi} className="flex-1 justify-center">
+                  {testandoEmailApi ? "Enviando teste..." : "Enviar e-mail de teste"}
+                </Button>
+                {!confirmandoRemocaoApi ? (
+                  <Button variant="danger" onClick={() => setConfirmandoRemocaoApi(true)} className="justify-center">
+                    Remover
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="danger" onClick={removerEmailApi} className="justify-center">
+                      Confirmar remoção
+                    </Button>
+                    <Button variant="ghost" onClick={() => setConfirmandoRemocaoApi(false)} className="justify-center">
+                      Cancelar
+                    </Button>
+                  </>
+                )}
+              </div>
+              {resultadoTesteApi && (
+                <div className={`mt-2 text-[12px] ${resultadoTesteApi.sucesso ? "text-green" : "text-red"}`}>{resultadoTesteApi.mensagem}</div>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {isGestor && (
+        <Card className="mt-4">
           <SectionLabel>E-mail (SMTP)</SectionLabel>
           <div className="mb-3 text-[11px] text-muted">
             Conta de e-mail própria (host SMTP, porta, usuário e senha — Gmail Workspace, Outlook 365, sua
-            própria hospedagem, etc.) — obrigatória pra disparar e-mail de cadência/campanha. Sem ela
-            configurada aqui, o envio fica desativado (nenhum e-mail sai).
+            própria hospedagem, etc.) — necessária pra disparar e-mail de cadência/campanha, a menos que o envio por API (acima) esteja
+            configurado. Sem nenhum dos dois, o envio fica desativado (nenhum e-mail sai). Com a conta SMTP o relatório não mede entrega,
+            bounce nem spam.
           </div>
           {emailSmtp && (
             <div className="mb-3 text-[12px] text-muted">

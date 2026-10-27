@@ -258,6 +258,7 @@ def webhook_reputacao(dados: RegistrarEventoReputacaoRequestSchema, db: Session 
     )
 
 
+@router.post("/envio/eventos")  # mesmo tratamento sob um endereço sem o nome do fornecedor, o que o cliente cola no serviço de envio dele
 @router.post("/sendgrid/eventos")
 async def webhook_sendgrid_eventos(request: Request, db: Session = Depends(get_db)) -> dict:
     """Event Webhook do SendGrid (delivered/bounce/dropped/spamreport)
@@ -267,16 +268,15 @@ async def webhook_sendgrid_eventos(request: Request, db: Session = Depends(get_d
     raciocínio do webhook do Mercado Pago: sem isso, qualquer um poderia
     forjar bounce/spam em massa e pausar o canal de e-mail de um tenant."""
     corpo = await request.body()
-    assinatura_valida = sendgrid_webhook_service.verificar_assinatura(
+    processado = sendgrid_webhook_service.autenticar_e_processar(
+        db,
         corpo,
         request.headers.get("x-twilio-email-event-webhook-signature"),
         request.headers.get("x-twilio-email-event-webhook-timestamp"),
         settings.sendgrid_webhook_verification_key,
     )
-    if not assinatura_valida:
+    if not processado:
         raise NaoAutorizado("Assinatura do webhook inválida.")
-
-    sendgrid_webhook_service.processar_eventos(db, json.loads(corpo))
     return {"recebido": True}
 
 

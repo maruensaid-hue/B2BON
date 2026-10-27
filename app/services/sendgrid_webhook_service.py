@@ -1,12 +1,15 @@
 import base64
+import json
 from datetime import UTC, datetime
 
 from cryptography.exceptions import InvalidSignature
+from cryptography.fernet import InvalidToken
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy.orm import Session
 
 from app.models.campanha import CampanhaDestinatario
+from app.models.configuracao_email_api import ConfiguracaoEmailApi
 from app.models.mensagem import Mensagem
 from app.services import reputacao_service
 
@@ -62,7 +65,7 @@ def _registrar_contato_problematico(db: Session, evento: dict) -> None:
 
     mensagem_id = evento.get("mensagem_id")
     if mensagem_id is not None:
-        mensagem = db.query(Mensagem).filter_by(id=int(mensagem_id)).one_or_none()
+        mensagem = db.query(Mensagem).filter_by(id=int(mensagem_id), tenant_id=evento.get("tenant_id")).one_or_none()
         if mensagem is not None:
             mensagem.bounce_em = agora
             mensagem.motivo_bounce = motivo
@@ -70,10 +73,35 @@ def _registrar_contato_problematico(db: Session, evento: dict) -> None:
 
     campanha_destinatario_id = evento.get("campanha_destinatario_id")
     if campanha_destinatario_id is not None:
-        destinatario = db.query(CampanhaDestinatario).filter_by(id=int(campanha_destinatario_id)).one_or_none()
+        destinatario = (
+            db.query(CampanhaDestinatario)
+            .filter_by(id=int(campanha_destinatario_id), tenant_id=evento.get("tenant_id"))
+            .one_or_none()
+        )
         if destinatario is not None:
             destinatario.bounce_em = agora
             destinatario.motivo_bounce = motivo
+
+
+def _registrar_entrega(db: Session, evento: dict) -> None:
+    """Entrega confirmada pelo serviço de envio (`delivered`): guarda o momento no e-mail exato, para o relatório mostrar "Entregue" — antes só alimentava o
+    contador agregado de reputação. Sempre dentro do tenant do evento: um cliente nunca marca e-mail de outro."""
+    agora = datetime.now(UTC)
+    mensagem_id = evento.get("mensagem_id")
+    if mensagem_id is not None:
+        mensagem = db.query(Mensagem).filter_by(id=int(mensagem_id), tenant_id=evento.get("tenant_id")).one_or_none()
+        if mensagem is not None and mensagem.entregue_em is None:
+            mensagem.entregue_em = agora
+        return
+    campanha_destinatario_id = evento.get("campanha_destinatario_id")
+    if campanha_destinatario_id is not None:
+        destinatario = (
+            db.query(CampanhaDestinatario)
+            .filter_by(id=int(campanha_destinatario_id), tenant_id=evento.get("tenant_id"))
+            .one_or_none()
+        )
+        if destinatario is not None and destinatario.entregue_em is None:
+            destinatario.entregue_em = agora
 
 
 def processar_eventos(db: Session, eventos: list[dict]) -> None:
@@ -97,4 +125,39 @@ def processar_eventos(db: Session, eventos: list[dict]) -> None:
         reputacao_service.registrar_evento(db, tenant_id, "email", tipo_mapeado)
         if tipo_evento in _EVENTOS_COM_CONTATO_PROBLEMATICO:
             _registrar_contato_problematico(db, evento)
+        elif tipo_evento == "delivered":
+            _registrar_entrega(db, evento)
     db.commit()
+
+
+def _chave_de_verificacao_do_tenant(db: Session, tenant_id: str) -> str | None:
+    try:
+        config = db.query(ConfiguracaoEmailApi).filter_by(tenant_id=tenant_id).one_or_none()
+    except InvalidToken:  # chave cifrada com outra chave de criptografia: sem como validar, então não aceita
+        return None
+    return config.chave_webhook if config is not None else None
+
+
+def autenticar_e_processar(
+    db: Session, corpo: bytes, assinatura_b64: str | None, timestamp: str | None, chave_da_plataforma: str
+) -> bool:
+    """Valida a assinatura do aviso de eventos e só então processa. Dois emissores legítimos: a conta da plataforma (chave global; vale para qualquer tenant,
+    pois é a própria plataforma que envia) e a conta de cada cliente (chave dele, em `ConfiguracaoEmailApi`). Os eventos do cliente são lidos de forma
+    não confiável só para descobrir de quais tenants são; se a assinatura bate com a chave de um deles, **apenas os eventos desse tenant** são processados — assim
+    uma chave de cliente nunca serve para forjar entrega/bounce de outro."""
+    if verificar_assinatura(corpo, assinatura_b64, timestamp, chave_da_plataforma):
+        processar_eventos(db, json.loads(corpo))
+        return True
+    try:
+        eventos = json.loads(corpo)
+    except ValueError:
+        return False
+    if not isinstance(eventos, list):
+        return False
+    tenants = sorted({e["tenant_id"] for e in eventos if isinstance(e, dict) and isinstance(e.get("tenant_id"), str)})
+    for tenant_id in tenants:
+        chave = _chave_de_verificacao_do_tenant(db, tenant_id)
+        if chave and verificar_assinatura(corpo, assinatura_b64, timestamp, chave):
+            processar_eventos(db, [e for e in eventos if isinstance(e, dict) and e.get("tenant_id") == tenant_id])
+            return True
+    return False

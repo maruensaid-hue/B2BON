@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.models.campanha import CampanhaDestinatario
 from app.models.mensagem import Mensagem
 from app.services.errors import ValidacaoFalhou
 
@@ -19,32 +20,41 @@ PIXEL_PNG_1X1 = bytes.fromhex(
 )
 
 
-def gerar_token_abertura(tenant_id: str, mensagem_id: int) -> str:
+def gerar_token_abertura(tenant_id: str, item_id: int, campanha: bool = False) -> str:
     """Mesmo padrão HMAC stateless do token de opt-out
-    (`optout_service.gerar_token`) — sem tabela própria."""
-    payload = f"{tenant_id}{_SEPARADOR}{mensagem_id}"
+    (`optout_service.gerar_token`) — sem tabela própria. O pixel de campanha
+    leva um "c" na frente do id, para o mesmo endereço servir os dois."""
+    identificador = f"c{item_id}" if campanha else str(item_id)
+    payload = f"{tenant_id}{_SEPARADOR}{identificador}"
     assinatura = hmac.new(settings.secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
     return f"{payload}{_SEPARADOR}{assinatura}"
 
 
-def _validar_token(token: str) -> tuple[str, int]:
+def _validar_token(token: str) -> tuple[str, bool, int]:
+    """Devolve `(tenant_id, é_de_campanha, id)`."""
     partes = token.split(_SEPARADOR)
     if len(partes) != 3:
         raise ValidacaoFalhou("Token de rastreio inválido.")
-    tenant_id, mensagem_id_str, assinatura = partes
+    tenant_id, identificador, assinatura = partes
+    de_campanha = identificador.startswith("c")
     try:
-        mensagem_id = int(mensagem_id_str)
+        item_id = int(identificador[1:] if de_campanha else identificador)
     except ValueError as erro:
         raise ValidacaoFalhou("Token de rastreio inválido.") from erro
 
-    esperado = gerar_token_abertura(tenant_id, mensagem_id).rsplit(_SEPARADOR, 1)[-1]
+    esperado = gerar_token_abertura(tenant_id, item_id, de_campanha).rsplit(_SEPARADOR, 1)[-1]
     if not hmac.compare_digest(assinatura, esperado):
         raise ValidacaoFalhou("Token de rastreio inválido.")
-    return tenant_id, mensagem_id
+    return tenant_id, de_campanha, item_id
 
 
 def url_pixel(tenant_id: str, mensagem_id: int) -> str:
     token = gerar_token_abertura(tenant_id, mensagem_id)
+    return f"{settings.url_base_api}/webhooks/email/aberto/{token}.png"
+
+
+def url_pixel_campanha(tenant_id: str, destinatario_id: int) -> str:
+    token = gerar_token_abertura(tenant_id, destinatario_id, campanha=True)
     return f"{settings.url_base_api}/webhooks/email/aberto/{token}.png"
 
 
@@ -54,13 +64,14 @@ def registrar_abertura(db: Session, token: str) -> None:
     detalhe do motivo, só não registra nada (E-mails automatizados/scanners
     de segurança às vezes disparam requisições malformadas de propósito)."""
     try:
-        tenant_id, mensagem_id = _validar_token(token)
+        tenant_id, de_campanha, item_id = _validar_token(token)
     except ValidacaoFalhou:
         return
 
-    mensagem = db.query(Mensagem).filter_by(id=mensagem_id, tenant_id=tenant_id).one_or_none()
-    if mensagem is None or mensagem.aberto_em is not None:
+    modelo = CampanhaDestinatario if de_campanha else Mensagem
+    item = db.query(modelo).filter_by(id=item_id, tenant_id=tenant_id).one_or_none()
+    if item is None or item.aberto_em is not None:
         return
 
-    mensagem.aberto_em = datetime.now(UTC)
+    item.aberto_em = datetime.now(UTC)
     db.commit()

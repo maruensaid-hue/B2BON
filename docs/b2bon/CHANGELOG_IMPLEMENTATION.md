@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Envio por API do cliente e pixel de abertura nas campanhas (2026-10-27, D-106)
+
+- Em Configuração há o "Envio por API": cada cliente cadastra a chave do serviço de envio dele, o remetente verificado e a chave de verificação dos avisos. Com isso o relatório mede entrega, bounce, spam e abertura de verdade, e o envio não depende do limite diário nem do login de uma caixa de e-mail.
+- Os avisos de entrega e bounce de cada cliente só valem para os e-mails dele (a assinatura é conferida com a chave cadastrada).
+- O relatório ganhou "Entregue" e "Aberto"; as campanhas passam a sair com pixel de abertura, e o rodapé de descadastro virou link clicável.
+
 ## Registrar e-mails que voltaram no Relatório de Entrega (2026-10-27, D-106)
 
 - No Relatório de Entrega há uma caixa para colar os endereços que voltaram como não entregues (os avisos de falha do Gmail); eles passam a constar como erro e o sistema informa quais não foram encontrados entre os e-mails enviados.

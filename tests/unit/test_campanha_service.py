@@ -819,3 +819,45 @@ def test_endereco_que_ja_voltou_em_outra_campanha_nao_recebe_de_novo(db_session)
     assert resultado["ignoradas"] == 1
     voltou = campanha_service.listar_destinatarios(db_session, TENANT_ID, segunda)[0]
     assert voltou.status == "nao_enviado" and voltou.motivo_falha.startswith("E-mail devolvido em envio anterior")
+
+
+def test_email_de_campanha_sai_com_pixel_de_abertura_e_marca_o_destinatario(db_session):
+    from app.core.config import settings
+
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 1)
+    fake_email = FakeEmailProvider()
+
+    campanha_service.processar_pendentes(db_session, TENANT_ID, fake_email, FakeWhatsAppProvider())
+
+    destinatario = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)[0]
+    assert fake_email.envios[0]["pixel_url"].startswith(f"{settings.url_base_api}/webhooks/email/aberto/{TENANT_ID}:c{destinatario.id}:")
+    assert destinatario.pixel_incluido is True and destinatario.aberto_em is None
+
+
+def test_pixel_registra_a_abertura_so_do_destinatario_certo_e_uma_vez(db_session):
+    from app.services import rastreamento_service
+
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 2)
+    primeiro, segundo = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)
+
+    rastreamento_service.registrar_abertura(db_session, rastreamento_service.gerar_token_abertura(TENANT_ID, primeiro.id, campanha=True))
+    aberto_em = primeiro.aberto_em
+    rastreamento_service.registrar_abertura(db_session, rastreamento_service.gerar_token_abertura(TENANT_ID, primeiro.id, campanha=True))
+
+    assert aberto_em is not None and primeiro.aberto_em == aberto_em  # a primeira abertura é a que vale
+    assert segundo.aberto_em is None
+
+
+def test_pixel_com_token_adulterado_ou_de_outro_tenant_nao_registra_nada(db_session):
+    from app.services import rastreamento_service
+
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 1)
+    destinatario = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)[0]
+    valido = rastreamento_service.gerar_token_abertura(TENANT_ID, destinatario.id, campanha=True)
+
+    rastreamento_service.registrar_abertura(db_session, valido[:-1] + ("0" if valido[-1] != "0" else "1"))  # assinatura adulterada
+    rastreamento_service.registrar_abertura(db_session, rastreamento_service.gerar_token_abertura("outro-tenant", destinatario.id, campanha=True))
+    rastreamento_service.registrar_abertura(db_session, f"{TENANT_ID}:c{destinatario.id}")
+    rastreamento_service.registrar_abertura(db_session, "lixo")
+
+    assert destinatario.aberto_em is None

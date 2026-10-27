@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -61,4 +61,9 @@ class CampanhaDestinatario(Base):
     # correlacionado por `campanha_destinatario_id` em `custom_args`.
     bounce_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     motivo_bounce: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Abertura (pixel no e-mail) e entrega confirmada pelo serviço de envio. `pixel_incluido` marca os e-mails que saíram com pixel: os enviados antes
+    # disso não têm como ser abertos "no sistema" e não podem entrar no denominador da taxa de abertura.
+    aberto_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    entregue_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pixel_incluido: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

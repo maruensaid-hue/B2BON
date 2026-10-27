@@ -1,7 +1,12 @@
 import html
+import re
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel
+
+
+# Roda sobre o texto já escapado: para antes de `&quot;`, `&#x27;`, `&lt;` e `&gt;` (aspas e sinais que cercam o endereço no texto).
+_LINK = re.compile(r"https?://(?:(?!&quot;|&#x27;|&lt;|&gt;)[^\s<>\"'])+")
 
 
 def montar_html_com_pixel(corpo: str, pixel_url: str) -> str:
@@ -9,7 +14,8 @@ def montar_html_com_pixel(corpo: str, pixel_url: str) -> str:
     escapado (preserva quebras de linha) mais o pixel de 1x1 de rastreio de
     abertura (Onda I). Compartilhado entre implementações reais de
     `EmailProvider` (SMTP, SendGrid) que precisam montar o mesmo corpo."""
-    corpo_html = html.escape(corpo).replace("\n", "<br>")
+    # Endereços viram link (o rodapé de descadastro das campanhas é uma URL: sem isso ela apareceria como texto puro, difícil de clicar).
+    corpo_html = _LINK.sub(lambda m: f'<a href="{m.group(0)}">{m.group(0)}</a>', html.escape(corpo)).replace("\n", "<br>")
     return (
         f'<html><body>{corpo_html}'
         f'<img src="{html.escape(pixel_url)}" width="1" height="1" alt="" style="display:none"></body></html>'

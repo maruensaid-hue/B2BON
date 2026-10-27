@@ -265,7 +265,7 @@ def test_resumo_conta_os_envios_reais_dos_ultimos_7_dias_mesmo_sem_retorno_do_pr
 
     corpo = client.get("/api/v1/relatorio-entrega").json()
 
-    assert corpo["resumo_envios"] == {"enviados": 2, "erros": 1, "nao_enviados": 1, "pendentes": 1}
+    assert corpo["resumo_envios"] == {"enviados": 2, "entregues": 0, "abertos": 0, "erros": 1, "nao_enviados": 1, "pendentes": 1}
     assert corpo["saude_email"]["enviados"] == 0  # o contador de reputação só conhece o retorno do provedor
     assert corpo["saude_email"]["medido_pelo_provedor"] is True  # sem conta SMTP própria, o provedor da plataforma devolve bounce
 
@@ -329,3 +329,54 @@ def test_registrar_bounces_manuais_so_enxerga_os_envios_do_proprio_tenant(client
     corpo = client.post("/api/v1/relatorio-entrega/bounces-manuais", json={"texto": "x@teste.com"}).json()
 
     assert corpo["registrados"] == [] and corpo["nao_encontrados"] == ["x@teste.com"]
+
+
+def test_relatorio_mostra_entregue_e_aberto_e_conta_no_resumo(client, onboarding_completo, db_session):
+    campanha = _campanha_email(db_session)
+    agora = datetime.now(UTC)
+    for nome, entregue, aberto in [("Simples", None, None), ("Entregue", agora, None), ("Aberto", agora, agora)]:
+        db_session.add(
+            CampanhaDestinatario(
+                tenant_id=TENANT_ID, campanha_id=campanha.id, nome=nome, email=f"{nome.lower()}@teste.com", status="enviado",
+                enviado_em=agora, entregue_em=entregue, aberto_em=aberto, pixel_incluido=True,
+            )
+        )
+    db_session.commit()
+
+    envios = client.get("/api/v1/relatorio-entrega/envios").json()
+    por_nome = {item["nome"]: item["status"] for item in envios["itens"]}
+    assert por_nome == {"Simples": "enviado", "Entregue": "entregue", "Aberto": "aberto"}
+    assert [i["nome"] for i in client.get("/api/v1/relatorio-entrega/envios", params={"status": "entregue"}).json()["itens"]] == ["Entregue"]
+
+    corpo = client.get("/api/v1/relatorio-entrega").json()
+    assert corpo["resumo_envios"]["enviados"] == 3 and corpo["resumo_envios"]["entregues"] == 2 and corpo["resumo_envios"]["abertos"] == 1
+
+
+def test_taxa_de_abertura_inclui_campanha_so_com_os_e_mails_que_tinham_pixel(client, onboarding_completo, db_session):
+    campanha = _campanha_email(db_session)
+    agora = datetime.now(UTC)
+    for nome, pixel, aberto in [("Abriu", True, agora), ("Nao abriu", True, None), ("Antigo sem pixel", False, None), ("Antigo sem pixel 2", False, None)]:
+        db_session.add(
+            CampanhaDestinatario(
+                tenant_id=TENANT_ID, campanha_id=campanha.id, nome=nome, email=f"{nome.replace(' ', '').lower()}@teste.com", status="enviado",
+                enviado_em=agora, pixel_incluido=pixel, aberto_em=aberto,
+            )
+        )
+    db_session.commit()
+
+    corpo = client.get("/api/v1/relatorio-entrega").json()
+
+    assert corpo["taxa_abertura_email"] == 0.5  # 1 de 2 com pixel; os envios antigos, sem pixel, não derrubam a taxa
+
+
+def test_envio_por_api_faz_o_provedor_medir_mesmo_havendo_conta_smtp(client, onboarding_completo, db_session):
+    from app.models.configuracao_email_api import ConfiguracaoEmailApi
+
+    db_session.add(ConfiguracaoEmailSmtp(tenant_id=TENANT_ID, host="smtp.gmail.com", porta=587, usuario="eu@teste.com", senha="s", usar_tls=True))
+    db_session.commit()
+    assert client.get("/api/v1/relatorio-entrega").json()["saude_email"]["medido_pelo_provedor"] is False
+
+    db_session.add(ConfiguracaoEmailApi(tenant_id=TENANT_ID, chave_api="SG.x", remetente_email="v@c.com"))
+    db_session.commit()
+
+    assert client.get("/api/v1/relatorio-entrega").json()["saude_email"]["medido_pelo_provedor"] is True

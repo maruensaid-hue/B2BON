@@ -23,6 +23,7 @@ from app.services import (
     campanha_personalizacao,
     limite_criacao_service,
     optout_service,
+    rastreamento_service,
     reputacao_service,
 )
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
@@ -573,10 +574,12 @@ def _disparar_destinatario(
                 _REMETENTE_NOME,
                 settings.sendgrid_remetente_email,
                 campanha.tenant_id,
+                pixel_url=rastreamento_service.url_pixel_campanha(campanha.tenant_id, destinatario.id),
                 campanha_destinatario_id=destinatario.id,
             )
             if resultado.sucesso:
                 enviou_algum = True
+                destinatario.pixel_incluido = True
             elif resultado.transitoria:
                 falha_transitoria = resultado.motivo_falha or "Falha temporária de rede ao enviar o e-mail."
             else:

@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.models.campanha import CampanhaDestinatario
 from app.models.conta import Conta
 from app.models.configuracao_painel import ConfiguracaoPainel
 from app.models.conversa_qualificacao import ConversaQualificacao
@@ -195,9 +196,23 @@ def indicadores_energia(db: Session, tenant_id: str, data_inicio: date | None, d
     # Só e-mail tem pixel de rastreio (Onda I) — os demais canais nunca
     # teriam abertura pra medir, então a taxa fica None em vez de 0.
     mensagens_email_no_periodo = [m for m in mensagens_enviadas if m.canal == "email" and _no_periodo(m.enviado_em, inicio, fim)]
+    # Campanhas entram só com os e-mails que saíram com pixel: os anteriores não têm como ser abertos "no sistema" e derrubariam a taxa a zero.
+    campanhas_com_pixel = [
+        d
+        for d in db.query(CampanhaDestinatario)
+        .filter(
+            CampanhaDestinatario.tenant_id == tenant_id,
+            CampanhaDestinatario.status == "enviado",
+            CampanhaDestinatario.pixel_incluido.is_(True),
+        )
+        .all()
+        if _no_periodo(d.enviado_em, inicio, fim)
+    ]
+    total_com_pixel = len(mensagens_email_no_periodo) + len(campanhas_com_pixel)
     taxa_abertura_email = (
-        sum(1 for m in mensagens_email_no_periodo if m.aberto_em is not None) / len(mensagens_email_no_periodo)
-        if mensagens_email_no_periodo
+        (sum(1 for m in mensagens_email_no_periodo if m.aberto_em is not None) + sum(1 for d in campanhas_com_pixel if d.aberto_em is not None))
+        / total_com_pixel
+        if total_com_pixel
         else None
     )
 

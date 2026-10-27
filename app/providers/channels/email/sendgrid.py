@@ -1,3 +1,5 @@
+import re
+
 import httpx
 
 from app.core.config import settings
@@ -6,12 +8,24 @@ from app.providers.channels.email.base import EmailProvider, ResultadoEnvio, mon
 _URL_ENVIO = "https://api.sendgrid.com/v3/mail/send"
 
 
+def _sem_nome_do_fornecedor(texto: str) -> str:
+    """A mensagem de erro do serviço vai até a tela do cliente, e o nome do fornecedor não aparece em tela nem em dado visível."""
+    return re.sub(r"(?i)sendgrid", "serviço de envio", texto)
+
+
 class SendGridEmailProvider(EmailProvider):
     """ESP real (raio-X de produção) — substitui o SMTP genérico. Envelope
     `From` fica fixo no domínio autenticado da plataforma (SPF/DKIM não dá
     pra fazer por tenant sem domínio próprio de cada um); `remetente_nome`/
     `remetente_email` configurados por tenant viram nome de exibição e
     `Reply-To`, então respostas ainda caem no lugar certo."""
+
+    def __init__(self, api_key: str | None = None, remetente_email: str | None = None, remetente_nome: str | None = None) -> None:
+        """Sem argumentos usa a conta da plataforma (e-mail de sistema). Com a chave de API e o remetente do cliente (`ConfiguracaoEmailApi`), envia pela conta
+        dele — o remetente precisa estar verificado no serviço dele — e o aviso de entrega/bounce volta com o `tenant_id` do cliente."""
+        self.api_key = api_key
+        self.remetente_email = remetente_email
+        self.remetente_nome = remetente_nome
 
     def enviar(
         self,
@@ -48,8 +62,8 @@ class SendGridEmailProvider(EmailProvider):
                     "custom_args": custom_args,
                 }
             ],
-            "from": {"email": settings.sendgrid_remetente_email, "name": remetente_nome},
-            "reply_to": {"email": reply_to or remetente_email},
+            "from": {"email": self.remetente_email or settings.sendgrid_remetente_email, "name": self.remetente_nome or remetente_nome},
+            "reply_to": {"email": reply_to or self.remetente_email or remetente_email},
             "subject": assunto,
             "content": conteudo,
         }
@@ -58,7 +72,7 @@ class SendGridEmailProvider(EmailProvider):
             resposta = httpx.post(
                 _URL_ENVIO,
                 json=corpo_requisicao,
-                headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
+                headers={"Authorization": f"Bearer {self.api_key or settings.sendgrid_api_key}"},
                 timeout=15,
             )
         except httpx.HTTPError as erro:
@@ -67,7 +81,7 @@ class SendGridEmailProvider(EmailProvider):
         if resposta.status_code != 202:
             return ResultadoEnvio(
                 sucesso=False,
-                motivo_falha=f"Falha do serviço de e-mail ({resposta.status_code}): {resposta.text}",
+                motivo_falha=f"Falha do serviço de e-mail ({resposta.status_code}): {_sem_nome_do_fornecedor(resposta.text)}",
                 transitoria=resposta.status_code == 429 or resposta.status_code >= 500,
             )
         return ResultadoEnvio(sucesso=True, id_externo=resposta.headers.get("X-Message-Id"))

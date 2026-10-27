@@ -41,6 +41,8 @@ class RegistroBouncesManuaisSchema(BaseModel):
 
 class ResumoEnviosSchema(BaseModel):
     enviados: int = 0
+    entregues: int = 0
+    abertos: int = 0
     erros: int = 0
     nao_enviados: int = 0
     pendentes: int = 0
@@ -67,7 +69,7 @@ class EnvioEmailSchema(BaseModel):
     nome: str
     email: str | None
     conta_nome: str | None
-    status: str  # erro | enviado | aberto | pendente | nao_enviado | cancelado
+    status: str  # erro | enviado | entregue | aberto | pendente | nao_enviado | cancelado
     detalhe: str | None
     enviado_em: datetime | None
     criado_em: datetime
