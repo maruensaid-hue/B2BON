@@ -400,6 +400,7 @@ def _enviar_pendentes(
         sucesso, motivo_falha, adiado = _disparar_destinatario(db, campanha, destinatario, email_provider, whatsapp_provider)
         if sucesso:
             destinatario.status = "enviado"
+            destinatario.motivo_falha = None  # limpa o aviso de tentativa adiada, se houve
             destinatario.enviado_em = datetime.now(UTC)
             if destinatario.decisor_id is not None:
                 decisor = db.query(Decisor).filter_by(id=destinatario.decisor_id).one_or_none()
@@ -416,6 +417,7 @@ def _enviar_pendentes(
             resultado["adiadas"] += 1
             if motivo_falha:  # falha de rede: os próximos também falhariam; para por aqui e retoma no ciclo seguinte
                 logger.warning("CAMPANHA_ENVIO_INTERROMPIDO campanha=%s motivo=%s", campanha_id, motivo_falha)
+                destinatario.motivo_falha = f"Envio adiado, nova tentativa automática em breve. {motivo_falha}"  # a tela mostra, em vez de "pendente" mudo
                 interrompido = True
         else:
             destinatario.status = "falhou"

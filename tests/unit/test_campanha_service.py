@@ -626,3 +626,18 @@ def test_previa_mostra_como_o_email_chega_para_um_destinatario(db_session):
     assert previa["destinatario_nome"] == "Maria Souza"
     assert previa["assunto"] == "Novidade para a Empresa de Maria Souza"
     assert previa["corpo"].startswith("Olá, Maria,")
+
+
+def test_envio_adiado_por_falha_de_rede_mostra_o_motivo_no_destinatario_e_limpa_quando_envia(db_session):
+    campanha_id = _campanha_pronta_com_destinatarios(db_session, 2)
+
+    campanha_service.processar_pendentes(db_session, TENANT_ID, _EmailSemRede(), FakeWhatsAppProvider())
+
+    primeiro, segundo = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)
+    assert primeiro.status == "pendente" and "nova tentativa automática" in primeiro.motivo_falha
+    assert "Network is unreachable" in primeiro.motivo_falha
+    assert segundo.status == "pendente" and segundo.motivo_falha is None  # só quem foi tentado
+
+    campanha_service.processar_pendentes(db_session, TENANT_ID, FakeEmailProvider(), FakeWhatsAppProvider())
+
+    assert all(d.status == "enviado" and d.motivo_falha is None for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id))

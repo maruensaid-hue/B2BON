@@ -72,18 +72,37 @@ class SmtpEmailProvider(EmailProvider):
         return ultimo
 
     def _enviar_uma_vez(self, mensagem: EmailMessage) -> ResultadoEnvio:
+        # A etapa e o endereço IP entram no motivo da falha: "Connection unexpectedly closed" sozinho não diz se caiu ao conectar, na criptografia, no
+        # login ou no envio — e foi o que separou a rede bloqueada (plano gratuito do Render) de um servidor que aceita e depois derruba a conexão.
+        etapa = "conectar"
+        ip = ""
         try:
             with smtplib.SMTP(self.host, self.porta, timeout=15) as servidor:
+                ip = self._ip_conectado(servidor)
                 if self.usar_tls:
+                    etapa = "negociar a criptografia (TLS)"
                     servidor.starttls()
                 if self.usuario:
+                    etapa = "autenticar"
                     servidor.login(self.usuario, self.senha)
+                etapa = "enviar a mensagem"
                 servidor.send_message(mensagem)
             return ResultadoEnvio(sucesso=True)
         except smtplib.SMTPResponseException as erro:
             # 4xx é recusa temporária do servidor (caixa cheia, limite de envio, greylisting); 5xx é definitiva (credencial, remetente, destinatário).
-            return ResultadoEnvio(sucesso=False, motivo_falha=str(erro), transitoria=400 <= erro.smtp_code < 500)
+            return ResultadoEnvio(sucesso=False, motivo_falha=self._motivo(etapa, ip, erro), transitoria=400 <= erro.smtp_code < 500)
         except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, OSError) as erro:
-            return ResultadoEnvio(sucesso=False, motivo_falha=str(erro), transitoria=True)
+            return ResultadoEnvio(sucesso=False, motivo_falha=self._motivo(etapa, ip, erro), transitoria=True)
         except smtplib.SMTPException as erro:
-            return ResultadoEnvio(sucesso=False, motivo_falha=str(erro))
+            return ResultadoEnvio(sucesso=False, motivo_falha=self._motivo(etapa, ip, erro))
+
+    @staticmethod
+    def _ip_conectado(servidor: smtplib.SMTP) -> str:
+        try:
+            return str(servidor.sock.getpeername()[0])
+        except (AttributeError, OSError):
+            return ""
+
+    def _motivo(self, etapa: str, ip: str, erro: Exception) -> str:
+        onde = f"{self.host}:{self.porta}" + (f" (IP {ip})" if ip else "")
+        return f"Falha ao {etapa} em {onde}: {erro}"

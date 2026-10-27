@@ -138,3 +138,34 @@ def test_recusa_temporaria_4xx_do_servidor_e_transitoria(mock_smtp: MagicMock, m
     mock_smtp.side_effect = smtplib.SMTPResponseException(451, b"try again later")
 
     assert _enviar(SmtpEmailProvider()).transitoria is True
+
+
+@patch("app.providers.channels.email.smtp.time.sleep")
+@patch("app.providers.channels.email.smtp.smtplib.SMTP")
+def test_falha_diz_em_que_etapa_e_em_que_endereco_a_conexao_caiu(mock_smtp: MagicMock, mock_sleep: MagicMock):
+    import smtplib
+
+    servidor = MagicMock()
+    servidor.sock.getpeername.return_value = ("142.250.0.1", 587)
+    servidor.starttls.side_effect = smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+    mock_smtp.return_value.__enter__.return_value = servidor
+
+    resultado = _enviar(SmtpEmailProvider(host="smtp.gmail.com", porta=587, usuario="u", senha="s"))
+
+    assert resultado.sucesso is False and resultado.transitoria is True
+    assert resultado.motivo_falha == (
+        "Falha ao negociar a criptografia (TLS) em smtp.gmail.com:587 (IP 142.250.0.1): Connection unexpectedly closed"
+    )
+
+
+@patch("app.providers.channels.email.smtp.smtplib.SMTP")
+def test_recusa_de_credencial_diz_que_falhou_ao_autenticar(mock_smtp: MagicMock):
+    import smtplib
+
+    servidor = MagicMock()
+    servidor.login.side_effect = smtplib.SMTPAuthenticationError(535, b"bad credentials")
+    mock_smtp.return_value.__enter__.return_value = servidor
+
+    resultado = _enviar(SmtpEmailProvider(host="smtp.gmail.com", porta=587, usuario="u", senha="s"))
+
+    assert resultado.transitoria is False and resultado.motivo_falha.startswith("Falha ao autenticar em smtp.gmail.com:587")
