@@ -13,11 +13,13 @@ _MINIMO_DE_DIGITOS = 8
 
 
 def normalizar_email(email: str | None) -> str | None:
+    """E-mail em minúsculas e sem espaços nas pontas; vazio vira `None`."""
     texto = (email or "").strip().lower()
     return texto or None
 
 
 def normalizar_telefone(telefone: str | None) -> str | None:
+    """Só os dígitos; com menos de 8 dígitos não é telefone (`None`)."""
     digitos = re.sub(r"\D", "", telefone or "")
     return digitos if len(digitos) >= _MINIMO_DE_DIGITOS else None
 
@@ -30,6 +32,7 @@ class Bloqueados:
     telefones: set[str] = field(default_factory=set)
 
     def contem(self, email: str | None, telefone: str | None) -> bool:
+        """True se o e-mail, ou o telefone (pelos 10 últimos dígitos), está na lista."""
         email_normalizado = normalizar_email(email)
         telefone_normalizado = normalizar_telefone(telefone)
         return (email_normalizado is not None and email_normalizado in self.emails) or (
@@ -38,6 +41,7 @@ class Bloqueados:
 
 
 def carregar(db: Session, tenant_id: str) -> Bloqueados:
+    """Carrega a lista do tenant em conjuntos normalizados, uma vez por rodada de envio."""
     bloqueados = Bloqueados()
     for bloqueio in db.query(BloqueioContato).filter_by(tenant_id=tenant_id).all():
         if bloqueio.email:
@@ -86,10 +90,12 @@ def registrar(
 
 
 def listar(db: Session, tenant_id: str) -> list[BloqueioContato]:
+    """Bloqueios do tenant, do mais novo para o mais antigo."""
     return db.query(BloqueioContato).filter_by(tenant_id=tenant_id).order_by(BloqueioContato.criado_em.desc(), BloqueioContato.id.desc()).all()
 
 
 def liberar(db: Session, tenant_id: str, ator_id: str | None, bloqueio_id: int) -> None:
+    """Remove um bloqueio do tenant (desfaz um engano) e registra na auditoria."""
     bloqueio = db.query(BloqueioContato).filter_by(id=bloqueio_id, tenant_id=tenant_id).one_or_none()
     if bloqueio is None:
         raise NaoEncontrado(f"Bloqueio {bloqueio_id} não encontrado")

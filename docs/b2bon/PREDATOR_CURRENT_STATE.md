@@ -17,14 +17,14 @@ CRM (ver §3).
 | Mensagens | ✅ | `cadencia_service._gerar_conteudo_toque` / `gerar_para_lote` | Sim, **não medida**. Passa por aprovação. |
 | Cadências multicanal | ✅ e-mail / WhatsApp / LinkedIn (manual), A/B, cancelar ao responder | `cadencia_service`, `toque_cadencia` | — |
 | Aprovação humana | ✅ robusta | `aprovacao_service`, `envio_service.processar_pendentes` (filtra `status in (aprovado, falhou)`) | — |
-| Campanhas em massa | ✅ sem IA | `campanha_service` | Não |
+| Campanhas em massa | ✅ sem IA. Marcadores `[Nome]`/`[Empresa]`, envio só aos selecionados, edição de destinatário, lista de bloqueio, rastreio de entrega/abertura | `campanha_service`, `campanha_personalizacao`, `bloqueio_contato_service` | Não |
 | Respostas assistidas | ⚠️ parcial | `qualificacao_service` (S.H.A.R.K.) gera sugestão de resposta a inbound de WhatsApp/e-mail, grava em `TurnoConversa` e **não envia** ao lead. Só notifica o vendedor. | Sim, **não medida**, disparada por webhook externo |
 | Reuniões / NPS / dossiê | ✅ | `reuniao_service`, `nps_service`, `dossie_service`, `meeting_bot_service` (Recall → resumo por IA) | Resumo por IA, não medido |
 | Aprendizado | ✅ | `regra_aprendida_service`: regras escritas por humano entram no prompt de cadência. Há sugestão de regra por IA. | Sim, não medida |
 | Inteligência comercial | ✅ | `sinal_oportunidade_service` (fit de ICP, match de Intent, riscos de pipeline, atribuição), `agente_corporativo_service` (responde a outras empresas do Shoal sob aprovação), `conta_service.sugerir_estrategia_venda` | Sim. 2 de 4 chamadas medidas. |
 | Indicações | ✅ | `indicacao_service.solicitar` (texto por IA, sob aprovação) | Sim, não medida |
 | Webmail / e-mail direto | ✅ humano | `email_direto_service` | Não |
-| LinkedIn | ✅ só tarefas manuais (nunca auto-envio, por risco de ban) | `linkedin_service`, `tarefa_linkedin` | Não |
+| LinkedIn | ✅ só tarefas manuais (nunca auto-envio, por risco de ban); tela **Tarefas de LinkedIn** com contador no menu (D-107) | `linkedin_service`, `tarefa_linkedin`, `pages/linkedin/TarefasLinkedin.tsx` | Não |
 | LGPD (opt-out, ROPA, titulares, supressão) | ✅ | `optout_service`, `ropa_service`, `titular_service` | Não |
 
 ## 2. Fontes de dados externas usadas
@@ -81,3 +81,22 @@ na migração diz que esses zeros deveriam valer só para MAP/CRM. Com
 - Os limites 0 dos planos PREDATOR avulsos (OI-001) **continuam**: o
   tenant só-PREDATOR agora alcança as rotas, mas a franquia continua
   bloqueando o uso.
+
+## 7. Campanhas, envio e entrega (2026-10-24 a 2026-10-28, D-104 a D-108)
+
+- **Disparo**: "Marcar como pronta" reserva a campanha (`campanha.processando_ate`, 10 min) e envia em segundo plano, um destinatário por vez com um
+  commit por envio (`campanha_service._enviar_pendentes`); o agendador (`/cron/processar-campanhas`) retoma o que ficou parado. Falha de rede para o ciclo e
+  retoma depois; nada é reenviado. Status do destinatário: `pendente`, `enviado`, `falhou`, `optout`, `retido`, `nao_enviado`.
+- **Envio seletivo**: `POST /campanhas/{id}/marcar-pronta` aceita `destinatario_ids`; os demais pendentes ficam `retido` até o fim da rodada e a campanha
+  volta a `rascunho`. `POST /campanhas/{id}/voltar-para-rascunho` permite editar uma campanha já enviada (quem recebeu não recebe de novo).
+- **Personalização**: `[Nome]`, `[Nome completo]`, `[Empresa]` (`campanha_personalizacao.renderizar`); sem nome o marcador some com a pontuação, sem empresa
+  entra "a sua empresa". `GET /campanhas/{id}/previa` mostra o resultado. `app/core/texto.corrigir_codificacao` conserta acentos trocados na lista colada.
+- **Destinatários**: `PUT .../destinatarios/{id}` (trocar e-mail zera entrega/abertura/bounce e devolve à fila; quem já recebeu exige `reenviar`) e
+  `POST .../nao-quer-receber` (grava em `bloqueio_contato` e aplica o opt-out completo se o contato veio do CRM). `GET/DELETE /bloqueios-contato` (liberar: admin).
+- **Canal de e-mail**: duas contas por tenant, a API do cliente (`configuracao_email_api`, `GET/PUT/DELETE /configuracao-email-api`, `POST .../testar`) com
+  prioridade sobre o SMTP (`configuracao_email_smtp`). Só a API devolve entrega/bounce/spam, pelo aviso assinado `POST /webhooks/envio/eventos`; a abertura vem
+  do pixel (`rastreamento_service`, indicador aproximado). Com SMTP, `POST /relatorio-entrega/bounces-manuais` registra os e-mails que voltaram.
+- **Erros de SMTP**: `smtp.py` informa a etapa (conexão, TLS, login, remetente, destinatário, envio) e o IP; `SMTPRecipientsRefused` é tratado antes de `OSError`
+  (é subclasse dele) e e-mail de formato inválido vira `nao_enviado`, nunca falha nem bounce.
+- **LinkedIn**: `GET /linkedin/tarefas`, `GET /linkedin/tarefas/contagem` (menu) e `POST /linkedin/tarefas/{id}/marcar` (idempotente).
+- **Limites por plano**: `limite_cadencias_mes` e `limite_campanhas_mes` contam criações no mês (`limite_criacao_service`); ver `PRICING_CURRENT_STATE.md`.

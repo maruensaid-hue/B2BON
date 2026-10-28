@@ -330,6 +330,26 @@ Antes de gerar cadências, cadastre em **Configuração**:
 - **Tom e restrições de comunicação**: o tom da comunicação (ex.:
   "consultivo") e uma lista do que a IA nunca deve mencionar (ex.:
   preço, concorrentes, desconto).
+- **Como o e-mail sai** (`admin`/`super_admin`): cada empresa envia pela
+  **própria** conta — a B2B ON não compartilha remetente entre clientes.
+  Há duas opções, e sem nenhuma delas nenhum e-mail de cadência ou
+  campanha sai:
+  - **Envio por API (recomendado para campanhas)**: você contrata uma
+    conta num serviço de envio de e-mail, verifica o seu remetente ou
+    domínio lá, gera uma chave de API e cola em **Configuração → Envio
+    por API**, com o e-mail e o nome do remetente. Para o relatório
+    medir **entregue, bounce, spam e abertura de verdade**, cadastre
+    também, no seu serviço de envio, o endereço dos avisos que a tela
+    mostra depois de salvar, ative a assinatura dos avisos e cole a
+    chave pública dela no campo *Chave de verificação dos avisos de
+    entrega*. **Enviar e-mail de teste** confirma que a chave funciona.
+    Quando configurado, tem prioridade sobre o SMTP. A chave fica
+    guardada cifrada e a tela só mostra o final dela.
+  - **E-mail (SMTP)**: uma caixa de e-mail comum (host, porta, usuário e
+    senha; Gmail Workspace, Outlook 365 ou a sua hospedagem). Com ela o
+    relatório **não** mede entrega, bounce nem spam (veja a seção 5.9), e
+    o provedor impõe limites próprios, como o teto diário de envios.
+    **Enviar e-mail de teste** mostra na hora o motivo real se falhar.
 
 ### 5.2 Prospecção — ICPs e contas
 
@@ -500,13 +520,23 @@ minutos (ver `DEPLOY.md`, seção 7). Cada canal segue uma rampa de
 aquecimento (limite diário de envios crescente conforme os dias de uso
 do canal), para preservar a reputação do domínio/número.
 
+As **campanhas** (seção 5.13) não passam pela fila de Aprovação: saem
+quando você clica em **Marcar como pronta**, imediatamente e em segundo
+plano, e o agendador acima também retoma qualquer campanha interrompida
+(por exemplo, por queda de conexão).
+
 ### 5.7 Rastreio de abertura de e-mail
 
-Todo e-mail enviado carrega um pixel de rastreio invisível — quando o
-destinatário abre, o sistema registra automaticamente o horário da
-abertura. A **taxa de abertura de e-mail** aparece no **Relatório de
-Entrega** (seção 5.9), dando visibilidade de quem abriu (ou não) cada
-prospecção sem precisar de nenhuma ação manual.
+Todo e-mail de cadência e de campanha carrega um pixel de rastreio
+invisível — quando o destinatário abre, o sistema registra
+automaticamente o horário da abertura. A **taxa de abertura de e-mail**
+aparece no **Relatório de Entrega** (seção 5.9), dando visibilidade de
+quem abriu (ou não) cada prospecção sem precisar de nenhuma ação manual.
+
+A abertura é um **indicador aproximado**: quem bloqueia imagens não é
+contado, e alguns programas de e-mail carregam a imagem sozinhos, o que
+conta como abertura mesmo sem a pessoa ter lido. Use o número para
+comparar campanhas entre si, não como contagem exata de leitores.
 
 ### 5.8 Reuniões e dossiê
 
@@ -575,12 +605,36 @@ Enquanto o canal está pausado, os e-mails aprovados aparecem como
 **Pendente** no detalhamento, com o aviso "Aguardando — canal de e-mail
 pausado".
 
-Essa proteção depende do retorno do provedor de envio. Contas com
+Essa proteção depende do retorno do serviço de envio. Só o **Envio por
+API** (Configuração → Envio por API, com os avisos de entrega
+cadastrados — seção 5.1) devolve **entregue, bounce e spam**. Contas com
 **SMTP próprio** (Configuração → E-mail (SMTP)) não recebem esse retorno
-quando um e-mail quica depois de aceito — nesse caso, só falhas
-imediatas de envio aparecem, como **Erro** no detalhamento. Sem conta
-SMTP cadastrada, nenhum e-mail de cadência ou campanha sai: o envio falha
-com o aviso para cadastrar a conta.
+quando um e-mail quica depois de aceito — nesse caso, o painel mostra
+"não medido" para entregues, bounce e spam, e só as recusas na hora do
+envio aparecem, como **Erro** (falha do servidor) ou **Não enviado**
+(e-mail inválido, contato bloqueado) no detalhamento. Sem nenhuma das
+duas formas de envio cadastradas, nenhum e-mail de cadência ou campanha
+sai: o envio falha com o aviso para configurar.
+
+**Painel "E-mail — últimos 7 dias".** Os totais são contados nos
+próprios envios da B2B ON, não só nos retornos do serviço de envio:
+**Enviados**, **Entregues** (só com o Envio por API), **Abertos** (pelo
+pixel, indicador aproximado — seção 5.7), **Com erro**, **Não enviados**,
+**Taxa de bounce**, **Taxa de spam** e **Taxa de abertura**. O selo
+indica **Saudável** ou **Pausado**.
+
+**Registrar e-mails que voltaram (para quem usa SMTP).** Quando o Gmail
+ou outro provedor devolve um e-mail por endereço inexistente, o aviso de
+falha chega na **sua caixa de entrada**, não na B2B ON (e o sistema não
+lê a sua caixa). Em **Registrar e-mails que voltaram**, cole os
+endereços que voltaram — um por linha, ou o próprio texto do aviso — e
+clique em **Registrar como erro**: eles passam a constar como erro e o
+sistema deixa de enviar para esses endereços nas próximas campanhas.
+
+**Contatos bloqueados.** Lista os e-mails e telefones de quem pediu para
+não receber (marcados em **Não quer receber**, seção 5.13), com o motivo
+e a data. Nenhum deles recebe campanha. **Liberar** (só `admin` e
+`super_admin`) desfaz o bloqueio.
 
 **Testando a conta de e-mail e o Webmail.** Depois de salvar a conta em
 Configuração → E-mail (SMTP), use **"Enviar e-mail de teste"**: a B2B ON
@@ -649,6 +703,130 @@ numa resposta padrão de "sem informação suficiente").
   motivo.
 - **Minhas perguntas**: o que você perguntou ao agente de outras
   empresas conectadas, e as respostas recebidas.
+
+### 5.13 Campanhas
+
+Em **PREDATOR → Campanhas**: disparo em massa de **uma mensagem só**
+(um comunicado, uma promoção, um convite) para uma lista de pessoas. Ao
+contrário da cadência (seção 5.3), não é uma sequência de toques gerada
+pela IA e não passa pela fila de Aprovação: o texto é seu, e o envio sai
+quando você mandar. O limite de campanhas criadas por mês depende do
+plano (seção 8).
+
+**1. Criar a campanha.** **Nova campanha** pede o nome, o tipo
+(Marketing ou Vendas) e os canais:
+
+- **E-mail**: assunto e texto do e-mail, em texto simples.
+- **WhatsApp**: um template aprovado pela Meta (ver seção 5.5).
+
+**2. Personalizar com marcadores.** No assunto e no texto, escreva os
+marcadores entre colchetes; cada pessoa recebe o e-mail com os próprios
+dados. Maiúsculas, minúsculas e espaços dentro dos colchetes não
+importam.
+
+| Marcador | O que entra | Se o dado estiver faltando |
+|---|---|---|
+| `[Nome]` | o primeiro nome (sem "Dr.", "Sra." etc.; nomes todo em maiúsculas ou minúsculas ganham inicial maiúscula) | o marcador some, junto com a vírgula: "Olá, [Nome]," vira "Olá!" |
+| `[Nome completo]` | o nome inteiro | some, do mesmo jeito |
+| `[Empresa]` | o nome da empresa do destinatário | entra "a sua empresa" |
+
+Em **Ver o texto do e-mail**, a prévia mostra como a mensagem chega para
+o primeiro destinatário da lista.
+
+**3. Adicionar os destinatários.** Com a campanha em rascunho, há duas
+formas:
+
+- **Contatos cadastrados**: marque contas **Por ICP** ou entre os
+  **Clientes Cadastrados** (Leads) e clique em adicionar — entram todos
+  os contatos já cadastrados naquelas contas.
+- **Colar lista**: cole direto do Excel/Planilhas, uma pessoa por linha,
+  com as colunas **Nome, E-mail, Telefone e Empresa**. Com cabeçalho, o
+  sistema reconhece as colunas pelos nomes; sem cabeçalho, o que não for
+  número de telefone vira empresa. Se o texto colado vier com acentos
+  quebrados ("JoÃ£o"), o sistema conserta sozinho. Pessoas repetidas
+  (mesmo e-mail) entram uma vez só.
+
+**4. Enviar.** Há dois botões:
+
+- **Marcar como pronta**: envia a todos que ainda não receberam. Quem já
+  recebeu **nunca** recebe de novo; quem tinha falhado é tentado outra
+  vez.
+- **Enviar só para os selecionados (N)**: marque as caixas da tabela
+  para mandar apenas a algumas pessoas — por exemplo, um teste com dois
+  e-mails. Os demais ficam como **fora desta rodada** e, quando a rodada
+  termina, a campanha volta ao rascunho, pronta para o envio seguinte
+  (você pode, depois, mandar a todos os que ainda não receberam).
+
+O envio roda em segundo plano, um destinatário por vez, e a tela mostra
+os totais por situação. Se o canal de e-mail estiver pausado por bounce
+(seção 5.9), a campanha não é aceita para envio até você reativar o
+canal.
+
+**Situação de cada destinatário**
+
+| Situação | Significado |
+|---|---|
+| pendente | na fila, ainda não enviado |
+| enviado | a mensagem saiu |
+| falhou | o servidor recusou o envio; o motivo aparece embaixo do status |
+| não enviado | nunca foi tentado: sem e-mail válido (por exemplo, um endereço digitado errado ou um link no lugar do e-mail), contato na lista de bloqueio ou endereço que já tinha voltado antes. Não conta como bounce nem derruba a reputação |
+| optout | pediu para não receber |
+| fora desta rodada | ficou de fora de um envio "só para os selecionados" |
+
+Se a conexão com o servidor de e-mail cair no meio, o envio **para** e
+retoma sozinho em alguns minutos de onde parou (ninguém recebe em
+duplicidade).
+
+**5. Corrigir um destinatário (Editar).** Na linha do contato, **Editar**
+corrige nome, e-mail, telefone e empresa — por exemplo, quando a pessoa
+avisou que trocou de e-mail. Só é possível com a campanha parada
+(rascunho ou concluída). Ao trocar o e-mail: o histórico do endereço
+antigo (entrega, abertura, erro) é zerado; quem ainda não tinha recebido
+volta para a fila; quem **já recebeu** só troca se você marcar *"Enviar
+a campanha também para o novo e-mail"*. Também dá para marcar *"Atualizar
+também o e-mail no cadastro do contato (CRM)"*.
+
+**6. Quem não quer receber (Não quer receber).** Se alguém disse que não
+quer receber mas não clicou em cancelar, use **Não quer receber** na
+linha dele e confirme. O e-mail e o telefone entram na **lista de
+bloqueio da empresa**: valem para **todas as campanhas**, atuais e
+futuras, e se o contato veio do CRM o cancelamento completo dele
+também é aplicado (as cadências pendentes são canceladas). A lista fica
+em **Relatório de Entrega → Contatos bloqueados**; só `admin` e
+`super_admin` podem **Liberar** um bloqueio.
+
+**7. Editar a campanha.** **Editar e-mail e dados** altera nome, tipo,
+canais e texto. Com a campanha já enviada, a edição pede para
+**voltar a campanha para rascunho**: quem já recebeu não recebe de novo
+e os que falharam voltam para a fila.
+
+**Medir o resultado.** O **Relatório de Entrega** (seção 5.9) mostra
+enviados, entregues, abertos e erros das campanhas.
+
+**Como o e-mail sai.** Em **Configuração** há duas formas de enviar
+(seção 5.1): o **Envio por API** (recomendado para campanhas) e a conta
+**E-mail (SMTP)**. A conta SMTP é uma caixa de e-mail comum e tem
+limites do próprio provedor (por exemplo, um teto diário de envios e
+recusa de logins muito frequentes). Para listas grandes, prefira o envio
+por API.
+
+### 5.14 Tarefas de LinkedIn
+
+O B2B ON **não envia mensagens pelo LinkedIn** nem se conecta à sua conta
+do LinkedIn: automatizar o envio pode levar à restrição ou ao banimento
+da conta. Em vez disso, quando um toque de LinkedIn da cadência chega na
+hora de ser enviado, o sistema prepara a mensagem e cria uma **tarefa**
+em **PREDATOR → Tarefas de LinkedIn** (o menu mostra a quantidade de
+pendentes). Você faz o último passo:
+
+1. **Copiar mensagem**.
+2. **Abrir perfil** (abre numa nova aba, se o contato tem o link do
+   perfil cadastrado) e enviar a mensagem pelo LinkedIn.
+3. Voltar e clicar em **Marcar como enviada**: a cadência avança e o
+   envio fica registrado no histórico da conta.
+
+**Ignorar** cancela a mensagem (pede confirmação). As abas
+**Pendentes**, **Enviadas** e **Ignoradas** guardam o histórico.
 
 ---
 
@@ -848,7 +1026,8 @@ O consumo/restante em tempo real aparece na tela de **Prospecção**.
 
 ### Planos padrão
 
-Suíte (CRM + MAP + PREDATOR), valores de cadastro inicial:
+Suíte (CRM + MAP + PREDATOR), valores de cadastro inicial (planilha
+comercial de 24/10/2026):
 
 | Plano | Franquia (contas/mês) | Máx. usuários | Preço mensal |
 |---|---|---|---|
@@ -856,7 +1035,31 @@ Suíte (CRM + MAP + PREDATOR), valores de cadastro inicial:
 | Teste | 200 | sem limite | R$ 0 (cortesia, só por convite) |
 | Starter | 200 | 5 | R$ 924,50 |
 | Professional | 800 | 10 | R$ 1.664,10 |
-| Enterprise | 5.000 | 20 | R$ 2.958,40 |
+| Enterprise | 1.200 | 20 | R$ 2.958,40 |
+| Business | 2.500 | 50 | R$ 6.485,00 |
+| Corporate | 5.000 | 100 | R$ 11.100,00 |
+
+Acima de 100 usuários a contratação é "On Demand" (sob consulta).
+
+Cada plano também limita o uso de alguns recursos que consomem
+processamento. Os limites abaixo valem por empresa (tenant):
+
+| Plano | Enriquecimento de site (por semana) | Enriquecimento de contatos (por semana) | Cadências por mês | Campanhas por mês |
+|---|---|---|---|---|
+| POC | 15 | 15 | 5 | 2 |
+| Teste | 30 | 15 | 20 | 10 |
+| Starter | 50 | 50 | 20 | 10 |
+| Professional | 100 | 100 | 80 | 40 |
+| Enterprise | 250 | 250 | 150 | 100 |
+| Business | 500 | 500 | 300 | 200 |
+| Corporate | 1.000 | 1.000 | 500 | 400 |
+
+Cadências e campanhas contam as que foram **criadas** no mês corrente:
+ao atingir o limite, criar uma nova é recusado com um aviso, até o
+primeiro dia do mês seguinte (ou até a troca para um plano maior). O
+enriquecimento conta por semana. Os limites ficam na tabela de planos
+(**Admin → Planos**) e podem ser ajustados pela B2B ON sem mudança de
+software.
 
 MAP, PREDATOR e CRM também são vendidos separados (planos Starter /
 Professional / Enterprise de cada módulo, com 5 / 10 / 20 usuários).
@@ -929,15 +1132,17 @@ avaliação comercial sem risco de suspensão automática.
 Além do volume (franquia/usuários), alguns recursos são um gancho de
 upgrade — bloqueados nos planos mais baixos independente de quanto a
 franquia ainda tenha sobrado. O plano **Teste** espelha o Starter aqui
-também (nenhum dos recursos abaixo):
+também nos recursos abaixo, com uma exceção: o Teste pode criar
+sub-tenants, para que quem avalia a plataforma consiga testar a
+hierarquia de revenda:
 
-| Recurso | POC / Starter / Teste | Professional | Enterprise |
+| Recurso | POC / Starter / Teste | Professional | Enterprise / Business / Corporate |
 |---|---|---|---|
 | Teste A/B em cadências | ✗ | ✓ | ✓ |
 | Auto-aprovação de mensagens | ✗ | ✗ | ✓ |
 | Webhook automático no relatório periódico | ✗ | ✓ | ✓ |
 | API de parceiros (provisionamento/billing) | ✗ | ✓ | ✓ |
-| Criar sub-tenants (hierarquia) | ✗ | ✓ | ✓ |
+| Criar sub-tenants (hierarquia) | ✗ (Teste: ✓) | ✓ | ✓ |
 | Retenção de relatórios / auditoria | 30 / 90 dias | 90 / 365 dias | sem limite |
 
 A UI mostra um cadeado nas opções bloqueadas em vez de simplesmente

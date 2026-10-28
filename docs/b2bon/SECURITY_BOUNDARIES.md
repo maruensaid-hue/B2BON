@@ -69,7 +69,10 @@ restante foi reconfirmado no código.
 
 Credenciais de terceiros em repouso usam Fernet (`TextoCriptografado`).
 A chave é obrigatória em produção. Rotação é manual. Webhooks verificam
-a assinatura antes de ler o corpo.
+a assinatura antes de ler o corpo. Inclui as chaves do envio por API de cada cliente
+(`configuracao_email_api`, 2026-10): cifradas, mascaradas na resposta e com
+chave pública própria para validar os avisos de entrega daquele tenant
+(ver `08_SECURITY.md`).
 
 ## 5. IA
 

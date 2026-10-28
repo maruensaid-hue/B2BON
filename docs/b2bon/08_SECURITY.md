@@ -40,3 +40,22 @@ demonstração invalidados quando o recurso é desligado e limite por IP real (�
   `Access-Control-Allow-Origin`; recusas são registradas com o motivo (logger `b2bon.cors`).
 - `CORS_ORIGINS_PROPRIAS` (padrão `https://b2bon.onrender.com`): frontends da própria B2B ON publicados por este
   repositório, somados a `CORS_ORIGINS` do painel. Nunca incluir origem de terceiros aqui.
+
+## Envio por API do cliente, avisos de entrega e lista de bloqueio (2026-10, D-106 a D-108)
+
+- **Chaves cifradas em repouso**: `configuracao_email_api.chave_api` e `.chave_webhook` usam `TextoCriptografado` (Fernet), como as credenciais SMTP.
+  A API só devolve o final da chave (`chave_mascarada`); `PUT` com chave em branco mantém a atual. Se a chave de criptografia mudar, a leitura falha de
+  forma controlada (`InvalidToken`) e o aviso de eventos daquele tenant deixa de ser aceito, em vez de derrubar o processamento.
+- **Aviso de eventos (`POST /webhooks/envio/eventos`, alias `/webhooks/sendgrid/eventos`) é público, mas assinado**: a assinatura (ECDSA P-256 sobre
+  `timestamp + corpo`) é verificada antes de qualquer gravação. Há dois emissores legítimos: a conta da plataforma (chave global) e a conta de cada cliente
+  (chave em `configuracao_email_api`). Os eventos lidos antes da verificação servem só para descobrir de quais tenants são; quando a assinatura bate com a chave de
+  um tenant, **apenas os eventos desse tenant** são processados. Uma chave de cliente nunca forja entrega, bounce ou spam de outro cliente.
+- **Eventos sempre dentro do tenant**: a busca da mensagem ou do destinatário de campanha usa `tenant_id` do evento e o id ecoado no envio; e-mail de sistema
+  (convite, cobrança, boas-vindas) não tem esses ids e nunca alimenta a reputação do canal (incidente de 2026-10-05).
+- **Pixel de abertura**: o token é HMAC (`tenant:id:assinatura`; os ids de campanha levam o prefixo `c`); token inválido não registra nada e a imagem é servida
+  do mesmo jeito. A abertura é indicador aproximado, nunca base de decisão automática.
+- **Lista de bloqueio** (`bloqueio_contato`): consultada no envio de toda campanha do tenant (e-mail em minúsculas; telefone pelos 10 últimos dígitos). Liberar um
+  bloqueio exige `admin` ou `super_admin`; marcar "não quer receber" e ver a lista valem para qualquer usuário do tenant com acesso ao PREDATOR.
+- **Reserva do disparo**: `campanha.processando_ate` impede dois processos de enviar a mesma campanha (envio imediato e agendador); a reserva vence em 10 minutos.
+- **Entrada tratada como dado**: nomes, telefones e empresas colados de planilha passam por `corrigir_codificacao` (só reverte a troca de codificação
+  quando o resultado é UTF-8 válido) e os marcadores `[Nome]`/`[Empresa]` são trocados por expressão regular sobre o texto, sem executar nada.

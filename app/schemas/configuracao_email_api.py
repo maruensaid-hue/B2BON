@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 
 class ConfiguracaoEmailApiSchema(BaseModel):
+    """Configuração do envio por API devolvida ao cliente: chave mascarada e o endereço dos avisos de entrega."""
     id: int
     tenant_id: str
     remetente_email: str
@@ -17,6 +18,7 @@ class ConfiguracaoEmailApiSchema(BaseModel):
 
 
 class ConfiguracaoEmailApiUpsertSchema(BaseModel):
+    """Dados para salvar o envio por API; chave em branco mantém a atual."""
     chave_api: str | None = None
     remetente_email: str
     remetente_nome: str | None = None

@@ -8,6 +8,7 @@ import { api, ApiError } from "@/lib/api";
 // Avisa o menu (contador ao lado de "Tarefas de LinkedIn") que a quantidade de pendentes mudou.
 export const EVENTO_TAREFAS_LINKEDIN = "b2bon:tarefas-linkedin";
 
+// Tarefa manual: a mensagem pronta de um toque de LinkedIn, que a pessoa envia pelo próprio LinkedIn.
 interface TarefaLinkedin {
   id: number;
   mensagem_id: number;
@@ -22,12 +23,14 @@ interface TarefaLinkedin {
   conta_nome: string | null;
 }
 
+// Abas da lista, na ordem em que aparecem.
 const FILTROS: { valor: string; rotulo: string }[] = [
   { valor: "pendente", rotulo: "Pendentes" },
   { valor: "executada", rotulo: "Enviadas" },
   { valor: "ignorada", rotulo: "Ignoradas" },
 ];
 
+// Cor e texto do selo de cada status da tarefa.
 const TOM_STATUS: Record<string, "amber" | "green" | "muted"> = { pendente: "amber", executada: "green", ignorada: "muted" };
 const ROTULO_STATUS: Record<string, string> = { pendente: "Pendente", executada: "Enviada", ignorada: "Ignorada" };
 
@@ -44,6 +47,7 @@ function urlDoPerfil(link: string | null): string | null {
   }
 }
 
+// Tela das tarefas de LinkedIn: copiar a mensagem, abrir o perfil, marcar como enviada ou ignorar. O B2B ON não envia pelo LinkedIn (protege a conta da pessoa).
 export function TarefasLinkedin() {
   const [filtro, setFiltro] = useState("pendente");
   const [tarefas, setTarefas] = useState<TarefaLinkedin[] | null>(null);
@@ -53,6 +57,7 @@ export function TarefasLinkedin() {
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
 
+  // Busca as tarefas do status escolhido.
   async function carregar(status: string) {
     try {
       setTarefas(await api.get<TarefaLinkedin[]>(`/linkedin/tarefas?status=${status}`));
@@ -67,6 +72,7 @@ export function TarefasLinkedin() {
     carregar(filtro);
   }, [filtro]);
 
+  // Copia a mensagem para a área de transferência; se o navegador recusar, orienta a copiar à mão.
   async function copiar(tarefa: TarefaLinkedin) {
     setErro(null);
     try {
@@ -78,6 +84,7 @@ export function TarefasLinkedin() {
     }
   }
 
+  // Marca como enviada (atualiza a cadência e o histórico da conta) ou ignora (cancela a mensagem), e avisa o menu para atualizar o contador.
   async function marcar(tarefa: TarefaLinkedin, executada: boolean) {
     if (processandoId !== null) return;
     setProcessandoId(tarefa.id);

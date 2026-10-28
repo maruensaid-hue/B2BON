@@ -23,6 +23,7 @@ def primeiro_nome(nome_completo: str | None) -> str:
 
 
 def _sem_nome(m: re.Match[str]) -> str:
+    """Decide o que fica no lugar de `[Nome]` quando não há nome: o marcador some junto com a pontuação ("Olá, [Nome]," vira "Olá!")."""
     texto = m.string
     antes_vazio = m.start() == 0 or texto[m.start() - 1] == "\n"
     depois = texto[m.end():]
@@ -39,6 +40,7 @@ def _sem_nome(m: re.Match[str]) -> str:
 
 
 def _trocar_nome(texto: str, padrao: str, valor: str) -> str:
+    """Troca o marcador pelo valor ou, se o valor é vazio, aplica a regra de nome ausente."""
     if valor:
         return re.sub(padrao, lambda _m: valor, texto, flags=re.IGNORECASE)
     ausente = re.compile(rf"(?P<antes>[ \t]*,?[ \t]*){padrao}(?:[ \t]*(?P<virgula>,))?", re.IGNORECASE)
@@ -46,6 +48,7 @@ def _trocar_nome(texto: str, padrao: str, valor: str) -> str:
 
 
 def renderizar(texto: str | None, nome_completo: str | None, empresa: str | None) -> str:
+    """Texto com `[Nome]`, `[Nome completo]` e `[Empresa]` trocados pelos dados do destinatário (empresa ausente vira "a sua empresa")."""
     resultado = texto or ""
     resultado = _trocar_nome(resultado, _NOME_COMPLETO, (nome_completo or "").strip())
     resultado = _trocar_nome(resultado, _NOME, primeiro_nome(nome_completo))

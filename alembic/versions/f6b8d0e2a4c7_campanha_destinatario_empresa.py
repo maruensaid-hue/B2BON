@@ -20,10 +20,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Acrescenta `campanha_destinatario.empresa`."""
     with op.batch_alter_table("campanha_destinatario") as lote:
         lote.add_column(sa.Column("empresa", sa.String(), nullable=True))
 
 
 def downgrade() -> None:
+    """Remove a coluna `campanha_destinatario.empresa`."""
     with op.batch_alter_table("campanha_destinatario") as lote:
         lote.drop_column("empresa")

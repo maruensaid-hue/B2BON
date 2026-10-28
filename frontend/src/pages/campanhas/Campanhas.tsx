@@ -386,6 +386,7 @@ export function Campanhas() {
     }
   }
 
+  // Salva a edição do destinatário; se ele voltou para a fila (e-mail corrigido), avisa que a campanha pode ter sido reaberta como rascunho.
   async function salvarDestinatario(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (campanhaSelecionadaId === null || destinatarioEmEdicao === null || salvandoDestinatario) return;
@@ -432,6 +433,7 @@ export function Campanhas() {
     }
   }
 
+  // Marca ou desmarca um destinatário para o envio só aos selecionados.
   function alternarDestinatario(destinatarioId: number) {
     setDestinatariosMarcados((atual) => {
       const nova = new Set(atual);
@@ -441,6 +443,7 @@ export function Campanhas() {
     });
   }
 
+  // Marca ou desmarca todos os que ainda não receberam.
   function alternarTodosOsElegiveis() {
     setDestinatariosMarcados(idsMarcados.length === idsElegiveis.length ? new Set() : new Set(idsElegiveis));
   }
@@ -464,6 +467,7 @@ export function Campanhas() {
     }
   }
 
+  // Abre o formulário de edição da campanha com os canais atuais dela.
   function abrirEdicao() {
     if (!campanhaSelecionada) return;
     setCanaisEdicao(new Set(campanhaSelecionada.canais));
@@ -485,6 +489,7 @@ export function Campanhas() {
     }
   }
 
+  // Liga ou desliga um canal (e-mail ou WhatsApp) no formulário de edição.
   function alternarCanalEdicao(canal: string) {
     setCanaisEdicao((atual) => {
       const nova = new Set(atual);
@@ -494,6 +499,7 @@ export function Campanhas() {
     });
   }
 
+  // Grava nome, tipo, canais e texto da campanha (só com a campanha em rascunho).
   async function salvarEdicao(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (campanhaSelecionadaId === null) return;

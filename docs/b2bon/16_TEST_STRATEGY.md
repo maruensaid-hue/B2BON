@@ -60,6 +60,14 @@
 | Preços públicos dos fornecedores: Render Scale/Web Service, Postgres e Key Value fora do pool, Neon por envelope (benchmark não é custo), Lusha Premium no pool de dados, CUSTOM sem preço, PTAX, dupla contagem, prioridade da fonte, pesos BID/SOURCING, capacidade não alocada, snapshot imutável | `tests/integration/test_precos_fornecedores.py` | D-077 |
 | Infrastructure Cost Pool: real × provisionado, plano máximo, pesos 1/2/4 configuráveis, atribuição direta, sem dupla contagem IA/API, limiares 70/80/90/100, alertas sem upgrade automático, projeção, Provider Economics, PTAX, isolamento | `tests/integration/test_infraestrutura_pool.py` | D-076 |
 | Entitlements Government do PO no catálogo único; Tax Engine (presunção, ISS SP 1.05, CBS/IBS-teste fora da carga, adicional de IRPJ, pendências); infraestrutura por categoria/método; câmbio por vigência e AWAITING_FX_RATE; IA só pela política | `tests/integration/test_parametros_financeiros.py` | D-075 |
+| Campanha: disparo com reserva, retentativa, envio seletivo, edição de destinatário, `nao_enviado` | `tests/integration/test_campanhas.py`, `tests/unit/test_campanha_service.py` | D-106, D-108 |
+| Marcadores `[Nome]`/`[Empresa]` e conserto de acentos | `tests/unit/test_campanha_personalizacao.py`, `tests/unit/test_texto.py` | D-106 |
+| Erros de SMTP por etapa, com IP; `SMTPRecipientsRefused` antes de `OSError` | `tests/unit/test_smtp_email_provider.py` | D-106 |
+| Envio por API, aviso de eventos assinado (chave da plataforma ou do tenant, sem forjar outro tenant) e pixel de abertura | `tests/integration/test_configuracao_email_api.py`, `test_webhook_sendgrid.py`, `test_rastreamento_email.py`, `tests/unit/test_sendgrid_webhook_service.py`, `test_rastreamento_service.py` | D-106 |
+| Relatório de entrega com totais dos envios reais, bounce manual e lista de bloqueio | `tests/integration/test_relatorio_entrega.py` | D-106, D-108 |
+| Tarefas de LinkedIn (listar, contar, marcar de forma idempotente) | `tests/integration/test_linkedin.py` | D-107 |
+| Toda rota pública está aprovada (inclui `/webhooks/envio/eventos`, `webhook_assinado`) | `tests/test_rotas_publicas_aprovadas.py` | D-106 |
+| `lock_timeout` das migrações (unidade e PostgreSQL real, este último sob demanda com `B2BON_TESTE_PG_URL`) | `tests/unit/test_migracao_limite_de_espera.py`, `tests/test_migracao_limite_de_espera_pg.py` | D-106 |
 
 ## Regras
 
@@ -115,3 +123,4 @@
 | D-080 MAP Performance Comercial (2026-10-01) | 2.207 passed (+ Postgres 10/10) | ruff 40, lint OK (25 warnings), build OK, duplicação 41 | 18/18 |
 | D-081 MAP pronto para a configuração (2026-10-01) | 2.212 passed (+ Postgres 10/10) | ruff 40, lint OK (25 warnings), build OK | 18/18 |
 | D-082 Ambiente de demonstração (2026-10-01) | 2.219 passed (+ Postgres 11/11) | ruff 40, lint OK (25 warnings), build OK | 19/19 |
+| D-104 a D-108 Campanhas, envio e entrega (2026-10-28) | 3.338 passed, 22 skipped (suíte sem `tests/desempenho`, que exige Unix) | ruff OK, `tsc -b` OK, build OK | varredura de isolamento 8/8 |

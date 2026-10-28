@@ -39,11 +39,11 @@ O `SECURITY_BOUNDARIES.md` de raiz diz que o staging de CNPJ é a
 | CRM | conta, decisor, negocio, estagio_funil, atividade, proposta_negocio, template_proposta (+itens), descarte_conta, custo_aquisicao |
 | MAP | interacao_conta, interacao_tenant, alerta_detrator (NPS detrator), configuracao_painel |
 | PREDATOR — prospecção | icp, lista_prospeccao, fila_enriquecimento_conta, campo_enriquecido, oferta, material_oferta, cnpj_* , recorte_cnpj_estado |
-| PREDATOR — engajamento | cadencia, toque_cadencia, mensagem, aprovacao, regra_auto_aprovacao, campanha, campanha_destinatario, pausa_canal, registro_envio_diario, registro_reputacao_canal, tarefa_linkedin, conexao_linkedin, email_direto, email_recebido, template_whatsapp |
+| PREDATOR — engajamento | cadencia, toque_cadencia, mensagem, aprovacao, regra_auto_aprovacao, campanha, campanha_destinatario, pausa_canal, registro_envio_diario, registro_reputacao_canal, bloqueio_contato, tarefa_linkedin, conexao_linkedin, email_direto, email_recebido, template_whatsapp |
 | PREDATOR — qualificação/reunião | conversa_qualificacao, turno_conversa, qualificacao_score, configuracao_qualificacao, reuniao, pesquisa_nps, configuracao_nps, faq_item |
 | PREDATOR — inteligência | regra_aprendida, sinal_oportunidade, configuracao_agente_corporativo, pergunta_agente_corporativo, registro_oportunidade, indicacao |
 | Shoal (Business Network) | perfil_empresa, verificacao_empresa, conexao_empresa, seguidor_empresa, mensagem_rede_social, post_rede_social, midia_post, comentario_post, reacao_post, notificacao_rede_social, intent, relacionamento_empresarial, sala_corporativa, canal_sala, mensagem_sala, sala_compra |
-| Configuração de canal | configuracao_whatsapp, configuracao_email_smtp, configuracao_comunicacao, configuracao_canal, configuracao_envio, configuracao_notificacao, configuracao_relatorio |
+| Configuração de canal | configuracao_whatsapp, configuracao_email_smtp, configuracao_email_api, configuracao_comunicacao, configuracao_canal, configuracao_envio, configuracao_notificacao, configuracao_relatorio |
 | IA | registro_uso_ia (ledger parcial — ver `AI_CURRENT_STATE.md`) |
 | Compliance / auditoria | audit_log, registro_tratamento, registro_supressao_permanente |
 | Parceiros | chave_api_parceiro, assinatura_webhook_parceiro, evento_webhook_parceiro |
@@ -70,6 +70,14 @@ O `SECURITY_BOUNDARIES.md` de raiz diz que o staging de CNPJ é a
 
 **Fase 11:** `participante_sala`, `documento_sala`, `tarefa_sala`, `reuniao_sala`, `stakeholder_sala`; `sala_compra` + `titulo_compartilhado`, `fase_compartilhada`. Total: 135 tabelas.
 
+**Campanhas, envio por API e lista de bloqueio (2026-10, D-104 a D-108):** cabeça Alembic `d4f6a8c0e2b4` (cadeia `c3e5a7b9d1f4` → `d4f6b8c0e2a5` → `e5a7c9d1f3b6` → `f6b8d0e2a4c7` → `c1e3a5b7d9f4` → `d4f6a8c0e2b4`). Tabelas novas, ambas com `tenant_id` indexado:
+- `configuracao_email_api` — envio por API do próprio cliente: `chave_api` e `chave_webhook` cifradas (Fernet, `TextoCriptografado`), `remetente_email`, `remetente_nome`. Uma linha por tenant; quando existe, vale antes da conta SMTP.
+- `bloqueio_contato` — e-mail (minúsculo, indexado) e/ou telefone (comparado pelos 10 últimos dígitos) de quem pediu para não receber; `motivo`, `origem`, `criado_por`. Vale para todas as campanhas do tenant.
+
+Colunas novas: `campanha.processando_ate` (reserva do disparo, vence em 10 min); `campanha_destinatario.empresa`, `.aberto_em`, `.entregue_em`, `.pixel_incluido` (boolean, default falso); `mensagem.entregue_em`. Os planos `Business` e `Corporate` entram como linhas de `plano` (sem coluna nova) e `plano.limite_*` ganha os valores da planilha de 24/10 (`c3e5a7b9d1f4`); `d4f6b8c0e2a5` publica o custo de infraestrutura +30%/+40%.
+
+Os status do destinatário de campanha são `pendente`, `enviado`, `falhou`, `optout`, `retido` (fora da rodada de um envio seletivo) e `nao_enviado` (sem tentativa: e-mail inválido, bloqueado ou já devolvido). O inventário completo abaixo é o da Fase 0 a 11; o total em `Base.metadata` conferido em 28/10/2026 é de 208 tabelas e 133 arquivos de revisão em `alembic/versions/`, e as tabelas posteriores à Fase 11 estão descritas em `CHANGELOG_IMPLEMENTATION.md`.
+
 Nenhuma tabela de Procurement, Bid, Credit Wallet, Usage Ledger
 completo, Entitlement, Integration Registry ou vetores existe.
 
@@ -85,8 +93,9 @@ completo, Entitlement, Integration Registry ou vetores existe.
 | `audit_log` | 10 | tenant_id | — |
 | `cache_mercado_externo` | 3 | **—** | — |
 | `cadencia` | 12 | tenant_id | conta, icp, oferta |
-| `campanha` | 11 | tenant_id | — |
-| `campanha_destinatario` | 13 | tenant_id | campanha, decisor |
+| `bloqueio_contato` | 8 | tenant_id | — |
+| `campanha` | 12 | tenant_id | — |
+| `campanha_destinatario` | 17 | tenant_id | campanha, decisor |
 | `campo_enriquecido` | 6 | **—** | conta |
 | `canal_sala` | 7 | **—** | sala_corporativa |
 | `cnpj_estabelecimento` | 12 | **—** | — |
@@ -97,6 +106,7 @@ completo, Entitlement, Integration Registry ou vetores existe.
 | `configuracao_agente_corporativo` | 5 | tenant_id | — |
 | `configuracao_canal` | 4 | tenant_id | — |
 | `configuracao_comunicacao` | 6 | tenant_id | — |
+| `configuracao_email_api` | 8 | tenant_id | — |
 | `configuracao_email_smtp` | 9 | tenant_id | — |
 | `configuracao_envio` | 9 | tenant_id | — |
 | `configuracao_notificacao` | 6 | tenant_id | — |
@@ -127,7 +137,7 @@ completo, Entitlement, Integration Registry ou vetores existe.
 | `licenca` | 8 | tenant_id | plano |
 | `lista_prospeccao` | 7 | tenant_id | icp, usuario |
 | `material_oferta` | 8 | tenant_id | oferta |
-| `mensagem` | 19 | tenant_id | cadencia, decisor, toque_cadencia |
+| `mensagem` | 20 | tenant_id | cadencia, decisor, toque_cadencia |
 | `mensagem_rede_social` | 7 | tenant_id_remetente, tenant_id_destinatario | usuario |
 | `mensagem_sala` | 7 | tenant_id_remetente | canal_sala, usuario |
 | `midia_post` | 6 | **—** | post_rede_social |

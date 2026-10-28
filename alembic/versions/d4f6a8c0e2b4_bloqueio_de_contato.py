@@ -18,6 +18,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Cria a tabela `bloqueio_contato` e seus índices."""
     op.create_table(
         "bloqueio_contato",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -34,6 +35,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Remove a tabela (a lista de bloqueio é perdida)."""
     op.drop_index("ix_bloqueio_contato_email", table_name="bloqueio_contato")
     op.drop_index("ix_bloqueio_contato_tenant_id", table_name="bloqueio_contato")
     op.drop_table("bloqueio_contato")

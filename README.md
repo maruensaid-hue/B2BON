@@ -12,7 +12,11 @@ Plataforma SaaS multi-tenant da CyberFort. Módulos:
   listas a partir da Receita Federal, enriquecimento, cadências
   multicanal (e-mail/WhatsApp/LinkedIn) com fila de aprovação humana,
   disparo agendado, rastreio de abertura de e-mail, qualificação de
-  reuniões e dossiê automático.
+  reuniões e dossiê automático. Inclui **campanhas** em massa
+  (personalização `[Nome]`/`[Empresa]`, envio só aos selecionados, lista
+  de bloqueio da empresa, envio por API do próprio cliente ou por SMTP) e
+  **Tarefas de LinkedIn**: o LinkedIn é toque manual assistido, o sistema
+  nunca envia pela conta da pessoa.
 - **Licitações (B2B ON Bid Intelligence)** — lado vendedor: editais
   públicos e RFPs de empresas, requisitos extraídos com página e trecho,
   matriz de conformidade, cofre de documentos, Go/No-Go (decisão humana)
@@ -150,6 +154,9 @@ sobe a aplicação inteira via `TestClient` contra um SQLite temporário
 por teste (`tests/conftest.py`). Os testes marcados para Postgres rodam
 com `B2BON_TESTE_PG_URL` apontando para um banco de teste; a medição de
 desempenho, com `B2BON_MEDIR` (ver `docs/b2bon/16_TEST_STRATEGY.md`).
+
+`tests/desempenho/` usa o módulo `resource` do Unix: no Windows, rode a suíte
+com `--ignore=tests/desempenho` (o CI, em Linux, roda tudo).
 
 Ponta a ponta (sobe API e frontend sozinho):
 

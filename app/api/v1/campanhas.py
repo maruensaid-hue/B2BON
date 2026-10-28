@@ -107,6 +107,7 @@ def previa_campanha(
     tenant_id: str = Depends(get_tenant_id),
     db: Session = Depends(get_db),
 ) -> CampanhaPreviaSchema:
+    """E-mail como chega para um destinatário (o indicado ou o primeiro da lista), com `[Nome]` e `[Empresa]` já trocados e sem o rodapé de descadastro."""
     return CampanhaPreviaSchema(**campanha_service.previa(db, tenant_id, campanha_id, destinatario_id))
 
 
@@ -139,6 +140,7 @@ def voltar_para_rascunho(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> CampanhaSchema:
+    """Devolve a campanha ao rascunho para editar o texto: quem já recebeu continua enviado, os que falharam voltam à fila e um envio em andamento para."""
     return campanha_service.voltar_para_rascunho(db, tenant_id, ator_id, campanha_id)
 
 
@@ -183,6 +185,7 @@ def editar_destinatario(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> CampanhaDestinatarioSchema:
+    """Corrige nome, e-mail, telefone ou empresa de um destinatário, com a campanha parada. As regras estão em `campanha_service.editar_destinatario`."""
     return campanha_service.editar_destinatario(
         db, tenant_id, ator_id, campanha_id, destinatario_id,
         dados.nome, dados.email, dados.telefone, dados.empresa, dados.reenviar, dados.atualizar_contato_crm,
@@ -198,6 +201,7 @@ def nao_quer_receber(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> CampanhaDestinatarioSchema:
+    """Cancela o destinatário e põe o e-mail e o telefone dele na lista de bloqueio da empresa, que vale para todas as campanhas."""
     return campanha_service.nao_quer_receber(
         db, tenant_id, ator_id, campanha_id, destinatario_id, dados.motivo if dados is not None else None
     )

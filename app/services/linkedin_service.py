@@ -49,6 +49,7 @@ def listar_tarefas(db: Session, tenant_id: str, status: str | None = None) -> li
 
 
 def contar_pendentes(db: Session, tenant_id: str) -> int:
+    """Quantas tarefas pendentes o tenant tem (o número do menu)."""
     return db.query(TarefaLinkedin).filter_by(tenant_id=tenant_id, status="pendente").count()
 
 

@@ -41,6 +41,7 @@ class CampanhaDetalheSchema(CampanhaSchema):
 
 
 class CampanhaPreviaSchema(BaseModel):
+    """E-mail da campanha já personalizado para um destinatário (sem o rodapé de descadastro)."""
     destinatario_nome: str | None
     assunto: str
     corpo: str
@@ -65,6 +66,7 @@ class CampanhaUpdateSchema(BaseModel):
 
 
 class EditarDestinatarioRequestSchema(BaseModel):
+    """Dados para corrigir um destinatário; `reenviar` e `atualizar_contato_crm` controlam o efeito de trocar o e-mail."""
     nome: str
     email: str | None = None
     telefone: str | None = None
@@ -76,10 +78,12 @@ class EditarDestinatarioRequestSchema(BaseModel):
 
 
 class NaoQuerReceberRequestSchema(BaseModel):
+    """Motivo opcional do bloqueio (padrão: "Informado manualmente: não quer receber.")."""
     motivo: str | None = None
 
 
 class MarcarProntaRequestSchema(BaseModel):
+    """Lista opcional de destinatários para enviar só a eles; os demais pendentes ficam para o próximo envio."""
     # Nulo = todos os pendentes; lista = só estes (os demais pendentes aguardam o próximo envio).
     destinatario_ids: list[int] | None = None
 
@@ -89,6 +93,8 @@ class AdicionarDestinatariosDeDecisoresRequestSchema(BaseModel):
 
 
 class DestinatarioAvulsoSchema(BaseModel):
+    """Uma pessoa da lista colada na campanha (sem cadastro no CRM). A `empresa` é opcional e alimenta o marcador `[Empresa]` do e-mail."""
+
     nome: str
     email: str | None = None
     telefone: str | None = None

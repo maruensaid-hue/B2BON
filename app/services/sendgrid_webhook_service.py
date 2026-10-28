@@ -131,6 +131,7 @@ def processar_eventos(db: Session, eventos: list[dict]) -> None:
 
 
 def _chave_de_verificacao_do_tenant(db: Session, tenant_id: str) -> str | None:
+    """Chave pública de verificação dos avisos cadastrada pelo cliente (nulo se não há ou não pode ser lida)."""
     try:
         config = db.query(ConfiguracaoEmailApi).filter_by(tenant_id=tenant_id).one_or_none()
     except InvalidToken:  # chave cifrada com outra chave de criptografia: sem como validar, então não aceita

@@ -42,6 +42,7 @@ _EMAIL_VALIDO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _email_valido(email: str | None) -> bool:
+    """True se parece um e-mail (algo@dominio.ext, sem espaços)."""
     return bool(email) and _EMAIL_VALIDO.match(email.strip()) is not None
 
 
@@ -253,10 +254,9 @@ def adicionar_avulsos(
     destinatarios: list[DestinatarioAvulsoSchema],
 ) -> list[CampanhaDestinatario]:
     """Lista colada/avulsa — sem Decisor de origem, então sem checagem
-    contra a supressão do CRM (limitação documentada: um destinatário
-    avulso que se descadastra só fica suprimido dentro desta campanha,
-    não em campanhas futuras — não existe hoje uma lista de supressão
-    por e-mail cruzando campanhas)."""
+    contra a supressão do CRM. Quem pede para não receber é protegido pela
+    lista de bloqueio da empresa (`bloqueio_contato_service`, e-mail e
+    telefone), que vale para todas as campanhas e é consultada no envio."""
     campanha = obter(db, tenant_id, campanha_id)
     _exigir_rascunho(campanha)
 
@@ -323,6 +323,7 @@ def remover_destinatario(db: Session, tenant_id: str, ator_id: str | None, campa
 
 
 def _obter_destinatario(db: Session, tenant_id: str, campanha_id: int, destinatario_id: int) -> CampanhaDestinatario:
+    """Destinatário da campanha do tenant, ou `NaoEncontrado`."""
     destinatario = (
         db.query(CampanhaDestinatario).filter_by(id=destinatario_id, campanha_id=campanha_id, tenant_id=tenant_id).one_or_none()
     )
@@ -516,6 +517,7 @@ def voltar_para_rascunho(db: Session, tenant_id: str, ator_id: str | None, campa
 
 
 def _agora() -> datetime:
+    """Agora em UTC sem fuso (o banco guarda as datas sem fuso)."""
     return datetime.now(UTC).replace(tzinfo=None)
 
 
@@ -564,6 +566,7 @@ def processar_pendentes(
 def _enviar_pendentes(
     db: Session, tenant_id: str, campanha_id: int, email_provider: EmailProvider, whatsapp_provider: WhatsAppProvider, resultado: dict
 ) -> None:
+    """Envia os destinatários pendentes de uma campanha já reservada, com um commit por destinatário (se o processo cair, quem recebeu não volta a ser enviado). Pula quem deixou de estar pendente e marca como `nao_enviado` quem não tem destino válido, está na lista de bloqueio ou já teve o e-mail devolvido. Para na primeira falha de rede (os próximos também falhariam; a reserva é devolvida e o ciclo seguinte retoma). No fim a campanha fica `concluida`, ou volta a `rascunho` se a rodada foi só dos selecionados, ou segue `enviando` se algo ficou adiado."""
     campanha = db.query(Campanha).filter_by(id=campanha_id, tenant_id=tenant_id).one()
     ids_pendentes = [
         i for (i,) in db.query(CampanhaDestinatario.id).filter_by(campanha_id=campanha_id, tenant_id=tenant_id, status="pendente")
@@ -654,6 +657,7 @@ def _empresa_do_destinatario(db: Session, destinatario: CampanhaDestinatario) ->
 
 
 def _personalizar(db: Session, texto: str | None, destinatario: CampanhaDestinatario) -> str:
+    """Troca os marcadores do texto pelos dados do destinatário e da empresa dele."""
     return campanha_personalizacao.renderizar(texto, destinatario.nome, _empresa_do_destinatario(db, destinatario))
 
 

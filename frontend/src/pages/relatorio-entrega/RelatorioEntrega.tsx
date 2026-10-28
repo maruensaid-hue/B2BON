@@ -35,6 +35,7 @@ interface ContatoComBounce {
   bounce_em: string;
 }
 
+// Totais dos últimos 7 dias contados nos próprios envios (não só nos retornos do provedor de envio).
 interface ResumoEnvios {
   enviados: number;
   entregues: number;
@@ -52,6 +53,7 @@ interface RelatorioEntrega {
   contatos_com_bounce: ContatoComBounce[];
 }
 
+// Entrada da lista de bloqueio da empresa: e-mail e/ou telefone de quem pediu para não receber.
 interface BloqueioContato {
   id: number;
   email: string | null;
@@ -94,6 +96,7 @@ const ABAS_STATUS: { valor: string; rotulo: string }[] = [
   { valor: "cancelado", rotulo: "Cancelado" },
 ];
 
+// Cor do selo de cada status do e-mail.
 const TOM_STATUS: Record<string, "red" | "green" | "violet" | "amber" | "muted" | "cyan"> = {
   erro: "red",
   enviado: "green",
@@ -159,6 +162,7 @@ export function RelatorioEntrega() {
     }
   }
 
+  // Lista de bloqueio: complemento do relatório; se falhar, o resto da tela segue funcionando.
   async function carregarBloqueios() {
     try {
       setBloqueios(await api.get<BloqueioContato[]>("/bloqueios-contato"));
@@ -167,6 +171,7 @@ export function RelatorioEntrega() {
     }
   }
 
+  // Desfaz um bloqueio (só administrador); o contato volta a poder receber campanhas.
   async function liberarBloqueio(bloqueio: BloqueioContato) {
     if (liberandoId !== null) return;
     setLiberandoId(bloqueio.id);

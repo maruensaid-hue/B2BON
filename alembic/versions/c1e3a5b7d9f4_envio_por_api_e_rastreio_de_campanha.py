@@ -23,6 +23,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Cria `configuracao_email_api` e as colunas de abertura/entrega (ver o resumo no topo do arquivo)."""
     op.create_table(
         "configuracao_email_api",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -46,6 +47,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Remove as colunas e a tabela (a configuração do envio por API e os registros de abertura/entrega são perdidos)."""
     with op.batch_alter_table("mensagem") as lote:
         lote.drop_column("entregue_em")
     with op.batch_alter_table("campanha_destinatario") as lote:

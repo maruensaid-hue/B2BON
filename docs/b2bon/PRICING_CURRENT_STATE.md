@@ -36,6 +36,8 @@ banco antes de qualquer decisão comercial.**
 | Starter | suite | map, predator, crm | 5 | 924,50 | sim |
 | Professional | suite | map, predator, crm | 10 | 1.664,10 | sim |
 | Enterprise | suite | map, predator, crm | 20 | 2.958,40 | sim |
+| Business (D-104, migração `c3e5a7b9d1f4`) | suite | map, predator, crm | 50 | 6.485,00 | sim |
+| Corporate (D-104, idem) | suite | map, predator, crm | 100 | 11.100,00 | sim |
 | MAP Starter / Professional / Enterprise | modulo | map | 5 / 10 / 20 | 149,50 / 269,10 / 478,40 | sim |
 | PREDATOR Starter / Professional / Enterprise | modulo | predator | 5 / 10 / 20 | 475,50 / 855,90 / 1.521,60 | sim |
 | CRM Starter / Professional / Enterprise | modulo | crm | 5 / 10 / 20 | 299,50 / 539,10 / 958,40 | sim |
@@ -43,6 +45,23 @@ banco antes de qualquer decisão comercial.**
 | Strategic Sourcing (idem) | modulo | sourcing | 5 | 2.990,00 · FIXED | sim |
 | Strategic Sourcing Enterprise (idem) | modulo | sourcing + tier `sourcing_enterprise` | por contrato | a partir de 5.990,00 · STARTING_AT | **não** (venda assistida) |
 | B2B ON Government Department / Professional (recomendada) / Enterprise (D-072, migração `d9e1f3a5b7c9`) | governo | procurement | conforme contrato (OI-024) | licença 72.000 / 120.000 / 180.000 + implantação 12.000 / 20.000 / 30.000 + subscrição anual 24.000 / 36.000 / 54.000 · CONTRACT (300K / 600K / 1,2M AI Credits/ano) | **não** (contrato) |
+
+**Limites dos planos de suíte (planilha comercial de 2026-10-24, D-104; migração `c3e5a7b9d1f4` e `scripts/bootstrap_tenant.py`).** Contas/mês é a franquia do
+`NucleoPlanLimits`; cadências e campanhas contam as **criadas no mês corrente** (`limite_criacao_service`); o enriquecimento é semanal.
+
+| Plano | Contas/mês | Enriq. site/sem. | Enriq. contatos/sem. | Cadências/mês | Campanhas/mês |
+|---|---|---|---|---|---|
+| POC | 50 | 15 | 15 | 5 | 2 |
+| Teste | 200 | 30 | 15 | 20 | 10 |
+| Starter | 200 | 50 | 50 | 20 | 10 |
+| Professional | 800 | 100 | 100 | 80 | 40 |
+| Enterprise | 1.200 | 250 | 250 | 150 | 100 |
+| Business | 2.500 | 500 | 500 | 300 | 200 |
+| Corporate | 5.000 | 1.000 | 1.000 | 500 | 400 |
+
+A migração só altera cada coluna se ela ainda tem o valor anterior (um ajuste feito depois pelo Admin não é sobrescrito) e cria Business e Corporate a partir do
+Enterprise, com a franquia de pesquisa de decisores da matriz de enriquecimento (120/120/20 e 180/180/30). O custo de infraestrutura dos dois tiers é +30% e +40%
+(D-105, migração `d4f6b8c0e2a5`). Acima de 100 usuários a contratação é "On Demand" (sob consulta). Teste é o único plano gratuito com `permite_subtenants`.
 
 Public Procurement e a B2B ON Suite continuam **sem plano** (PENDING_DEFINITION). AI Credits por plano ficam em
 `finops/comercial.FRANQUIAS`: Bid Intelligence 25.000, Strategic Sourcing 50.000, Enterprise 100.000 (substitui).

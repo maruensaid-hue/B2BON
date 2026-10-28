@@ -27,6 +27,7 @@ _PAPEIS = Depends(exigir_papel("super_admin", "admin"))
 
 
 def _para_schema(config: ConfiguracaoEmailApi) -> ConfiguracaoEmailApiSchema:
+    """Converte a configuração para a resposta da API, mostrando só o sufixo da chave (nunca a chave inteira)."""
     sufixo = config.chave_api[-4:] if len(config.chave_api) >= 4 else config.chave_api
     return ConfiguracaoEmailApiSchema(
         id=config.id,
@@ -45,6 +46,7 @@ def _para_schema(config: ConfiguracaoEmailApi) -> ConfiguracaoEmailApiSchema:
 def obter_configuracao_email_api(
     tenant_id: str = Depends(get_tenant_id), db: Session = Depends(get_db)
 ) -> ConfiguracaoEmailApiSchema | None:
+    """Configuração atual do envio por API do tenant, ou nulo se não houver."""
     config = db.query(ConfiguracaoEmailApi).filter_by(tenant_id=tenant_id).one_or_none()
     return _para_schema(config) if config else None
 

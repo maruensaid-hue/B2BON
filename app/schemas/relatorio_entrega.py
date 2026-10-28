@@ -30,16 +30,19 @@ class ContatoComBounceSchema(BaseModel):
 
 
 class RegistrarBouncesManuaisRequestSchema(BaseModel):
+    """Texto livre com os endereços que voltaram como não entregues."""
     texto: str
 
 
 class RegistroBouncesManuaisSchema(BaseModel):
+    """Resultado do registro manual: registrados, já registrados e não encontrados entre os e-mails enviados."""
     registrados: list[str]
     ja_registrados: list[str]
     nao_encontrados: list[str]
 
 
 class ResumoEnviosSchema(BaseModel):
+    """Totais de e-mails dos últimos 7 dias, contados nos próprios envios."""
     enviados: int = 0
     entregues: int = 0
     abertos: int = 0

@@ -72,6 +72,7 @@ class SmtpEmailProvider(EmailProvider):
         return ultimo
 
     def _enviar_uma_vez(self, mensagem: EmailMessage) -> ResultadoEnvio:
+        """Uma tentativa de envio por SMTP. Classifica a falha em transitória (rede, servidor que derruba a conexão, 4xx) ou definitiva (5xx, destinatário recusado, erro de protocolo), com a etapa e o IP no motivo."""
         # A etapa e o endereço IP entram no motivo da falha: "Connection unexpectedly closed" sozinho não diz se caiu ao conectar, na criptografia, no
         # login ou no envio — e foi o que separou a rede bloqueada (plano gratuito do Render) de um servidor que aceita e depois derruba a conexão.
         etapa = "conectar"
@@ -114,11 +115,13 @@ class SmtpEmailProvider(EmailProvider):
 
     @staticmethod
     def _ip_conectado(servidor: smtplib.SMTP) -> str:
+        """IP do servidor ao qual a conexão se abriu (vazio se indisponível), para o diagnóstico."""
         try:
             return str(servidor.sock.getpeername()[0])
         except (AttributeError, OSError):
             return ""
 
     def _motivo(self, etapa: str, ip: str, erro: Exception | str) -> str:
+        """Monta a mensagem de falha com etapa, servidor, porta e IP: "Connection unexpectedly closed" sozinho não diz onde a conexão caiu."""
         onde = f"{self.host}:{self.porta}" + (f" (IP {ip})" if ip else "")
         return f"Falha ao {etapa} em {onde}: {erro}"

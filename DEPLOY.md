@@ -63,6 +63,22 @@ real percorrido (inclui os desvios da versão original do plano).
 5. Materiais de oferta (`/materiais`) são salvos como blob direto no
    Postgres — não dependem mais de disco persistente, sobrevivem a
    qualquer redeploy mesmo no plano free do Render.
+6. **Plano da instância e envio por SMTP**: o plano *Free* do Render **bloqueia
+   conexões de saída nas portas SMTP (25, 465 e 587)** — o envio por conta
+   SMTP do cliente falha com `Errno 101 Network is unreachable`. Para o
+   cliente poder usar a própria caixa de e-mail, a instância precisa ser de
+   um plano pago. Em 2026-10-26 o `b2bon-api` foi movido para o plano
+   **Starter** pelo painel do Render (Settings → Instance Type); o
+   `render.yaml` da raiz ainda declara `plan: free`. **Antes de sincronizar o
+   Blueprint, alinhe o arquivo** (`plan: starter`), senão a sincronização pode
+   devolver a instância ao plano gratuito e o SMTP volta a falhar.
+7. **Migrações e tabelas em uso**: o `alembic/env.py` aplica
+   `SET LOCAL lock_timeout = '30s'` em PostgreSQL (`app/db/migracao.py`).
+   Se um `ALTER TABLE` ficar esperando por uma tabela em uso (por exemplo,
+   um envio de campanha longo da versão anterior), a migração falha em
+   segundos, o deploy não vai ao ar e a versão anterior continua
+   atendendo — em vez de pendurar até o prazo do Render. O valor é
+   ajustável pela variável `ALEMBIC_LOCK_TIMEOUT` (ex.: `90s`, `500ms`).
 
 ## 4. Primeiro tenant real (CyberFort)
 
@@ -313,6 +329,35 @@ pesquisa de NPS e principalmente o motor de prospecção fria (cadências).
    que chega numa caixa real com SPF/DKIM válidos — no Gmail, abra o
    e-mail → menu "⋮" → **"Ver original"** → confira `SPF: PASS` e
    `DKIM: PASS`.
+
+### 8.1. Envio por API do próprio cliente (campanhas)
+
+Além do e-mail da plataforma (acima), cada tenant pode enviar pela **própria**
+conta num serviço de envio, em **Configuração → Envio por API** (guardada em
+`configuracao_email_api`, chaves cifradas). Com ela o relatório mede entrega,
+bounce, spam e abertura de verdade; com SMTP só aparecem as recusas na hora do
+envio. Quando existe, tem prioridade sobre a conta SMTP do tenant.
+
+Passos do cliente (também no `MANUAL_DO_USUARIO.md`, seção 5.1):
+
+1. Criar a conta no serviço de envio, verificar o remetente ou o domínio e
+   gerar uma chave de API com permissão de envio.
+2. Colar a chave, o e-mail e o nome do remetente na tela e salvar; usar
+   **Enviar e-mail de teste**.
+3. No painel do serviço de envio, cadastrar como destino dos avisos de
+   eventos o endereço que a tela mostra depois de salvar
+   (`https://<api>/api/v1/webhooks/envio/eventos`, mesmo tratamento de
+   `/webhooks/sendgrid/eventos`), marcar **Delivered, Bounce, Dropped e Spam
+   Report** e ligar **Signed Event Webhook Requests**.
+4. Colar a chave pública da assinatura em *Chave de verificação dos avisos de
+   entrega*. Sem ela, os avisos desse cliente são recusados (a rota exige
+   assinatura válida: a da plataforma ou a do tenant dono do evento).
+
+O pixel de abertura das campanhas e o endereço dos avisos são montados a
+partir de `URL_BASE_API` (`{URL_BASE_API}/webhooks/email/aberto/<token>.png` e
+`{URL_BASE_API}/webhooks/envio/eventos`); a variável já inclui o `/api/v1` e
+precisa ser a URL pública do backend, por exemplo
+`https://b2bon-api.onrender.com/api/v1`.
 
 ## 9. Vídeo + transcrição automática — bot de reunião (raio-X)
 

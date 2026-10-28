@@ -19,10 +19,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Acrescenta `campanha.processando_ate` (a reserva do disparo)."""
     with op.batch_alter_table("campanha") as lote:
         lote.add_column(sa.Column("processando_ate", sa.DateTime(), nullable=True))
 
 
 def downgrade() -> None:
+    """Remove a coluna `campanha.processando_ate`."""
     with op.batch_alter_table("campanha") as lote:
         lote.drop_column("processando_ate")

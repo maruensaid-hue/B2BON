@@ -18,6 +18,7 @@ _MARCA = re.compile("[ÃÂ][\u0080-¿" + "".join(_CP1252) + "]|â€|ðŸ")
 
 
 def corrigir_codificacao(texto: str | None) -> str | None:
+    """Desfaz a troca de codificação ("JoÃ£o" vira "João") quando o texto tem a marca típica e o resultado é UTF-8 válido; qualquer outro texto volta intacto."""
     if not texto or not _MARCA.search(texto):
         return texto
     octetos = bytearray()

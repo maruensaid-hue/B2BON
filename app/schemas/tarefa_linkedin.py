@@ -23,6 +23,7 @@ class TarefaLinkedinSchema(BaseModel):
 
 
 class ContagemTarefasLinkedinSchema(BaseModel):
+    """Número de tarefas de LinkedIn pendentes (o contador do menu)."""
     pendentes: int
 
 

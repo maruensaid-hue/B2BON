@@ -50,6 +50,7 @@ _NOVOS = (
 
 
 def upgrade() -> None:
+    """Ajusta os limites dos planos existentes (só onde ainda valem os valores antigos) e cria Business e Corporate a partir do Enterprise, se ainda não existirem."""
     conexao = op.get_bind()
     plano = sa.Table("plano", sa.MetaData(), autoload_with=conexao)
     for nome, coluna, antigo, novo in _AJUSTES:
@@ -81,6 +82,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Devolve os limites antigos onde estão iguais aos novos e remove Business/Corporate que ainda não têm licença."""
     conexao = op.get_bind()
     plano = sa.Table("plano", sa.MetaData(), autoload_with=conexao)
     for nome, coluna, antigo, novo in _AJUSTES:

@@ -27,11 +27,13 @@ PLANOS_TIER = (("Business", "BUSINESS"), ("Corporate", "CORPORATE"))
 
 
 def _politica() -> sa.Table:
+    """Visão mínima da tabela `politica_comissao`, para ler e gravar versões da política sem depender do modelo da aplicação."""
     return sa.table("politica_comissao", sa.column("id", sa.Integer), sa.column("codigo", sa.String), sa.column("versao", sa.Integer),
                     sa.column("regras", sa.JSON), sa.column("ativa", sa.Boolean), sa.column("motivo", sa.String), sa.column("criado_por", sa.String))
 
 
 def upgrade() -> None:
+    """Move Business/Corporate para os tiers próprios e publica a versão da política com os pesos 5,2 e 5,6, se ainda não existirem."""
     conexao = op.get_bind()
     plano = sa.table("plano", sa.column("nome", sa.String), sa.column("tier_infraestrutura", sa.String))
     for nome, tier in PLANOS_TIER:
@@ -55,6 +57,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Devolve os tiers ao ENTERPRISE e remove a versão publicada por esta migração, reativando a anterior."""
     conexao = op.get_bind()
     plano = sa.table("plano", sa.column("nome", sa.String), sa.column("tier_infraestrutura", sa.String))
     for nome, tier in PLANOS_TIER:

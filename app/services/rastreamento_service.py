@@ -54,6 +54,7 @@ def url_pixel(tenant_id: str, mensagem_id: int) -> str:
 
 
 def url_pixel_campanha(tenant_id: str, destinatario_id: int) -> str:
+    """Endereço do pixel de abertura de um destinatário de campanha."""
     token = gerar_token_abertura(tenant_id, destinatario_id, campanha=True)
     return f"{settings.url_base_api}/webhooks/email/aberto/{token}.png"
 

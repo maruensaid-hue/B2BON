@@ -74,6 +74,7 @@ interface ConfiguracaoEmailSmtp {
   senha_mascarada: string;
 }
 
+// Envio por API do cliente: a chave nunca vem inteira, só o sufixo mascarado (ver `configuracao_email_api` no backend).
 interface ConfiguracaoEmailApi {
   id: number;
   remetente_email: string;
@@ -604,6 +605,7 @@ export function Configuracao() {
     }
   }
 
+  // Salva o envio por API; chave em branco mantém a atual.
   async function salvarEmailApi(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (salvandoEmailApi) return;
@@ -627,6 +629,7 @@ export function Configuracao() {
     }
   }
 
+  // Envia um e-mail de teste ao próprio usuário pelo envio por API salvo.
   async function testarEmailApi() {
     if (testandoEmailApi) return;
     setTestandoEmailApi(true);
@@ -643,6 +646,7 @@ export function Configuracao() {
     }
   }
 
+  // Remove o envio por API; volta a valer a conta SMTP, se houver.
   async function removerEmailApi() {
     setErro(null);
     try {
