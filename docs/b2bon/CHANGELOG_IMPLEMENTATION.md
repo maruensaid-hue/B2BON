@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Editar destinatário da campanha e lista de bloqueio (2026-10-28, D-108)
+
+- Na tabela de destinatários de uma campanha há "Editar" (nome, e-mail, telefone, empresa): serve para corrigir um e-mail digitado errado ou trocar o e-mail de quem avisou que mudou. Quem já recebeu só troca o e-mail marcando "enviar também para o novo endereço".
+- "Não quer receber" cancela o contato nesta campanha e o coloca numa lista de bloqueio da empresa, que vale para todas as campanhas (e canais). Se o contato é do CRM, o cancelamento também se aplica a ele.
+- A lista de bloqueio aparece no Relatório de Entrega, com a opção "Liberar" para desfazer.
+
 ## Tarefas de LinkedIn e LinkedIn como toque manual (2026-10-27, D-107)
 
 - Nova tela "Tarefas de LinkedIn" (menu PREDATOR, com contador de pendentes): a mensagem pronta de cada toque de LinkedIn, para copiar, abrir o perfil e marcar como enviada ou ignorar.

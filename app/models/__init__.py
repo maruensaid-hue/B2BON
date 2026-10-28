@@ -34,6 +34,7 @@ from app.models.contrato_governo import (
 from app.models.conta_franquia_consumo import ContaFranquiaConsumo
 from app.models.configuracao_agente_corporativo import ConfiguracaoAgenteCorporativo
 from app.models.configuracao_canal import ConfiguracaoCanal
+from app.models.bloqueio_contato import BloqueioContato
 from app.models.configuracao_email_api import ConfiguracaoEmailApi
 from app.models.configuracao_email_smtp import ConfiguracaoEmailSmtp
 from app.models.custo_aquisicao import CustoAquisicao
@@ -246,6 +247,7 @@ __all__ = [
     "ConfiguracaoComunicacao",
     "ConfiguracaoEnvio",
     "ConfiguracaoWhatsApp",
+    "BloqueioContato",
     "ConfiguracaoEmailApi",
     "ConfiguracaoEmailSmtp",
     "ConfiguracaoCanal",

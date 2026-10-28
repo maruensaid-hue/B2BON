@@ -24,7 +24,9 @@ from app.schemas.campanha import (
     CampanhaPreviaSchema,
     CampanhaSchema,
     CampanhaUpdateSchema,
+    EditarDestinatarioRequestSchema,
     MarcarProntaRequestSchema,
+    NaoQuerReceberRequestSchema,
 )
 from app.services import campanha_service
 
@@ -170,6 +172,35 @@ def adicionar_destinatarios_avulsos(
     db: Session = Depends(get_db),
 ) -> list[CampanhaDestinatarioSchema]:
     return campanha_service.adicionar_avulsos(db, tenant_id, ator_id, campanha_id, dados.destinatarios)
+
+
+@router.put("/{campanha_id}/destinatarios/{destinatario_id}", response_model=CampanhaDestinatarioSchema)
+def editar_destinatario(
+    campanha_id: int,
+    destinatario_id: int,
+    dados: EditarDestinatarioRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> CampanhaDestinatarioSchema:
+    return campanha_service.editar_destinatario(
+        db, tenant_id, ator_id, campanha_id, destinatario_id,
+        dados.nome, dados.email, dados.telefone, dados.empresa, dados.reenviar, dados.atualizar_contato_crm,
+    )
+
+
+@router.post("/{campanha_id}/destinatarios/{destinatario_id}/nao-quer-receber", response_model=CampanhaDestinatarioSchema)
+def nao_quer_receber(
+    campanha_id: int,
+    destinatario_id: int,
+    dados: NaoQuerReceberRequestSchema | None = None,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> CampanhaDestinatarioSchema:
+    return campanha_service.nao_quer_receber(
+        db, tenant_id, ator_id, campanha_id, destinatario_id, dados.motivo if dados is not None else None
+    )
 
 
 @router.delete("/{campanha_id}/destinatarios/{destinatario_id}", status_code=204)

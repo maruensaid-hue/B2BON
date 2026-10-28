@@ -7,7 +7,7 @@ from app.models.decisor import Decisor
 from app.providers.plan_limits.stub import StubPlanLimitsProvider
 from app.schemas.campanha import DestinatarioAvulsoSchema
 from app.services import campanha_service, reputacao_service
-from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
+from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 from tests.fakes import FakeEmailProvider, FakeWhatsAppProvider
 
 TENANT_ID = "tenant-campanhas"
@@ -861,3 +861,200 @@ def test_pixel_com_token_adulterado_ou_de_outro_tenant_nao_registra_nada(db_sess
     rastreamento_service.registrar_abertura(db_session, "lixo")
 
     assert destinatario.aberto_em is None
+
+
+# --- editar destinatário e lista de bloqueio ----------------------------------------------------------------------------------------
+
+
+def _avulsos(db_session, campanha_id: int, *itens: tuple[str, str | None, str | None]) -> list:
+    return campanha_service.adicionar_avulsos(
+        db_session, TENANT_ID, None, campanha_id,
+        [DestinatarioAvulsoSchema(nome=nome, email=email, telefone=telefone) for nome, email, telefone in itens],
+    )
+
+
+def _enviar_todos(db_session, campanha_id: int, fake: FakeEmailProvider | None = None) -> FakeEmailProvider:
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    fake = fake or FakeEmailProvider()
+    campanha_service.processar_pendentes(db_session, TENANT_ID, fake, FakeWhatsAppProvider())
+    return fake
+
+
+def test_corrigir_o_email_de_quem_nao_foi_enviado_devolve_para_a_fila_e_reabre_a_campanha(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    from app.models.campanha import CampanhaDestinatario
+
+    _avulsos(db_session, campanha_id, ("Certo", "certo@teste.com", None))
+    errado = CampanhaDestinatario(  # entrou assim numa lista antiga, antes de o sistema recusar endereços fora do formato
+        tenant_id=TENANT_ID, campanha_id=campanha_id, nome="Digitou errado", email="digitou-errado@", status="pendente"
+    )
+    db_session.add(errado)
+    db_session.commit()
+    fake = _enviar_todos(db_session, campanha_id)
+    db_session.refresh(errado)
+    assert errado.status == "nao_enviado"
+    assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "concluida"
+
+    corrigido = campanha_service.editar_destinatario(
+        db_session, TENANT_ID, None, campanha_id, errado.id, "Digitou errado", "certo2@teste.com", None, None
+    )
+
+    assert corrigido.status == "pendente" and corrigido.email == "certo2@teste.com" and corrigido.motivo_falha is None
+    assert campanha_service.obter(db_session, TENANT_ID, campanha_id).status == "rascunho"  # reaberta para o envio poder ser retomado
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    segundo = FakeEmailProvider()
+    campanha_service.processar_pendentes(db_session, TENANT_ID, segundo, FakeWhatsAppProvider())
+    assert [e["destinatario"] for e in segundo.envios] == ["certo2@teste.com"]  # só o corrigido
+    assert [e["destinatario"] for e in fake.envios] == ["certo@teste.com"]
+
+
+def test_trocar_o_email_de_quem_ja_recebeu_exige_reenviar_e_zera_o_rastreio_do_endereco_antigo(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    _avulsos(db_session, campanha_id, ("Vai mudar", "antigo@teste.com", None))
+    _enviar_todos(db_session, campanha_id)
+    destinatario = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)[0]
+    destinatario.aberto_em = datetime.now(UTC)
+    destinatario.entregue_em = datetime.now(UTC)
+    db_session.commit()
+
+    with pytest.raises(ValidacaoFalhou, match="já recebeu"):
+        campanha_service.editar_destinatario(db_session, TENANT_ID, None, campanha_id, destinatario.id, "Vai mudar", "novo@teste.com", None, None)
+    assert destinatario.email == "antigo@teste.com" and destinatario.status == "enviado"  # nada mudou na recusa
+
+    novo = campanha_service.editar_destinatario(
+        db_session, TENANT_ID, None, campanha_id, destinatario.id, "Vai mudar", "novo@teste.com", None, None, reenviar=True
+    )
+
+    assert novo.status == "pendente" and novo.email == "novo@teste.com"
+    assert novo.aberto_em is None and novo.entregue_em is None and novo.enviado_em is None and novo.pixel_incluido is False
+
+
+def test_editar_so_o_nome_ou_a_empresa_nao_mexe_no_status_de_quem_ja_recebeu(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    _avulsos(db_session, campanha_id, ("Maria", "maria@teste.com", None))
+    _enviar_todos(db_session, campanha_id)
+    destinatario = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)[0]
+
+    editado = campanha_service.editar_destinatario(
+        db_session, TENANT_ID, None, campanha_id, destinatario.id, "Maria Souza", "MARIA@teste.com", None, "Acme"
+    )
+
+    assert editado.status == "enviado" and editado.nome == "Maria Souza" and editado.empresa == "Acme"  # maiúsculas no e-mail não contam como troca
+
+
+def test_editar_destinatario_valida_os_dados_e_recusa_durante_o_envio(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    a, b = _avulsos(db_session, campanha_id, ("A", "a@teste.com", None), ("B", "b@teste.com", None))
+
+    with pytest.raises(ValidacaoFalhou, match="nome"):
+        campanha_service.editar_destinatario(db_session, TENANT_ID, None, campanha_id, a.id, "  ", "a@teste.com", None, None)
+    with pytest.raises(ValidacaoFalhou, match="e-mail válido"):
+        campanha_service.editar_destinatario(db_session, TENANT_ID, None, campanha_id, a.id, "A", "isso-nao-e-email", None, None)
+    with pytest.raises(ValidacaoFalhou, match="e-mail ou o telefone"):
+        campanha_service.editar_destinatario(db_session, TENANT_ID, None, campanha_id, a.id, "A", None, "  ", None)
+    with pytest.raises(ValidacaoFalhou, match="outro destinatário"):
+        campanha_service.editar_destinatario(db_session, TENANT_ID, None, campanha_id, a.id, "A", "B@teste.com", None, None)
+    with pytest.raises(NaoEncontrado):
+        campanha_service.editar_destinatario(db_session, TENANT_ID, None, campanha_id, 999999, "A", "a@teste.com", None, None)
+
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    with pytest.raises(RegraNegocioViolada, match="sendo enviada"):
+        campanha_service.editar_destinatario(db_session, TENANT_ID, None, campanha_id, a.id, "A", "a2@teste.com", None, None)
+
+
+def test_trocar_o_email_pode_atualizar_o_cadastro_do_contato_no_crm(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    decisor = _criar_decisor(db_session, "Do CRM", email="antigo@teste.com")
+    campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+    destinatario = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)[0]
+
+    campanha_service.editar_destinatario(
+        db_session, TENANT_ID, None, campanha_id, destinatario.id, "Do CRM", "novo@teste.com", None, None, atualizar_contato_crm=True
+    )
+
+    db_session.expire_all()
+    assert db_session.get(Decisor, decisor.id).email == "novo@teste.com"
+
+
+def test_nao_quer_receber_cancela_o_destinatario_e_bloqueia_o_contato_em_todas_as_campanhas(db_session):
+    from app.services import bloqueio_contato_service
+
+    primeira = _criar_campanha_email(db_session)
+    a, _ = _avulsos(db_session, primeira, ("Sem interesse", "Sem.Interesse@Teste.com", "+55 (11) 99999-0000"), ("Outro", "outro@teste.com", None))
+
+    cancelado = campanha_service.nao_quer_receber(db_session, TENANT_ID, None, primeira, a.id, "Disse por telefone que não tem interesse")
+
+    assert cancelado.status == "optout" and cancelado.motivo_falha == "Disse por telefone que não tem interesse"
+    bloqueios = bloqueio_contato_service.listar(db_session, TENANT_ID)
+    assert len(bloqueios) == 1 and bloqueios[0].email == "sem.interesse@teste.com" and bloqueios[0].telefone == "5511999990000"
+    # repetir não duplica
+    campanha_service.nao_quer_receber(db_session, TENANT_ID, None, primeira, a.id)
+    assert len(bloqueio_contato_service.listar(db_session, TENANT_ID)) == 1
+
+    # outra campanha, mesmo e-mail em outra caixa/minúsculas e mesmo telefone com outra formatação: não recebe
+    segunda = _criar_campanha_email(db_session)
+    _avulsos(
+        db_session, segunda,
+        ("Mesmo e-mail", "SEM.INTERESSE@teste.com", None),
+        ("Mesmo telefone", "novo-email@teste.com", "11 99999-0000"),
+        ("Pessoa diferente", "diferente@teste.com", None),
+    )
+    fake = _enviar_todos(db_session, segunda)
+
+    assert [e["destinatario"] for e in fake.envios] == ["diferente@teste.com"]
+    estados = {d.nome: (d.status, d.motivo_falha) for d in campanha_service.listar_destinatarios(db_session, TENANT_ID, segunda)}
+    assert estados["Mesmo e-mail"][0] == "nao_enviado" and "Pediu para não receber" in estados["Mesmo e-mail"][1]
+    assert estados["Mesmo telefone"][0] == "nao_enviado"
+    assert estados["Pessoa diferente"][0] == "enviado"
+
+
+def test_nao_quer_receber_de_contato_do_crm_aplica_o_cancelamento_completo(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    decisor = _criar_decisor(db_session, "Do CRM", email="crm@teste.com")
+    campanha_service.adicionar_de_decisores(db_session, TENANT_ID, None, campanha_id, [decisor.id])
+    destinatario = campanha_service.listar_destinatarios(db_session, TENANT_ID, campanha_id)[0]
+
+    campanha_service.nao_quer_receber(db_session, TENANT_ID, None, campanha_id, destinatario.id)
+
+    db_session.expire_all()
+    assert db_session.get(Decisor, decisor.id).suprimido_em is not None  # não recebe nem cadência nem outras campanhas pelo cadastro
+
+
+def test_nao_quer_receber_durante_o_envio_faz_o_envio_pular_o_destinatario(db_session):
+    campanha_id = _criar_campanha_email(db_session)
+    a, b, c = _avulsos(db_session, campanha_id, ("A", "a@teste.com", None), ("B", "b@teste.com", None), ("C", "c@teste.com", None))
+    campanha_service.marcar_pronta(db_session, TENANT_ID, None, campanha_id)
+    campanha_service.nao_quer_receber(db_session, TENANT_ID, None, campanha_id, b.id)
+
+    fake = FakeEmailProvider()
+    campanha_service.processar_pendentes(db_session, TENANT_ID, fake, FakeWhatsAppProvider())
+
+    assert [e["destinatario"] for e in fake.envios] == ["a@teste.com", "c@teste.com"]
+
+
+def test_liberar_o_bloqueio_volta_a_permitir_o_envio(db_session):
+    from app.services import bloqueio_contato_service
+
+    campanha_id = _criar_campanha_email(db_session)
+    a, = _avulsos(db_session, campanha_id, ("A", "a@teste.com", None))
+    campanha_service.nao_quer_receber(db_session, TENANT_ID, None, campanha_id, a.id)
+    bloqueio = bloqueio_contato_service.listar(db_session, TENANT_ID)[0]
+
+    bloqueio_contato_service.liberar(db_session, TENANT_ID, None, bloqueio.id)
+
+    assert bloqueio_contato_service.listar(db_session, TENANT_ID) == []
+    nova = _criar_campanha_email(db_session)
+    _avulsos(db_session, nova, ("A de novo", "a@teste.com", None))
+    assert [e["destinatario"] for e in _enviar_todos(db_session, nova).envios] == ["a@teste.com"]
+    with pytest.raises(NaoEncontrado):
+        bloqueio_contato_service.liberar(db_session, TENANT_ID, None, bloqueio.id)
+
+
+def test_normalizacao_de_email_e_telefone_do_bloqueio():
+    from app.services.bloqueio_contato_service import Bloqueados, normalizar_email, normalizar_telefone
+
+    assert normalizar_email("  Fulano@Empresa.COM ") == "fulano@empresa.com" and normalizar_email("  ") is None
+    assert normalizar_telefone("+55 (11) 99999-0000") == "5511999990000"
+    assert normalizar_telefone("123") is None  # curto demais para ser telefone
+    bloqueados = Bloqueados(emails={"a@x.com"}, telefones={"1199990000"})
+    assert bloqueados.contem("A@X.com", None) and bloqueados.contem(None, "+55 11 9999-0000") and not bloqueados.contem("b@x.com", "21 8888-7777")

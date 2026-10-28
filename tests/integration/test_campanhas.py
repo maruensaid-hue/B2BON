@@ -236,3 +236,55 @@ def test_lista_colada_guarda_a_empresa_e_a_previa_usa(client):
     assert adicionados.status_code == 201 and adicionados.json()[0]["empresa"] == "Acme"
     assert client.get(f"/api/v1/campanhas/{criada['id']}/previa").json()["assunto"] == "Para Acme"
     assert client.get(f"/api/v1/campanhas/{criada['id']}").json()["destinatarios"][0]["empresa"] == "Acme"
+
+
+def _campanha_com_avulsos(client, *itens: tuple[str, str]) -> tuple[int, list[dict]]:
+    criada = client.post(
+        "/api/v1/campanhas",
+        json={"nome": "Edição", "tipo": "marketing", "canais": ["email"], "assunto": "Assunto", "conteudo_email": "Corpo"},
+    ).json()
+    resposta = client.post(
+        f"/api/v1/campanhas/{criada['id']}/destinatarios/avulsos",
+        json={"destinatarios": [{"nome": nome, "email": email} for nome, email in itens]},
+    )
+    return criada["id"], resposta.json()
+
+
+def test_editar_destinatario_pela_api(client):
+    campanha_id, (maria, joao) = _campanha_com_avulsos(client, ("Maria", "maria@teste.com"), ("João", "joao@teste.com"))
+    url = f"/api/v1/campanhas/{campanha_id}/destinatarios/{maria['id']}"
+
+    ok = client.put(url, json={"nome": "Maria Souza", "email": "maria.nova@teste.com", "telefone": None, "empresa": "Acme"})
+    repetido = client.put(url, json={"nome": "Maria", "email": "JOAO@teste.com"})
+    invalido = client.put(url, json={"nome": "Maria", "email": "nao-e-email"})
+    inexistente = client.put(f"/api/v1/campanhas/{campanha_id}/destinatarios/999999", json={"nome": "X", "email": "x@teste.com"})
+
+    assert ok.status_code == 200
+    assert ok.json()["email"] == "maria.nova@teste.com" and ok.json()["empresa"] == "Acme" and ok.json()["nome"] == "Maria Souza"
+    assert repetido.status_code == 422 and invalido.status_code == 422 and inexistente.status_code == 404
+
+
+def test_nao_quer_receber_e_lista_de_bloqueio_pela_api(client, criar_usuario_autenticado):
+    campanha_id, (maria, _) = _campanha_com_avulsos(client, ("Maria", "maria@teste.com"), ("João", "joao@teste.com"))
+
+    resposta = client.post(
+        f"/api/v1/campanhas/{campanha_id}/destinatarios/{maria['id']}/nao-quer-receber", json={"motivo": "Avisou por e-mail"}
+    )
+
+    assert resposta.status_code == 200 and resposta.json()["status"] == "optout"
+    bloqueios = client.get("/api/v1/bloqueios-contato").json()
+    assert [(b["email"], b["motivo"], b["origem"]) for b in bloqueios] == [("maria@teste.com", "Avisou por e-mail", "campanha")]
+    outro = criar_usuario_autenticado("outro-tenant-bloqueio")
+    assert client.get("/api/v1/bloqueios-contato", headers=outro).json() == []  # a lista é de cada empresa
+    assert client.delete(f"/api/v1/bloqueios-contato/{bloqueios[0]['id']}", headers=outro).status_code == 404
+
+    assert client.delete(f"/api/v1/bloqueios-contato/{bloqueios[0]['id']}").status_code == 204
+    assert client.get("/api/v1/bloqueios-contato").json() == []
+
+
+def test_nao_quer_receber_sem_corpo_usa_o_motivo_padrao(client):
+    campanha_id, (maria,) = _campanha_com_avulsos(client, ("Maria", "maria@teste.com"))
+
+    resposta = client.post(f"/api/v1/campanhas/{campanha_id}/destinatarios/{maria['id']}/nao-quer-receber")
+
+    assert resposta.status_code == 200 and "não quer receber" in resposta.json()["motivo_falha"]

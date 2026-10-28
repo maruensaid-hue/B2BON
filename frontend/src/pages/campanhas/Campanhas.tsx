@@ -186,6 +186,9 @@ export function Campanhas() {
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [destinatariosMarcados, setDestinatariosMarcados] = useState<Set<number>>(new Set());
+  const [destinatarioEmEdicao, setDestinatarioEmEdicao] = useState<CampanhaDestinatario | null>(null);
+  const [salvandoDestinatario, setSalvandoDestinatario] = useState(false);
+  const [confirmandoNaoQuerId, setConfirmandoNaoQuerId] = useState<number | null>(null);
   const [previa, setPrevia] = useState<{ destinatario_nome: string | null; assunto: string; corpo: string } | null>(null);
 
   const campanhaSelecionada = campanhas.find((c) => c.id === campanhaSelecionadaId) ?? null;
@@ -380,6 +383,52 @@ export function Campanhas() {
       await carregarDetalhe(campanhaSelecionadaId);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível remover o destinatário.");
+    }
+  }
+
+  async function salvarDestinatario(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (campanhaSelecionadaId === null || destinatarioEmEdicao === null || salvandoDestinatario) return;
+    const form = new FormData(event.currentTarget);
+    const texto = (campo: string) => String(form.get(campo) ?? "").trim() || null;
+    setSalvandoDestinatario(true);
+    setErro(null);
+    try {
+      const salvo = await api.put<CampanhaDestinatario>(`/campanhas/${campanhaSelecionadaId}/destinatarios/${destinatarioEmEdicao.id}`, {
+        nome: String(form.get("nome") ?? "").trim(),
+        email: texto("email"),
+        telefone: texto("telefone"),
+        empresa: texto("empresa"),
+        reenviar: form.get("reenviar") === "on",
+        atualizar_contato_crm: form.get("atualizar_contato_crm") === "on",
+      });
+      const voltouParaAFila = salvo.status === "pendente" && destinatarioEmEdicao.status !== "pendente";
+      setDestinatarioEmEdicao(null);
+      setMensagem(
+        voltouParaAFila
+          ? "Destinatário atualizado e de volta à fila. Se a campanha já estava concluída, ela foi reaberta como rascunho: clique em “Marcar como pronta” para enviar."
+          : "Destinatário atualizado.",
+      );
+      await carregarCampanhas();
+      await carregarDetalhe(campanhaSelecionadaId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível salvar o destinatário.");
+    } finally {
+      setSalvandoDestinatario(false);
+    }
+  }
+
+  // O contato disse que não quer receber (e não clicou em cancelar): sai desta campanha e entra na lista de bloqueio da empresa, para todas as campanhas.
+  async function naoQuerReceber(destinatarioId: number) {
+    if (campanhaSelecionadaId === null) return;
+    setErro(null);
+    try {
+      await api.post(`/campanhas/${campanhaSelecionadaId}/destinatarios/${destinatarioId}/nao-quer-receber`);
+      setConfirmandoNaoQuerId(null);
+      setMensagem("Contato bloqueado: não vai mais receber nenhuma campanha. A lista de bloqueio fica no Relatório de Entrega.");
+      await carregarDetalhe(campanhaSelecionadaId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível bloquear o contato.");
     }
   }
 
@@ -773,7 +822,7 @@ export function Campanhas() {
                   <th className="p-2 text-left">Telefone</th>
                   <th className="p-2 text-left">Empresa</th>
                   <th className="p-2 text-left">Status</th>
-                  {campanhaSelecionada.status === "rascunho" && <th className="p-2 text-left">Ações</th>}
+                  <th className="p-2 text-left">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -797,21 +846,50 @@ export function Campanhas() {
                     <td className="p-2">
                       <Badge tone={toneStatusDestinatario(destinatario.status)}>{rotuloStatusDestinatario(destinatario.status)}</Badge>
                       {destinatario.motivo_falha && (
-                        <div className={`mt-0.5 text-[10px] ${destinatario.status === "nao_enviado" ? "text-muted" : "text-red"}`}>{destinatario.motivo_falha}</div>
+                        <div className={`mt-0.5 text-[10px] ${destinatario.status === "nao_enviado" || destinatario.status === "optout" ? "text-muted" : "text-red"}`}>
+                          {destinatario.motivo_falha}
+                        </div>
                       )}
                     </td>
-                    {campanhaSelecionada.status === "rascunho" && (
-                      <td className="p-2">
-                        <Button size="sm" variant="ghost" onClick={() => removerDestinatario(destinatario.id)}>
-                          Remover
+                    <td className="p-2">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={emEnvio}
+                          title={emEnvio ? "A campanha está sendo enviada: espere terminar para editar" : undefined}
+                          onClick={() => setDestinatarioEmEdicao(destinatario)}
+                        >
+                          Editar
                         </Button>
-                      </td>
-                    )}
+                        {destinatario.status !== "optout" &&
+                          (confirmandoNaoQuerId === destinatario.id ? (
+                            <>
+                              <span className="text-[10px] text-muted">Bloquear em todas as campanhas?</span>
+                              <Button size="sm" variant="danger" onClick={() => naoQuerReceber(destinatario.id)}>
+                                Confirmar
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setConfirmandoNaoQuerId(null)}>
+                                Cancelar
+                              </Button>
+                            </>
+                          ) : (
+                            <Button size="sm" variant="ghost" onClick={() => setConfirmandoNaoQuerId(destinatario.id)}>
+                              Não quer receber
+                            </Button>
+                          ))}
+                        {campanhaSelecionada.status === "rascunho" && (
+                          <Button size="sm" variant="ghost" onClick={() => removerDestinatario(destinatario.id)}>
+                            Remover
+                          </Button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {detalhe.destinatarios.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-4 text-center text-muted">
+                    <td colSpan={8} className="p-4 text-center text-muted">
                       Nenhum destinatário adicionado ainda.
                     </td>
                   </tr>
@@ -898,6 +976,52 @@ export function Campanhas() {
             Criar campanha
           </Button>
         </form>
+      </Modal>
+
+      <Modal title="Editar destinatário" open={destinatarioEmEdicao !== null} onClose={() => setDestinatarioEmEdicao(null)}>
+        {destinatarioEmEdicao && (
+          <form key={destinatarioEmEdicao.id} onSubmit={salvarDestinatario} className="flex flex-col gap-3">
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Nome</div>
+              <Input name="nome" required defaultValue={destinatarioEmEdicao.nome} />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">E-mail</div>
+              <Input name="email" type="email" defaultValue={destinatarioEmEdicao.email ?? ""} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Telefone</div>
+                <Input name="telefone" defaultValue={destinatarioEmEdicao.telefone ?? ""} />
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Empresa</div>
+                <Input name="empresa" defaultValue={destinatarioEmEdicao.empresa ?? ""} />
+              </div>
+            </div>
+            {destinatarioEmEdicao.status === "enviado" && (
+              <label className="flex items-start gap-1.5 text-[12px] text-muted">
+                <input type="checkbox" name="reenviar" className="mt-0.5" />
+                <span>
+                  Se eu trocar o e-mail, enviar a campanha também para o novo endereço. (Sem isso, o sistema recusa trocar o e-mail de quem já
+                  recebeu, para o histórico não mentir.)
+                </span>
+              </label>
+            )}
+            {(destinatarioEmEdicao.status === "nao_enviado" || destinatarioEmEdicao.status === "falhou") && (
+              <div className="text-[11px] text-muted">Ao corrigir o e-mail, o contato volta para a fila de envio.</div>
+            )}
+            {destinatarioEmEdicao.decisor_id !== null && (
+              <label className="flex items-start gap-1.5 text-[12px] text-muted">
+                <input type="checkbox" name="atualizar_contato_crm" defaultChecked className="mt-0.5" />
+                <span>Atualizar também o e-mail no cadastro do contato (CRM).</span>
+              </label>
+            )}
+            <Button type="submit" disabled={salvandoDestinatario} className="mt-1 w-full justify-center">
+              {salvandoDestinatario ? "Salvando..." : "Salvar destinatário"}
+            </Button>
+          </form>
+        )}
       </Modal>
 
       <Modal title="Editar campanha" open={modalEditarAberto} onClose={() => setModalEditarAberto(false)}>

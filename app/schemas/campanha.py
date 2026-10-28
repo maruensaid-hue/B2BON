@@ -64,6 +64,21 @@ class CampanhaUpdateSchema(BaseModel):
     template_whatsapp_id: str | None = None
 
 
+class EditarDestinatarioRequestSchema(BaseModel):
+    nome: str
+    email: str | None = None
+    telefone: str | None = None
+    empresa: str | None = None
+    # Trocar o e-mail de quem já recebeu a campanha só vale com isto marcado: o novo endereço volta para a fila de envio.
+    reenviar: bool = False
+    # Para destinatário vindo do CRM: grava o novo e-mail também no cadastro do contato.
+    atualizar_contato_crm: bool = False
+
+
+class NaoQuerReceberRequestSchema(BaseModel):
+    motivo: str | None = None
+
+
 class MarcarProntaRequestSchema(BaseModel):
     # Nulo = todos os pendentes; lista = só estes (os demais pendentes aguardam o próximo envio).
     destinatario_ids: list[int] | None = None

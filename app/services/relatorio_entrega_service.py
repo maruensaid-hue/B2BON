@@ -136,7 +136,7 @@ def _classificar_destinatario_campanha(destinatario: CampanhaDestinatario) -> tu
     if destinatario.status == "nao_enviado":  # sem destino válido (ex.: link no lugar do e-mail): nunca houve tentativa, então não é erro nem enviado
         return "nao_enviado", destinatario.motivo_falha
     if destinatario.status == "optout":
-        return "cancelado", None
+        return "cancelado", destinatario.motivo_falha  # "informado manualmente: não quer receber"; pelo link do e-mail não há motivo
     if destinatario.status == "pendente":
         return "pendente", destinatario.motivo_falha  # traz o aviso de envio adiado, se houver
     if destinatario.status == "retido":  # fora de uma rodada de envio parcial: aguarda o próximo envio

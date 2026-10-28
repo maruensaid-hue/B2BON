@@ -17,6 +17,7 @@ from app.api.v1.captura_lead import router as captura_lead_router
 from app.api.v1.central_negocios import router as central_negocios_router
 from app.api.v1.comunicacao import router as comunicacao_router
 from app.api.v1.configuracao_envio import router as configuracao_envio_router
+from app.api.v1.bloqueios_contato import router as bloqueios_contato_router
 from app.api.v1.configuracao_email_api import router as configuracao_email_api_router
 from app.api.v1.configuracao_email_smtp import router as configuracao_email_smtp_router
 from app.api.v1.configuracao_whatsapp import router as configuracao_whatsapp_router
@@ -154,6 +155,7 @@ router.include_router(configuracao_envio_router, dependencies=_exige_predator)
 router.include_router(configuracao_whatsapp_router, dependencies=_exige_predator)
 router.include_router(configuracao_email_smtp_router, dependencies=_exige_predator)
 router.include_router(configuracao_email_api_router, dependencies=_exige_predator)
+router.include_router(bloqueios_contato_router, dependencies=_exige_predator)
 router.include_router(linkedin_router, dependencies=_exige_predator)
 router.include_router(canais_router, dependencies=_exige_predator)
 router.include_router(relatorio_entrega_router, dependencies=_exige_predator)

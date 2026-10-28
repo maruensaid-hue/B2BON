@@ -52,6 +52,15 @@ interface RelatorioEntrega {
   contatos_com_bounce: ContatoComBounce[];
 }
 
+interface BloqueioContato {
+  id: number;
+  email: string | null;
+  telefone: string | null;
+  motivo: string;
+  origem: string;
+  criado_em: string;
+}
+
 interface EnvioEmail {
   origem: "cadencia" | "campanha";
   origem_nome: string;
@@ -136,6 +145,8 @@ export function RelatorioEntrega() {
   const [suprimindoDecisorId, setSuprimindoDecisorId] = useState<number | null>(null);
   const [contaEmEdicaoId, setContaEmEdicaoId] = useState<number | null>(null);
   const [textoBounces, setTextoBounces] = useState("");
+  const [bloqueios, setBloqueios] = useState<BloqueioContato[]>([]);
+  const [liberandoId, setLiberandoId] = useState<number | null>(null);
   const [registrandoBounces, setRegistrandoBounces] = useState(false);
 
   async function carregar() {
@@ -145,6 +156,29 @@ export function RelatorioEntrega() {
       setErro(error instanceof ApiError ? error.message : "Não foi possível carregar o relatório.");
     } finally {
       setCarregado(true);
+    }
+  }
+
+  async function carregarBloqueios() {
+    try {
+      setBloqueios(await api.get<BloqueioContato[]>("/bloqueios-contato"));
+    } catch {
+      // a lista é um complemento do relatório: se falhar, o resto da tela segue funcionando
+    }
+  }
+
+  async function liberarBloqueio(bloqueio: BloqueioContato) {
+    if (liberandoId !== null) return;
+    setLiberandoId(bloqueio.id);
+    setErro(null);
+    try {
+      await api.delete(`/bloqueios-contato/${bloqueio.id}`);
+      setMensagem("Contato liberado: ele volta a poder receber campanhas.");
+      await carregarBloqueios();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível liberar o contato.");
+    } finally {
+      setLiberandoId(null);
     }
   }
 
@@ -166,6 +200,7 @@ export function RelatorioEntrega() {
 
   useEffect(() => {
     carregar();
+    carregarBloqueios();
   }, []);
 
   useEffect(() => {
@@ -234,6 +269,7 @@ export function RelatorioEntrega() {
   }
 
   const saude = relatorio?.saude_email;
+  const podeLiberar = usuario?.papel === "admin" || usuario?.papel === "super_admin";
   const resumo = relatorio?.resumo_envios;
   const medidoPeloProvedor = saude?.medido_pelo_provedor ?? true;
   const totalPaginas = envios ? Math.max(1, Math.ceil(envios.total / LIMITE_POR_PAGINA)) : 1;
@@ -326,6 +362,34 @@ export function RelatorioEntrega() {
           detalhamento abaixo. Um endereço que não existe costuma ser recusado depois, com um aviso de falha na sua caixa
           de entrada, e esse aviso o sistema ainda não lê.
         </div>
+      </Card>
+
+      <Card className="mb-4">
+        <SectionLabel>Contatos bloqueados ({bloqueios.length})</SectionLabel>
+        <div className="mb-2 text-[11px] text-muted">
+          Quem pediu para não receber mais nada (marcado por você em “Não quer receber”, nas campanhas). Esses e-mails e telefones não recebem nenhuma campanha.
+        </div>
+        {bloqueios.length === 0 ? (
+          <div className="text-[12px] text-muted">Ninguém bloqueado.</div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {bloqueios.map((bloqueio) => (
+              <div key={bloqueio.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-2 text-[12px]">
+                <div>
+                  <div className="font-semibold text-text">{[bloqueio.email, bloqueio.telefone].filter(Boolean).join(" · ")}</div>
+                  <div className="text-[11px] text-muted">
+                    {bloqueio.motivo} · {new Date(bloqueio.criado_em).toLocaleDateString("pt-BR")}
+                  </div>
+                </div>
+                {podeLiberar && (
+                  <Button size="sm" variant="ghost" disabled={liberandoId === bloqueio.id} onClick={() => liberarBloqueio(bloqueio)}>
+                    {liberandoId === bloqueio.id ? "Liberando..." : "Liberar"}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card className="mb-4">

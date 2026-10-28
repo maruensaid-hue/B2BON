@@ -20,6 +20,7 @@ from app.schemas.campanha import DestinatarioAvulsoSchema
 from app.services import (
     atividade_service,
     auditoria_service,
+    bloqueio_contato_service,
     campanha_personalizacao,
     limite_criacao_service,
     optout_service,
@@ -57,9 +58,16 @@ def _emails_devolvidos(db: Session, tenant_id: str) -> set[str]:
     return {email for (email,) in [*de_campanhas.all(), *de_cadencias.all()]}
 
 
-def _motivo_sem_destino(campanha: Campanha, destinatario: CampanhaDestinatario, devolvidos: set[str] | None = None) -> str | None:
+def _motivo_sem_destino(
+    campanha: Campanha,
+    destinatario: CampanhaDestinatario,
+    devolvidos: set[str] | None = None,
+    bloqueados: bloqueio_contato_service.Bloqueados | None = None,
+) -> str | None:
     """Motivo pelo qual não existe para onde enviar nos canais da campanha (e-mail que não é e-mail e sem telefone/template de WhatsApp), ou `None`
     se há ao menos um destino. Esse destinatário vira `nao_enviado`, nunca `falhou`: não houve tentativa, então não entra em retentativa nem em bounce."""
+    if bloqueados is not None and bloqueados.contem(destinatario.email, destinatario.telefone):
+        return "Pediu para não receber (lista de bloqueio da empresa)."  # vale para todos os canais: quem pediu não recebe por e-mail nem por WhatsApp
     devolvido = bool(destinatario.email) and destinatario.email.strip().lower() in (devolvidos or set())
     tem_email = "email" in campanha.canais and _email_valido(destinatario.email) and not devolvido
     tem_whatsapp = "whatsapp" in campanha.canais and bool(destinatario.telefone) and bool(campanha.template_whatsapp_id)
@@ -314,6 +322,129 @@ def remover_destinatario(db: Session, tenant_id: str, ator_id: str | None, campa
     db.commit()
 
 
+def _obter_destinatario(db: Session, tenant_id: str, campanha_id: int, destinatario_id: int) -> CampanhaDestinatario:
+    destinatario = (
+        db.query(CampanhaDestinatario).filter_by(id=destinatario_id, campanha_id=campanha_id, tenant_id=tenant_id).one_or_none()
+    )
+    if destinatario is None:
+        raise NaoEncontrado(f"Destinatário {destinatario_id} não encontrado")
+    return destinatario
+
+
+def editar_destinatario(
+    db: Session,
+    tenant_id: str,
+    ator_id: str | None,
+    campanha_id: int,
+    destinatario_id: int,
+    nome: str,
+    email: str | None,
+    telefone: str | None,
+    empresa: str | None,
+    reenviar: bool = False,
+    atualizar_contato_crm: bool = False,
+) -> CampanhaDestinatario:
+    """Corrige os dados de um destinatário (ex.: o contato avisou que trocou de e-mail). Só com a campanha parada (rascunho ou concluída). Trocar o e-mail:
+    zera o que pertencia ao endereço antigo (entrega, abertura, bounce); quem ainda não tinha recebido (não enviado ou falha) volta para a fila, e quem já
+    recebeu só troca com `reenviar` (senão o histórico passaria a dizer que o novo endereço recebeu o que não recebeu). Se a campanha estava concluída e o
+    destinatário volta para a fila, a campanha volta ao rascunho para o envio poder ser retomado."""
+    campanha = obter(db, tenant_id, campanha_id)
+    if campanha.status in ("pronta", "enviando"):
+        raise RegraNegocioViolada("A campanha está sendo enviada. Espere terminar, ou volte a campanha para rascunho, para editar destinatários.")
+    destinatario = _obter_destinatario(db, tenant_id, campanha_id, destinatario_id)
+
+    nome_novo = (corrigir_codificacao(nome) or "").strip()
+    if not nome_novo:
+        raise ValidacaoFalhou("Informe o nome do destinatário.")
+    email_novo = (email or "").strip() or None
+    if email_novo and not _email_valido(email_novo):
+        raise ValidacaoFalhou("Informe um e-mail válido (algo@empresa.com.br) ou deixe o campo em branco.")
+    telefone_novo = (corrigir_codificacao(telefone) or "").strip() or None
+    empresa_nova = (corrigir_codificacao(empresa) or "").strip() or None
+    if not (email_novo or telefone_novo):
+        raise ValidacaoFalhou("Informe ao menos o e-mail ou o telefone.")
+
+    email_antigo = (destinatario.email or "").strip().lower()
+    email_mudou = (email_novo or "").lower() != email_antigo
+    if email_mudou and email_novo:
+        repetido = (
+            db.query(CampanhaDestinatario)
+            .filter(
+                CampanhaDestinatario.campanha_id == campanha_id,
+                CampanhaDestinatario.id != destinatario.id,
+                func.lower(CampanhaDestinatario.email) == email_novo.lower(),
+            )
+            .first()
+        )
+        if repetido is not None:
+            raise ValidacaoFalhou("Já existe outro destinatário com este e-mail nesta campanha.")
+    if email_mudou and destinatario.status == "enviado" and not reenviar:
+        raise ValidacaoFalhou(
+            "Este e-mail já recebeu a campanha. Para trocar o endereço, marque “Enviar a campanha também para o novo e-mail”."
+        )
+    if email_mudou and destinatario.status == "optout":
+        raise ValidacaoFalhou("Este contato pediu para não receber. Para voltar a enviar, remova-o da lista de bloqueio.")
+
+    destinatario.nome = nome_novo
+    destinatario.email = email_novo
+    destinatario.telefone = telefone_novo
+    destinatario.empresa = empresa_nova
+
+    volta_para_a_fila = False
+    if email_mudou:
+        destinatario.bounce_em = None
+        destinatario.motivo_bounce = None
+        destinatario.entregue_em = None
+        destinatario.aberto_em = None
+        destinatario.pixel_incluido = False
+        destinatario.motivo_falha = None
+        if destinatario.status in ("enviado", "falhou", "nao_enviado"):
+            destinatario.status = "pendente"
+            destinatario.enviado_em = None
+            volta_para_a_fila = True
+        if atualizar_contato_crm and destinatario.decisor_id is not None and email_novo:
+            decisor = db.query(Decisor).filter_by(id=destinatario.decisor_id, tenant_id=tenant_id).one_or_none()
+            if decisor is not None:
+                decisor.email = email_novo
+
+    auditoria_service.registrar(
+        db, tenant_id, "campanha_destinatario_editado", "campanha", campanha_id, ator_id,
+        {"destinatario_id": destinatario.id, "email_mudou": email_mudou, "reenviar": reenviar, "contato_crm_atualizado": bool(atualizar_contato_crm and email_mudou)},
+    )
+    db.commit()
+    if volta_para_a_fila and campanha.status == "concluida":
+        voltar_para_rascunho(db, tenant_id, ator_id, campanha_id)
+    db.refresh(destinatario)
+    return destinatario
+
+
+def nao_quer_receber(
+    db: Session, tenant_id: str, ator_id: str | None, campanha_id: int, destinatario_id: int, motivo: str | None = None
+) -> CampanhaDestinatario:
+    """O contato disse que não quer receber (e não clicou em cancelar): fica `optout` nesta campanha e o e-mail e o telefone entram na lista de bloqueio da
+    empresa, que vale para todas as campanhas. Se veio do CRM, aplica o cancelamento completo do contato (supressão, cadências pendentes). Pode ser feito com a
+    campanha em qualquer estado: o envio em andamento pula quem deixou de estar pendente."""
+    obter(db, tenant_id, campanha_id)
+    destinatario = _obter_destinatario(db, tenant_id, campanha_id, destinatario_id)
+    texto = (motivo or "").strip() or "Informado manualmente: não quer receber."
+
+    destinatario.status = "optout"
+    destinatario.motivo_falha = texto
+    bloqueio_contato_service.registrar(
+        db, tenant_id, ator_id, email=destinatario.email, telefone=destinatario.telefone, motivo=texto, origem="campanha"
+    )
+    if destinatario.decisor_id is not None:
+        decisor = db.query(Decisor).filter_by(id=destinatario.decisor_id, tenant_id=tenant_id).one_or_none()
+        if decisor is not None:
+            optout_service.aplicar(db, tenant_id, decisor, origem="campanha_manual")
+    auditoria_service.registrar(
+        db, tenant_id, "campanha_destinatario_nao_quer_receber", "campanha", campanha_id, ator_id, {"destinatario_id": destinatario.id}
+    )
+    db.commit()
+    db.refresh(destinatario)
+    return destinatario
+
+
 def marcar_pronta(
     db: Session, tenant_id: str, ator_id: str | None, campanha_id: int, destinatario_ids: list[int] | None = None
 ) -> Campanha:
@@ -441,6 +572,7 @@ def _enviar_pendentes(
     algum_adiado = False
     interrompido = False
     devolvidos = _emails_devolvidos(db, tenant_id)
+    bloqueados = bloqueio_contato_service.carregar(db, tenant_id)
     for destinatario_id in ids_pendentes:
         db.refresh(campanha)
         if campanha.status not in ("pronta", "enviando"):
@@ -448,7 +580,7 @@ def _enviar_pendentes(
         destinatario = db.get(CampanhaDestinatario, destinatario_id)
         if destinatario is None or destinatario.status != "pendente":
             continue  # saiu da lista (descadastro, remoção) desde a consulta
-        motivo_ignorado = _motivo_sem_destino(campanha, destinatario, devolvidos)
+        motivo_ignorado = _motivo_sem_destino(campanha, destinatario, devolvidos, bloqueados)
         if motivo_ignorado is not None:
             destinatario.status = "nao_enviado"  # sem tentativa: nem falha, nem retentativa, nem bounce
             destinatario.motivo_falha = motivo_ignorado
