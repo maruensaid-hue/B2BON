@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_tenant_id
+from app.core.uploads import ler_limitado
 from app.schemas.oferta import MaterialOfertaSchema, OfertaCreateSchema, OfertaSchema
 from app.services import oferta_service
 
@@ -75,7 +76,7 @@ async def enviar_material(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> MaterialOfertaSchema:
-    conteudo = await arquivo.read()
+    conteudo = await ler_limitado(arquivo, oferta_service.TAMANHO_MAXIMO_MATERIAL_BYTES)
     return oferta_service.salvar_material(
         db,
         tenant_id,

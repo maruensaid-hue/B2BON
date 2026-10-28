@@ -86,6 +86,14 @@ dois:
   o plano Teste — restrito a `admin`/`super_admin`). Veja a seção
   [8](#8-modelos-de-licença) para o que isso restringe na prática.
 
+**Segurança da sessão.** Ao clicar em **Sair**, a sessão é encerrada no
+servidor: ela deixa de valer em **todos os aparelhos** em que a conta estava
+aberta (é preciso entrar de novo em cada um). Depois de várias tentativas de
+senha errada para o mesmo e-mail, o login fica indisponível por alguns
+minutos (cerca de 15), mesmo vindo de outro computador — aguarde e tente
+de novo, ou use **Esqueci minha senha**. Esse pedido de redefinição também
+tem limite (5 por hora por e-mail).
+
 ### O que cada tela mostra depende da licença
 
 Quem não tem licença ativa só vê o **Shoal** no menu — é o único

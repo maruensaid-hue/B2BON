@@ -5,6 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_llm_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant
+from app.core.uploads import ler_limitado
 from app.llm.base import LLMProvider
 from app.models.conta import Conta
 from app.models.decisor import Decisor
@@ -442,7 +443,7 @@ async def anexar_proposta(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> PropostaNegocioSchema:
-    conteudo = await arquivo.read()
+    conteudo = await ler_limitado(arquivo, proposta_service.TAMANHO_MAXIMO_BYTES)
     return proposta_service.anexar(
         db,
         tenant_id,

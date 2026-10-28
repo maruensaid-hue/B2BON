@@ -3,6 +3,23 @@ import json
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+TAMANHO_MINIMO_SEGREDO = 32
+_VARIEDADE_MINIMA_SEGREDO = 12  # caracteres distintos; token_urlsafe(32) tem ~35, "aaaa…" ou "abcabc…" têm poucos
+_TERMOS_OBVIOS = ("changeme", "password", "senha", "qwerty", "admin", "default", "example", "exemplo", "troque")
+
+
+def motivo_segredo_fraco(valor: str) -> str | None:
+    """Por que um segredo de produção é fraco (ou `None` se está ok). Nunca devolve o valor."""
+    if len(valor) < TAMANHO_MINIMO_SEGREDO:
+        return "curto"
+    if len(set(valor)) < _VARIEDADE_MINIMA_SEGREDO:
+        return "pouca variedade"
+    minusculo = valor.lower()
+    if any(termo in minusculo for termo in _TERMOS_OBVIOS):
+        return "contém termo óbvio"
+    return None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -378,6 +395,21 @@ class Settings(BaseSettings):
                 f"Configuração insegura: {', '.join(fracos)} ainda está no valor padrão do "
                 "repositório. Gere um valor forte (ex.: secrets.token_urlsafe(32)) e configure "
                 "a variável de ambiente correspondente antes de subir em produção."
+            )
+        # Além do padrão do repositório: valor curto, de pouca variedade ou óbvio também é recusado (auditoria de segurança A03). Só os NOMES saem na
+        # mensagem, nunca o valor.
+        invalidos = [
+            nome for nome, valor in (("secret_key", self.secret_key), ("jwt_secret_key", self.jwt_secret_key)) if motivo_segredo_fraco(valor) is not None
+        ]
+        if invalidos:
+            raise RuntimeError(
+                f"Configuração insegura: {', '.join(invalidos)} é fraco demais para produção (mínimo de {TAMANHO_MINIMO_SEGREDO} caracteres, com variedade, "
+                "sem palavras óbvias). Gere um valor novo com `python -c \"import secrets; print(secrets.token_urlsafe(48))\"` e configure a variável de ambiente."
+            )
+        if self.secret_key == self.jwt_secret_key:
+            raise RuntimeError(
+                "Configuração insegura: secret_key e jwt_secret_key têm o mesmo valor. Use um valor diferente em cada uma "
+                "(o vazamento de uma não pode comprometer a outra)."
             )
         if not self.redis_url.strip():
             raise RuntimeError(

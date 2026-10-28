@@ -27,6 +27,18 @@ _correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=N
 logger_acesso = logging.getLogger("b2bon.acesso")
 
 
+# Rotas que carregam uma credencial ou um segredo no próprio endereço (token de webhook de CRM, link de NPS, de opt-out, de reagendamento, do pixel de abertura
+# e do portal do fornecedor). O log guarda o endereço sem esse trecho: quem tem acesso aos logs não pode reaproveitar a credencial (auditoria de segurança A09).
+_SEGREDOS_NO_CAMINHO = re.compile(
+    r"(/hub-integracoes/webhook/|/nps/responder/|/opt-out/(?:email|campanha)/|/reunioes/reagendar/|/webhooks/email/aberto/|/portal-fornecedor/)[^/\s]+"
+)
+
+
+def caminho_para_log(caminho: str) -> str:
+    """Endereço da requisição sem tokens/segredos, para ir ao log."""
+    return _SEGREDOS_NO_CAMINHO.sub(r"\g<1>***", caminho)
+
+
 TAXA_TRACES = 0.1
 # Rotas de máquina: os crons (7 chamadas a cada 15 min) e o health check respondem pela maior parte do tráfego da API e não trazem informação de
 # desempenho que um usuário perceba. Erros delas continuam sendo capturados (o amostrador só afeta transações de desempenho).
@@ -73,6 +85,6 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             logger_acesso.log(
                 logging.WARNING if lenta else logging.INFO,
                 "method=%s path=%s status=%s latency_ms=%s request_id=%s%s",
-                request.method, request.url.path, status, latencia_ms, correlation_id, " slow=1" if lenta else "",
+                request.method, caminho_para_log(request.url.path), status, latencia_ms, correlation_id, " slow=1" if lenta else "",
             )
             _correlation_id.reset(token)

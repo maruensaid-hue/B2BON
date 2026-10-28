@@ -25,6 +25,7 @@ from app.api.deps import (
 )
 from app.api.respostas import arquivo_com_hash
 from app.contexts.procurement import contract as compras
+from app.core.uploads import ler_limitado
 from app.llm.base import LLMProvider
 from app.models.usuario import Usuario
 
@@ -279,7 +280,7 @@ async def enviar_documento(processo_id: int, arquivo: UploadFile = File(...), cl
                            tenant_id: str = Depends(get_tenant_id), ator_id: str | None = Depends(get_ator_id),
                            db: Session = Depends(get_db)) -> dict:
     documento = ia.enviar_documento(db, tenant_id, _usuario_id(ator_id), processo_id, arquivo.filename or "especificacao",
-                                    arquivo.content_type or "", await arquivo.read(), classificacao)
+                                    arquivo.content_type or "", await ler_limitado(arquivo), classificacao)
     return ia.documento_dict(documento)
 
 

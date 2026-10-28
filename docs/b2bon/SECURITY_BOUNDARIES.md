@@ -35,9 +35,11 @@ restante foi reconfirmado no código.
   intents, salas). A visibilidade é controlada por campos
   `visibilidade` (`publica|conexoes|privada`) e pelo status de conexão.
   É a área onde uma fronteira errada vaza dado de um tenant para outro.
-- Testes: há testes pontuais de isolamento (ex.:
-  `test_isolamento_ia_critico.py`, testes de escopo por serviço). **Não
-  há teste genérico** que percorra todas as rotas com dois tenants.
+- Testes: além dos pontuais (ex.: `test_isolamento_ia_critico.py`), a
+  **varredura sistemática** `tests/integration/test_isolamento_sistematico.py`
+  chama todas as rotas autenticadas como administrador de outro tenant,
+  com ids reais da vítima, e confere leitura e mutação (matriz em
+  `MATRIZ_ISOLAMENTO_ROTAS.md`). **RLS no banco continua não existindo** (D-109).
 
 ## 3. Autenticação / autorização
 

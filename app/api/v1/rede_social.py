@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_ator_id, get_db, get_email_provider, get_tenant_id, get_usuario_atual
 from app.api.respostas import arquivo_com_hash
 from app.contexts.network.contract import grafo, identidade, membership, salas
+from app.core.uploads import ler_limitado, ler_varios_limitados
 from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
 from app.schemas.rede_social import (
@@ -46,6 +47,7 @@ from app.schemas.rede_social import (
 from app.services import (
     auditoria_service,
     intent_service,
+    midia_service,
     notificacao_rede_social_service,
     post_rede_social_service,
     rede_social_service,
@@ -367,7 +369,9 @@ async def criar_post(
     """Business Feed (master prompt §44-45, Fase 2B) — anexo real de
     foto/vídeo via multipart, em vez de URL colada; várias fotos formam
     um carrossel (2026-09-20), vídeo sempre sozinho."""
-    midias = [(await arquivo.read(), arquivo.content_type or "") for arquivo in arquivos]
+    post_rede_social_service.exigir_quantidade_de_midias(len(arquivos))  # recusa antes de ler qualquer byte
+    conteudos = await ler_varios_limitados(arquivos, lambda arquivo: midia_service.limite_de_entrada(arquivo.content_type or ""))
+    midias = [(conteudo, arquivo.content_type or "") for conteudo, arquivo in zip(conteudos, arquivos, strict=True)]
     return post_rede_social_service.criar(
         db,
         tenant_id,
@@ -719,7 +723,7 @@ async def enviar_documento_sala(
     db: Session = Depends(get_db),
 ) -> dict:
     documento = salas.adicionar_documento(db, sala_id, usuario, arquivo.filename or "documento", arquivo.content_type or "",
-                                          await arquivo.read(), escopo, canal_id)
+                                          await ler_limitado(arquivo), escopo, canal_id)
     return {"id": documento.id, "nome_arquivo": documento.nome_arquivo, "escopo": documento.escopo, "sha256": documento.sha256}
 
 

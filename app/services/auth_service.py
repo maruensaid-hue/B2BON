@@ -227,6 +227,22 @@ def redefinir_senha(db: Session, token: str, nova_senha: str) -> None:
     db.commit()
 
 
+def revogar_sessao(db: Session, token: str | None) -> bool:
+    """Encerra de verdade a sessão do token apresentado no logout: sobe `token_version`, e todo JWT emitido antes (inclusive uma cópia roubada) passa a ser
+    recusado por `validar_token`. Vale para todos os dispositivos do usuário, que precisam entrar de novo (troca simples e sem armazenamento extra de sessões).
+    Token ausente, inválido ou já expirado não é erro: o logout continua só limpando o cookie. Devolve se revogou."""
+    if not token:
+        return False
+    try:
+        usuario = validar_token(db, token)
+    except NaoAutenticado:
+        return False
+    usuario.token_version = int(usuario.token_version or 0) + 1
+    auditoria_service.registrar(db, usuario.tenant_id, "sessao_encerrada", "usuario", usuario.id, str(usuario.id), {})
+    db.commit()
+    return True
+
+
 def _gerar_codigo_convite() -> str:
     return secrets.token_hex(8).upper()
 

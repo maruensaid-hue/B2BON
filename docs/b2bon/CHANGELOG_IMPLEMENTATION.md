@@ -1,5 +1,16 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Auditoria de segurança de 28/10/2026 (2026-10-28, D-109)
+
+- Uploads: o arquivo é lido com teto de tamanho antes de ir para a memória, e o feed recusa anexos demais antes de ler (A02).
+- Produção recusa subir com segredo de sessão curto, repetitivo ou óbvio (A03). Se o valor atual no Render for fraco, o deploy falha e a versão anterior continua no ar.
+- Sair da conta agora invalida a sessão no servidor: uma cópia do cookie deixa de valer, e a pessoa é desconectada nos outros aparelhos (A04).
+- O site publicado passa a enviar cabeçalhos de segurança, com política de conteúdo (CSP) que libera só os scripts conhecidos (A05).
+- Login e "esqueci a senha" também são limitados por conta, não só por IP, e o limite por IP passou a usar o IP real do cliente (A06).
+- Docker Compose local só aceita conexões da própria máquina e exige senhas definidas (A08).
+- O log de acesso não grava mais os tokens que viajam no endereço (webhook de CRM, NPS, opt-out, reagendamento, portal do fornecedor) (A09).
+- Pendentes: preços dos planos no endpoint público (A07, decisão comercial) e isolamento por RLS no banco (A01, projeto próprio).
+
 ## Editar destinatário da campanha e lista de bloqueio (2026-10-28, D-108)
 
 - Na tabela de destinatários de uma campanha há "Editar" (nome, e-mail, telefone, empresa): serve para corrigir um e-mail digitado errado ou trocar o e-mail de quem avisou que mudou. Quem já recebeu só troca o e-mail marcando "enviar também para o novo endereço".

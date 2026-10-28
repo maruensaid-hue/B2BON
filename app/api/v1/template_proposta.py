@@ -3,6 +3,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_tenant_id
+from app.core.uploads import ler_limitado
 from app.schemas.template_proposta import (
     AtualizarItemTemplatePropostaRequestSchema,
     AtualizarTemplatePropostaRequestSchema,
@@ -48,7 +49,7 @@ async def enviar_logo(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> TemplatePropostaSchema:
-    conteudo = await arquivo.read()
+    conteudo = await ler_limitado(arquivo, template_proposta_service.TAMANHO_MAXIMO_LOGO_BYTES)
     return template_proposta_service.salvar_logo(db, tenant_id, ator_id, conteudo, arquivo.content_type or "")
 
 

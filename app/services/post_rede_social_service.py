@@ -29,6 +29,12 @@ TIPOS_REACAO_VALIDOS = {
 }
 
 
+def exigir_quantidade_de_midias(quantidade: int) -> None:
+    """Recusa posts com anexos demais. A API chama antes de ler os arquivos, para o excesso nem chegar à memória."""
+    if quantidade > _LIMITE_MIDIAS_POR_POST:
+        raise ValidacaoFalhou(f"Máximo de {_LIMITE_MIDIAS_POR_POST} fotos por post.")
+
+
 def criar(
     db: Session,
     tenant_id: str,
@@ -40,8 +46,7 @@ def criar(
     midias: list[tuple[bytes, str]] | None = None,
 ) -> dict:
     midias = midias or []
-    if len(midias) > _LIMITE_MIDIAS_POR_POST:
-        raise ValidacaoFalhou(f"Máximo de {_LIMITE_MIDIAS_POR_POST} fotos por post.")
+    exigir_quantidade_de_midias(len(midias))
 
     midias_comprimidas: list[tuple[bytes, str]] = []
     for conteudo, tipo_mime in midias:

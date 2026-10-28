@@ -30,4 +30,4 @@ EXPOSE 8000
 # `alembic upgrade head` roda o schema de produção (Postgres) antes do
 # Uvicorn subir — em dev/SQLite é idempotente, não faz nada de novo se
 # já estiver em dia.
-CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --no-access-log

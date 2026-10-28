@@ -1,7 +1,7 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -19,7 +19,7 @@ from app.api.deps import (
     get_web_search_provider,
 )
 from app.core.config import settings
-from app.core.rate_limit import limitar_demonstracao, limitar_por_ip
+from app.core.rate_limit import limitar_demonstracao, limitar_por_conta, limitar_por_ip
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
@@ -196,6 +196,7 @@ def demonstracao(response: Response, tarefas: BackgroundTasks, db: Session = Dep
 def login(
     dados: LoginRequestSchema, response: Response, db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)
 ) -> TokenResponseSchema:
+    limitar_por_conta("login", dados.email)  # além do limite por IP: cobre ataque distribuído contra a mesma conta (A06)
     usuario, primeiro_login = auth_service.autenticar_senha(db, dados.email, dados.senha)
     return _resposta_token(usuario, db, primeiro_login=primeiro_login, email_provider=email, response=response)
 
@@ -312,6 +313,7 @@ def esqueci_senha(
 ) -> RespostaMensagemSchema:
     """Sempre responde a mesma mensagem genérica, exista o e-mail ou não
     — nunca revela se uma conta existe (evita enumeração)."""
+    limitar_por_conta("esqueci-senha", dados.email, max_tentativas=5, janela_segundos=3600)  # evita encher a caixa de alguém com e-mails de redefinição
     auth_service.solicitar_redefinicao_senha(db, dados.email, email)
     return RespostaMensagemSchema(
         mensagem="Se este e-mail estiver cadastrado, você vai receber um link para redefinir sua senha."
@@ -325,8 +327,18 @@ def redefinir_senha(dados: RedefinirSenhaRequestSchema, db: Session = Depends(ge
 
 
 @router.post("/logout", status_code=204)
-def logout(response: Response) -> Response:
-    """Encerra a sessão do navegador removendo o cookie HttpOnly."""
+def logout(
+    request: Request,
+    response: Response,
+    authorization: str | None = Header(None, alias="Authorization"),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Encerra a sessão: invalida o token no servidor (`token_version`, então uma cópia do JWT deixa de valer) e remove o cookie HttpOnly do navegador."""
+    if authorization is not None and authorization.startswith("Bearer "):
+        token = authorization[len("Bearer ") :]
+    else:
+        token = request.cookies.get(settings.sessao_cookie_nome)
+    auth_service.revogar_sessao(db, token)
     response.delete_cookie(
         key=settings.sessao_cookie_nome,
         path="/",

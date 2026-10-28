@@ -27,6 +27,7 @@ from app.api.respostas import arquivo_com_hash
 from app.contexts.intelligence import contract as intel
 from app.contexts.procurement import contract as compras
 from app.contexts.shared import paginacao
+from app.core.uploads import ler_limitado
 from app.llm.base import LLMProvider
 from app.models.documento_compras import DocumentoCompras
 from app.models.usuario import Usuario
@@ -169,7 +170,7 @@ async def enviar_documento(
     if contrato_id is not None:
         compras.cadastros.obter(db, tenant_id, "contrato_compra", contrato_id)
     documento = compras.documentos.registrar(
-        db, tenant_id, tipo, arquivo.filename or "documento", arquivo.content_type or "", await arquivo.read(),
+        db, tenant_id, tipo, arquivo.filename or "documento", arquivo.content_type or "", await ler_limitado(arquivo),
         _usuario_id(ator_id), processo_id, contrato_id, classificacao,
     )
     auditoria_service.registrar(db, tenant_id, "documento_compras_enviado", "processo_contratacao" if processo_id else "documento_compras",

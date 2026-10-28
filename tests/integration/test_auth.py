@@ -978,3 +978,52 @@ def test_atualizar_whatsapp_pessoal(client):
     assert resposta.status_code == 200
     assert resposta.json()["whatsapp_pessoal"] == "+5511999998888"
     assert client.get("/api/v1/auth/eu").json()["whatsapp_pessoal"] == "+5511999998888"
+
+
+def test_logout_revoga_o_token_no_servidor_e_uma_copia_roubada_deixa_de_valer(client, db_session):
+    """Auditoria A04: antes o logout só apagava o cookie; uma cópia do JWT continuava valendo até expirar."""
+    usuario = _criar_usuario_senha(db_session, "logout@teste.com.br", "senha-forte")
+    login = client.post("/api/v1/auth/login", json={"email": "logout@teste.com.br", "senha": "senha-forte"})
+    jwt_copiado = login.headers["set-cookie"].split("b2bon_session=", 1)[1].split(";", 1)[0]
+    cabecalho = {"Authorization": f"Bearer {jwt_copiado}"}
+    assert client.get("/api/v1/auth/eu", headers=cabecalho).status_code == 200
+
+    # como o navegador: sem Authorization, só o cookie de sessão (o cliente de teste traz um Bearer padrão de outro usuário)
+    assert client.post("/api/v1/auth/logout", headers={"Authorization": "", "Origin": settings.origens_cors[0]}).status_code == 204
+
+    assert client.get("/api/v1/auth/eu", headers=cabecalho).status_code == 401
+    db_session.refresh(usuario)
+    assert usuario.token_version == 1
+
+
+def test_logout_sem_sessao_ou_com_token_invalido_continua_204_sem_erro(client):
+    assert client.post("/api/v1/auth/logout").status_code == 204
+    assert client.post("/api/v1/auth/logout", headers={"Authorization": "Bearer lixo"}).status_code == 204
+
+
+def test_login_limita_tentativas_por_conta_mesmo_trocando_de_ip(client, db_session):
+    """Auditoria A06: o limite era só por IP; um ataque vindo de muitos IPs contra a mesma conta não esbarrava em nada."""
+    _criar_usuario_senha(db_session, "alvo@teste.com.br", "senha-forte")
+    _criar_usuario_senha(db_session, "outra@teste.com.br", "senha-forte")
+    for n in range(10):
+        resposta = client.post(
+            "/api/v1/auth/login",
+            json={"email": "ALVO@teste.com.br" if n % 2 else "alvo@teste.com.br", "senha": "errada"},
+            headers={"X-Forwarded-For": f"203.0.113.{n + 1}"},  # um IP diferente a cada tentativa
+        )
+        assert resposta.status_code == 401
+    bloqueada = client.post(
+        "/api/v1/auth/login", json={"email": "alvo@teste.com.br", "senha": "senha-forte"}, headers={"X-Forwarded-For": "198.51.100.77"}
+    )
+    assert bloqueada.status_code == 429
+    # outra conta, outro IP: não é afetada
+    livre = client.post(
+        "/api/v1/auth/login", json={"email": "outra@teste.com.br", "senha": "senha-forte"}, headers={"X-Forwarded-For": "198.51.100.78"}
+    )
+    assert livre.status_code == 200
+
+
+def test_esqueci_senha_limita_por_conta_sem_revelar_se_ela_existe(client):
+    for n in range(5):
+        assert client.post("/api/v1/auth/esqueci-senha", json={"email": "ninguem@teste.com.br"}, headers={"X-Forwarded-For": f"203.0.113.{n + 1}"}).status_code == 200
+    assert client.post("/api/v1/auth/esqueci-senha", json={"email": "ninguem@teste.com.br"}, headers={"X-Forwarded-For": "198.51.100.9"}).status_code == 429

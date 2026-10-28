@@ -27,6 +27,11 @@ _CRF_VIDEO = 28
 _TIMEOUT_FFMPEG_SEGUNDOS = 120
 
 
+def limite_de_entrada(tipo_mime: str) -> int:
+    """Teto de leitura de um anexo de feed pelo tipo declarado: vídeo tem teto maior que foto. O tipo declarado só escolhe o teto; o conteúdo é validado depois."""
+    return TAMANHO_MAXIMO_VIDEO_ENTRADA_BYTES if tipo_mime.startswith("video/") else TAMANHO_MAXIMO_IMAGEM_ENTRADA_BYTES
+
+
 def comprimir_imagem(conteudo: bytes) -> bytes:
     """Reencoda em JPEG, redimensionando o lado maior pra no máximo
     _DIMENSAO_MAXIMA_IMAGEM — mesma cautela de espaço do raio-X do Neon

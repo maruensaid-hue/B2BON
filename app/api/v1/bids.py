@@ -27,6 +27,7 @@ from app.contexts.bids import contract as bids
 from app.contexts.intelligence import contract as intel
 from app.contexts.shared import paginacao
 from app.core.config import settings
+from app.core.uploads import ler_limitado
 from app.llm.base import LLMProvider
 from app.models.documento_cofre import DocumentoCofre
 from app.models.documento_licitacao import DocumentoLicitacao
@@ -314,7 +315,7 @@ async def enviar_documento(
     db: Session = Depends(get_db),
 ) -> dict:
     bids.licitacoes.obter(db, tenant_id, licitacao_id)
-    conteudo = await arquivo.read()
+    conteudo = await ler_limitado(arquivo)
     documento = bids.documentos.registrar(
         db, tenant_id, licitacao_id, tipo, arquivo.filename or "documento", arquivo.content_type or "", conteudo,
         _usuario_id(ator_id), fonte="URL" if fonte_url else "UPLOAD", fonte_url=fonte_url,
@@ -459,7 +460,7 @@ async def adicionar_ao_cofre(
         raise ValidacaoFalhou(f"Tipo inválido: {tipo}")
     if valido_desde and valido_ate and valido_ate < valido_desde:
         raise ValidacaoFalhou("Validade final antes da inicial.")
-    conteudo = await arquivo.read() if arquivo is not None else None
+    conteudo = await ler_limitado(arquivo) if arquivo is not None else None
     if conteudo and len(conteudo) > bids.documentos.TAMANHO_MAXIMO:
         raise ValidacaoFalhou("Arquivo acima de 15 MB.")
     documento = DocumentoCofre(

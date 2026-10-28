@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_usuario_atual
 from app.contexts.procurement import contract as compras
 from app.core.rate_limit import limitador_portal
+from app.core.uploads import ler_limitado
 from app.models.usuario import Usuario
 
 portal = compras.portal
@@ -93,7 +94,7 @@ def _rotas(router: APIRouter, participante_de, prefixo: str) -> None:
     async def anexar(proposta_id: int, arquivo: UploadFile = File(...), participante=Depends(participante_de),
                      db: Session = Depends(get_db)) -> dict:
         anexo = portal.anexar(db, participante, proposta_id, arquivo.filename or "anexo", arquivo.content_type or "",
-                              await arquivo.read())
+                              await ler_limitado(arquivo))
         return {"id": anexo.id, "nome_arquivo": anexo.nome_arquivo, "sha256": anexo.sha256}
 
     @router.post(f"{prefixo}/declinar")

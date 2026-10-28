@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import secrets
 import time
@@ -101,10 +102,18 @@ def limitar_por_ip(max_tentativas: int = 5, janela_segundos: int = 300):
     infraestrutura nova."""
 
     def _dependencia(request: Request) -> None:
-        ip = request.client.host if request.client else "desconhecido"
-        limitador_auth.checar(f"{request.url.path}:{ip}", max_tentativas, janela_segundos)
+        limitador_auth.checar(f"{request.url.path}:{_ip_cliente(request)}", max_tentativas, janela_segundos)
 
     return _dependencia
+
+
+def limitar_por_conta(rota: str, identificador: str, max_tentativas: int = 10, janela_segundos: int = 900) -> None:
+    """Segunda cota, por conta (e-mail normalizado), somada à cota por IP: um ataque distribuído por muitos IPs contra a mesma conta (credential stuffing) bate
+    aqui mesmo trocando de IP. A janela é curta e se esgota sozinha — nunca há bloqueio permanente, que deixaria alguém trancar a conta de outra pessoa.
+    A chave usa o hash do e-mail, para o endereço não ficar legível no Redis. Vale para o endereço exista a conta ou não (não revela cadastro)."""
+    normalizado = identificador.strip().lower()
+    resumo = hashlib.sha256(normalizado.encode("utf-8")).hexdigest()[:32]
+    limitador_auth.checar(f"conta:{rota}:{resumo}", max_tentativas, janela_segundos)
 
 
 # Demonstração pública (D-083): por cliente real e um teto global por hora.
