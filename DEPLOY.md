@@ -68,10 +68,10 @@ real percorrido (inclui os desvios da versão original do plano).
    SMTP do cliente falha com `Errno 101 Network is unreachable`. Para o
    cliente poder usar a própria caixa de e-mail, a instância precisa ser de
    um plano pago. Em 2026-10-26 o `b2bon-api` foi movido para o plano
-   **Starter** pelo painel do Render (Settings → Instance Type); o
-   `render.yaml` da raiz ainda declara `plan: free`. **Antes de sincronizar o
-   Blueprint, alinhe o arquivo** (`plan: starter`), senão a sincronização pode
-   devolver a instância ao plano gratuito e o SMTP volta a falhar.
+   **Starter** pelo painel do Render (Settings → Instance Type) e o
+   `render.yaml` da raiz passou a declarar `plan: starter`, para que uma
+   sincronização do Blueprint não devolva a instância ao plano gratuito (o
+   SMTP voltaria a falhar). Mantenha os dois alinhados.
 7. **Migrações e tabelas em uso**: o `alembic/env.py` aplica
    `SET LOCAL lock_timeout = '30s'` em PostgreSQL (`app/db/migracao.py`).
    Se um `ALTER TABLE` ficar esperando por uma tabela em uso (por exemplo,

@@ -3,7 +3,7 @@ services:
     name: b2bon-api
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: free
+    plan: starter # o plano gratuito bloqueia SMTP (25/465/587); ver DEPLOY.md, secao 3
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
