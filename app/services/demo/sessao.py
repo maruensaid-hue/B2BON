@@ -20,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db import rls
 from app.models.creditos_ia import ConfiguracaoCreditosTenant
 from app.models.licenca import Licenca
 from app.models.perfil_empresa import PerfilEmpresa
@@ -86,11 +87,12 @@ def purgar_expiradas(db: Session, limite: int = LIMPEZA_POR_CHAMADA) -> int:
 
 def _apagar(db: Session, tenant_id: str) -> None:
     db.rollback()
-    tenant_service.apagar_dados(db, tenant_id)
-    tenant = db.get(Tenant, tenant_id)
-    if tenant is not None:
-        db.delete(tenant)
-        db.commit()
+    with rls.contexto_tenant(db, tenant_id):  # apaga só o que é do ambiente de demonstração (RLS)
+        tenant_service.apagar_dados(db, tenant_id)
+        tenant = db.get(Tenant, tenant_id)
+        if tenant is not None:
+            db.delete(tenant)
+            db.commit()
 
 
 def criar(db: Session) -> tuple[Usuario, datetime]:
@@ -115,13 +117,14 @@ def _reivindicar(db: Session, expira_em: datetime) -> Usuario | None:
     if tenant is None:
         return None
     tenant.demo_expira_em = expira_em
-    db.query(Licenca).filter_by(tenant_id=tenant.id).update({"data_expiracao": expira_em})
-    gestora = db.query(Usuario).filter_by(tenant_id=tenant.id, email=semente.email_gestora(tenant.id)).one_or_none()
-    if gestora is None:  # reserva corrompida: deixa vencer e semeia outra
-        tenant.demo_expira_em = _agora()
+    with rls.contexto_tenant(db, tenant.id):
+        db.query(Licenca).filter_by(tenant_id=tenant.id).update({"data_expiracao": expira_em})
+        gestora = db.query(Usuario).filter_by(tenant_id=tenant.id, email=semente.email_gestora(tenant.id)).one_or_none()
+        if gestora is None:  # reserva corrompida: deixa vencer e semeia outra
+            tenant.demo_expira_em = _agora()
+            db.commit()
+            return None
         db.commit()
-        return None
-    db.commit()
     return gestora
 
 
@@ -150,6 +153,7 @@ def _semear_novo(db: Session, expira_em: datetime) -> tuple[Usuario, datetime]:
     plano = _plano(db)
     db.add(Tenant(id=tenant_id, razao_social=semente.EMPRESA, demo_expira_em=expira_em))
     db.flush()
+    rls.definir_tenant(db, tenant_id)  # tudo o que a demonstração cria pertence ao tenant fictício dela
     db.add(Licenca(tenant_id=tenant_id, plano_id=plano.id, status="ativa", data_expiracao=expira_em))
     # Nunca aparece no diretório da rede de empresas reais.
     db.add(PerfilEmpresa(tenant_id=tenant_id, nome_exibicao=semente.EMPRESA, visivel_no_diretorio=False))

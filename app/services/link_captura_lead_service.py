@@ -2,6 +2,7 @@ import secrets
 
 from sqlalchemy.orm import Session
 
+from app.db import rls
 from app.models.link_captura_lead import LinkCapturaLead
 from app.models.perfil_empresa import PerfilEmpresa
 from app.services import conta_service
@@ -25,9 +26,11 @@ def obter_ou_criar(db: Session, tenant_id: str) -> LinkCapturaLead:
 
 
 def resolver_tenant_por_codigo(db: Session, codigo: str) -> str:
-    link = db.query(LinkCapturaLead).filter_by(codigo=codigo).one_or_none()
+    with rls.contexto_busca(db, rls.ESCOPO_CAPTURA_LEAD, codigo):
+        link = db.query(LinkCapturaLead).filter_by(codigo=codigo).one_or_none()
     if link is None:
         raise NaoEncontrado("Link de captura de lead não encontrado.")
+    rls.definir_tenant(db, link.tenant_id)  # o link diz de qual tenant é o lead que vai ser criado
     return link.tenant_id
 
 

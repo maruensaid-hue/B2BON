@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db import rls
 from app.llm.base import LLMProvider
 from app.models.alerta_detrator import AlertaDetrator
 from app.models.configuracao_notificacao import ConfiguracaoNotificacao
@@ -177,6 +178,7 @@ def _gerar_alerta_detrator(db: Session, tenant_id: str, pesquisa: PesquisaNps, w
 
 def obter_por_token(db: Session, token: str) -> PesquisaNps:
     tenant_id, pesquisa_id = _validar_token(token)
+    rls.definir_tenant(db, tenant_id)  # o tenant vem do token assinado (HMAC), não da requisição
     pesquisa = db.query(PesquisaNps).filter_by(id=pesquisa_id, tenant_id=tenant_id).one_or_none()
     if pesquisa is None:
         raise NaoEncontrado(f"Pesquisa NPS {pesquisa_id} não encontrada")
@@ -194,6 +196,7 @@ def responder(
     encantado.
     """
     tenant_id, pesquisa_id = _validar_token(token)
+    rls.definir_tenant(db, tenant_id)  # o tenant vem do token assinado (HMAC), não da requisição
     if not (0 <= nota <= 10):
         raise ValidacaoFalhou("Nota de NPS deve estar entre 0 e 10.")
 

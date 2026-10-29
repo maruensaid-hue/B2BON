@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db import rls
 from app.models.campanha import CampanhaDestinatario
 from app.models.mensagem import Mensagem
 from app.services.errors import ValidacaoFalhou
@@ -68,6 +69,7 @@ def registrar_abertura(db: Session, token: str) -> None:
         tenant_id, de_campanha, item_id = _validar_token(token)
     except ValidacaoFalhou:
         return
+    rls.definir_tenant(db, tenant_id)  # o tenant vem do token assinado (HMAC), não da requisição
 
     modelo = CampanhaDestinatario if de_campanha else Mensagem
     item = db.query(modelo).filter_by(id=item_id, tenant_id=tenant_id).one_or_none()

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.contexts.integrations import contract as integracoes
 from app.core.config import settings
+from app.db import rls
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
 from app.services import auditoria_service
@@ -52,6 +53,7 @@ def _cancelar_mensagens_pendentes(db: Session, decisor_id: int) -> int:
 def processar_por_token(db: Session, token: str) -> dict:
     """Opt-out via link do e-mail — endpoint público, sem X-Tenant-Id (E9-H2)."""
     tenant_id, decisor_id = _validar_token(token)
+    rls.definir_tenant(db, tenant_id)  # o tenant vem do token assinado (HMAC), não da requisição
     return processar(db, tenant_id, decisor_id, origem="email")
 
 

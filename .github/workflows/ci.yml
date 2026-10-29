@@ -92,6 +92,15 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
           CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: pytest -q tests/integration/test_enriquecimento_concorrencia_pg.py tests/test_migracao_limite_de_espera_pg.py
+      # RLS (D-110): políticas de isolamento por tenant provadas com o papel de execução (sem superusuário, sem BYPASSRLS) em banco descartável criado pelo próprio teste.
+      - name: Isolamento por tenant com RLS (PostgreSQL)
+        env:
+          B2BON_TESTE_PG_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+          SECRET_KEY: ci-descartavel-secret-key-0123456789abcdef
+          JWT_SECRET_KEY: ci-descartavel-jwt-secret-key-0123456789abcdef-xyz
+          REDIS_URL: redis://localhost:6379/0
+          CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        run: pytest -q tests/integration/test_rls_postgres.py
 
   frontend:
     runs-on: ubuntu-latest

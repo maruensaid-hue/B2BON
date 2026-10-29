@@ -26,11 +26,12 @@ from contextlib import contextmanager
 from decimal import Decimal
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session, object_session, sessionmaker
+from sqlalchemy.orm import Session, object_session
 
 from app.contexts.finops import carteira, catalogos, comercial, limites
 from app.contexts.finops.comercial import Evento
 from app.core.config import settings
+from app.db import rls
 from app.models.creditos_ia import ExecucaoIa
 from app.models.tenant import Tenant
 from app.services.errors import ConfirmacaoNecessaria, CreditosInsuficientes, LimiteDeTaxaExcedido, NaoEncontrado
@@ -40,7 +41,7 @@ ZERO = Decimal(0)
 
 
 def _sessao(db: Session) -> Session:
-    return sessionmaker(bind=db.get_bind(), expire_on_commit=False)()
+    return rls.sessao_irma(db, expire_on_commit=False)
 
 
 def _d(valor) -> Decimal:

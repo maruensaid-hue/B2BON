@@ -22,7 +22,8 @@ if config.config_file_name is not None:
 # URL vem de app.core.config.settings (mesma fonte do resto do app —
 # funciona igual em dev/SQLite e produção/Postgres, Onda G), não do
 # valor fixo em alembic.ini.
-config.set_main_option("sqlalchemy.url", normalizar_database_url(settings.database_url))
+# Com RLS (D-110) a aplicação conecta com um papel de execução e as migrações com o papel dono das tabelas: `MIGRATION_DATABASE_URL`, se definida, vale só aqui.
+config.set_main_option("sqlalchemy.url", normalizar_database_url(settings.migration_database_url or settings.database_url))
 
 target_metadata = Base.metadata
 

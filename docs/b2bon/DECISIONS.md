@@ -1624,3 +1624,13 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **A07 — preços de planos no endpoint público**: **não alterado**, aguarda decisão comercial. `GET /planos` devolve os planos não self-service (por exemplo, o Government) com preços de licença; a própria auditoria pede para confirmar se a publicação é intencional.
 - **Fora do código**: bancos SQLite na pasta do OneDrive (`predator.db`, `onda_a_demo.db`, `dev.db`) — conferir se têm só dados fictícios; auditoria de dependências (`pip-audit` e `npm audit`) a rodar em ambiente com acesso ao índice.
 - **Status**: ACEITA (A07 e RLS pendentes).
+
+## D-110 · 2026-10-29 · RLS no PostgreSQL, primeira etapa (achado A01 da auditoria)
+
+- **Problema**: o isolamento entre empresas dependia de cada consulta filtrar `tenant_id`; uma consulta nova que esquecesse o filtro vazaria dados. Não havia barreira no banco.
+- **Decisão**: acrescentar Row-Level Security como segunda barreira, **sem tirar os filtros do código**, em etapas. Detalhes, papéis, rollout e reversão em `docs/b2bon/RLS.md`.
+- **Mecanismo**: contexto transacional (`set_config(..., is_local => true)`, regravado a cada transação pelo evento `after_begin`), tenant vindo do usuário validado no banco, negação por padrão, `WITH CHECK` em escrita, hierarquia só amplia LEITURA, buscas antes de saber o tenant com política própria de uma linha (`SELECT`), contextos de sistema nomeados. Sem `FORCE` (o dono precisa rodar migrações); o papel de execução `b2bon_app` é sem superusuário e sem `BYPASSRLS`.
+- **Entregue nesta etapa**: mecanismo (`app/db/rls.py`, `rls_registro.py`, `rls_sql.py`), contexto em login, cadastros, demonstração, cron por tenant, webhooks e links por token e chave de API do tenant; migração `e7a9c1d3f5b8` (81 tabelas com RLS e 166 políticas; downgrade testado); `MIGRATION_DATABASE_URL`; script do papel de execução; 20 testes em PostgreSQL real (no CI) e a sonda `tests/rls_sonda.py`, que rodou a suíte inteira.
+- **Como as tabelas foram escolhidas**: só entram as que a sonda viu, na suíte inteira, tocadas apenas dentro do contexto do tenant dono. As 98 pendentes ficaram de fora, cada uma com o motivo no registro.
+- **A01 NÃO está resolvido.** O RLS só vale quando a API conecta com `b2bon_app`; hoje conecta com o dono, então a migração não muda nada em produção. Falta: dar contexto verificado a webhooks/cron globais/admin entre tenants/parceiros, entrar as tabelas pendentes (CRM central, `usuario`, `licenca`, `audit_log`, IA e créditos), revisar as listas dos contextos de sistema e fazer o rollout em staging e produção.
+- **Status**: ACEITA (etapa 1; A01 em andamento).

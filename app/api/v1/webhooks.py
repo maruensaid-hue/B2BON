@@ -18,6 +18,7 @@ from app.api.deps import (
 from app.contexts.enriquecimento import contract as enriquecimento
 from app.contexts.finops import contract as finops
 from app.core.config import settings
+from app.db import rls
 from app.llm.base import LLMProvider
 from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.decisor import Decisor
@@ -69,12 +70,14 @@ def _whatsapp_provider_do_webhook_whatsapp(
     `resolver_whatsapp_provider` — webhook público (Meta chamando, sem
     JWT), então o tenant vem do próprio corpo da requisição, não de
     `Depends(get_tenant_id)` (que exigiria usuário autenticado)."""
+    rls.definir_tenant(db, dados.tenant_id)  # rota interna: o segredo já foi conferido (dependência da rota); o tenant vem do chamador interno
     return resolver_whatsapp_provider(dados.tenant_id, db)
 
 
 def _whatsapp_provider_do_webhook_email(
     dados: WebhookEmailRequestSchema, db: Session = Depends(get_db)
 ) -> WhatsAppProvider:
+    rls.definir_tenant(db, dados.tenant_id)
     return resolver_whatsapp_provider(dados.tenant_id, db)
 
 
@@ -114,6 +117,7 @@ def webhook_whatsapp(
     """Schema simplificado (`tenant_id` explícito) usado pela suíte de
     testes e por chamadas internas — a Meta nunca chama esta rota
     diretamente, ver `/whatsapp/meta` abaixo para o formato real."""
+    rls.definir_tenant(db, dados.tenant_id)  # rota interna (segredo conferido pela dependência da rota); repete aqui porque os testes substituem o provider
     return _processar_mensagem_whatsapp(db, llm, whatsapp, dados.tenant_id, dados.telefone, dados.texto)
 
 
@@ -158,9 +162,11 @@ async def receber_webhook_whatsapp_meta(
             phone_number_id = valor.get("metadata", {}).get("phone_number_id")
             if not phone_number_id:
                 continue
-            config = db.query(ConfiguracaoWhatsApp).filter_by(phone_number_id=phone_number_id).one_or_none()
+            with rls.contexto_busca(db, rls.ESCOPO_WHATSAPP_NUMERO, str(phone_number_id)):  # o número que recebeu a mensagem diz de qual tenant ela é
+                config = db.query(ConfiguracaoWhatsApp).filter_by(phone_number_id=phone_number_id).one_or_none()
             if config is None:
                 continue
+            rls.definir_tenant(db, config.tenant_id)
             whatsapp = resolver_whatsapp_provider(config.tenant_id, db)
             for mensagem in valor.get("messages", []):
                 telefone = mensagem.get("from")
@@ -183,6 +189,7 @@ def webhook_email(
 ) -> dict:
     """Integração de inbound-parse do ESP — resposta de e-mail interrompe a
     cadência em todos os canais (E3-H3) e alimenta a qualificação (E5-H1)."""
+    rls.definir_tenant(db, dados.tenant_id)  # rota interna (segredo conferido pela dependência da rota)
     decisor = db.query(Decisor).filter_by(tenant_id=dados.tenant_id, email=dados.email).first()
     if decisor is None:
         raise NaoEncontrado("Decisor não encontrado para este e-mail.")
@@ -231,6 +238,7 @@ async def webhook_email_inbound(request: Request, db: Session = Depends(get_db))
     except ValidacaoFalhou:
         return {"recebido": True, "processado": False}
 
+    rls.definir_tenant(db, tenant_id)  # o tenant vem do token assinado (HMAC) do endereço de resposta
     remetente_email = _extrair_email(str(formulario.get("from", "")))
     assunto = str(formulario.get("subject", ""))
     corpo = str(formulario.get("text", ""))
@@ -253,6 +261,7 @@ def registrar_abertura_email(token: str, db: Session = Depends(get_db)) -> Respo
 def webhook_reputacao(dados: RegistrarEventoReputacaoRequestSchema, db: Session = Depends(get_db)) -> SaudeCanalSchema:
     """Callback do ESP/Meta com eventos de entregabilidade — dispara pausa
     automática de canal ao cruzar o limiar crítico (E10-H2)."""
+    rls.definir_tenant(db, dados.tenant_id)  # rota interna (segredo conferido); o tenant vem do chamador interno
     return SaudeCanalSchema(
         **reputacao_service.registrar_evento(db, dados.tenant_id, dados.canal, dados.tipo_evento, dados.quantidade)
     )

@@ -59,3 +59,9 @@ demonstração invalidados quando o recurso é desligado e limite por IP real (�
 - **Reserva do disparo**: `campanha.processando_ate` impede dois processos de enviar a mesma campanha (envio imediato e agendador); a reserva vence em 10 minutos.
 - **Entrada tratada como dado**: nomes, telefones e empresas colados de planilha passam por `corrigir_codificacao` (só reverte a troca de codificação
   quando o resultado é UTF-8 válido) e os marcadores `[Nome]`/`[Empresa]` são trocados por expressão regular sobre o texto, sem executar nada.
+
+## RLS no PostgreSQL (2026-10-29, D-110) — resumo
+
+Segunda barreira do isolamento entre tenants, em etapas; mecanismo, papéis, rollout, reversão e a matriz tabela a tabela estão em `RLS.md`. O tenant do contexto vem do usuário validado no banco; sem contexto o banco
+nega; a escrita só vale no tenant do contexto (`WITH CHECK`); a hierarquia amplia só a leitura. **Limites declarados**: não vale enquanto a API usar o papel dono; 98 tabelas ainda sem política; não protege contra SQL arbitrário
+vindo da própria aplicação. A01 segue aberto.

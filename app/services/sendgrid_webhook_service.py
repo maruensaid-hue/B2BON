@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy.orm import Session
 
+from app.db import rls
 from app.models.campanha import CampanhaDestinatario
 from app.models.configuracao_email_api import ConfiguracaoEmailApi
 from app.models.mensagem import Mensagem
@@ -122,18 +123,20 @@ def processar_eventos(db: Session, eventos: list[dict]) -> None:
         # por bounce de um convite digitado errado (incidente 2026-10-05).
         if evento.get("mensagem_id") is None and evento.get("campanha_destinatario_id") is None:
             continue
-        reputacao_service.registrar_evento(db, tenant_id, "email", tipo_mapeado)
-        if tipo_evento in _EVENTOS_COM_CONTATO_PROBLEMATICO:
-            _registrar_contato_problematico(db, evento)
-        elif tipo_evento == "delivered":
-            _registrar_entrega(db, evento)
+        with rls.contexto_tenant(db, tenant_id):  # assinatura já conferida: cada evento é gravado só no tenant dono dele
+            reputacao_service.registrar_evento(db, tenant_id, "email", tipo_mapeado)
+            if tipo_evento in _EVENTOS_COM_CONTATO_PROBLEMATICO:
+                _registrar_contato_problematico(db, evento)
+            elif tipo_evento == "delivered":
+                _registrar_entrega(db, evento)
     db.commit()
 
 
 def _chave_de_verificacao_do_tenant(db: Session, tenant_id: str) -> str | None:
     """Chave pública de verificação dos avisos cadastrada pelo cliente (nulo se não há ou não pode ser lida)."""
     try:
-        config = db.query(ConfiguracaoEmailApi).filter_by(tenant_id=tenant_id).one_or_none()
+        with rls.contexto_sistema(db, "webhook-envio-verificacao"):  # só a leitura da chave pública de verificação, antes de a assinatura ser conferida
+            config = db.query(ConfiguracaoEmailApi).filter_by(tenant_id=tenant_id).one_or_none()
     except InvalidToken:  # chave cifrada com outra chave de criptografia: sem como validar, então não aceita
         return None
     return config.chave_webhook if config is not None else None

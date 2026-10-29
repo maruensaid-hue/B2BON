@@ -1,5 +1,6 @@
 from collections.abc import Generator
 
+import os
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -301,6 +302,8 @@ def client(
     central_negocios_service.resetar_cache()
 
     def override_get_db() -> Generator[Session, None, None]:
+        # Em produção cada requisição tem sessão própria e nasce sem contexto de RLS; aqui a sessão é compartilhada com a fixture, então zera o contexto herdado.
+        db_session.info.pop("rls_contexto", None)
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
@@ -576,3 +579,17 @@ def _disjuntor_ia_fechado():
     yield
     disjuntor_ia.reiniciar()
     fallback.reiniciar_disjuntores()
+
+
+def pytest_configure(config):
+    if os.environ.get("B2BON_RLS_SONDA"):
+        from tests import rls_sonda
+
+        rls_sonda.ativar()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if os.environ.get("B2BON_RLS_SONDA"):
+        from tests import rls_sonda
+
+        rls_sonda.gravar_relatorio()

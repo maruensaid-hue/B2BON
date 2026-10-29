@@ -25,6 +25,9 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     database_url: str = "sqlite:///./predator.db"
+    # Papel de MIGRAÇÃO (dono das tabelas). Vazio = usa `database_url`. Com RLS (D-110) a aplicação passa a conectar com um papel sem `BYPASSRLS` e sem DDL, e só o
+    # Alembic usa este: `DATABASE_URL` = papel de execução, `MIGRATION_DATABASE_URL` = papel dono (ver docs/b2bon/RLS.md).
+    migration_database_url: str = ""
 
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"

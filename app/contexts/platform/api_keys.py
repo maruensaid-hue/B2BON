@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.db import rls
 from app.models.chave_api_tenant import ChaveApiTenant
 from app.services import auditoria_service
 from app.services.errors import NaoAutenticado, NaoEncontrado, ValidacaoFalhou
@@ -71,9 +72,11 @@ def revogar(db: Session, tenant_id: str, usuario_id: int | None, chave_id: int) 
 def autenticar(db: Session, segredo: str | None) -> ChaveApiTenant:
     if not segredo or not segredo.startswith(PREFIXO):
         raise NaoAutenticado("Informe uma chave de API válida (header X-API-Key ou Authorization: Bearer b2bk_...).")
-    chave = db.query(ChaveApiTenant).filter_by(chave_hash=_hash(segredo)).one_or_none()
+    with rls.contexto_busca(db, rls.ESCOPO_CHAVE_API, _hash(segredo)):  # a chave diz de qual tenant é a chamada
+        chave = db.query(ChaveApiTenant).filter_by(chave_hash=_hash(segredo)).one_or_none()
     if chave is None or chave.revogada_em is not None:
         raise NaoAutenticado("Chave de API inválida ou revogada.")
+    rls.definir_tenant(db, chave.tenant_id)
     chave.ultimo_uso_em = datetime.now(UTC)
     db.commit()
     return chave

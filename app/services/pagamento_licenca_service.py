@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.contexts.comissoes import contract as comissoes
 from app.core.config import settings
+from app.db import rls
 from app.models.licenca import Licenca
 from app.models.pagamento_licenca import PagamentoLicenca
 from app.models.plano import Plano
@@ -124,9 +125,11 @@ def confirmar_via_webhook(
     if not detalhe.referencia_externa or not detalhe.referencia_externa.isdigit():
         return  # "creditos:<id>" é compra de AI Credits (finops.compras)
 
-    pagamento = db.query(PagamentoLicenca).filter_by(id=int(detalhe.referencia_externa)).one_or_none()
+    with rls.contexto_busca(db, rls.ESCOPO_PAGAMENTO, detalhe.referencia_externa):
+        pagamento = db.query(PagamentoLicenca).filter_by(id=int(detalhe.referencia_externa)).one_or_none()
     if pagamento is None:
         return
+    rls.definir_tenant(db, pagamento.tenant_id)  # o pedido diz de qual tenant é o pagamento (assinatura do webhook já conferida)
     if pagamento.confirmado_em is not None:
         return
 

@@ -21,6 +21,7 @@ from app.models.usuario import Usuario
 from app.contexts.shared.entitlements import PAPEIS_EXTERNOS, Entitlements
 from app.providers.channels.email.base import EmailProvider
 from app.providers.plan_limits.nucleo import NucleoPlanLimitsProvider
+from app.db import rls
 from app.services import auditoria_service
 from app.services.errors import NaoAutenticado, NaoAutorizado, NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
@@ -64,22 +65,34 @@ def validar_token(db: Session, token: str) -> Usuario:
     except (KeyError, TypeError, ValueError) as erro:
         raise NaoAutenticado("Token inválido ou expirado.") from erro
 
-    usuario = db.query(Usuario).filter_by(id=usuario_id).one_or_none()
-    if usuario is None or not usuario.ativo:
-        raise NaoAutenticado("Usuário não encontrado ou inativo.")
-    # Tokens legados sem ver continuam válidos até expirar; após redefinir a senha,
-    # a versão sobe e invalida todos os tokens anteriores.
-    if int(payload.get("ver", 0)) != int(usuario.token_version or 0):
-        raise NaoAutenticado("Sessão invalidada. Faça login novamente.")
+    # A assinatura do JWT já foi conferida; o id dele só destrava a busca de UMA linha de `usuario` (política do banco), antes de saber o tenant.
+    with rls.contexto_busca(db, rls.ESCOPO_AUTENTICACAO, str(usuario_id)):
+        usuario = db.query(Usuario).filter_by(id=usuario_id).one_or_none()
+        if usuario is None or not usuario.ativo:
+            raise NaoAutenticado("Usuário não encontrado ou inativo.")
+        # Tokens legados sem ver continuam válidos até expirar; após redefinir a senha,
+        # a versão sobe e invalida todos os tokens anteriores.
+        if int(payload.get("ver", 0)) != int(usuario.token_version or 0):
+            raise NaoAutenticado("Sessão invalidada. Faça login novamente.")
+        tenant_id = usuario.tenant_id
+    # Daqui em diante a sessão só enxerga o tenant do usuário validado (o tenant vem do banco, não do token nem da requisição).
+    rls.definir_tenant(db, tenant_id)
     return usuario
 
 
+def buscar_usuario_por_email(db: Session, email: str) -> Usuario | None:
+    """Busca de UMA linha antes de saber o tenant (política `login` do banco: só a linha cujo e-mail coincide)."""
+    with rls.contexto_busca(db, rls.ESCOPO_LOGIN, email.strip().lower()):
+        return db.query(Usuario).filter_by(email=email).one_or_none()
+
+
 def autenticar_senha(db: Session, email: str, senha: str) -> tuple[Usuario, bool]:
-    usuario = db.query(Usuario).filter_by(email=email).one_or_none()
+    usuario = buscar_usuario_por_email(db, email)
     if usuario is None or usuario.senha_hash is None or not verificar_senha(senha, usuario.senha_hash):
         raise NaoAutenticado("E-mail ou senha inválidos.")
     if not usuario.ativo:
         raise NaoAutenticado("Usuário inativo.")
+    rls.definir_tenant(db, usuario.tenant_id)  # credencial conferida: a partir daqui a sessão só enxerga o tenant do usuário
 
     # Calculado ANTES de sobrescrever — só é `True` quando este é
     # genuinamente o primeiro login (raio-X: dispara o tour guiado de
@@ -111,11 +124,12 @@ def autenticar_google(db: Session, id_token_str: str) -> tuple[Usuario, bool]:
     if not email or not google_sub:
         raise NaoAutenticado("Token do Google não contém e-mail verificado.")
 
-    usuario = db.query(Usuario).filter_by(email=email).one_or_none()
+    usuario = buscar_usuario_por_email(db, email)
     if usuario is None:
         raise NaoAutenticado("E-mail não cadastrado. Peça um convite antes de entrar com o Google.")
     if not usuario.ativo:
         raise NaoAutenticado("Usuário inativo.")
+    rls.definir_tenant(db, usuario.tenant_id)
 
     if usuario.google_sub is None:
         usuario.google_sub = google_sub
@@ -149,9 +163,10 @@ def solicitar_redefinicao_senha(db: Session, email: str, email_provider: EmailPr
     não virar uma forma de enumerar contas). Só cria token/manda
     e-mail quando existe um usuário ativo com login por senha própria
     (Google-only não tem `senha_hash` — nada pra redefinir)."""
-    usuario = db.query(Usuario).filter_by(email=email).one_or_none()
+    usuario = buscar_usuario_por_email(db, email)
     if usuario is None or not usuario.ativo or usuario.senha_hash is None:
         return
+    rls.definir_tenant(db, usuario.tenant_id)
 
     # Invalida qualquer link ainda "disponivel" de um pedido anterior —
     # sem isso, um e-mail antigo continuaria válido depois de um pedido
@@ -194,15 +209,24 @@ def solicitar_redefinicao_senha(db: Session, email: str, email_provider: EmailPr
 
 def redefinir_senha(db: Session, token: str, nova_senha: str) -> None:
     token_hash = _hash_token_redefinicao_senha(token)
-    redefinicao = db.query(RedefinicaoSenha).filter_by(token=token_hash).one_or_none()
+    # O link só destrava a linha do próprio pedido (e o usuário dono dele); o tenant só é conhecido depois dessa busca.
+    with rls.contexto_busca(db, rls.ESCOPO_REDEFINICAO, token_hash):
+        redefinicao = db.query(RedefinicaoSenha).filter_by(token=token_hash).one_or_none()
+        usuario_dono = db.query(Usuario).filter_by(id=redefinicao.usuario_id).one_or_none() if redefinicao is not None else None
+    legado = False
     if redefinicao is None:
         # Migração suave: aceita um token legado em texto puro uma única vez e o converte para hash.
-        redefinicao = db.query(RedefinicaoSenha).filter_by(token=token).one_or_none()
-        if redefinicao is not None:
-            redefinicao.token = token_hash
-            db.flush()
+        with rls.contexto_busca(db, rls.ESCOPO_REDEFINICAO, token):
+            redefinicao = db.query(RedefinicaoSenha).filter_by(token=token).one_or_none()
+            usuario_dono = db.query(Usuario).filter_by(id=redefinicao.usuario_id).one_or_none() if redefinicao is not None else None
+        legado = redefinicao is not None
     if redefinicao is None:
         raise NaoEncontrado("Link de redefinição de senha não encontrado.")
+    if usuario_dono is not None:
+        rls.definir_tenant(db, usuario_dono.tenant_id)
+    if legado:
+        redefinicao.token = token_hash
+        db.flush()
     if redefinicao.status == "usado":
         raise RegraNegocioViolada("Este link de redefinição já foi usado.")
     if redefinicao.status == "expirado":
@@ -418,10 +442,13 @@ def registrar_com_convite(
     if not aceite_termos:
         raise ValidacaoFalhou("É preciso aceitar a Política de Privacidade e os Termos de Uso para se cadastrar.")
 
-    convite = db.query(ConviteCadastro).filter_by(codigo=codigo).one_or_none()
+    with rls.contexto_busca(db, rls.ESCOPO_CONVITE_CADASTRO, codigo):
+        convite = db.query(ConviteCadastro).filter_by(codigo=codigo).one_or_none()
+    if convite is not None:
+        rls.definir_tenant(db, convite.tenant_id)  # o convite diz em qual tenant a pessoa vai entrar
     convite = _validar_convite_disponivel(db, convite, codigo)
 
-    if db.query(Usuario).filter_by(email=email).one_or_none() is not None:
+    if buscar_usuario_por_email(db, email) is not None:  # unicidade do e-mail vale para a plataforma toda, não só para este tenant
         raise RegraNegocioViolada("E-mail já cadastrado.")
     _verificar_limite_de_usuarios(db, convite.tenant_id)
     reivindicar_convite(db, convite)

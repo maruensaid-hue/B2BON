@@ -3,6 +3,7 @@ import hmac
 
 from sqlalchemy.orm import Session
 
+from app.db import rls
 from app.llm.base import LLMProvider
 from app.models.reuniao import Reuniao
 from app.services import meeting_bot_service
@@ -34,8 +35,10 @@ def processar_evento(db: Session, llm: LLMProvider, payload: dict) -> None:
     if not bot_id or not texto_transcricao:
         return
 
-    reuniao = db.query(Reuniao).filter_by(bot_id=bot_id).one_or_none()
+    with rls.contexto_busca(db, rls.ESCOPO_RECALL_BOT, str(bot_id)):
+        reuniao = db.query(Reuniao).filter_by(bot_id=bot_id).one_or_none()
     if reuniao is None:
         return
+    rls.definir_tenant(db, reuniao.tenant_id)  # a reunião diz de qual tenant é a transcrição (assinatura do webhook já conferida)
 
     meeting_bot_service.processar_transcricao(db, reuniao, llm, texto_transcricao)

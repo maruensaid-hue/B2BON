@@ -32,6 +32,7 @@ from app.contexts.platform.contract import webhooks
 from app.contexts.sourcing import contract as sourcing
 from app.contexts.shared import events
 from app.core.config import settings
+from app.db import rls, rls_registro
 from app.integrations.brasilapi_client import BrasilApiClient
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
@@ -77,6 +78,18 @@ def _exigir_segredo_cron(x_cron_secret: str | None = Header(None)) -> None:
         raise NaoAutorizado("Segredo de cron ausente ou inválido.")
 
 
+def _contexto_cron(nome: str):
+    """Dependência que fixa o contexto de sistema NOMEADO da rotina (RLS, D-110), depois de `_exigir_segredo_cron`: o nome lista, em `rls_registro.CONTEXTOS_SISTEMA`,
+    as únicas tabelas que a rotina pode tocar e se ela pode escrever. Rotinas que trabalham tenant a tenant não usam isto: usam `rls.contexto_tenant` a cada volta."""
+    if nome not in rls_registro.CONTEXTOS_SISTEMA:
+        raise RuntimeError(f"contexto de sistema não registrado: {nome}")
+
+    def _dependencia(db: Session = Depends(get_db)) -> None:
+        rls.definir(db, rls.ContextoRls(escopo=rls.PREFIXO_SISTEMA + nome))
+
+    return _dependencia
+
+
 def _registrar_falha_tenant(tenant_id: str) -> None:
     """Loga e reporta ao Sentry sem propagar — usada nos dispatchers que
     iteram todos os tenants numa chamada só. Raio-X 2026-08-27: uma
@@ -115,13 +128,14 @@ def processar_envios_todos_os_tenants(
 
     for tenant in _tenants_reais(db):
         try:
-            whatsapp = resolver_whatsapp_provider(tenant.id, db)
-            # E-mail resolvido por tenant, dentro do loop (raio-X
-            # 2026-08-27) — igual ao WhatsApp: cada tenant manda pela
-            # própria conta SMTP, sem instância única compartilhada
-            # entre todos os tenants do disparo.
-            email = resolver_email_provider(tenant.id, db)
-            resultado = envio_service.processar_pendentes(db, tenant.id, whatsapp, email, email_validation)
+            with rls.contexto_tenant(db, tenant.id):  # cada volta enxerga e grava só o tenant dela (RLS, D-110)
+                whatsapp = resolver_whatsapp_provider(tenant.id, db)
+                # E-mail resolvido por tenant, dentro do loop (raio-X
+                # 2026-08-27) — igual ao WhatsApp: cada tenant manda pela
+                # própria conta SMTP, sem instância única compartilhada
+                # entre todos os tenants do disparo.
+                email = resolver_email_provider(tenant.id, db)
+                resultado = envio_service.processar_pendentes(db, tenant.id, whatsapp, email, email_validation)
         except Exception:
             db.rollback()
             _registrar_falha_tenant(tenant.id)
@@ -148,10 +162,11 @@ def processar_retorno_todos_os_tenants(
 
     for tenant in _tenants_reais(db):
         try:
-            whatsapp = resolver_whatsapp_provider(tenant.id, db)
-            email = resolver_email_provider(tenant.id, db)
-            lembretes = reuniao_service.processar_lembretes(db, tenant.id, whatsapp, email)
-            nps = nps_service.disparar_pendentes(db, tenant.id, whatsapp, email)
+            with rls.contexto_tenant(db, tenant.id):
+                whatsapp = resolver_whatsapp_provider(tenant.id, db)
+                email = resolver_email_provider(tenant.id, db)
+                lembretes = reuniao_service.processar_lembretes(db, tenant.id, whatsapp, email)
+                nps = nps_service.disparar_pendentes(db, tenant.id, whatsapp, email)
         except Exception:
             db.rollback()
             _registrar_falha_tenant(tenant.id)
@@ -180,9 +195,10 @@ def processar_campanhas_todos_os_tenants(
 
     for tenant in _tenants_reais(db):
         try:
-            whatsapp = resolver_whatsapp_provider(tenant.id, db)
-            email = resolver_email_provider(tenant.id, db)
-            resultado = campanha_service.processar_pendentes(db, tenant.id, email, whatsapp)
+            with rls.contexto_tenant(db, tenant.id):
+                whatsapp = resolver_whatsapp_provider(tenant.id, db)
+                email = resolver_email_provider(tenant.id, db)
+                resultado = campanha_service.processar_pendentes(db, tenant.id, email, whatsapp)
         except Exception:
             db.rollback()
             _registrar_falha_tenant(tenant.id)
@@ -206,7 +222,8 @@ def expirar_titulares_todos_os_tenants(db: Session = Depends(get_db)) -> dict:
 
     for tenant in _tenants_reais(db):
         try:
-            resultado = titular_service.expirar_inativos(db, tenant.id, settings.dias_retencao_titular_inativo)
+            with rls.contexto_tenant(db, tenant.id):
+                resultado = titular_service.expirar_inativos(db, tenant.id, settings.dias_retencao_titular_inativo)
         except Exception:
             db.rollback()
             _registrar_falha_tenant(tenant.id)
@@ -222,7 +239,7 @@ def expirar_titulares_todos_os_tenants(db: Session = Depends(get_db)) -> dict:
     }
 
 
-@router.post("/suspender-licencas-vencidas", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/suspender-licencas-vencidas", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-suspender-licencas-vencidas"))])
 def suspender_licencas_vencidas(db: Session = Depends(get_db)) -> dict:
     """Suspensão automática por inadimplência (raio-X: hierarquia de
     distribuidores) — antes disto, `Licenca.data_expiracao` nunca era
@@ -232,14 +249,14 @@ def suspender_licencas_vencidas(db: Session = Depends(get_db)) -> dict:
     return {"tenants_suspensos": tenant_service.suspender_licencas_vencidas(db)}
 
 
-@router.post("/podar-historicos", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/podar-historicos", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-podar-historicos"))])
 def podar_historicos(db: Session = Depends(get_db)) -> dict:
     """Retenção diária dos históricos que só cresciam: cache de IA vencido, execuções da coleta de fonte pública e coletas de site (com
     indicadores). Protege o cursor da coleta, a última coleta bem-sucedida e a confirmação manual de domínio. Idempotente."""
     return retencao_historicos_service.podar(db)
 
 
-@router.post("/podar-recorte-cnpj", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/podar-recorte-cnpj", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-podar-recorte-cnpj"))])
 def podar_recorte_cnpj(db: Session = Depends(get_db)) -> dict:
     """Libera espaço no staging de CNPJ removendo CNAE/UF que não são mais
     exigidos por nenhum ICP ativo (raio-X 2026-09-11: o staging só
@@ -250,7 +267,7 @@ def podar_recorte_cnpj(db: Session = Depends(get_db)) -> dict:
     return cnpj_recorte_service.podar_recorte_nao_utilizado(db)
 
 
-@router.post("/disparar-webhooks-parceiros", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/disparar-webhooks-parceiros", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-disparar-webhooks-parceiros"))])
 def disparar_webhooks_parceiros(db: Session = Depends(get_db)) -> dict:
     """Entrega os eventos enfileirados pra Distribuidores com webhook
     configurado (Fase 2 da hierarquia, raio-X) — assinado (HMAC), com
@@ -258,7 +275,7 @@ def disparar_webhooks_parceiros(db: Session = Depends(get_db)) -> dict:
     return webhook_parceiro_service.despachar_pendentes(db)
 
 
-@router.post("/processar-fila-enriquecimento", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/processar-fila-enriquecimento", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-processar-fila-enriquecimento"))])
 def processar_fila_enriquecimento(
     db: Session = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
@@ -281,7 +298,7 @@ def processar_fila_enriquecimento(
     )
 
 
-@router.post("/disparar-relatorios-periodicos", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/disparar-relatorios-periodicos", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-disparar-relatorios-periodicos"))])
 def disparar_relatorios_periodicos(
     db: Session = Depends(get_db),
     email: EmailProvider = Depends(get_email_provider),
@@ -294,7 +311,7 @@ def disparar_relatorios_periodicos(
     return relatorio_service.disparar_periodicos(db, email, plan_limits)
 
 
-@router.post("/enviar-lembretes-cobranca", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/enviar-lembretes-cobranca", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-enviar-lembretes-cobranca"))])
 def enviar_lembretes_cobranca(
     db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)
 ) -> dict:
@@ -304,7 +321,7 @@ def enviar_lembretes_cobranca(
     return pagamento_licenca_service.enviar_lembretes_cobranca(db, email)
 
 
-@router.post("/expirar-registros-oportunidade", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/expirar-registros-oportunidade", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-expirar-registros-oportunidade"))])
 def expirar_registros_oportunidade(db: Session = Depends(get_db)) -> dict:
     """Libera o CNPJ pra um novo Registro de Oportunidade quando o
     anterior passa da validade sem decisão (raio-X: deal registration).
@@ -312,7 +329,7 @@ def expirar_registros_oportunidade(db: Session = Depends(get_db)) -> dict:
     return {"expirados": registro_oportunidade_service.expirar_registros_vencidos(db)}
 
 
-@router.post("/repassar-comissoes", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/repassar-comissoes", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-repassar-comissoes"))])
 def repassar_comissoes(
     db: Session = Depends(get_db),
     payout: PayoutProvider = Depends(get_payout_provider),
@@ -325,7 +342,7 @@ def repassar_comissoes(
     return cron_repasse_comissoes_service.repassar_pendentes(db, payout, email)
 
 
-@router.post("/processar-eventos", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/processar-eventos", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-processar-eventos"))])
 def processar_eventos(db: Session = Depends(get_db)) -> dict:
     """Fase 3: entrega o outbox de eventos de domínio aos consumidores
     (hoje, webhooks de saída do tenant) e despacha as entregas devidas."""
@@ -335,7 +352,7 @@ def processar_eventos(db: Session = Depends(get_db)) -> dict:
     return {"eventos": eventos, "webhooks": entregas}
 
 
-@router.post("/creditos-ia", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/creditos-ia", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-creditos-ia"))])
 def creditos_ia(tarefas: BackgroundTasks, db: Session = Depends(get_db), sessao_factory=Depends(get_sessao_factory),
                 contatos: ContactEnrichmentProvider = Depends(get_contact_enrichment_provider)) -> dict:
     """Fase 15 — roda de hora em hora: expira lotes vencidos, concede a
@@ -355,7 +372,7 @@ def creditos_ia(tarefas: BackgroundTasks, db: Session = Depends(get_db), sessao_
             "enriquecimento": enriquecimento.renovacao.renovar_todos(db), "enriquecimento_provedor": enriquecimento.conciliacao.rotina(db, contatos)}
 
 
-@router.post("/integracoes-crm", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/integracoes-crm", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-integracoes-crm"))])
 def integracoes_crm(db: Session = Depends(get_db)) -> dict:
     """D-087, a cada 15 min: relê o CRM das conexões que avisaram mudança
     (webhook de entrada → índice de deduplicação do PREDATOR) e despacha a
@@ -365,21 +382,21 @@ def integracoes_crm(db: Session = Depends(get_db)) -> dict:
     return {"webhooks_entrada": webhooks_entrada, "fila": fila}
 
 
-@router.post("/integracoes-crm-diario", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/integracoes-crm-diario", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-integracoes-crm-diario"))])
 def integracoes_crm_diario(db: Session = Depends(get_db)) -> dict:
     """D-087, 1x/dia: refaz o índice de deduplicação de cada conexão e publica
     os sinais de risco do MAP nas contas-cliente do CRM (só o que mudou)."""
     return {"indices": integracoes.obter_escrita().rotina_diaria(db), "sinais_map": map_contract.obter_sinais_crm().rotina_diaria(db)}
 
 
-@router.post("/coletar-licitacoes", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/coletar-licitacoes", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-coletar-licitacoes"))])
 def coletar_licitacoes(fonte: bids_contract.FontePncp = Depends(get_fonte_pncp), db: Session = Depends(get_db)) -> dict:
     """Coleta agendada do PNCP (sem IA) para os tenants que ativaram e configuraram a coleta. Idempotente e com uma execução
     por vez por tenant; desligada enquanto `PNCP_HABILITADO` for falso. Agendada a cada 6 h pelo workflow `cron-envios.yml`."""
     return bids_contract.coleta.executar_agendada(db, fonte)
 
 
-@router.post("/processar-alertas-licitacoes", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/processar-alertas-licitacoes", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-processar-alertas-licitacoes"))])
 def processar_alertas_licitacoes(db: Session = Depends(get_db), email: EmailProvider = Depends(get_email_provider)) -> dict:
     """Alertas de oportunidades (sem IA): para cada tenant com regra ativa avalia os editais novos/alterados do corpus e envia o resumo por e-mail de
     sistema (só com `ALERTAS_LICITACAO_EMAIL_HABILITADO`). Idempotente; a falha de um tenant não afeta os outros. Roda depois da coleta (workflow)."""
@@ -392,8 +409,9 @@ def processar_alertas_licitacoes(db: Session = Depends(get_db), email: EmailProv
             continue
         resumo["tenants"] += 1
         try:
-            avaliacao = bids_contract.alertas.avaliar_tenant(db, tenant.id)
-            entrega = bids_contract.alertas.entregar(db, tenant.id, email)
+            with rls.contexto_tenant(db, tenant.id):
+                avaliacao = bids_contract.alertas.avaliar_tenant(db, tenant.id)
+                entrega = bids_contract.alertas.entregar(db, tenant.id, email)
         except Exception:  # noqa: BLE001
             db.rollback()
             _registrar_falha_tenant(tenant.id)
@@ -405,7 +423,7 @@ def processar_alertas_licitacoes(db: Session = Depends(get_db), email: EmailProv
     return resumo
 
 
-@router.post("/sourcing-sincronizar", dependencies=[Depends(_exigir_segredo_cron)])
+@router.post("/sourcing-sincronizar", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-sourcing-sincronizar"))])
 def sourcing_sincronizar(db: Session = Depends(get_db)) -> dict:
     """Sourcing S3 (expand): backfill idempotente das tabelas unificadas a
     partir das antigas (a fonte da verdade), em lotes, e remoção de órfãos.

@@ -261,6 +261,11 @@ não testado num deploy real ainda):
 - **Alcançabilidade de `dadosabertos.rfb.gov.br` a partir do Render**: não
   testado a partir da rede do Render nesta rodada.
 
+## 7.2. Isolamento por tenant no banco (RLS)
+
+A migração `e7a9c1d3f5b8` liga o RLS em 81 tabelas, mas **só tem efeito quando a API conecta com um papel sem `BYPASSRLS`** (hoje conecta com o dono). O passo a passo (criar o papel
+`b2bon_app`, separar `MIGRATION_DATABASE_URL` de `DATABASE_URL`, verificar e como reverter em segundos) está em `docs/b2bon/RLS.md`. Faça primeiro em staging.
+
 ## 8. E-mail real — SendGrid (raio-X de produção)
 
 Sem isso, e-mail continua saindo só por SMTP genérico (se configurado) ou,

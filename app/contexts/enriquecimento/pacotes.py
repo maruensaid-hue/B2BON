@@ -23,6 +23,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.contexts.enriquecimento import config, custo, ledger, precos, vendas
+from app.db import rls
 from app.models.enriquecimento_creditos import EnriquecimentoCompra, EnriquecimentoPacote
 from app.providers.fiscal.base import FiscalProvider
 from app.providers.payment.base import PaymentProvider
@@ -245,7 +246,11 @@ def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagame
     referencia = detalhe.referencia_externa or ""
     if not referencia.startswith(PREFIXO_REFERENCIA) or not referencia.removeprefix(PREFIXO_REFERENCIA).isdigit():
         return None
-    compra = db.get(EnriquecimentoCompra, int(referencia.removeprefix(PREFIXO_REFERENCIA)))
+    id_da_compra = referencia.removeprefix(PREFIXO_REFERENCIA)
+    with rls.contexto_busca(db, rls.ESCOPO_PAGAMENTO, id_da_compra):
+        compra = db.get(EnriquecimentoCompra, int(id_da_compra))
+    if compra is not None:
+        rls.definir_tenant(db, compra.tenant_id)  # o pedido diz de qual tenant é o pagamento (assinatura do webhook já conferida)
     if compra is not None and compra.status == "APROVADA":
         if detalhe.status in _CONTESTACOES and compra.pagamento_id_externo == detalhe.id_externo:
             _contestar(db, compra, detalhe.status, agora or config.agora_utc())

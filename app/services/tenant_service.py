@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.contexts.governo import contract as governo
 from app.core.config import settings
+from app.db import rls
 from app.db.base import Base
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
@@ -340,8 +341,12 @@ def tenant_ids_no_escopo(db: Session, usuario: Usuario, tenant_id_selecionado: s
     if tenant_id_selecionado is not None:
         if tenant_id_selecionado not in visiveis:
             raise NaoAutorizado("Você não tem permissão para ver esse tenant.")
-        return [t.id for t in listar_subarvore(db, tenant_id_selecionado)]
-    return list(visiveis)
+        ids = [t.id for t in listar_subarvore(db, tenant_id_selecionado)]
+    else:
+        ids = list(visiveis)
+    # RLS: a leitura do banco se amplia exatamente para o que esta regra autorizou (e só a leitura; a escrita segue no tenant do usuário).
+    rls.ampliar_leitura(db, rls.LEITURA_TOTAL if usuario.papel == "super_admin" and tenant_id_selecionado is None else ids)
+    return ids
 
 
 def obter_raiz_da_rede(db: Session, tenant_id: str) -> str:
@@ -868,7 +873,8 @@ def obter_info_convite_vitrine(db: Session, codigo: str) -> ConviteVitrine:
     """Info pública mínima pra tela de cadastro (`ConviteVitrine.tsx`)
     saber, antes de renderizar o formulário, se é um convite gratuito
     (esconde o seletor de plano e a cópia de checkout) ou normal."""
-    convite = db.query(ConviteVitrine).filter_by(codigo=codigo).one_or_none()
+    with rls.contexto_busca(db, rls.ESCOPO_CONVITE_VITRINE, codigo):
+        convite = db.query(ConviteVitrine).filter_by(codigo=codigo).one_or_none()
     if convite is None:
         raise NaoEncontrado(f"Convite {codigo} não encontrado")
     return convite
@@ -917,7 +923,10 @@ def criar_tenant_vitrine(
     if not aceite_termos:
         raise ValidacaoFalhou("É preciso aceitar a Política de Privacidade e os Termos de Uso para se cadastrar.")
 
-    convite = db.query(ConviteVitrine).filter_by(codigo=codigo_convite).one_or_none()
+    with rls.contexto_busca(db, rls.ESCOPO_CONVITE_VITRINE, codigo_convite):
+        convite = db.query(ConviteVitrine).filter_by(codigo=codigo_convite).one_or_none()
+    if convite is not None:
+        rls.definir_tenant(db, convite.tenant_id_origem)  # o convite pertence a quem convidou; reivindicá-lo é escrita no tenant de origem
     convite = _validar_convite_vitrine_disponivel(db, convite, codigo_convite)
 
     if convite.gratuito:
@@ -929,7 +938,7 @@ def criar_tenant_vitrine(
         if not plano.visivel_self_service or plano.tipo_preco != "FIXED":  # Phase I: "a partir de" é venda assistida
             raise RegraNegocioViolada("Este plano não está disponível para cadastro self-service.")
 
-    if db.query(Usuario).filter_by(email=email_admin).one_or_none() is not None:
+    if auth_service.buscar_usuario_por_email(db, email_admin) is not None:  # unicidade do e-mail vale para a plataforma toda
         raise RegraNegocioViolada("E-mail já cadastrado.")
 
     auth_service.reivindicar_convite(db, convite)
@@ -946,40 +955,45 @@ def criar_tenant_vitrine(
     db.add(tenant)
     db.flush()
 
-    rede_social_service.criar_perfil_inicial(db, tenant.id, razao_social)
-
-    usuario = Usuario(
-        tenant_id=tenant.id,
-        nome=nome_admin,
-        email=email_admin,
-        senha_hash=auth_service.hash_senha(senha_admin),
-        papel="admin",
-        termos_aceitos_em=datetime.now(UTC),
-    )
-    db.add(usuario)
-    try:
-        db.flush()
-    except IntegrityError as erro:  # outro cadastro com o mesmo e-mail passou entre a checagem e o INSERT
-        db.rollback()
-        raise RegraNegocioViolada("E-mail já cadastrado.") from erro
-
-    if convite.gratuito:
-        db.add(Licenca(tenant_id=tenant.id, plano_id=plano_id, status="ativa"))
-    else:
-        db.add(Licenca(tenant_id=tenant.id, plano_id=plano_id, status="pendente_pagamento"))
-
+    # O convite pertence ao tenant de origem: fecha-o ainda no contexto dele, antes de passar para o contexto do tenant novo.
     convite.status = "usado"
     convite.tenant_id_gerado = tenant.id
+    db.flush()
 
-    auditoria_service.registrar(
-        db,
-        tenant.id,
-        "tenant_vitrine_criado",
-        "tenant",
-        0,
-        None,
-        {"razao_social": razao_social, "convite_codigo": codigo_convite},
-    )
+    # Tudo o que nasce para o tenant novo é gravado no contexto DELE (cada `flush` fica dentro do bloco: o `WITH CHECK` confere o tenant da linha com o do contexto).
+    with rls.contexto_tenant(db, tenant.id):
+        rede_social_service.criar_perfil_inicial(db, tenant.id, razao_social)
+
+        usuario = Usuario(
+            tenant_id=tenant.id,
+            nome=nome_admin,
+            email=email_admin,
+            senha_hash=auth_service.hash_senha(senha_admin),
+            papel="admin",
+            termos_aceitos_em=datetime.now(UTC),
+        )
+        db.add(usuario)
+        try:
+            db.flush()
+        except IntegrityError as erro:  # outro cadastro com o mesmo e-mail passou entre a checagem e o INSERT
+            db.rollback()
+            raise RegraNegocioViolada("E-mail já cadastrado.") from erro
+
+        if convite.gratuito:
+            db.add(Licenca(tenant_id=tenant.id, plano_id=plano_id, status="ativa"))
+        else:
+            db.add(Licenca(tenant_id=tenant.id, plano_id=plano_id, status="pendente_pagamento"))
+
+        auditoria_service.registrar(
+            db,
+            tenant.id,
+            "tenant_vitrine_criado",
+            "tenant",
+            0,
+            None,
+            {"razao_social": razao_social, "convite_codigo": codigo_convite},
+        )
+        db.flush()
 
     # A empresa convidada também entra como prospect no CRM de quem a
     # convidou — não só como tenant novo e independente da Rede Social.
@@ -994,6 +1008,7 @@ def criar_tenant_vitrine(
     db.add(FilaEnriquecimentoConta(tenant_id=convite.tenant_id_origem, conta_id=conta_prospect.id))
 
     db.commit()
+    rls.definir_tenant(db, tenant.id)  # a requisição segue como o administrador do tenant que acabou de nascer
     db.refresh(usuario)
 
     if convite.gratuito:
@@ -1040,7 +1055,7 @@ def criar_tenant_publico(
 
     representante_service.obter_ativo(db, representante_id)
 
-    if db.query(Usuario).filter_by(email=email_admin).one_or_none() is not None:
+    if auth_service.buscar_usuario_por_email(db, email_admin) is not None:  # unicidade do e-mail vale para a plataforma toda
         raise RegraNegocioViolada("E-mail já cadastrado.")
 
     tenant_id = _gerar_tenant_id(db, razao_social)
@@ -1050,6 +1065,7 @@ def criar_tenant_publico(
     db.add(tenant)
     db.flush()
 
+    rls.definir_tenant(db, tenant.id)  # tudo o que nasce a seguir pertence ao tenant novo
     rede_social_service.criar_perfil_inicial(db, tenant.id, razao_social)
 
     usuario = Usuario(

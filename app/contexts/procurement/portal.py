@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.contexts.procurement import estrategico
 from app.contexts.shared.documentos import sha256, validar
 from app.contexts.sourcing.contract import nativo
+from app.db import rls
 from app.models.tenant import Tenant
 from app.services import auditoria_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
@@ -73,9 +74,13 @@ def baixar_anexo(db: Session, tenant_id: str, anexo_id: int):
 
 # --- Lado fornecedor: quem está falando ----------------------------------------------------
 def por_token(db: Session, token: str):
-    participante = nativo.participante_por_token(db, LADO, _hash(token)) if token else None
+    participante = None
+    if token:
+        with rls.contexto_busca(db, rls.ESCOPO_PORTAL_FORNECEDOR, _hash(token)):
+            participante = nativo.participante_por_token(db, LADO, _hash(token))
     if participante is None:  # link inválido ou revogado: não diz qual
         raise NaoEncontrado(NAO_ENCONTRADO)
+    rls.definir_tenant(db, participante.tenant_id)  # o link diz de qual comprador é a rodada
     return participante
 
 

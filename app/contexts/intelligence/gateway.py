@@ -35,7 +35,7 @@ from dataclasses import dataclass, replace
 from datetime import timedelta
 from decimal import Decimal
 
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from app.contexts.finops import contract as finops
 from app.contexts.intelligence import prompt_seguro, registro, roteador
@@ -43,6 +43,7 @@ from app.contexts.intelligence.disjuntor import disjuntor_ia
 from app.core.config import settings
 from app.core.observability import correlation_id_atual
 from app.core.rate_limit import LimitadorEmMemoria
+from app.db import rls
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest, LLMResponse
 from app.models.creditos_ia import CacheRespostaIa
@@ -121,7 +122,7 @@ def _registrar(db: Session, ctx: ContextoIA, feature: registro.Feature, gatilho:
         cache_hit=medicao.cache_hit,
         decisao_roteamento=medicao.decisao_roteamento,
     )
-    sessao = sessionmaker(bind=db.get_bind(), expire_on_commit=False)()
+    sessao = rls.sessao_irma(db, expire_on_commit=False)
     try:
         # Evento de uso, custo e agregado da execução na MESMA transação:
         # ou entram juntos, ou nenhum.
@@ -187,7 +188,7 @@ def _cache_ler(db: Session, chave: str, tenant_id: str) -> CacheRespostaIa | Non
 
 
 def _cache_gravar(db: Session, chave: str, ctx: ContextoIA, resposta: LLMResponse) -> None:
-    sessao = sessionmaker(bind=db.get_bind())()
+    sessao = rls.sessao_irma(db)
     try:
         custo, _, _ = finops.custear(sessao, resposta.model, resposta.input_tokens, resposta.output_tokens, 0, 0, resposta.provider)
         existente = sessao.get(CacheRespostaIa, chave)

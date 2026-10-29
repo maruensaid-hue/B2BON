@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.contexts.integrations import contract as integracoes
 from app.contexts.shared import events as eventos
 from app.core.config import settings
+from app.db import rls
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
 from app.models.conta import Conta
 from app.models.decisor import Decisor
@@ -125,6 +126,7 @@ def listar(
 
 def obter_por_token(db: Session, token: str) -> Reuniao:
     tenant_id, reuniao_id = _validar_token_reagendamento(token)
+    rls.definir_tenant(db, tenant_id)  # o tenant vem do token assinado (HMAC), não da requisição
     return obter(db, tenant_id, reuniao_id)
 
 
@@ -297,6 +299,7 @@ def reagendar_por_token(
     """Reagendamento pelo próprio lead (E6-H1) — endpoint público, o lead
     não é usuário autenticado (mesmo padrão do token de opt-out)."""
     tenant_id, reuniao_id = _validar_token_reagendamento(token)
+    rls.definir_tenant(db, tenant_id)  # o tenant vem do token assinado (HMAC), não da requisição
     reuniao_antiga = obter(db, tenant_id, reuniao_id)
 
     if reuniao_antiga.origem_calendario_id:

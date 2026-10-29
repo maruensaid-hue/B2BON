@@ -20,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.contexts.integrations import registry
+from app.db import rls
 from app.models.conexao_integracao import ConexaoIntegracao
 from app.services import auditoria_service
 
@@ -49,9 +50,11 @@ def revogar_token(db: Session, conexao: ConexaoIntegracao, ator_id: str | None) 
 def receber(db: Session, token: str) -> bool:
     if not token.startswith(PREFIXO) or len(token) > 100:
         return False
-    conexao = db.query(ConexaoIntegracao).filter_by(webhook_token_hash=_hash(token)).one_or_none()
+    with rls.contexto_busca(db, rls.ESCOPO_INTEGRACAO_WEBHOOK, _hash(token)):
+        conexao = db.query(ConexaoIntegracao).filter_by(webhook_token_hash=_hash(token)).one_or_none()
     if conexao is None:
         return False
+    rls.definir_tenant(db, conexao.tenant_id)
     agora = datetime.now(UTC)
     ultimo = conexao.sync_solicitado_em
     if ultimo is None or agora - (ultimo if ultimo.tzinfo else ultimo.replace(tzinfo=UTC)) >= INTERVALO_MINIMO:

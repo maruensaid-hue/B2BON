@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.contexts.finops import carteira, catalogos
 from app.contexts.finops.comercial import TipoLote
+from app.db import rls
 from app.models.creditos_ia import CompraCreditos
 from app.providers.payment.base import PaymentProvider
 from app.services import auditoria_service
@@ -103,7 +104,11 @@ def confirmar_via_webhook(db: Session, payment_provider: PaymentProvider, pagame
     referencia = detalhe.referencia_externa or ""
     if not referencia.startswith(PREFIXO_REFERENCIA):
         return None
-    compra = db.get(CompraCreditos, int(referencia.removeprefix(PREFIXO_REFERENCIA)))
+    id_da_compra = referencia.removeprefix(PREFIXO_REFERENCIA)
+    with rls.contexto_busca(db, rls.ESCOPO_PAGAMENTO, id_da_compra):
+        compra = db.get(CompraCreditos, int(id_da_compra))
+    if compra is not None:
+        rls.definir_tenant(db, compra.tenant_id)  # o pedido diz de qual tenant é o pagamento (assinatura do webhook já conferida)
     if compra is None or compra.status != "PENDENTE":
         return compra  # idempotente: webhook repetido não credita de novo
     carteira.travar(db, compra.tenant_id)

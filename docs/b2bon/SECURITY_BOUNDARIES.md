@@ -39,7 +39,7 @@ restante foi reconfirmado no código.
   **varredura sistemática** `tests/integration/test_isolamento_sistematico.py`
   chama todas as rotas autenticadas como administrador de outro tenant,
   com ids reais da vítima, e confere leitura e mutação (matriz em
-  `MATRIZ_ISOLAMENTO_ROTAS.md`). **RLS no banco continua não existindo** (D-109).
+  `MATRIZ_ISOLAMENTO_ROTAS.md`). **RLS no banco: primeira etapa pronta, ainda não ligada** (D-110, `RLS.md`): 81 tabelas com política, 98 pendentes, e a API ainda conecta com o papel dono, que ignora o RLS.
 
 ## 3. Autenticação / autorização
 

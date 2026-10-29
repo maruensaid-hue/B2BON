@@ -20,6 +20,7 @@ from app.api.deps import (
 )
 from app.core.config import settings
 from app.core.rate_limit import limitar_demonstracao, limitar_por_conta, limitar_por_ip
+from app.db import rls
 from app.graph.client import Neo4jClient
 from app.integrations.site_fetcher import SiteFetcher
 from app.llm.base import LLMProvider
@@ -131,6 +132,7 @@ def _resposta_token(
     email_provider: EmailProvider | None = None,
     response: Response | None = None,
 ) -> TokenResponseSchema:
+    rls.definir_tenant(db, usuario.tenant_id)  # a resposta de login consulta licença/plano do tenant do usuário que acabou de entrar
     licenca = db.query(Licenca).filter_by(tenant_id=usuario.tenant_id).one_or_none()
     usuario_schema = _construir_usuario_schema(usuario, db)
     if primeiro_login and email_provider is not None:

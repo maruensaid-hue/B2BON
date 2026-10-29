@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.texto import corrigir_codificacao
+from app.db import rls
 from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.conta import Conta
 from app.models.decisor import Decisor
@@ -771,6 +772,7 @@ def processar_optout_por_token(db: Session, token: str) -> dict:
     supressão real (`optout_service.processar`), suprimindo cadências
     pro mesmo contato — destinatário avulso só fica suprimido aqui."""
     tenant_id, destinatario_id = _validar_token_optout(token)
+    rls.definir_tenant(db, tenant_id)  # o tenant vem do token assinado (HMAC), não da requisição
     destinatario = db.query(CampanhaDestinatario).filter_by(id=destinatario_id, tenant_id=tenant_id).one_or_none()
     if destinatario is None:
         raise NaoEncontrado(f"Destinatário {destinatario_id} não encontrado")

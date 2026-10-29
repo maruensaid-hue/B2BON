@@ -1,5 +1,10 @@
 # CHANGELOG — IMPLEMENTATION
 
+## RLS no banco, primeira etapa (2026-10-29, D-110)
+
+- O banco passa a ter uma segunda barreira contra mistura de dados entre empresas (Row-Level Security) em 81 tabelas, além dos filtros que o código já faz. Ela só começa a valer quando a API for ligada ao papel de execução do banco (passo a passo em `docs/b2bon/RLS.md`); até lá, nada muda para os usuários.
+- 98 tabelas ainda dependem só dos filtros do código (CRM central, usuários, licenças, auditoria, IA e créditos entre elas). O item A01 da auditoria continua aberto.
+
 ## Auditoria de segurança de 28/10/2026 (2026-10-28, D-109)
 
 - Uploads: o arquivo é lido com teto de tamanho antes de ir para a memória, e o feed recusa anexos demais antes de ler (A02).
