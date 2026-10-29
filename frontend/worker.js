@@ -1,4 +1,11 @@
-const API_ORIGIN = "https://b2bon-api.onrender.com";
+const API_ORIGIN_PADRAO = "https://b2bon-api.onrender.com";
+
+// A API de destino vem da variável de runtime `API_ORIGIN` do Worker (o Worker de staging aponta para a API de staging); sem a variável vale a de produção. Antes o endereço de
+// produção ficava escrito aqui e o front de staging, que roda este mesmo código, acabava falando com a produção.
+function origemDaApi(env) {
+  const valor = (env && env.API_ORIGIN ? String(env.API_ORIGIN) : "").trim().replace(/\/+$/, "");
+  return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(valor) ? valor : API_ORIGIN_PADRAO;
+}
 
 export default {
   async fetch(request, env) {
@@ -8,7 +15,7 @@ export default {
     // original Cookie and Origin headers to the API so HttpOnly session
     // cookies work as first-party cookies without weakening CSRF checks.
     if (incoming.pathname === "/api" || incoming.pathname.startsWith("/api/")) {
-      const target = new URL(incoming.pathname + incoming.search, API_ORIGIN);
+      const target = new URL(incoming.pathname + incoming.search, origemDaApi(env));
       const headers = new Headers(request.headers);
       headers.delete("host");
       headers.delete("cookie2");
@@ -46,7 +53,7 @@ export default {
   // Agendador do Cloudflare (UTC, ver wrangler.toml): a API gratuita do Render dorme após 15 min sem uso. Este toque a
   // cada 10 min em horário comercial evita a espera de ~2 min para acordar. Fora do horário ela dorme e economiza as
   // 750 h gratuitas do mês.
-  async scheduled(_controller, _env, ctx) {
-    ctx.waitUntil(fetch(`${API_ORIGIN}/health`).catch(() => undefined));
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(fetch(`${origemDaApi(env)}/health`).catch(() => undefined));
   },
 };

@@ -132,6 +132,7 @@ o `b2bon-staging` real:
    `https://b2bon-api-staging.onrender.com/api/v1`) — **isso é
    gravado no bundle na hora do build**, então precisa estar certo
    antes de deployar, não é algo pra trocar depois em runtime.
+5b. **Variável de runtime `API_ORIGIN` (obrigatória no Worker de staging)**: em **Configurações → Variáveis e segredos** (a de *runtime*, não a de build), crie `API_ORIGIN` = `https://b2bon-api-staging.onrender.com` (sem barra no final) e faça um novo deploy. O `frontend/worker.js` usa essa variável como destino do proxy `/api/*`; **sem ela vale a API de produção**. Foi assim, sem a variável, que o front de staging chegou a falar com a produção (descoberto em 29/10/2026). Para conferir: uma chamada `GET /api/v1/planos` pelo front de staging precisa aparecer nos logs do `b2bon-api-staging`, e não nos do `b2bon-api`.
 6. **Ramificação de produção**: o seletor de branch da tela de
    criação nem sempre "pega" — depois de criar o projeto, confirme em
    **Configurações → Build → Controle da ramificação → Ramificação de
