@@ -117,14 +117,17 @@ def _reivindicar(db: Session, expira_em: datetime) -> Usuario | None:
     if tenant is None:
         return None
     tenant.demo_expira_em = expira_em
-    with rls.contexto_tenant(db, tenant.id):
-        db.query(Licenca).filter_by(tenant_id=tenant.id).update({"data_expiracao": expira_em})
-        gestora = db.query(Usuario).filter_by(tenant_id=tenant.id, email=semente.email_gestora(tenant.id)).one_or_none()
-        if gestora is None:  # reserva corrompida: deixa vencer e semeia outra
-            tenant.demo_expira_em = _agora()
-            db.commit()
-            return None
+    # A requisição segue como a gestora da demonstração reivindicada (como em `_semear_novo`): a rota ainda lê atributos dela depois do commit, e uma releitura sem contexto de
+    # tenant não encontraria a linha (RLS). Por isso o contexto não é restaurado ao sair daqui.
+    rls.definir_tenant(db, tenant.id)
+    db.query(Licenca).filter_by(tenant_id=tenant.id).update({"data_expiracao": expira_em})
+    gestora = db.query(Usuario).filter_by(tenant_id=tenant.id, email=semente.email_gestora(tenant.id)).one_or_none()
+    if gestora is None:  # reserva corrompida: deixa vencer e semeia outra
+        tenant.demo_expira_em = _agora()
         db.commit()
+        rls.limpar(db)
+        return None
+    db.commit()
     return gestora
 
 

@@ -13,7 +13,10 @@ Tipos de contexto (`escopo`)
 - `tenant`: usuário autenticado; vê e grava só as linhas do próprio `tenant_id`. Pontos de leitura que o código já autoriza para a hierarquia (`tenant_service.tenant_ids_no_escopo`)
   ampliam a LEITURA, nunca a escrita, com `ampliar_leitura`.
 - `autenticacao`/`login`: buscas feitas ANTES de saber o tenant (validar o token, entrar com e-mail e senha). Cada uma tem política própria que libera uma única linha, pela chave.
-- `sistema:<nome>`: tarefas sem usuário (cron, webhooks). Cada nome libera só as tabelas listadas para ele em `app/db/rls_registro.py`.
+- `sistema:<nome>`: tarefas sem usuário (cron, webhooks). O nome precisa constar em `app/db/rls_registro.py` (rastreabilidade); na segunda etapa (D-111) o banco libera todas as
+  tabelas protegidas a qualquer contexto de sistema (ver `FUNCOES_ETAPA2` em `rls_sql.py` para o porquê).
+- `plataforma`: rotas de administração da plataforma, só para quem o banco confirmou como `super_admin` (`definir_plataforma`, chamado por `deps.exigir_papel`). Mesmo acesso
+  total dos contextos de sistema; o que os separa do contexto de tenant é exatamente a verificação do papel.
 """
 
 from __future__ import annotations
@@ -44,6 +47,8 @@ ESCOPO_PORTAL_FORNECEDOR = "portal-fornecedor"
 ESCOPO_RECALL_BOT = "recall-bot"
 ESCOPO_PAGAMENTO = "pagamento-referencia"
 ESCOPO_CHAVE_API = "chave-api"
+ESCOPO_CHAVE_API_PARCEIRO = "chave-api-parceiro"
+ESCOPO_PLATAFORMA = "plataforma"
 PREFIXO_SISTEMA = "sistema:"
 LEITURA_TOTAL = "*"  # só `tenant_service.tenant_ids_no_escopo` para super_admin, que o código já autoriza a ver todos
 
@@ -124,6 +129,11 @@ def definir_tenant(db: Session, tenant_id: str) -> None:
     if not tenant_id:
         raise ValueError("tenant_id vazio: o contexto de tenant exige um tenant")
     definir(db, ContextoRls(tenant_id=tenant_id, escopo=ESCOPO_TENANT))
+
+
+def definir_plataforma(db: Session) -> None:
+    """Contexto das rotas de administração da plataforma. Só chamar DEPOIS de confirmar que o usuário validado no banco é `super_admin` (`deps.exigir_papel`)."""
+    definir(db, ContextoRls(escopo=ESCOPO_PLATAFORMA))
 
 
 def ampliar_leitura(db: Session, tenant_ids: list[str] | tuple[str, ...] | str) -> None:

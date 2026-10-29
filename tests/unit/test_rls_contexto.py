@@ -112,3 +112,55 @@ def test_trocar_de_contexto_grava_antes_o_que_estava_pendente(sessao):
     rls.definir_tenant(sessao, "t-a")
     rls.definir_tenant(sessao, "t-b")  # não pode perder nem reordenar nada
     assert sessao.execute(text("select count(*) from item")).scalar() == 1
+
+
+# --- Segunda etapa (D-111): quando o contexto de plataforma é fixado ---------------------------------------------------------------------------------
+
+
+def test_rota_exclusiva_de_super_admin_fixa_a_plataforma_so_para_super_admin(sessao, emissoes):
+    from types import SimpleNamespace
+
+    from app.api import deps
+    from app.services.errors import NaoAutorizado
+
+    deps.exigir_papel("super_admin")(usuario=SimpleNamespace(papel="super_admin"), db=sessao)
+    assert rls.contexto_atual(sessao).escopo == rls.ESCOPO_PLATAFORMA
+
+    rls.limpar(sessao)
+    with pytest.raises(NaoAutorizado):  # quem não é super_admin nem chega a ter contexto de plataforma
+        deps.exigir_papel("super_admin")(usuario=SimpleNamespace(papel="admin"), db=sessao)
+    assert rls.contexto_atual(sessao).vazio
+
+
+def test_rota_de_configuracao_do_proprio_tenant_nao_vira_plataforma_para_super_admin(sessao, emissoes):
+    """`exigir_papel("super_admin", "admin")` protege configuração do PRÓPRIO tenant: o super_admin segue no contexto de tenant (já fixado pelo login) e não ganha acesso a todas as empresas."""
+    from types import SimpleNamespace
+
+    from app.api import deps
+
+    rls.definir_tenant(sessao, "t-a")
+    deps.exigir_papel("super_admin", "admin")(usuario=SimpleNamespace(papel="super_admin"), db=sessao)
+    assert rls.contexto_atual(sessao).escopo == rls.ESCOPO_TENANT
+    assert rls.contexto_atual(sessao).tenant_id == "t-a"
+
+
+def test_admin_gerencia_so_o_tenant_que_a_hierarquia_permitiu(sessao, emissoes):
+    from types import SimpleNamespace
+
+    from app.api import deps
+
+    admin = SimpleNamespace(papel="admin", tenant_id="t-a")
+    deps.exigir_gestor_do_tenant(tenant_id="t-a", usuario=admin, db=sessao)
+    assert rls.contexto_atual(sessao).tenant_id == "t-a"
+
+    rls.limpar(sessao)
+    super_admin = SimpleNamespace(papel="super_admin", tenant_id="t-a")
+    deps.exigir_gestor_do_tenant(tenant_id="t-b", usuario=super_admin, db=sessao)
+    assert rls.contexto_atual(sessao).escopo == rls.ESCOPO_PLATAFORMA
+
+
+def test_ampliar_leitura_nao_vale_no_contexto_de_plataforma(sessao, emissoes):
+    """Plataforma já vê tudo; ampliar a leitura ali não pode rebaixar o contexto para tenant."""
+    rls.definir_plataforma(sessao)
+    rls.ampliar_leitura(sessao, ["t-a"])
+    assert rls.contexto_atual(sessao).escopo == rls.ESCOPO_PLATAFORMA

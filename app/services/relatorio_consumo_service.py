@@ -35,6 +35,7 @@ from app.models.licenca import Licenca
 from app.models.plano import Plano
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
+from app.db import rls
 from app.services import tenant_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
@@ -69,8 +70,10 @@ def periodo(inicio: date | None, fim: date | None, agora: datetime) -> tuple[dat
 def _tenants_do_escopo(db: Session, usuario: Usuario, tenant_id: str | None) -> list[Tenant]:
     if usuario.papel == "super_admin":
         tenants = tenant_service.listar_tenants(db)
+        rls.ampliar_leitura(db, rls.LEITURA_TOTAL)  # o relatório lê o consumo desses tenants (RLS, D-111: leitura ampliada de propósito, nunca a escrita)
     else:
         tenants = tenant_service.listar_subarvore(db, usuario.tenant_id)
+        rls.ampliar_leitura(db, [t.id for t in tenants])
     if tenant_id is not None:
         tenants = [t for t in tenants if t.id == tenant_id]
         if not tenants:

@@ -90,10 +90,12 @@ def _classificar(contexto, tabela: str, verbo: str) -> str:
         return "SEM_CONTEXTO"
     if contexto.escopo == rls.ESCOPO_TENANT:
         return rls.ESCOPO_TENANT
+    if contexto.escopo == rls.ESCOPO_PLATAFORMA:
+        return contexto.escopo  # super_admin: acesso total por desenho (D-111)
     if contexto.escopo.startswith(rls.PREFIXO_SISTEMA):
-        liberado = rls_registro.CONTEXTOS_SISTEMA.get(contexto.escopo[len(rls.PREFIXO_SISTEMA):], {}).get(tabela)
-        coberto = liberado == "escrever" or (liberado == "ler" and verbo == "ler")
-        return contexto.escopo if coberto else f"FORA:{contexto.escopo}"
+        # D-111: contexto de sistema com nome registrado vê tudo; só o nome precisa existir (rastreabilidade)
+        nome = contexto.escopo[len(rls.PREFIXO_SISTEMA):]
+        return contexto.escopo if nome in rls_registro.CONTEXTOS_SISTEMA else f"FORA:{contexto.escopo}"
     busca = rls_registro.BUSCAS.get(contexto.escopo, ())
     coberto = verbo == "ler" and any(item.tabela == tabela for item in busca)
     return contexto.escopo if coberto else f"FORA:{contexto.escopo}"

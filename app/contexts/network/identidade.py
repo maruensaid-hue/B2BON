@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.db import rls
 from app.models.empresa_rede import EmpresaRede
 from app.models.perfil_empresa import PerfilEmpresa
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
@@ -104,16 +105,19 @@ def reivindicar(db: Session, tenant_id: str, empresa_id: int) -> EmpresaRede:
     if not propria.cnpj or propria.cnpj != alvo.cnpj:
         raise NaoAutorizado("O CNPJ desta empresa não confere com a identidade reivindicada.")
 
-    for aresta in db.query(RelacionamentoEmpresarial).filter_by(empresa_destino_id=alvo.id).all():
-        if aresta.tenant_id_origem == tenant_id:
-            db.delete(aresta)  # a empresa não se relaciona consigo mesma
-            continue
-        aresta.empresa_destino_id = propria.id
-        aresta.tenant_id_destino = tenant_id
-    alvo.status = "MESCLADA"
-    alvo.mesclada_em_id = propria.id
-    propria.reivindicada_em = datetime.now(UTC)
-    db.flush()
+    # Reivindicar migra as arestas que OUTRAS empresas declararam para a identidade citada (o tenant que reivindica ainda não é parte delas). Conferido o direito acima
+    # (verificada e CNPJ igual), a migração é uma tarefa de sistema nomeada, não uma leitura livre dos relacionamentos alheios (RLS, D-111).
+    with rls.contexto_sistema(db, "reivindicacao-identidade"):
+        for aresta in db.query(RelacionamentoEmpresarial).filter_by(empresa_destino_id=alvo.id).all():
+            if aresta.tenant_id_origem == tenant_id:
+                db.delete(aresta)  # a empresa não se relaciona consigo mesma
+                continue
+            aresta.empresa_destino_id = propria.id
+            aresta.tenant_id_destino = tenant_id
+        alvo.status = "MESCLADA"
+        alvo.mesclada_em_id = propria.id
+        propria.reivindicada_em = datetime.now(UTC)
+        db.flush()
     return propria
 
 

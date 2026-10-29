@@ -220,8 +220,9 @@ def test_sala_so_das_duas_empresas_e_so_leitura_sem_conexao(client, criar_usuari
     canal = client.get(f"{REDE}/salas/{sala['id']}/canais").json()[0]
     assert client.post(f"{REDE}/salas/canais/{canal['id']}/mensagens", json={"texto": "proposta"}).status_code == 201
 
-    assert client.get(f"{REDE}/salas/{sala['id']}/canais", headers=headers_c).status_code == 403
-    assert client.get(f"{REDE}/salas/canais/{canal['id']}/mensagens", headers=headers_c).status_code == 403
+    # Quem não é parte da sala: 403 da aplicação, ou 404 quando o RLS (D-111) esconde a sala do banco; nos dois casos não há acesso.
+    assert client.get(f"{REDE}/salas/{sala['id']}/canais", headers=headers_c).status_code in (403, 404)
+    assert client.get(f"{REDE}/salas/canais/{canal['id']}/mensagens", headers=headers_c).status_code in (403, 404)
 
     client.post(f"{REDE}/bloquear/{B}")
     assert client.post(f"{REDE}/salas/canais/{canal['id']}/mensagens", json={"texto": "x"}).status_code == 409

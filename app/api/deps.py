@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from fastapi import Depends, Header, Request
 from sqlalchemy.orm import Session, aliased
 
+from app.db import rls
 from app.db.session import SessionLocal
 from app.graph.client import Neo4jClient
 from app.graph.nulo import GrafoNulo
@@ -700,9 +701,13 @@ def exigir_papel(*papeis: str):
     """Dependency factory para proteger rotas administrativas por papel
     (ex.: Depends(exigir_papel("super_admin"))) — Onda A."""
 
-    def _dependencia(usuario: Usuario = Depends(get_usuario_atual)) -> Usuario:
+    def _dependencia(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> Usuario:
         if usuario.papel not in papeis:
             raise NaoAutorizado("Você não tem permissão para executar esta ação.")
+        if papeis == ("super_admin",) and usuario.papel == "super_admin":
+            # Rota EXCLUSIVA de administração da plataforma (RLS, D-111): só aqui o banco libera todas as empresas, e só depois de o papel ter sido conferido no banco.
+            # Rotas de `exigir_papel("super_admin", "admin")` são configurações do próprio tenant: ali o super_admin continua no contexto do tenant dele.
+            rls.definir_plataforma(db)
         return usuario
 
     return _dependencia
@@ -720,8 +725,10 @@ def exigir_gestor_do_tenant(
     entre tenants. `tenant_id` é injetado automaticamente pelo FastAPI a
     partir do path param de mesmo nome na rota."""
     if usuario.papel == "super_admin":
+        rls.definir_plataforma(db)  # administração da plataforma (RLS, D-111)
         return usuario
     if usuario.papel == "admin" and (usuario.tenant_id == tenant_id or tenant_service.e_ancestral(db, usuario.tenant_id, tenant_id)):
+        rls.definir_tenant(db, tenant_id)  # o que o admin faz daqui em diante é no tenant que a hierarquia lhe permitiu gerenciar, e só nele (RLS, D-111)
         return usuario
     raise NaoAutorizado("Você não tem permissão para gerenciar este tenant.")
 
@@ -837,9 +844,11 @@ def get_chave_api_atual(
     if authorization is None or not authorization.startswith("Bearer "):
         raise NaoAutenticado("Cabeçalho Authorization deve ser 'Bearer <chave>'.")
     chave_hash = hashlib.sha256(authorization[len("Bearer ") :].encode()).hexdigest()
-    chave = db.query(ChaveApiParceiro).filter_by(chave_hash=chave_hash, revogada_em=None).one_or_none()
+    with rls.contexto_busca(db, rls.ESCOPO_CHAVE_API_PARCEIRO, chave_hash):  # a chave diz de qual tenant (o distribuidor) é a chamada
+        chave = db.query(ChaveApiParceiro).filter_by(chave_hash=chave_hash, revogada_em=None).one_or_none()
     if chave is None:
         raise NaoAutenticado("Chave de API inválida ou revogada.")
+    rls.definir_tenant(db, chave.tenant_id)  # daqui em diante a chamada é do tenant dono da chave; os tenants abaixo dele são abertos um a um em `_exigir_tenant_na_arvore`
     chave.ultimo_uso_em = datetime.now(UTC)
     db.commit()
     return chave

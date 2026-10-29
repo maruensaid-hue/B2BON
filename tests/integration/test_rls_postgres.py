@@ -270,8 +270,9 @@ def test_contexto_de_sistema_so_libera_a_tabela_e_o_modo_listados(bancos):
         rls.definir(s, rls.ContextoRls(escopo="sistema:rotina-de-prova"))
         assert s.execute(text("SELECT count(*) FROM prova_sistema")).scalar() == 2  # ler, de todos os tenants
         assert s.execute(text("UPDATE prova_sistema SET texto = 'x'")).rowcount == 0  # "ler" não escreve
-        assert s.execute(text("SELECT count(*) FROM bloqueio_contato")).scalar() == 0  # e não abre nenhuma outra tabela
-        assert s.execute(text("SELECT count(*) FROM prova_pai")).scalar() == 0
+        assert s.execute(text("SELECT count(*) FROM prova_pai")).scalar() == 0  # e a política estreita não abre outra tabela de prova
+        # D-111: nas tabelas REAIS, qualquer contexto de sistema com nome registrado é privilegiado (tabela `rls_privilegiado`), por isso vê todos os tenants.
+        assert s.execute(text("SELECT count(DISTINCT tenant_id) FROM bloqueio_contato")).scalar() >= 4
         s.rollback()
     with _sessao(bancos) as s:
         rls.definir(s, rls.ContextoRls(escopo="sistema:outra-rotina"))
@@ -339,7 +340,10 @@ def test_o_registro_bate_com_o_que_o_banco_tem(bancos):
     with bancos["dono"].connect() as conexao:
         com_rls = {n for (n,) in conexao.execute(text("SELECT relname FROM pg_class WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace AND relrowsecurity"))}
         com_politica = {n for (n,) in conexao.execute(text("SELECT DISTINCT tablename FROM pg_policies WHERE schemaname = 'public' AND policyname LIKE 'rls\\_%'"))}
-    protegidas = set(rls_registro.TENANT_DIRETO) | set(rls_registro.DUAS_PARTES)
+    protegidas = (
+        set(rls_registro.TENANT_DIRETO) | set(rls_registro.DUAS_PARTES) | set(rls_registro.TENANT_NULAVEL_ETAPA2) | set(rls_registro.TENANT_COLUNA_ETAPA2)
+        | set(rls_registro.LEITURA_COMPARTILHADA) | set(rls_registro.HERDADAS)
+    )
     provas = {"prova_pai", "prova_filha", "prova_publica", "prova_sistema"}
     assert protegidas <= com_rls and protegidas <= com_politica
     assert (com_rls - provas) == protegidas  # nenhuma tabela fora do registro ganhou RLS

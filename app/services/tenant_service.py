@@ -215,7 +215,8 @@ def criar_tenant_inicial(
         raise RegraNegocioViolada(f"Tenant {tenant_id} já existe.")
     if db.query(Plano).filter_by(id=plano_id).one_or_none() is None:
         raise NaoEncontrado(f"Plano {plano_id} não encontrado")
-    if db.query(Usuario).filter_by(email=email_admin).one_or_none() is not None:
+    # O e-mail é único em TODA a plataforma: a checagem usa a busca por e-mail (o RLS esconderia os usuários de outras empresas de quem está no contexto de tenant).
+    if auth_service.buscar_usuario_por_email(db, email_admin) is not None:
         raise RegraNegocioViolada("E-mail já cadastrado.")
 
     tenant = Tenant(
@@ -229,31 +230,33 @@ def criar_tenant_inicial(
     db.add(tenant)
     db.flush()
 
-    licenca = Licenca(tenant_id=tenant.id, plano_id=plano_id, status="ativa")
-    db.add(licenca)
+    # Tudo o que nasce daqui em diante pertence ao tenant novo, não ao gestor que o criou (RLS, D-111); o contexto do gestor volta ao sair.
+    with rls.contexto_tenant(db, tenant.id):
+        licenca = Licenca(tenant_id=tenant.id, plano_id=plano_id, status="ativa")
+        db.add(licenca)
 
-    rede_social_service.criar_perfil_inicial(db, tenant.id, razao_social)
+        rede_social_service.criar_perfil_inicial(db, tenant.id, razao_social)
 
-    usuario = Usuario(
-        tenant_id=tenant.id,
-        nome=nome_admin,
-        email=email_admin,
-        senha_hash=auth_service.hash_senha(senha_admin),
-        papel=papel_primeiro_usuario,
-    )
-    db.add(usuario)
-    db.flush()
-
-    auditoria_service.registrar(
-        db, tenant.id, "tenant_criado", "tenant", 0, None, {"razao_social": razao_social}
-    )
-    if tenant_pai_id is not None:
-        webhook_parceiro_service.enfileirar_evento(
-            db, tenant.id, "tenant_provisionado",
-            {"tenant_id": tenant.id, "razao_social": razao_social, "tipo": tipo, "tenant_pai_id": tenant_pai_id, "plano_id": plano_id},
+        usuario = Usuario(
+            tenant_id=tenant.id,
+            nome=nome_admin,
+            email=email_admin,
+            senha_hash=auth_service.hash_senha(senha_admin),
+            papel=papel_primeiro_usuario,
         )
-    db.commit()
-    db.refresh(usuario)
+        db.add(usuario)
+        db.flush()
+
+        auditoria_service.registrar(
+            db, tenant.id, "tenant_criado", "tenant", 0, None, {"razao_social": razao_social}
+        )
+        if tenant_pai_id is not None:
+            webhook_parceiro_service.enfileirar_evento(
+                db, tenant.id, "tenant_provisionado",
+                {"tenant_id": tenant.id, "razao_social": razao_social, "tipo": tipo, "tenant_pai_id": tenant_pai_id, "plano_id": plano_id},
+            )
+        db.commit()
+        db.refresh(usuario)
 
     # Best-effort: e-mail de boas-vindas não pode travar a criação do
     # tenant (mesmo espírito de `sincronizar_com_tolerancia`) — se o

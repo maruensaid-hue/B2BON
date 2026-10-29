@@ -7,6 +7,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.ssrf import requisitar_publico
+from app.db import rls
 from app.models.assinatura_webhook_parceiro import AssinaturaWebhookParceiro
 from app.models.evento_webhook_parceiro import EventoWebhookParceiro
 from app.models.tenant import Tenant
@@ -42,13 +43,15 @@ def enfileirar_evento(db: Session, tenant_id: str, tipo_evento: str, payload: di
     Sem nenhuma assinatura ativa no caminho até a raiz da árvore, não cria
     nada — não faz sentido enfileirar evento pra tenant sem Distribuidor
     com integração configurada."""
-    assinatura = _assinatura_ancestral(db, tenant_id)
-    if assinatura is None:
-        return
-    db.add(
-        EventoWebhookParceiro(assinatura_id=assinatura.id, tipo_evento=tipo_evento, payload_json=json.dumps(payload))
-    )
-    db.flush()
+    # A assinatura é do distribuidor ANCESTRAL (outro tenant que não o do evento): tarefa de sistema nomeada, não o contexto de quem provocou o evento (RLS, D-111).
+    with rls.contexto_sistema(db, "webhook-parceiro-enfileirar"):
+        assinatura = _assinatura_ancestral(db, tenant_id)
+        if assinatura is None:
+            return
+        db.add(
+            EventoWebhookParceiro(assinatura_id=assinatura.id, tipo_evento=tipo_evento, payload_json=json.dumps(payload))
+        )
+        db.flush()
 
 
 def _assinar(segredo: str, corpo: bytes) -> str:

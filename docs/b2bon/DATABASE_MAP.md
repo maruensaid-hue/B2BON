@@ -9,7 +9,10 @@ Migrações: 71 revisões Alembic em `alembic/versions/`, com cabeça única
   código precisa rodar nos dois; já houve incidente de literal inteiro
   em coluna boolean (commit `943c3df`).
 - **Tenancy**: coluna `tenant_id` (ou `tenant_id_origem`/`_destino`/
-  `_vendedor`/…) filtrada no código. **Sem RLS.**
+  `_vendedor`/…) filtrada no código **e**, desde D-110/D-111, por Row-Level
+  Security em todas as tabelas com dado de empresa (179 de 212; as outras 33
+  são globais). O RLS só vale quando a API conecta com o papel `b2bon_app`
+  (ver `RLS.md`); hoje só o staging faz isso.
 - **Grafo**: Neo4j espelha `Conta`/`Decisor`/interação/indicação
   (`neo4j_node_id` em `conta`/`decisor`), em modo best-effort. O
   relacional é a fonte de verdade.

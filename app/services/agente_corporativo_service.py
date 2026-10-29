@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
+from app.db import rls
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.configuracao_agente_corporativo import ConfiguracaoAgenteCorporativo
@@ -149,29 +150,33 @@ def _gerar_resposta(db: Session, tenant_id: str, pergunta: str, evidencias: list
 def perguntar(
     db: Session, tenant_id_perguntante: str, ator_id: str | None, tenant_id_alvo: str, pergunta: str, llm: LLMProvider
 ) -> PerguntaAgenteCorporativo:
-    if obter_modo(db, tenant_id_alvo) != "assistido":
-        raise RegraNegocioViolada("Esta empresa não tem um agente corporativo disponível para perguntas.")
+    # A conexão é conferida ainda como quem pergunta (é uma das duas partes dela). Só depois o agente do ALVO trabalha: conhecimento, créditos de IA, auditoria e o próprio
+    # registro da pergunta são dados do alvo, e o RLS (D-111) só os abre no contexto dele. É a ação entre empresas autorizada por desenho, e só depois da conexão aceita.
     if not rede_social_service.conexao_aceita_entre(db, tenant_id_perguntante, tenant_id_alvo):
         raise RegraNegocioViolada("É preciso ter uma conexão aceita com esta empresa para perguntar ao seu agente.")
 
-    evidencias = _buscar_conhecimento(db, tenant_id_alvo, pergunta)
-    resposta_rascunho = _gerar_resposta(db, tenant_id_alvo, pergunta, evidencias, llm)
+    with rls.contexto_tenant(db, tenant_id_alvo):
+        if obter_modo(db, tenant_id_alvo) != "assistido":
+            raise RegraNegocioViolada("Esta empresa não tem um agente corporativo disponível para perguntas.")
 
-    registro = PerguntaAgenteCorporativo(
-        tenant_id_alvo=tenant_id_alvo,
-        tenant_id_perguntante=tenant_id_perguntante,
-        pergunta=pergunta,
-        resposta_rascunho=resposta_rascunho,
-        evidencias=evidencias,
-        status="pendente_aprovacao",
-    )
-    db.add(registro)
-    db.flush()
-    auditoria_service.registrar(
-        db, tenant_id_alvo, "pergunta_agente_corporativo_recebida", "pergunta_agente_corporativo", registro.id, ator_id, {}
-    )
-    db.commit()
-    db.refresh(registro)
+        evidencias = _buscar_conhecimento(db, tenant_id_alvo, pergunta)
+        resposta_rascunho = _gerar_resposta(db, tenant_id_alvo, pergunta, evidencias, llm)
+
+        registro = PerguntaAgenteCorporativo(
+            tenant_id_alvo=tenant_id_alvo,
+            tenant_id_perguntante=tenant_id_perguntante,
+            pergunta=pergunta,
+            resposta_rascunho=resposta_rascunho,
+            evidencias=evidencias,
+            status="pendente_aprovacao",
+        )
+        db.add(registro)
+        db.flush()
+        auditoria_service.registrar(
+            db, tenant_id_alvo, "pergunta_agente_corporativo_recebida", "pergunta_agente_corporativo", registro.id, ator_id, {}
+        )
+        db.commit()
+        db.refresh(registro)
     return registro
 
 

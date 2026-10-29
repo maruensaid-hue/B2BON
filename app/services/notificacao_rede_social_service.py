@@ -1,9 +1,10 @@
 import logging
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db import rls
 from app.models.notificacao_rede_social import NotificacaoRedeSocial
 from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
@@ -17,17 +18,18 @@ def criar(db: Session, tenant_id: str, tipo: str, referencia_tipo: str, referenc
     """Helper interno de wiring (master prompt §65) — chamado de dentro
     de outras transações (solicitar_conexao, responder_conexao, comentar,
     reagir, enviar_mensagem); não comita, o `flush` garante o id/ordem
-    sem fechar a transação de quem chamou."""
-    db.add(
-        NotificacaoRedeSocial(
-            tenant_id=tenant_id,
-            tipo=tipo,
-            referencia_tipo=referencia_tipo,
-            referencia_id=referencia_id,
-            mensagem=mensagem,
-        )
+    sem fechar a transação de quem chamou.
+
+    A notificação quase sempre é para OUTRA empresa (quem comentou avisa o dono do post). No PostgreSQL o RLS (D-111) deixa qualquer empresa inserir e só o dono ler,
+    mas `INSERT ... RETURNING` exigiria também a política de leitura; por isso o insert é de Core, sem RETURNING (ninguém precisa do id aqui)."""
+    # SQL direto, não `insert()` do SQLAlchemy: no PostgreSQL ele acrescenta `RETURNING id` sozinho, e o `RETURNING` exige a política de leitura da linha da outra empresa.
+    db.execute(
+        text(
+            "INSERT INTO notificacao_rede_social (tenant_id, tipo, referencia_tipo, referencia_id, mensagem) "
+            "VALUES (:tenant_id, :tipo, :referencia_tipo, :referencia_id, :mensagem)"
+        ),
+        {"tenant_id": tenant_id, "tipo": tipo, "referencia_tipo": referencia_tipo, "referencia_id": referencia_id, "mensagem": mensagem},
     )
-    db.flush()
 
 
 def enviar_email_para_tenant(db: Session, email_provider: EmailProvider | None, tenant_id: str, mensagem: str) -> None:
@@ -40,11 +42,13 @@ def enviar_email_para_tenant(db: Session, email_provider: EmailProvider | None, 
     de envio nunca pode reverter algo que já aconteceu."""
     if email_provider is None:
         return
-    usuarios = db.query(Usuario).filter(Usuario.tenant_id == tenant_id, Usuario.ativo.is_(True)).all()
-    for usuario in usuarios:
+    # Ler os e-mails dos usuários de OUTRA empresa é uma tarefa de sistema nomeada (o RLS esconde os usuários de outros tenants de quem está no contexto de tenant).
+    with rls.contexto_sistema(db, "shoal-notificar-por-email"):
+        destinatarios = [u.email for u in db.query(Usuario).filter(Usuario.tenant_id == tenant_id, Usuario.ativo.is_(True)).all()]
+    for email_destino in destinatarios:
         try:
             email_provider.enviar(
-                usuario.email,
+                email_destino,
                 "Nova notificação na B2B ON",
                 mensagem,
                 "B2B ON",

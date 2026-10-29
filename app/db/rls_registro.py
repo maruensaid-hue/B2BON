@@ -66,6 +66,9 @@ CONTEXTOS_SISTEMA: dict[str, dict[str, str]] = {
     "cron-processar-alertas-licitacoes": {"regra_alerta_licitacao": "ler"},
     "cron-sourcing-sincronizar": {"contrato_venda_publica": "ler", "documento_licitacao": "ler", "licitacao": "ler", "requisito_licitacao": "ler"},
     "webhook-envio-verificacao": {"configuracao_email_api": "ler"},
+    "shoal-notificar-por-email": {"usuario": "ler"},
+    "webhook-parceiro-enfileirar": {"assinatura_webhook_parceiro": "ler", "evento_webhook_parceiro": "escrever"},
+    "reivindicacao-identidade": {"empresa_rede": "escrever", "relacionamento_empresarial": "escrever"},
 }
 for _nome, _tabelas in _comprador.SISTEMA.items():
     CONTEXTOS_SISTEMA[_nome].update(_tabelas)
@@ -73,7 +76,7 @@ for _nome, _tabelas in _comprador.SISTEMA.items():
 # --- Classificação de TODAS as tabelas (primeira etapa) --------------------------------------------------------------------------------------------
 # Protegidas por tenant direto: política `rls_tenant` (+ leitura ampliada pela hierarquia). Entram aqui só as tabelas que a sonda (tests/rls_sonda.py) viu, na suíte inteira,
 # sendo tocadas apenas dentro do contexto do tenant dono da linha.
-TENANT_DIRETO: tuple[str, ...] = (
+TENANT_DIRETO_ETAPA1: tuple[str, ...] = (
     "alerta_credito", "alerta_detrator", "anexo_sourcing", "aprovacao",
     "avaliacao_sourcing", "bloqueio_contato", "cadencia", "campanha",
     "chave_api_tenant", "compra_credito", "conexao_integracao", "conexao_linkedin",
@@ -95,112 +98,116 @@ TENANT_DIRETO: tuple[str, ...] = (
 ) + _comprador.TENANT_DIRETO
 
 # Ligam duas empresas por desenho: cada parte vê e altera a linha (política `rls_partes`).
-DUAS_PARTES: dict[str, tuple[str, str]] = {
+DUAS_PARTES_ETAPA1: dict[str, tuple[str, str]] = {
     'conexao_empresa': ('tenant_id_origem', 'tenant_id_destino'),
     'mensagem_rede_social': ('tenant_id_remetente', 'tenant_id_destinatario'),
     'sala_corporativa': ('tenant_id_a', 'tenant_id_b'),
 }
 
-# Leitura compartilhada por desenho e escopo herdado: nenhuma tabela entra nesta etapa (os geradores existem em `rls_sql.py` e são testados em tabela de prova).
-LEITURA_COMPARTILHADA: tuple[str, ...] = ()
-HERDADAS: dict[str, tuple[str, str, bool]] = {}
+# --- Segunda etapa (D-111) ---------------------------------------------------------------------------------------------------------------------------
+# Tabelas com `tenant_id` NOT NULL: política `rls_tenant` + leitura ampliada pela hierarquia (como na primeira etapa).
+TENANT_DIRETO_ETAPA2: tuple[str, ...] = (
+    "alerta_licitacao", "apuracao_comissao", "assinatura_webhook_parceiro", "assinatura_webhook_tenant",
+    "atividade", "audit_log", "autorizacao_oauth_pendente", "cache_resposta_ia",
+    "campanha_destinatario", "carteira_creditos", "chave_api_parceiro", "coleta_site_conta",
+    "comissao_representante", "componente_contrato_governo", "configuracao_agente_corporativo", "configuracao_coleta_fonte",
+    "configuracao_credito_tenant", "configuracao_email_api", "configuracao_email_smtp", "configuracao_painel",
+    "configuracao_relatorio", "conhecimento_corporativo", "conta", "conta_franquia_consumo",
+    "conteudo_pagina_site", "contrato_governo", "contrato_sourcing", "contrato_venda_publica",
+    "decisor", "documento_licitacao", "documento_sourcing", "enriquecimento_carteira",
+    "enriquecimento_compra", "enriquecimento_estorno_compra", "enriquecimento_movimento", "entrega_webhook",
+    "evento_contrato_sourcing", "evento_dominio", "evento_sourcing", "execucao_coleta_fonte",
+    "execucao_ia", "fila_enriquecimento_conta", "icp", "interacao_conta",
+    "interacao_tenant", "item_sourcing", "licenca", "licitacao",
+    "lote_credito", "movimento_credito", "oferta", "orcamento_ia",
+    "periodo_assinatura_governo", "processo_sourcing", "proposta_item_sourcing", "proposta_sourcing",
+    "registro_oportunidade", "registro_uso_ia", "regra_alerta_licitacao", "requisito_licitacao",
+    "requisito_sourcing", "reuniao", "solicitacao_desconto", "usuario",
+    "participante_sourcing", "sinal_oportunidade", "verificacao_empresa", "necessidade_oportunidade",
+    "notificacao_rede_social",
+) + _comprador.TENANT_DIRETO_ETAPA2
+
+# `tenant_id` pode ser nulo: a linha sem dono é de plataforma (só os contextos privilegiados a gravam; a leitura segue a política de cada tabela em POLITICAS_ESPECIAIS).
+TENANT_NULAVEL_ETAPA2: tuple[str, ...] = ("enriquecimento_config_plano", "oportunidade_governo", "empresa_rede")
+
+# O dono do dado está em outra coluna que não `tenant_id`.
+TENANT_COLUNA_ETAPA2: dict[str, str] = {"sala_compra": "tenant_id_vendedor"}
+
+DUAS_PARTES_ETAPA2: dict[str, tuple[str, str]] = {
+    "convite_vitrine": ("tenant_id_origem", "tenant_id_gerado"),
+    "seguidor_empresa": ("tenant_id_seguidor", "tenant_id_seguido"),
+    "relacionamento_empresarial": ("tenant_id_origem", "tenant_id_destino"),
+    "pergunta_agente_corporativo": ("tenant_id_alvo", "tenant_id_perguntante"),
+}
+
+# Dado que o produto mostra a outras empresas por desenho (diretório, feed, necessidades da rede): qualquer contexto de tenant LÊ, só o dono grava. A visibilidade fina
+# (`conexoes` x `publica`, bloqueio entre empresas) continua nos filtros do código: aqui o banco só impede que uma empresa grave ou apague o que é de outra.
+LEITURA_COMPARTILHADA_ETAPA2: tuple[str, ...] = ("perfil_empresa", "post_rede_social", "comentario_post", "reacao_post", "intent")
+
+# Sem `tenant_id` próprio ou com dono por relação: o escopo vem do pai por função `SECURITY DEFINER` (tabela -> (coluna do pai, função do pai, leitura compartilhada)).
+HERDADAS_ETAPA2: dict[str, tuple[str, str, bool]] = {
+    "midia_post": ("post_id", "b2bon_post_cascata_do_tenant", True),
+    "campo_enriquecido": ("conta_id", "b2bon_conta_do_tenant", False),
+    "redefinicao_senha": ("usuario_id", "b2bon_usuario_do_tenant", False),
+    "evento_webhook_parceiro": ("assinatura_id", "b2bon_assinatura_parceiro_do_tenant", False),
+    "canal_sala": ("sala_id", "b2bon_sala_do_tenant", False),
+    "mensagem_sala": ("canal_id", "b2bon_canal_do_tenant", False),
+    "documento_sala": ("sala_id", "b2bon_sala_do_tenant", False),
+    "participante_sala": ("sala_id", "b2bon_sala_do_tenant", False),
+    "reuniao_sala": ("sala_id", "b2bon_sala_do_tenant", False),
+    "stakeholder_sala": ("sala_id", "b2bon_sala_do_tenant", False),
+    "tarefa_sala": ("sala_id", "b2bon_sala_do_tenant", False),
+}
+
+# Políticas avulsas por tabela: (nome, comando, USING, WITH CHECK).
+POLITICAS_ESPECIAIS_ETAPA2: dict[str, tuple[tuple[str, str, str | None, str | None], ...]] = {
+    # A licença que vale é a do tenant que PAGA (cobrança consolidada sobe para o pai): `deps.verificar_licenca_ativa` lê a licença do pai.
+    "licenca": (("rls_cobradora", "SELECT", "tenant_id = b2bon_cobrador()", None),),
+    # O conflito de CNPJ (PRIME) vale na rede inteira, não só no tenant que registra.
+    "registro_oportunidade": (("rls_rede", "SELECT", "rede_raiz_tenant_id = b2bon_raiz_da_rede()", None),),
+    # Linha sem dono = configuração padrão do plano: todo tenant lê.
+    "enriquecimento_config_plano": (("rls_padrao_do_plano", "SELECT", "tenant_id IS NULL AND b2bon_escopo() = 'tenant'", None),),
+    # Cadastro de identidades da rede (CNPJ, razão social, nome): dado público. Qualquer tenant lê, cria e ajusta, porque ao declarar um relacionamento a aplicação cria a
+    # identidade do OUTRO lado (de um tenant ou de um CNPJ citado) com os dados públicos dele. Quem pode reivindicar o quê (verificada, CNPJ igual) é regra do código;
+    # apagar identidade é só dos contextos privilegiados.
+    "empresa_rede": (
+        ("rls_diretorio", "SELECT", "b2bon_escopo() = 'tenant'", None),
+        ("rls_identidade_cria", "INSERT", None, "b2bon_escopo() = 'tenant'"),
+        ("rls_identidade_ajusta", "UPDATE", "b2bon_escopo() = 'tenant'", "b2bon_escopo() = 'tenant'"),
+    ),
+    # Quem comenta, reage ou notifica outra empresa insere; ler e apagar o que é dele continua só do dono.
+    "notificacao_rede_social": (("rls_insercao_entre_tenants", "INSERT", None, "b2bon_escopo() = 'tenant'"),),
+    # Quem publicou o original apaga os reposts e o que pendura neles.
+    "post_rede_social": (("rls_apagar_repost", "DELETE", "b2bon_post_cascata_do_tenant(id)", None),),
+    "comentario_post": (("rls_apagar_do_post", "DELETE", "b2bon_post_cascata_do_tenant(post_id)", None),),
+    "reacao_post": (("rls_apagar_do_post", "DELETE", "b2bon_post_cascata_do_tenant(post_id)", None),),
+    # Relacionamento comercial declarado como público, ou para quem está conectado.
+    "relacionamento_empresarial": (
+        ("rls_visibilidade", "SELECT", "visibilidade = 'publica' OR (visibilidade = 'conexoes' AND (b2bon_conectado(tenant_id_origem) OR b2bon_conectado(tenant_id_destino)))", None),
+    ),
+    # Negócio vinculado à sala: as duas empresas da sala veem.
+    "sala_compra": (("rls_sala", "SELECT", "b2bon_sala_do_tenant(sala_corporativa_id)", None),),
+    # Fornecedor (empresa da rede) convidado para um processo de OUTRO tenant: lê o convite e o processo para listar os convites que recebeu. A rodada em si (itens,
+    # propostas, anexos) é aberta pela aplicação no contexto do comprador, depois de conferir o convite (`portal.por_empresa`).
+    "participante_sourcing": (("rls_convidado_le", "SELECT", "empresa_rede_tenant_id = b2bon_tenant()", None),),
+    "processo_sourcing": (("rls_convidado", "SELECT", "b2bon_processo_convidado(id)", None),),
+}
+
+# Buscas da segunda etapa: só as tabelas protegidas por ela entram na migração dela (as da primeira já estão na outra).
+BUSCAS_ETAPA2: dict[str, tuple[Busca, ...]] = {
+    "chave-api-parceiro": (Busca("chave_api_parceiro", "chave_hash = b2bon_chave()"),),
+}
+for _escopo, _itens in BUSCAS_ETAPA2.items():
+    BUSCAS[_escopo] = _itens
+
+# Conjunto completo, sem distinguir a etapa (o resto do código e os testes usam estes nomes).
+TENANT_DIRETO: tuple[str, ...] = TENANT_DIRETO_ETAPA1 + TENANT_DIRETO_ETAPA2
+DUAS_PARTES: dict[str, tuple[str, str]] = {**DUAS_PARTES_ETAPA1, **DUAS_PARTES_ETAPA2}
+LEITURA_COMPARTILHADA: tuple[str, ...] = LEITURA_COMPARTILHADA_ETAPA2
+HERDADAS: dict[str, tuple[str, str, bool]] = dict(HERDADAS_ETAPA2)
 
 # Ainda SEM política, cada uma com o motivo. É o que impede declarar A01 resolvido: nestas tabelas o isolamento continua só nos filtros do código.
-PENDENTES: dict[str, str] = {**_comprador.PENDENTES, **{
-    'assinatura_webhook_parceiro': 'tocada fora do contexto do tenant em: cron (suspender licenças, webhooks de parceiros) e provisionamento por chave de parceiro',
-    'chave_api_parceiro': 'autenticada por hash de chave do parceiro, sem usuário, antes de saber o tenant (deps.get_chave_api_atual): falta a busca pré-tenant',
-    'configuracao_relatorio': 'lida por cron global (disparar relatórios periódicos) em todos os tenants: falta revisar a lista do contexto de sistema',
-    'evento_webhook_parceiro': 'sem tenant_id próprio (escopo herdado de `assinatura_webhook_parceiro`, também pendente)',
-    'alerta_licitacao': 'tocada fora do contexto do tenant em: cron:podar_historicos',
-    'apuracao_comissao': 'tocada fora do contexto do tenant em: comissoes:apuracoes, comissoes:criar_perfil, comissoes:recalcular, comissoes:registrar_cotacao, comissoes:waterfall, motor:margem_contribuicao, motor:waterfall_comissoes',
-    'assinatura_webhook_tenant': 'tocada fora do contexto do tenant em: cron:processar_eventos',
-    'atividade': 'tocada fora do contexto do tenant em: cron:processar_fila_enriquecimento',
-    'audit_log': 'tocada fora do contexto do tenant em: admin_enriquecimento:auditoria, admin_enriquecimento:decidir_estorno, admin_tenants:atualizar_licenca, admin_tenants:criar_tenant, admin_tenants:desativar_tenant, admin_tenants:reativar_tenant, agente_corporativo:perguntar, comissoes:alterar_politica_infra, comissoes:alterar_politica_margem, comissoes:atualizar_componente, comissoes:criar_componente, comissoes:criar_perfil, comissoes:criar_status_tributario, comissoes:decidir_alerta, comissoes:recalcular, comissoes:registrar_cotacao, cron:coletar_licitacoes, cron:processar_fila_enriquecimento, cron:suspender_licencas_vencidas, finops:ativar_catalogo, finops:criar_rascunho, finops:nova_versao_pacote, governo:criar_oportunidade, governo:nova_politica, governo:override_comissao, governo:transferir, map_performance:contato_efetivo, map_performance:definir_quota, map_performance:ofertas_familias, map_performance:vincular, motor:registrar_interacao, parceiros:provisionar_tenant, planos:atualizar_plano, planos:criar_plano, portal_fornecedor:enviar, ropa:criar_versao_ropa_plataforma, saude_conta:atribuir_vendedor, saude_conta:registrar_interacao',
-    'autorizacao_oauth_pendente': 'tocada fora do contexto do tenant em: integracoes_crm_publico:callback_oauth',
-    'cache_resposta_ia': 'tocada fora do contexto do tenant em: cron:podar_historicos',
-    'campanha_destinatario': 'tocada fora do contexto do tenant em: app/api/deps:(dependência)',
-    'campo_enriquecido': 'escopo herdado de `conta` (sem `tenant_id` próprio); a política só entra junto com a do pai, ainda pendente',
-    'canal_sala': 'escopo herdado de `sala_corporativa` (sem `tenant_id` próprio); a política só entra junto com a do pai, ainda pendente',
-    'carteira_creditos': 'tocada fora do contexto do tenant em: agente_corporativo:perguntar, cron:creditos_ia, cron:processar_fila_enriquecimento',
-    'coleta_site_conta': 'tocada fora do contexto do tenant em: cron:podar_historicos, cron:processar_fila_enriquecimento',
-    'comentario_post': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'comissao_representante': 'tocada fora do contexto do tenant em: comissoes:criar_perfil, comissoes:recalcular, comissoes:registrar_cotacao, comissoes:waterfall, motor:margem_contribuicao, motor:waterfall_comissoes',
-    'componente_contrato_governo': 'tocada fora do contexto do tenant em: governo:override_comissao, governo:transferir, motor:margem_contribuicao',
-    'configuracao_agente_corporativo': 'tocada fora do contexto do tenant em: agente_corporativo:perguntar',
-    'configuracao_coleta_fonte': 'tocada fora do contexto do tenant em: cron:coletar_licitacoes',
-    'configuracao_credito_tenant': 'tocada fora do contexto do tenant em: agente_corporativo:perguntar, cron:creditos_ia, cron:processar_fila_enriquecimento',
-    'configuracao_email_api': 'tocada fora do contexto do tenant em: app/api/deps:(dependência)',
-    'configuracao_email_smtp': 'tocada fora do contexto do tenant em: app/api/deps:(dependência)',
-    'configuracao_painel': 'tocada fora do contexto do tenant em: painel:ranking_assinantes',
-    'conhecimento_corporativo': 'tocada fora do contexto do tenant em: agente_corporativo:perguntar',
-    'conta': 'tocada fora do contexto do tenant em: auth:demonstracao, cron:processar_fila_enriquecimento, saude_conta:atribuir_vendedor, saude_conta:listar_interacoes, saude_conta:score_risco, saude_conta:script_resgate, saude_conta:vendedores_disponiveis',
-    'conta_franquia_consumo': 'tocada fora do contexto do tenant em: parceiros:obter_uso',
-    'conteudo_pagina_site': 'tocada fora do contexto do tenant em: cron:processar_fila_enriquecimento',
-    'contrato_governo': 'tocada fora do contexto do tenant em: governo:transferir',
-    'contrato_sourcing': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'contrato_venda_publica': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'convite_vitrine': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'decisor': 'tocada fora do contexto do tenant em: cron:processar_fila_enriquecimento',
-    'documento_licitacao': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'documento_sala': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'documento_sourcing': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'empresa_rede': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'enriquecimento_carteira': 'tocada fora do contexto do tenant em: admin_enriquecimento:decidir_estorno, cron:creditos_ia',
-    'enriquecimento_compra': 'tocada fora do contexto do tenant em: admin_enriquecimento:decidir_estorno',
-    'enriquecimento_config_plano': 'tocada fora do contexto do tenant em: admin_enriquecimento:aplicar_matriz, admin_enriquecimento:situacao_dos_planos, cron:creditos_ia, pesquisas_decisores:comprar_pacote, pesquisas_decisores:confirmar, pesquisas_decisores:criar_previa, pesquisas_decisores:pacotes_adicionais, pesquisas_decisores:painel_do_tenant, planos:criar_plano, relatorio_consumo:relatorio, relatorio_consumo:relatorio_csv',
-    'enriquecimento_estorno_compra': 'tocada fora do contexto do tenant em: admin_enriquecimento:decidir_estorno, admin_enriquecimento:listar_estornos',
-    'enriquecimento_movimento': 'tocada fora do contexto do tenant em: admin_enriquecimento:decidir_estorno, cron:processar_fila_enriquecimento',
-    'entrega_webhook': 'tocada fora do contexto do tenant em: cron:podar_historicos, cron:processar_eventos',
-    'evento_contrato_sourcing': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'evento_dominio': 'tocada fora do contexto do tenant em: cron:podar_historicos, cron:processar_eventos',
-    'evento_sourcing': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'execucao_coleta_fonte': 'tocada fora do contexto do tenant em: cron:coletar_licitacoes, cron:podar_historicos',
-    'execucao_ia': 'tocada fora do contexto do tenant em: agente_corporativo:perguntar, comissoes:registrar_cotacao, cron:creditos_ia, cron:processar_fila_enriquecimento, finops:resumo_plataforma',
-    'fila_enriquecimento_conta': 'tocada fora do contexto do tenant em: cron:processar_fila_enriquecimento',
-    'icp': 'tocada fora do contexto do tenant em: cron:podar_recorte_cnpj',
-    'intent': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'interacao_conta': 'tocada fora do contexto do tenant em: saude_conta:registrar_interacao',
-    'interacao_tenant': 'tocada fora do contexto do tenant em: motor:dashboard, motor:listar_interacoes, motor:registrar_interacao, motor:saude_tenants, motor:score_risco, motor:script_resgate',
-    'item_sourcing': 'tocada fora do contexto do tenant em: portal_fornecedor:enviar, portal_fornecedor:ver',
-    'licenca': 'tocada fora do contexto do tenant em: admin_tenants:atualizar_licenca, admin_tenants:criar_tenant, admin_tenants:obter_licenca, agente_corporativo:perguntar, app/api/deps:(dependência), auth:demonstracao, cron:creditos_ia, cron:enviar_lembretes_cobranca, cron:processar_fila_enriquecimento, cron:suspender_licencas_vencidas, motor:score_risco, motor:script_resgate, parceiros:obter_billing, parceiros:provisionar_tenant',
-    'licitacao': 'tocada fora do contexto do tenant em: cron:coletar_licitacoes, cron:podar_historicos, cron:sourcing_sincronizar',
-    'lote_credito': 'tocada fora do contexto do tenant em: agente_corporativo:perguntar, cron:creditos_ia, cron:processar_fila_enriquecimento, governo:transferir, motor:margem_contribuicao',
-    'mensagem_sala': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'midia_post': 'escopo herdado de `post_rede_social` (sem `tenant_id` próprio); a política só entra junto com a do pai, ainda pendente',
-    'movimento_credito': 'tocada fora do contexto do tenant em: agente_corporativo:perguntar, cron:creditos_ia, cron:processar_fila_enriquecimento',
-    'necessidade_oportunidade': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'notificacao_rede_social': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'oferta': 'tocada fora do contexto do tenant em: agente_corporativo:perguntar, map_performance:configuracao, map_performance:contato_efetivo, map_performance:daily, map_performance:ofertas_familias, rede_social:listar_empresas',
-    'oportunidade_governo': 'tocada fora do contexto do tenant em: governo:criar_oportunidade',
-    'orcamento_ia': 'tocada fora do contexto do tenant em: cron:processar_fila_enriquecimento',
-    'participante_sala': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'participante_sourcing': 'tocada fora do contexto do tenant em: portal_fornecedor:_por_conta, portal_fornecedor:convites, portal_fornecedor:enviar',
-    'perfil_empresa': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'pergunta_agente_corporativo': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'periodo_assinatura_governo': 'tocada fora do contexto do tenant em: cron:creditos_ia, governo:transferir, motor:margem_contribuicao',
-    'post_rede_social': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'processo_sourcing': 'tocada fora do contexto do tenant em: app/api/deps:(dependência), cron:coletar_licitacoes, cron:sourcing_sincronizar, portal_fornecedor:convites, portal_fornecedor:enviar, portal_fornecedor:ver',
-    'proposta_item_sourcing': 'tocada fora do contexto do tenant em: portal_fornecedor:enviar',
-    'proposta_sourcing': 'tocada fora do contexto do tenant em: portal_fornecedor:enviar, portal_fornecedor:ver',
-    'reacao_post': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'redefinicao_senha': 'escopo herdado de `usuario` (sem `tenant_id` próprio); a política só entra junto com a do pai, ainda pendente',
-    'registro_oportunidade': 'tocada fora do contexto do tenant em: cron:expirar_registros_oportunidade, leads:criar_lead, registro_oportunidade:solicitar_desconto',
-    'registro_uso_ia': 'tocada fora do contexto do tenant em: agente_corporativo:perguntar, cron:processar_fila_enriquecimento',
-    'regra_alerta_licitacao': 'tocada fora do contexto do tenant em: cron:processar_alertas_licitacoes',
-    'relacionamento_empresarial': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'requisito_licitacao': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'requisito_sourcing': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'reuniao': 'tocada fora do contexto do tenant em: painel:ranking_assinantes',
-    'reuniao_sala': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'sala_compra': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'seguidor_empresa': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'sinal_oportunidade': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'solicitacao_desconto': 'tocada fora do contexto do tenant em: registro_oportunidade:decidir_solicitacao_desconto',
-    'stakeholder_sala': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'tarefa_sala': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-    'usuario': 'tocada fora do contexto do tenant em: admin_tenants:criar_tenant, auth:demonstracao, indicacoes:converter_indicacao, map_performance:configuracao, map_performance:contato_efetivo, map_performance:daily, map_performance:equipe, map_performance:ofertas_familias, map_performance:usuarios_crm, parceiros:provisionar_tenant, rede_social:comentar_post, rede_social:compartilhar_post, rede_social:enviar_mensagem, rede_social:enviar_mensagem_canal, rede_social:listar_comentarios, rede_social:listar_feed, rede_social:reagir_post, rede_social:responder_conexao, rede_social:solicitar_conexao',
-    'verificacao_empresa': 'cruzamento entre empresas por desenho (Shoal): política de partes ainda não validada com os fluxos',
-}}
+PENDENTES: dict[str, str] = {**_comprador.PENDENTES}
 
 # Sem escopo de empresa por natureza (nunca recebem política por tenant).
 GLOBAIS: dict[str, str] = {

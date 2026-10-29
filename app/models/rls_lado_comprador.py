@@ -11,13 +11,16 @@ TENANT_DIRETO: tuple[str, ...] = (
     "unidade_compras",
 )
 
-PENDENTES: dict[str, str] = {
-    'contrato_compra': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'documento_compras': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'evento_contrato_compra': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'evento_processo': 'tocada fora do contexto do tenant em: cron:sourcing_sincronizar',
-    'processo_contratacao': 'tocada fora do contexto do tenant em: app/api/deps:(dependência), cron:sourcing_sincronizar',
-}
+# Segunda etapa (D-111): tocadas pela rotina global de sincronização (contexto de sistema) e, por isso, ficaram de fora da primeira.
+TENANT_DIRETO_ETAPA2: tuple[str, ...] = (
+    "contrato_compra",
+    "documento_compras",
+    "evento_contrato_compra",
+    "evento_processo",
+    "processo_contratacao",
+)
+
+PENDENTES: dict[str, str] = {}
 
 # Tabelas do lado comprador que os contextos de sistema (rotinas sem usuário) tocam. PROVISÓRIO, como o restante de `CONTEXTOS_SISTEMA`.
 SISTEMA: dict[str, dict[str, str]] = {

@@ -1,4 +1,4 @@
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.contexts.network.contract import privacidade
@@ -146,9 +146,18 @@ def _contagem_reacoes_por_tipo(db: Session, post_id: int) -> dict[str, int]:
     return {tipo: total for tipo, total in linhas}
 
 
+def _nome_do_autor(db: Session, usuario_id: int) -> str | None:
+    """Nome de quem publicou/comentou, de QUALQUER empresa da rede. No PostgreSQL o RLS esconde os usuários de outras empresas (D-111), então o nome vem de uma função
+    que devolve só o nome de quem tem post ou comentário; nos demais bancos (testes) é a consulta direta."""
+    if db.get_bind().dialect.name == "postgresql":
+        return db.execute(text("SELECT b2bon_nome_do_autor(:id)"), {"id": usuario_id}).scalar()
+    autor = db.query(Usuario).filter_by(id=usuario_id).one_or_none()
+    return autor.nome if autor is not None else None
+
+
 def _serializar(db: Session, post: PostRedeSocial, tenant_id_atual: str | None, *, incluir_original: bool = True) -> dict:
     perfil = db.query(PerfilEmpresa).filter_by(tenant_id=post.tenant_id).one_or_none()
-    autor = db.query(Usuario).filter_by(id=post.usuario_autor_id).one_or_none()
+    autor_nome = _nome_do_autor(db, post.usuario_autor_id)
     total_comentarios = db.query(func.count(ComentarioPost.id)).filter_by(post_id=post.id).scalar() or 0
     reacoes_por_tipo = _contagem_reacoes_por_tipo(db, post.id)
     minha_reacao = None
@@ -172,7 +181,7 @@ def _serializar(db: Session, post: PostRedeSocial, tenant_id_atual: str | None, 
         "tenant_id": post.tenant_id,
         "empresa_nome": perfil.nome_exibicao if perfil is not None else post.tenant_id,
         "empresa_logo_url": perfil.logo_url if perfil is not None else None,
-        "autor_nome": autor.nome if autor is not None else "Usuário removido",
+        "autor_nome": autor_nome or "Usuário removido",
         "texto": post.texto,
         "imagem_url": post.imagem_url,
         "link_url": post.link_url,
@@ -214,13 +223,13 @@ def listar_feed(db: Session, tenant_id_atual: str | None = None, limite: int = _
 
 def _serializar_comentario(db: Session, comentario: ComentarioPost) -> dict:
     perfil = db.query(PerfilEmpresa).filter_by(tenant_id=comentario.tenant_id).one_or_none()
-    autor = db.query(Usuario).filter_by(id=comentario.usuario_id).one_or_none()
+    autor_nome = _nome_do_autor(db, comentario.usuario_id)
     return {
         "id": comentario.id,
         "post_id": comentario.post_id,
         "tenant_id": comentario.tenant_id,
         "empresa_nome": perfil.nome_exibicao if perfil is not None else comentario.tenant_id,
-        "autor_nome": autor.nome if autor is not None else "Usuário removido",
+        "autor_nome": autor_nome or "Usuário removido",
         "texto": comentario.texto,
         "criado_em": comentario.criado_em,
     }

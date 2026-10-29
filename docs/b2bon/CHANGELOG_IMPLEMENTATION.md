@@ -1,5 +1,14 @@
 # CHANGELOG — IMPLEMENTATION
 
+## RLS no banco, segunda etapa (2026-10-29, D-111)
+
+- As 98 tabelas que ainda dependiam só dos filtros do código passam a ter política no banco (CRM central, usuários, licenças, auditoria, IA e créditos, Shoal, sourcing, comissões e governo). Agora **todas as
+  179 tabelas com dado de empresa** têm Row-Level Security; as 33 restantes são globais (catálogos, preços, dados públicos). Continua sem efeito até a API usar o papel de execução.
+- Rotas só de `super_admin`, cron e webhooks passam a ter um contexto próprio (acesso total, explícito e rastreável); ações entre empresas (agente corporativo, portal do fornecedor, tenant filho, solicitação
+  de desconto, parceiros) abrem o contexto do tenant-alvo só depois de conferir a relação.
+- Corrigidos pontos em que o isolamento do banco faria a tela vir vazia sem erro (e-mail duplicado no cadastro, contas e registros de tenants filhos, relatórios gerenciais).
+- Documentação: `docs/b2bon/RLS.md` (matriz completa e riscos residuais) e D-111. **A01 segue em aberto até o rollout em produção.**
+
 ## RLS no banco, primeira etapa (2026-10-29, D-110)
 
 - O banco passa a ter uma segunda barreira contra mistura de dados entre empresas (Row-Level Security) em 81 tabelas, além dos filtros que o código já faz. Ela só começa a valer quando a API for ligada ao papel de execução do banco (passo a passo em `docs/b2bon/RLS.md`); até lá, nada muda para os usuários.

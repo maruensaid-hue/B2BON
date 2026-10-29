@@ -263,7 +263,7 @@ não testado num deploy real ainda):
 
 ## 7.2. Isolamento por tenant no banco (RLS)
 
-A migração `e7a9c1d3f5b8` liga o RLS em 81 tabelas, mas **só tem efeito quando a API conecta com um papel sem `BYPASSRLS`** (hoje conecta com o dono). O passo a passo (criar o papel
+As migrações `e7a9c1d3f5b8` (81 tabelas) e `a3c5e7b9d1f2` (as outras 98, mais o acesso dos contextos de plataforma e de sistema) ligam o RLS em todas as 179 tabelas com dado de empresa, mas **só têm efeito quando a API conecta com um papel sem `BYPASSRLS`** (em produção ainda conecta com o dono). O passo a passo (criar o papel
 `b2bon_app`, separar `MIGRATION_DATABASE_URL` de `DATABASE_URL`, verificar e como reverter em segundos) está em `docs/b2bon/RLS.md`. Faça primeiro em staging.
 
 ## 8. E-mail real — SendGrid (raio-X de produção)

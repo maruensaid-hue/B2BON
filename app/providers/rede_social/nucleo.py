@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.db import rls
 from app.models.usuario import Usuario
 from app.providers.rede_social.base import RedeSocialProvider
 
@@ -14,4 +15,6 @@ class NucleoRedeSocialProvider(RedeSocialProvider):
         self._db = db
 
     def eh_assinante(self, identificador: str) -> bool:
-        return self._db.query(Usuario).filter_by(email=identificador).first() is not None
+        # Procurar um e-mail em QUALQUER tenant é a busca por e-mail (política `login` do banco: só a linha cujo e-mail coincide), não uma leitura livre de `usuario`.
+        with rls.contexto_busca(self._db, rls.ESCOPO_LOGIN, identificador.strip().lower()):
+            return self._db.query(Usuario).filter_by(email=identificador).first() is not None

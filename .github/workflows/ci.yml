@@ -100,7 +100,7 @@ jobs:
           JWT_SECRET_KEY: ci-descartavel-jwt-secret-key-0123456789abcdef-xyz
           REDIS_URL: redis://localhost:6379/0
           CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-        run: pytest -q tests/integration/test_rls_postgres.py
+        run: pytest -q tests/integration/test_rls_postgres.py tests/integration/test_rls_postgres_etapa2.py
 
   frontend:
     runs-on: ubuntu-latest

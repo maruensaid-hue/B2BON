@@ -88,6 +88,8 @@ def por_empresa(db: Session, empresa_tenant_id: str, participante_id: int):
     participante = next((p for p in nativo.participantes_da_empresa(db, LADO, empresa_tenant_id) if p.id == participante_id), None)
     if participante is None:
         raise NaoEncontrado(NAO_ENCONTRADO)
+    # O convite é desta empresa (conferido acima, no contexto dela); a rodada e o que o fornecedor grava nela são dados do COMPRADOR, como no acesso por link (RLS, D-111).
+    rls.definir_tenant(db, participante.tenant_id)
     return participante
 
 

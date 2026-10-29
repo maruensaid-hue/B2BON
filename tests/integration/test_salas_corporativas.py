@@ -120,5 +120,5 @@ def test_tarefa_interna_nao_atribui_a_outra_empresa_e_empresa_de_fora_nao_entra(
 
     terceiro = criar_usuario_autenticado("tenant-terceiro-sala", papel="admin", email="admin@terceiro-sala.com")
     for path in (f"/salas/{sala_id}/workspace", f"/salas/{sala_id}/canais", f"/salas/{sala_id}/negocio"):
-        assert client.get(R + path, headers=terceiro).status_code == 403, path
-    assert client.post(f"{R}/salas/{sala_id}/documentos", files={"arquivo": ("a.txt", b"x", "text/plain")}, headers=terceiro).status_code == 403
+        assert client.get(R + path, headers=terceiro).status_code in (403, 404), path  # 403 da aplicação, ou 404 quando o RLS (D-111) esconde a sala
+    assert client.post(f"{R}/salas/{sala_id}/documentos", files={"arquivo": ("a.txt", b"x", "text/plain")}, headers=terceiro).status_code in (403, 404)

@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db import rls
 from app.models.auditoria import AuditLog
 from app.models.configuracao_relatorio import ConfiguracaoRelatorio
 from app.models.licenca import Licenca
@@ -124,8 +125,12 @@ def _tenant_ids_visiveis(db: Session, usuario_ou_tenant_id, papel: str | None = 
     from app.services import tenant_service
 
     if papel == "super_admin":
-        return [t.id for t in tenant_service.listar_tenants(db)]
-    return [t.id for t in tenant_service.listar_subarvore(db, usuario_ou_tenant_id)]
+        ids = [t.id for t in tenant_service.listar_tenants(db)]
+        rls.ampliar_leitura(db, rls.LEITURA_TOTAL)  # o relatório lê as linhas desses tenants: o RLS (D-111) só as mostra com a leitura ampliada de propósito
+        return ids
+    ids = [t.id for t in tenant_service.listar_subarvore(db, usuario_ou_tenant_id)]
+    rls.ampliar_leitura(db, ids)
+    return ids
 
 
 def dashboard(db: Session, usuario: Usuario, periodo_dias: int, plan_limits: PlanLimitsProvider) -> dict:

@@ -6,8 +6,11 @@ A senha vem do ambiente (nunca de argumento de linha de comando, que fica no his
 
 import os
 import sys
+from pathlib import Path
 
-from app.db.rls_sql import sql_papel_aplicacao
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # rodar como arquivo não põe a raiz do projeto no caminho do Python
+
+from app.db.rls_sql import sql_papel_aplicacao  # noqa: E402
 
 
 def main() -> int:

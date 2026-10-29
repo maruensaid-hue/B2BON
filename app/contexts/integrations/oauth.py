@@ -32,6 +32,7 @@ from app.contexts.integrations.adapters import http_base, pipedrive, salesforce
 from app.contexts.integrations.adapters.http_base import ClienteHttp, host_permitido
 from app.core.config import settings
 from app.core.crypto import obter_fernet
+from app.db import rls
 from app.models.integracao_crm import AutorizacaoOauthPendente
 
 VALIDADE = timedelta(minutes=10)
@@ -171,12 +172,15 @@ def callback(db: Session, sistema: str, codigo: str, state: str) -> str:
     credenciais = _trocar_codigo(sistema, codigo, dados)
     referencia = secrets.token_urlsafe(32)
     credenciais["_escrita"] = dados.get("e", False)  # removido antes de virar conexão
-    db.add(AutorizacaoOauthPendente(
-        id=referencia, tenant_id=dados["t"], usuario_id=int(dados["u"]), sistema=sistema, nome=dados.get("n") or sistema,
-        credenciais=json.dumps(credenciais), expira_em=datetime.now(UTC) + VALIDADE,
-    ))
-    db.query(AutorizacaoOauthPendente).filter(AutorizacaoOauthPendente.expira_em < datetime.now(UTC).replace(tzinfo=None)).delete()
-    db.commit()
+    # O callback chega sem usuário logado, mas o `state` é cifrado e autenticado pela chave do servidor e carrega o tenant que iniciou a conexão: é ele que define o
+    # contexto de tenant da gravação (RLS, D-111), nunca um valor enviado pelo navegador.
+    with rls.contexto_tenant(db, dados["t"]):
+        db.add(AutorizacaoOauthPendente(
+            id=referencia, tenant_id=dados["t"], usuario_id=int(dados["u"]), sistema=sistema, nome=dados.get("n") or sistema,
+            credenciais=json.dumps(credenciais), expira_em=datetime.now(UTC) + VALIDADE,
+        ))
+        db.query(AutorizacaoOauthPendente).filter(AutorizacaoOauthPendente.expira_em < datetime.now(UTC).replace(tzinfo=None)).delete()
+        db.commit()
     return referencia
 
 

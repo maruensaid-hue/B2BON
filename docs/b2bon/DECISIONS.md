@@ -1634,3 +1634,24 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Como as tabelas foram escolhidas**: só entram as que a sonda viu, na suíte inteira, tocadas apenas dentro do contexto do tenant dono. As 98 pendentes ficaram de fora, cada uma com o motivo no registro.
 - **A01 NÃO está resolvido.** O RLS só vale quando a API conecta com `b2bon_app`; hoje conecta com o dono, então a migração não muda nada em produção. Falta: dar contexto verificado a webhooks/cron globais/admin entre tenants/parceiros, entrar as tabelas pendentes (CRM central, `usuario`, `licenca`, `audit_log`, IA e créditos), revisar as listas dos contextos de sistema e fazer o rollout em staging e produção.
 - **Status**: ACEITA (etapa 1; A01 em andamento).
+
+## D-111 · 2026-10-29 · RLS no PostgreSQL, segunda etapa (achado A01 da auditoria)
+
+- **Problema**: a primeira etapa deixou 98 tabelas sem política (CRM central, `usuario`, `licenca`, `audit_log`, IA e créditos, Shoal entre empresas, sourcing, comissões e governo), porque eram tocadas por cron,
+  administração entre tenants, parceiros e webhooks sem um contexto verificado.
+- **Decisão**: entrar as 98 e fechar o isolamento no banco, com três escolhas explícitas.
+  1. **Contextos privilegiados com acesso total** (`plataforma`, só para rotas exclusivas de `super_admin`, e `sistema:<nome>`, para cron e webhooks). Alternativa descartada: política por rotina com a lista de
+     tabelas. Leitura negada pelo RLS devolve zero linhas, sem erro: uma lista incompleta faria um cron parar de trabalhar sem aviso. O RLS protege a API de usuários, que é onde está o risco de A01.
+  2. **Shoal com leitura compartilhada** (perfil, feed, necessidades), duas partes (seguidor, relacionamento, pergunta ao agente, convite da vitrine) e escopo herdado da sala. O banco impede escrita e remoção
+     de dado alheio; a visibilidade fina continua no código. O autor do original apaga os reposts (função `b2bon_post_cascata_do_tenant`).
+  3. **Ações entre empresas abrem o contexto do tenant-alvo depois de o código conferir a relação**, em vez de afrouxar a política: agente corporativo (conexão aceita), portal do fornecedor convidado
+     (convite), conta/solicitação de tenant filho (árvore e rede), OAuth (`state` cifrado), chave de parceiro (árvore) e provisionamento de tenant.
+- **Entregue**: migração `a3c5e7b9d1f2` (98 tabelas + `rls_privilegiado` nas 81 da primeira etapa + 9 buscas); funções `SECURITY DEFINER` mínimas (`b2bon_nome_do_autor`, `b2bon_oferta_principal`,
+  `b2bon_cobrador`, `b2bon_conectado`, `b2bon_raiz_da_rede`...); 16 testes novos em PostgreSQL real; sonda reexecutada na suíte inteira.
+- **Armadilhas encontradas e tratadas** (leitura negada não dá erro): e-mail duplicado e "já é assinante" passaram pela busca por e-mail; `saude_conta` e o Registro de Oportunidade consultavam antes de ampliar
+  a leitura; relatórios gerenciais e de consumo não ampliavam a leitura; o agente corporativo gastava créditos do alvo no contexto de quem perguntava.
+- **Achados do teste HTTP em PostgreSQL com RLS** (modo `B2BON_TESTE_PG_RLS_URL`): `INSERT` de notificação entre empresas falhava porque o SQLAlchemy acrescenta `RETURNING`; a identidade de rede do outro lado
+  não podia ser criada; reivindicar demonstração da reserva dava 500 (releitura do usuário sem contexto); a rota que cria versão do ROPA da plataforma não tinha controle de papel e agora exige `super_admin`.
+  Mudança visível: quem não é parte de uma sala recebe 404 (e não 403) com o RLS ligado.
+- **A01 NÃO está resolvido até o rollout.** Falta passar o roteiro completo em staging com o papel `b2bon_app` e, só então, produção. O RLS continua sem efeito enquanto a API conectar com o dono.
+- **Status**: ACEITA (etapa 2 implementada e testada localmente; staging e produção pendentes).

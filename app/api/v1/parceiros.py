@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_chave_api_atual, get_db, get_plan_limits_provider, limitar_por_chave_api
+from app.db import rls
 from app.models.chave_api_parceiro import ChaveApiParceiro
 from app.models.tenant import Tenant
 from app.providers.plan_limits.base import PlanLimitsProvider
@@ -19,8 +20,10 @@ router = APIRouter(
 
 
 def _exigir_tenant_na_arvore(db: Session, chave: ChaveApiParceiro, tenant_id: str) -> None:
+    # `chave.tenant_id` é lido ANTES de trocar o contexto: depois dele a linha da chave (do distribuidor) deixa de ser visível e o objeto não poderia mais ser recarregado.
     if tenant_id != chave.tenant_id and not tenant_service.e_ancestral(db, chave.tenant_id, tenant_id):
         raise NaoAutorizado("Este tenant não pertence à sua árvore.")
+    rls.definir_tenant(db, tenant_id)  # a árvore foi conferida: o resto da chamada é no tenant alvo, e só nele (RLS, D-111)
 
 
 @router.post("/tenants", response_model=TenantSchema, status_code=201)

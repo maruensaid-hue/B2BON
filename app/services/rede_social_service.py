@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -145,6 +145,16 @@ def status_conexao_com(db: Session, tenant_id_atual: str, tenant_id_outro: str) 
     return "nenhuma"  # recusada/desconectada voltam a poder ser solicitadas
 
 
+def _oferta_principal(db: Session, tenant_id: str) -> dict | None:
+    """Vitrine do diretório: nome e descrição da primeira oferta ativa da empresa. No PostgreSQL o RLS (D-111) não deixa um tenant ler as ofertas de outro, então a
+    vitrine vem de uma função que devolve só esses dois campos, e só de perfil que o diretório mostraria; nos demais bancos (testes) é a consulta direta."""
+    if db.get_bind().dialect.name == "postgresql":
+        linha = db.execute(text("SELECT nome, descricao FROM b2bon_oferta_principal(:t)"), {"t": tenant_id}).first()
+        return {"nome": linha.nome, "descricao": linha.descricao} if linha is not None else None
+    oferta = db.query(Oferta).filter_by(tenant_id=tenant_id, ativo=True).order_by(Oferta.id).first()
+    return {"nome": oferta.nome, "descricao": oferta.descricao} if oferta else None
+
+
 def listar_empresas(
     db: Session,
     tenant_id_atual: str,
@@ -159,7 +169,7 @@ def listar_empresas(
     (reaproveitada do PREDATOR, E1-H2, sem duplicar dado). Filtros (master
     prompt §59 Company Search, Fase 1C) são todos opcionais e combináveis."""
     garantir_perfil(db, tenant_id_atual)
-    query = db.query(PerfilEmpresa).filter(PerfilEmpresa.tenant_id != tenant_id_atual)
+    query = db.query(PerfilEmpresa).filter(PerfilEmpresa.tenant_id != tenant_id_atual)  # (a vitrine de cada empresa vem de `_oferta_principal`, abaixo)
     if setor:
         query = query.filter(PerfilEmpresa.setor == setor)
     if porte:
@@ -189,14 +199,11 @@ def listar_empresas(
 
     resultado = []
     for perfil in perfis:
-        oferta = (
-            db.query(Oferta).filter_by(tenant_id=perfil.tenant_id, ativo=True).order_by(Oferta.id).first()
-        )
         resultado.append(
             {
                 "perfil": perfil,
                 "status_conexao": status_conexao_com(db, tenant_id_atual, perfil.tenant_id),
-                "oferta_principal": {"nome": oferta.nome, "descricao": oferta.descricao} if oferta else None,
+                "oferta_principal": _oferta_principal(db, perfil.tenant_id),
                 "seguindo": perfil.tenant_id in tenants_seguidos,
             }
         )

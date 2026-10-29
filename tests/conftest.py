@@ -153,8 +153,95 @@ def cobranca_ativa(monkeypatch):
     monkeypatch.setattr(settings, "ai_creditos_modo", "ENFORCE")
 
 
+_PG_RLS_URL = os.environ.get("B2BON_TESTE_PG_RLS_URL")
+
+
+@pytest.fixture(scope="session")
+def _bancos_pg_rls():
+    """Modo opcional (D-111): os mesmos testes HTTP, só que contra PostgreSQL de verdade com o RLS ligado. Ligado por `B2BON_TESTE_PG_RLS_URL` (servidor onde se possa criar banco e papel).
+
+    O teste semeia e confere com o DONO das tabelas (que não passa pelo RLS); cada requisição HTTP usa uma sessão do papel de EXECUÇÃO (sem superusuário, sem BYPASSRLS), como em
+    produção. Pega o que a sonda não vê: consulta que, sob o RLS, devolve menos linhas sem dar erro. Sem a variável, não faz nada e a suíte segue em SQLite."""
+    if not _PG_RLS_URL:
+        yield None
+        return
+    import secrets
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from sqlalchemy import text
+    from sqlalchemy.engine import make_url
+
+    from app.db import rls_sql
+
+    sufixo = secrets.token_hex(4)
+    nome_banco, papel, senha = f"b2bon_suite_{sufixo}", f"b2bon_suite_app_{sufixo}", secrets.token_urlsafe(24)
+    base = make_url(_PG_RLS_URL)
+    admin = create_engine(base, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conexao:
+        conexao.execute(text(f'CREATE DATABASE "{nome_banco}"'))
+    url_dono = base.set(database=nome_banco)
+    ambiente = {
+        **os.environ,
+        "DATABASE_URL": url_dono.render_as_string(hide_password=False),
+        "CONFIGURACAO_WHATSAPP_ENCRYPTION_KEY": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",  # só para a migração rodar; chave de teste, sem valor
+    }
+    ambiente.pop("MIGRATION_DATABASE_URL", None)
+    resultado = subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=Path(__file__).resolve().parents[1], env=ambiente, capture_output=True, text=True)
+    assert resultado.returncode == 0, resultado.stderr[-2000:]
+    dono = create_engine(url_dono)
+    from sqlalchemy import event
+
+    @event.listens_for(dono, "connect")
+    def _sem_chave_estrangeira_no_semeio(conexao_dbapi, _registro):
+        # O SQLite dos testes não aplica chave estrangeira (vários testes semeiam linha de tenant que nem existe); na conexão do DONO (que semeia e confere) o PostgreSQL
+        # também não aplica. A conexão do papel de execução (a da requisição) continua aplicando tudo, como em produção.
+        cursor = conexao_dbapi.cursor()
+        cursor.execute("SET session_replication_role = replica")
+        cursor.close()
+        conexao_dbapi.commit()
+
+    with dono.begin() as conexao:
+        for comando in rls_sql.sql_papel_aplicacao(papel, senha):
+            conexao.execute(text(comando))
+    # `lock_timeout`: se algum teste ainda segurar um lock, a requisição falha em segundos em vez de travar a suíte inteira.
+    app_engine = create_engine(url_dono.set(username=papel, password=senha), pool_pre_ping=True, connect_args={"options": "-c lock_timeout=5000"})
+    consulta_nao_vazias = " UNION ALL ".join(f"SELECT '{t}' WHERE EXISTS (SELECT 1 FROM \"{t}\")" for t in Base.metadata.tables)
+    yield {"dono": dono, "app": app_engine, "consulta_nao_vazias": consulta_nao_vazias}
+    app_engine.dispose()
+    dono.dispose()
+    with admin.connect() as conexao:
+        conexao.execute(text(f'DROP DATABASE IF EXISTS "{nome_banco}" WITH (FORCE)'))
+        conexao.execute(text(f"DROP ROLE IF EXISTS {papel}"))
+    admin.dispose()
+
+
 @pytest.fixture()
-def db_session() -> Generator[Session, None, None]:
+def db_session(_bancos_pg_rls) -> Generator[Session, None, None]:
+    if _bancos_pg_rls is not None:
+        from sqlalchemy import text
+
+        # Sessão do DONO para o teste semear e conferir; a limpeza entre testes também é do dono (o papel de execução não tem TRUNCATE).
+        session = sessionmaker(autocommit=False, autoflush=False, bind=_bancos_pg_rls["dono"])()
+        session.info["pg_app_engine"] = _bancos_pg_rls["app"]
+        try:
+            yield session
+        finally:
+            session.rollback()
+            session.close()
+            # Truncar as 200+ tabelas a cada teste custa segundos; trunca só as que têm linha e zera só as sequências que andaram (os testes contam com ids que recomeçam em 1).
+            with _bancos_pg_rls["dono"].begin() as conexao:
+                nao_vazias = [linha[0] for linha in conexao.execute(text(_bancos_pg_rls["consulta_nao_vazias"])).all()]
+                if nao_vazias:
+                    # `replica` desliga os gatilhos de chave estrangeira nesta transação (precisa de superusuário, que é o dono do banco descartável): DELETE em qualquer ordem, sem a
+                    # troca de arquivos do TRUNCATE.
+                    conexao.execute(text("SET LOCAL session_replication_role = replica"))
+                    for tabela in nao_vazias:
+                        conexao.execute(text(f'DELETE FROM "{tabela}"'))
+                for (sequencia,) in conexao.execute(text("SELECT schemaname || '.' || sequencename FROM pg_sequences WHERE last_value IS NOT NULL")).all():
+                    conexao.execute(text(f"SELECT setval('{sequencia}', 1, false)"))
+        return
     # StaticPool: o TestClient roda os endpoints em outra thread (via
     # anyio.to_thread); sem StaticPool cada thread pegaria uma conexão
     # nova do pool, e SQLite `:memory:` sem StaticPool = um banco vazio
@@ -302,6 +389,14 @@ def client(
     central_negocios_service.resetar_cache()
 
     def override_get_db() -> Generator[Session, None, None]:
+        engine_app = db_session.info.get("pg_app_engine")
+        if engine_app is not None:  # modo PostgreSQL com RLS: sessão própria do papel de execução por requisição, como em produção
+            sessao = sessionmaker(autocommit=False, autoflush=False, bind=engine_app)()
+            try:
+                yield sessao
+            finally:
+                sessao.close()
+            return
         # Em produção cada requisição tem sessão própria e nasce sem contexto de RLS; aqui a sessão é compartilhada com a fixture, então zera o contexto herdado.
         db_session.info.pop("rls_contexto", None)
         yield db_session
@@ -345,6 +440,19 @@ def client(
 
     with TestClient(app) as test_client:
         test_client.headers.update({"Authorization": f"Bearer {token}", "X-Webhook-Secret": SEGREDO_WEBHOOK_INTERNO_TESTE})
+        if db_session.info.get("pg_app_engine") is not None:
+            # Modo PostgreSQL com RLS: o teste semeia numa sessão e a requisição usa outra. No SQLite a sessão é uma só, então o que o teste já gravou vale para a requisição;
+            # aqui o semeio é confirmado antes de cada chamada (e o que a requisição gravou é relido depois).
+            requisicao_original = test_client.request
+
+            def requisicao_com_semeio_confirmado(*args, **kwargs):
+                db_session.commit()
+                try:
+                    return requisicao_original(*args, **kwargs)
+                finally:
+                    db_session.expire_all()
+
+            test_client.request = requisicao_com_semeio_confirmado
         yield test_client
     app.dependency_overrides.clear()
 

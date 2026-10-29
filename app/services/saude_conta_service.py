@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
 from app.contexts.map import contract as map_contract
+from app.db import rls
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.conta import Conta
@@ -18,8 +19,10 @@ _TIPOS_VALIDOS = map_contract.TIPOS_INTERACAO_VALIDOS
 
 
 def _obter_conta(db: Session, usuario: Usuario, conta_id: int) -> Conta:
+    # O escopo vem ANTES da consulta: é ele que amplia a leitura para a subárvore do usuário (RLS, D-111); sem isso a conta de um tenant filho nem seria encontrada.
+    tenant_ids = tenant_service.tenant_ids_no_escopo(db, usuario, None)
     conta = db.query(Conta).filter_by(id=conta_id).one_or_none()
-    if conta is None or conta.tenant_id not in tenant_service.tenant_ids_no_escopo(db, usuario, None):
+    if conta is None or conta.tenant_id not in tenant_ids:
         raise NaoEncontrado(f"Conta {conta_id} não encontrada")
     return conta
 
@@ -31,22 +34,24 @@ def registrar_interacao(
         raise ValidacaoFalhou(f"Tipo de interação inválido: {tipo}")
     conta = _obter_conta(db, usuario, conta_id)
 
-    interacao = InteracaoConta(
-        tenant_id=conta.tenant_id,
-        conta_id=conta_id,
-        tipo=tipo,
-        descricao=descricao,
-        criado_por_usuario_id=int(ator_id) if ator_id else None,
-    )
-    db.add(interacao)
-    db.flush()
+    # A conta pode ser de um tenant filho (hierarquia): o que se grava sobre ela pertence a esse tenant, e o escopo já foi conferido em `_obter_conta` (RLS, D-111).
+    with rls.contexto_tenant(db, conta.tenant_id):
+        interacao = InteracaoConta(
+            tenant_id=conta.tenant_id,
+            conta_id=conta_id,
+            tipo=tipo,
+            descricao=descricao,
+            criado_por_usuario_id=int(ator_id) if ator_id else None,
+        )
+        db.add(interacao)
+        db.flush()
 
-    auditoria_service.registrar(
-        db, conta.tenant_id, "interacao_conta_registrada", "interacao_conta", interacao.id, ator_id, {"tipo": tipo},
-        conta_id=conta_id,
-    )
-    db.commit()
-    db.refresh(interacao)
+        auditoria_service.registrar(
+            db, conta.tenant_id, "interacao_conta_registrada", "interacao_conta", interacao.id, ator_id, {"tipo": tipo},
+            conta_id=conta_id,
+        )
+        db.commit()
+        db.refresh(interacao)
     return interacao
 
 
@@ -252,11 +257,12 @@ def atribuir_vendedor(
         if vendedor is None:
             raise NaoEncontrado(f"Usuário {vendedor_usuario_id} não encontrado neste tenant")
 
-    conta.vendedor_usuario_id = vendedor_usuario_id
-    auditoria_service.registrar(
-        db, conta.tenant_id, "conta_vendedor_atribuido", "conta", conta.id, ator_id,
-        {"vendedor_usuario_id": vendedor_usuario_id}, conta_id=conta.id,
-    )
-    db.commit()
-    db.refresh(conta)
+    with rls.contexto_tenant(db, conta.tenant_id):  # a conta é do tenant dela, mesmo quando quem atribui está num tenant acima (RLS, D-111)
+        conta.vendedor_usuario_id = vendedor_usuario_id
+        auditoria_service.registrar(
+            db, conta.tenant_id, "conta_vendedor_atribuido", "conta", conta.id, ator_id,
+            {"vendedor_usuario_id": vendedor_usuario_id}, conta_id=conta.id,
+        )
+        db.commit()
+        db.refresh(conta)
     return conta

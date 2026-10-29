@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import re
 
+from app.models import rls_lado_sourcing as _sourcing
+
 FUNCOES_BASE = (
     "CREATE OR REPLACE FUNCTION b2bon_tenant() RETURNS text LANGUAGE sql STABLE AS $$ SELECT NULLIF(current_setting('app.tenant_id', true), '') $$",
     "CREATE OR REPLACE FUNCTION b2bon_escopo() RETURNS text LANGUAGE sql STABLE AS $$ SELECT NULLIF(current_setting('app.escopo', true), '') $$",
@@ -34,6 +36,7 @@ FUNCOES_DO_PAI = {
 
 
 def sql_funcoes() -> list[str]:
+    """Funções da primeira etapa (congeladas: a migração `e7a9c1d3f5b8` as usa). As da segunda etapa estão em `sql_funcoes_etapa2`."""
     comandos = list(FUNCOES_BASE)
     for nome, corpo in FUNCOES_DO_PAI.items():
         comandos.append(f"CREATE OR REPLACE FUNCTION {nome}(integer) RETURNS boolean LANGUAGE sql {_DEFINER} AS $$ {corpo} $$")
@@ -43,6 +46,100 @@ def sql_funcoes() -> list[str]:
 def sql_remover_funcoes() -> list[str]:
     nomes = ["b2bon_tenant()", "b2bon_escopo()", "b2bon_chave()", "b2bon_visivel(text)"] + [f"{n}(integer)" for n in FUNCOES_DO_PAI]
     return [f"DROP FUNCTION IF EXISTS {nome}" for nome in nomes]
+
+
+# --- Segunda etapa (D-111) -------------------------------------------------------------------------------------------------------------------------
+# Contextos PRIVILEGIADOS: `plataforma` (rotas de super_admin, escolhido pelo papel do usuário já validado no banco) e `sistema:<nome>` (cron e webhooks depois da assinatura
+# ou do segredo conferidos). Nunca vêm de dado enviado pelo cliente. Têm acesso total às tabelas protegidas: o que o RLS garante na API de usuários (o grosso da superfície de
+# ataque) NÃO se estende a eles; o risco residual está descrito em docs/b2bon/RLS.md. A razão de não listar tabela por rotina de cron: leitura negada pelo RLS não dá erro, devolve
+# zero linhas, e uma rotina agendada com lista incompleta pararia de trabalhar sem nenhum aviso.
+FUNCOES_ETAPA2 = (
+    "CREATE OR REPLACE FUNCTION b2bon_privilegiado() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT b2bon_escopo() = 'plataforma' OR b2bon_escopo() LIKE 'sistema:%' $$",
+    # Tenant que paga a licença de quem está no contexto: sobe a cadeia de `tenant_pai_id` enquanto o tenant é de cobrança consolidada (mesma regra de
+    # `deps.verificar_licenca_ativa`, no máximo 5 níveis). Lê só a tabela `tenant`, que é global.
+    """CREATE OR REPLACE FUNCTION b2bon_cobrador() RETURNS text LANGUAGE sql STABLE AS $$
+    WITH RECURSIVE cadeia(id, pai, consolidada, nivel) AS (
+        SELECT id, tenant_pai_id, modo_cobranca = 'consolidada', 0 FROM tenant WHERE id = b2bon_tenant()
+        UNION ALL
+        SELECT t.id, t.tenant_pai_id, t.modo_cobranca = 'consolidada', c.nivel + 1
+        FROM cadeia c JOIN tenant t ON t.id = c.pai
+        WHERE c.consolidada AND c.pai IS NOT NULL AND c.nivel < 5
+    )
+    SELECT id FROM cadeia ORDER BY nivel DESC LIMIT 1 $$""",
+    # Raiz da rede do tenant do contexto (sobe `tenant_pai_id` até o tenant sem pai). O Registro de Oportunidade confere conflito de CNPJ na rede inteira.
+    """CREATE OR REPLACE FUNCTION b2bon_raiz_da_rede() RETURNS text LANGUAGE sql STABLE AS $$
+    WITH RECURSIVE cadeia(id, pai, nivel) AS (
+        SELECT id, tenant_pai_id, 0 FROM tenant WHERE id = b2bon_tenant()
+        UNION ALL
+        SELECT t.id, t.tenant_pai_id, c.nivel + 1 FROM cadeia c JOIN tenant t ON t.id = c.pai WHERE c.pai IS NOT NULL AND c.nivel < 10
+    )
+    SELECT id FROM cadeia ORDER BY nivel DESC LIMIT 1 $$""",
+    # Conexão aceita entre o tenant do contexto e outro (o Shoal mostra dado a quem está conectado). Lê `conexao_empresa` sem passar pelo RLS dela.
+    f"""CREATE OR REPLACE FUNCTION b2bon_conectado(outro text) RETURNS boolean LANGUAGE sql {_DEFINER} AS $$
+    SELECT EXISTS (SELECT 1 FROM conexao_empresa c WHERE c.status = 'aceita'
+                   AND ((c.tenant_id_origem = b2bon_tenant() AND c.tenant_id_destino = outro) OR (c.tenant_id_destino = b2bon_tenant() AND c.tenant_id_origem = outro))) $$""",
+    # Post do tenant OU repost de um post do tenant: quem publica o original apaga os reposts e o que pendura neles.
+    f"""CREATE OR REPLACE FUNCTION b2bon_post_cascata_do_tenant(integer) RETURNS boolean LANGUAGE sql {_DEFINER} AS $$
+    SELECT EXISTS (SELECT 1 FROM post_rede_social p WHERE p.id = $1 AND (p.tenant_id = b2bon_tenant()
+        OR EXISTS (SELECT 1 FROM post_rede_social o WHERE o.id = p.post_original_id AND o.tenant_id = b2bon_tenant()))) $$""",
+    # Nome de quem publicou ou comentou no feed da rede (o feed mostra o autor de qualquer empresa). Devolve só o nome e só de quem de fato tem post ou comentário: a função
+    # não serve para descobrir usuário de outra empresa por id.
+    f"""CREATE OR REPLACE FUNCTION b2bon_nome_do_autor(integer) RETURNS text LANGUAGE sql {_DEFINER} AS $$
+    SELECT u.nome FROM usuario u WHERE u.id = $1 AND (EXISTS (SELECT 1 FROM post_rede_social p WHERE p.usuario_autor_id = u.id)
+                                                      OR EXISTS (SELECT 1 FROM comentario_post c WHERE c.usuario_id = u.id)) $$""",
+    # Vitrine do diretório: nome e descrição da oferta principal de uma empresa, só para perfil que o diretório mostraria (visível, ou conectado ao tenant do contexto). A tabela
+    # `oferta` inteira (diferenciais, provas, materiais) continua só do dono.
+    f"""CREATE OR REPLACE FUNCTION b2bon_oferta_principal(tenant text) RETURNS TABLE(nome text, descricao text) LANGUAGE sql {_DEFINER} AS $$
+    SELECT o.nome, o.descricao FROM oferta o
+    WHERE o.tenant_id = tenant AND o.ativo
+      AND EXISTS (SELECT 1 FROM perfil_empresa p WHERE p.tenant_id = tenant AND (p.visivel_no_diretorio OR b2bon_conectado(tenant) OR tenant = b2bon_tenant()))
+    ORDER BY o.id LIMIT 1 $$""",
+    # Canal de uma sala da qual o tenant é parte.
+    f"""CREATE OR REPLACE FUNCTION b2bon_canal_do_tenant(integer) RETURNS boolean LANGUAGE sql {_DEFINER} AS $$
+    SELECT EXISTS (SELECT 1 FROM canal_sala c JOIN sala_corporativa s ON s.id = c.sala_id
+                   WHERE c.id = $1 AND (s.tenant_id_a = b2bon_tenant() OR s.tenant_id_b = b2bon_tenant())) $$""",
+    f"""CREATE OR REPLACE FUNCTION b2bon_assinatura_parceiro_do_tenant(integer) RETURNS boolean LANGUAGE sql {_DEFINER} AS $$
+    SELECT EXISTS (SELECT 1 FROM assinatura_webhook_parceiro a WHERE a.id = $1 AND a.tenant_id = b2bon_tenant()) $$""",
+) + _sourcing.FUNCOES  # convite de fornecedor (lê as tabelas `*_sourcing`; ver o arquivo para o motivo de morar em app/models)
+
+NOMES_FUNCOES_ETAPA2 = (
+    "b2bon_privilegiado()", "b2bon_cobrador()", "b2bon_raiz_da_rede()", "b2bon_conectado(text)", "b2bon_post_cascata_do_tenant(integer)",
+    "b2bon_nome_do_autor(integer)", "b2bon_oferta_principal(text)", "b2bon_canal_do_tenant(integer)", "b2bon_assinatura_parceiro_do_tenant(integer)", "b2bon_processo_convidado(integer)",
+)
+
+
+def sql_funcoes_etapa2() -> list[str]:
+    return list(FUNCOES_ETAPA2)
+
+
+def sql_remover_funcoes_etapa2() -> list[str]:
+    return [f"DROP FUNCTION IF EXISTS {nome}" for nome in NOMES_FUNCOES_ETAPA2]
+
+
+def sql_politica(tabela: str, nome: str, comando: str, usando: str | None = None, verificando: str | None = None) -> list[str]:
+    """Política avulsa (`comando`: ALL, SELECT, INSERT, UPDATE ou DELETE). Usada quando o desenho da tabela não cabe nos moldes acima (licença do tenant cobrador, remoção
+    em cascata dos reposts, convite de fornecedor...). `INSERT` só aceita `verificando`; `SELECT` e `DELETE` só `usando`."""
+    if comando not in {"ALL", "SELECT", "INSERT", "UPDATE", "DELETE"}:
+        raise ValueError(f"comando inválido: {comando}")
+    if not re.fullmatch(r"rls_[a-z0-9_]{1,50}", nome):
+        raise ValueError(f"nome de política inválido: {nome}")
+    partes = [f"CREATE POLICY {nome} ON {tabela} FOR {comando}"]
+    if usando is not None:
+        partes.append(f"USING ({usando})")
+    if verificando is not None:
+        partes.append(f"WITH CHECK ({verificando})")
+    return [" ".join(partes)]
+
+
+def sql_privilegiado(tabela: str) -> list[str]:
+    """Contextos de plataforma e de sistema enxergam e gravam a tabela inteira."""
+    return sql_politica(tabela, "rls_privilegiado", "ALL", "b2bon_privilegiado()", "b2bon_privilegiado()")
+
+
+def sql_insercao_entre_tenants(tabela: str) -> list[str]:
+    """Qualquer tenant pode INSERIR (ex.: notificar a outra empresa); ler, alterar e apagar continua só do dono. Atenção: `INSERT ... RETURNING` exige também a política de
+    leitura, então quem insere para outro tenant usa INSERT sem RETURNING (SQLAlchemy Core, não o ORM)."""
+    return sql_politica(tabela, "rls_insercao_entre_tenants", "INSERT", verificando="b2bon_escopo() = 'tenant'")
 
 
 def _nome(prefixo: str, sufixo: str = "") -> str:

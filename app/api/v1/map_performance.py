@@ -12,9 +12,19 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_usuario_atual
 from app.contexts.map import contract as map_contract
+from app.db import rls
 from app.models.usuario import Usuario
 
-router = APIRouter(prefix="/map/performance", tags=["map-performance"])
+
+def _abrir_gestao_comercial(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)) -> None:
+    """A gestão comercial da CyberFort (super_admin) e cada representante vinculado enxergam números que cruzam empresas por desenho (ofertas, equipe e atividade
+    de vários tenants). Quem passa em `acesso` (a mesma regra que o contexto já aplica) ganha o contexto de plataforma só nestas rotas; os demais ficam no contexto de
+    tenant e recebem a recusa do próprio serviço (RLS, D-111)."""
+    if map_contract.performance.acesso(db, usuario)["pode_ver"]:
+        rls.definir_plataforma(db)
+
+
+router = APIRouter(prefix="/map/performance", tags=["map-performance"], dependencies=[Depends(_abrir_gestao_comercial)])
 
 
 class PoliticaSchema(BaseModel):

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_tenant_id
+from app.api.deps import exigir_papel, get_ator_id, get_db, get_tenant_id
 from app.schemas.registro_tratamento import (
     MinimizacaoResponseSchema,
     RegistroTratamentoCreateSchema,
@@ -18,7 +18,8 @@ def listar_ropa_plataforma(db: Session = Depends(get_db)) -> list[RegistroTratam
     return ropa_service.listar_ativos_plataforma(db)
 
 
-@router.post("", response_model=RegistroTratamentoSchema, status_code=201)
+# Registro de tratamento DA PLATAFORMA: só quem administra a plataforma altera (antes não havia controle de papel; a auditoria vai para o tenant "plataforma", o que o RLS só aceita no contexto de plataforma).
+@router.post("", response_model=RegistroTratamentoSchema, status_code=201, dependencies=[Depends(exigir_papel("super_admin"))])
 def criar_versao_ropa_plataforma(
     dados: RegistroTratamentoCreateSchema,
     ator_id: str | None = Depends(get_ator_id),

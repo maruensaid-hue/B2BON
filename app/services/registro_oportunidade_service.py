@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.db import rls
 from app.models.conta import Conta
 from app.models.registro_oportunidade import RegistroOportunidade
 from app.models.solicitacao_desconto import SolicitacaoDesconto
@@ -21,6 +22,15 @@ def _normalizar_cnpj(cnpj: str) -> str:
     if len(digitos) != 14:
         raise ValidacaoFalhou("CNPJ inválido — informe os 14 dígitos.")
     return digitos
+
+
+def _ampliar_leitura_para_a_rede(db: Session, usuario: Usuario) -> None:
+    """O Registro de Oportunidade vale na REDE inteira (o PRIME de um CNPJ é decidido entre todos os tenants da árvore). O RLS (D-111) só enxerga outros tenants quando a
+    leitura é ampliada de propósito, e aqui a regra é a da própria rede: super_admin vê tudo, os demais a rede a que o tenant pertence."""
+    if usuario.papel == "super_admin":
+        rls.ampliar_leitura(db, rls.LEITURA_TOTAL)
+    else:
+        rls.ampliar_leitura(db, tenant_service.tenant_ids_da_rede(db, usuario.tenant_id))
 
 
 def registrar_oportunidade(
@@ -46,6 +56,7 @@ def registrar_oportunidade(
 
     if conta_id is not None:
         tenant_ids_rede = tenant_service.tenant_ids_da_rede(db, usuario.tenant_id)
+        _ampliar_leitura_para_a_rede(db, usuario)  # a conta pode ser de outro tenant da rede
         conta = db.query(Conta).filter_by(id=conta_id).one_or_none()
         if conta is None or conta.tenant_id not in tenant_ids_rede:
             raise NaoEncontrado(f"Conta {conta_id} não encontrada")
@@ -101,8 +112,9 @@ def vincular_conta_criada(db: Session, conta: Conta) -> None:
     )
     if registro is None:
         return
-    registro.conta_id = conta.id
-    db.commit()
+    with rls.contexto_tenant(db, registro.tenant_id):  # o registro é do revendedor que o criou, não de quem criou a conta (RLS, D-111)
+        registro.conta_id = conta.id
+        db.commit()
 
 
 def _obter_registro(db: Session, registro_id: int) -> RegistroOportunidade:
@@ -129,18 +141,19 @@ def atualizar_status(
 ) -> RegistroOportunidade:
     if novo_status not in _STATUS_ATIVOS_ENCERRAVEIS:
         raise ValidacaoFalhou(f"Status inválido: {novo_status}")
+    tenant_ids_no_escopo = tenant_service.tenant_ids_no_escopo(db, usuario, None)  # antes da consulta: é o que amplia a leitura para a subárvore (RLS, D-111)
     registro = _obter_registro(db, registro_id)
-    tenant_ids_no_escopo = tenant_service.tenant_ids_no_escopo(db, usuario, None)
     if registro.tenant_id not in tenant_ids_no_escopo:
         raise NaoEncontrado(f"Registro de Oportunidade {registro_id} não encontrado")
 
-    registro.status = novo_status
-    auditoria_service.registrar(
-        db, registro.tenant_id, "registro_oportunidade_status_atualizado", "registro_oportunidade", registro.id,
-        ator_id, {"novo_status": novo_status},
-    )
-    db.commit()
-    db.refresh(registro)
+    with rls.contexto_tenant(db, registro.tenant_id):  # o registro pode ser de um tenant filho
+        registro.status = novo_status
+        auditoria_service.registrar(
+            db, registro.tenant_id, "registro_oportunidade_status_atualizado", "registro_oportunidade", registro.id,
+            ator_id, {"novo_status": novo_status},
+        )
+        db.commit()
+        db.refresh(registro)
     return registro
 
 
@@ -192,10 +205,12 @@ def listar_solicitacoes_desconto(db: Session, usuario: Usuario) -> list[Solicita
         RegistroOportunidade, SolicitacaoDesconto.registro_oportunidade_id == RegistroOportunidade.id
     )
     if usuario.papel == "super_admin":
+        _ampliar_leitura_para_a_rede(db, usuario)
         return query.order_by(SolicitacaoDesconto.criado_em.desc()).all()
 
     rede_raiz_tenant_id = tenant_service.obter_raiz_da_rede(db, usuario.tenant_id)
     if usuario.papel == "admin" and usuario.tenant_id == rede_raiz_tenant_id:
+        _ampliar_leitura_para_a_rede(db, usuario)  # o fabricante vê os pedidos de toda a rede
         return (
             query.filter(RegistroOportunidade.rede_raiz_tenant_id == rede_raiz_tenant_id)
             .order_by(SolicitacaoDesconto.criado_em.desc())
@@ -215,6 +230,9 @@ def decidir_solicitacao_desconto(
     """Só o admin do tenant RAIZ da rede (o "fabricante") decide — não
     qualquer admin da subárvore, já que é ele quem concede a
     vantagem/desconto pra toda a rede. `super_admin` sempre pode."""
+    # Quem decide é de outro tenant (o fabricante) e a solicitação é de um revendedor: a leitura da rede abre antes da consulta, e cada gravação vai para o tenant dono dela.
+    # Quem não é super_admin nem o tenant raiz só descobre isso depois de ler; a recusa abaixo é a mesma de antes (não existe para ele).
+    _ampliar_leitura_para_a_rede(db, usuario)
     solicitacao = db.query(SolicitacaoDesconto).filter_by(id=solicitacao_id).one_or_none()
     if solicitacao is None:
         raise NaoEncontrado(f"Solicitação de desconto {solicitacao_id} não encontrada")
@@ -223,14 +241,17 @@ def decidir_solicitacao_desconto(
     if usuario.papel != "super_admin" and usuario.tenant_id != registro.rede_raiz_tenant_id:
         raise NaoEncontrado(f"Solicitação de desconto {solicitacao_id} não encontrada")
 
-    solicitacao.status = "aprovado" if aprovar else "rejeitado"
-    solicitacao.aprovador_usuario_id = usuario.id
-    solicitacao.motivo_decisao = motivo
-    solicitacao.decidido_em = datetime.now(UTC)
-    auditoria_service.registrar(
-        db, registro.rede_raiz_tenant_id, "solicitacao_desconto_decidida", "solicitacao_desconto", solicitacao.id,
-        ator_id, {"aprovado": aprovar, "motivo": motivo},
-    )
-    db.commit()
-    db.refresh(solicitacao)
+    with rls.contexto_tenant(db, solicitacao.tenant_id):
+        solicitacao.status = "aprovado" if aprovar else "rejeitado"
+        solicitacao.aprovador_usuario_id = usuario.id
+        solicitacao.motivo_decisao = motivo
+        solicitacao.decidido_em = datetime.now(UTC)
+    with rls.contexto_tenant(db, registro.rede_raiz_tenant_id):  # a auditoria da decisão é do tenant raiz; as duas gravações seguem na MESMA transação
+        auditoria_service.registrar(
+            db, registro.rede_raiz_tenant_id, "solicitacao_desconto_decidida", "solicitacao_desconto", solicitacao.id,
+            ator_id, {"aprovado": aprovar, "motivo": motivo},
+        )
+        db.commit()
+    with rls.contexto_tenant(db, solicitacao.tenant_id):
+        db.refresh(solicitacao)
     return solicitacao

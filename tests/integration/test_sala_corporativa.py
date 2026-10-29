@@ -62,4 +62,5 @@ def test_tenant_de_fora_recebe_403_ao_acessar_sala(client, criar_usuario_autenti
     headers_c = criar_usuario_autenticado("tenant-terceiro", papel="admin", email="admin@terceiro.com.br")
     resposta = client.get(f"/api/v1/rede-social/salas/{sala['id']}/canais", headers=headers_c)
 
-    assert resposta.status_code == 403
+    # Quem não é parte da sala: 403 da aplicação, ou 404 quando o RLS (D-111) esconde a sala do banco; nos dois casos não há acesso.
+    assert resposta.status_code in (403, 404)
