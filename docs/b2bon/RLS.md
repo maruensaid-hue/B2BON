@@ -2,8 +2,8 @@
 
 Resposta ao achado **A01** da auditoria de 28/10/2026: o isolamento entre empresas dependia de cada consulta filtrar `tenant_id`. Isto acrescenta uma **segunda barreira no banco**
 (Row-Level Security), sem trocar a primeira. **Primeira etapa (D-110)**: mecanismo e 81 tabelas. **Segunda etapa (D-111)**: as outras 98 tabelas com `tenant_id`, os contextos privilegiados
-(plataforma e sistema) e os fluxos entre empresas. Hoje **todas as 179 tabelas com dado de empresa têm política** e as 33 restantes são globais por natureza. **A01 só se
-considera resolvido depois do rollout em produção com o papel de execução** (veja "O que ainda não está coberto").
+(plataforma e sistema) e os fluxos entre empresas. Hoje **todas as 179 tabelas com dado de empresa têm política** e as 33 restantes são globais por natureza. **Desde
+29/10/2026 a API de produção conecta com o papel de execução e o A01 está encerrado (D-112)**; os limites que permanecem estão em "O que ainda não está coberto".
 
 > Enquanto a aplicação conectar com o papel dono das tabelas (ou com qualquer papel com `BYPASSRLS`), o RLS **não tem efeito nenhum**. Ele só protege depois do passo
 > "Ligar" abaixo. Por isso a migração é segura de aplicar sozinha.
@@ -62,6 +62,8 @@ descrição, só de perfil que o diretório mostraria).
 - Variáveis de ambiente: `DATABASE_URL` = papel de execução; `MIGRATION_DATABASE_URL` = papel dono (só o Alembic usa; vazio = usa `DATABASE_URL`).
 
 ## 3. Rollout (nesta ordem, primeiro em staging)
+
+> Executado em 29/10/2026: staging com o roteiro de leitura, produção com o papel `b2bon_app` (deploy das 19:55 UTC). Registro e ressalvas em D-112; passo a passo da produção em `RLS_PRODUCAO_PASSO_A_PASSO.md`.
 
 1. **Aplicar as migrações** `e7a9c1d3f5b8` (primeira etapa) e `a3c5e7b9d1f2` (segunda etapa) com o papel dono (`alembic upgrade head`). Criam as funções e as políticas e ligam o RLS nas tabelas protegidas. Sem efeito enquanto a API usar o dono.
 2. **Criar o papel de execução** (revisar o SQL antes de rodar, com o papel dono; a senha vem do ambiente):
@@ -205,4 +207,5 @@ Nenhuma.
   os testes aceitam os dois. O mesmo vale para qualquer rota que antes achava a linha de outra empresa para só depois recusar: agora a linha nem aparece.
 - **Custo:** um `SELECT set_config(...)` extra por transação e mais um a cada troca de contexto dentro da requisição (agente corporativo, tenant filho). Medido no staging: sem diferença visível.
 - **Cobertura medida pelos testes:** caminhos que nenhum teste exercita podem faltar contexto. Por isso o rollout é primeiro em staging e a reversão é só voltar a `DATABASE_URL` ao papel dono.
-- **A01 só pode ser considerado resolvido** depois de a segunda etapa passar pelo roteiro completo em staging e a aplicação rodar em produção com o papel de execução.
+- **A01 foi encerrado em 29/10/2026 (D-112)** com a aplicação rodando em produção com o papel de execução, **sem** a janela de observação de 24 a 48 horas prevista e sem o roteiro completo de escrita em
+  staging (Shoal, Aprovações, Configuração, Registro de Oportunidade e atribuição de vendedor ficaram de fora). Tela vazia ou com zeros onde antes havia dado é o sintoma a procurar; a reversão é voltar `DATABASE_URL` ao papel dono.

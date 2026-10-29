@@ -3,7 +3,7 @@
 Objetivo: fazer a API de **produção** conectar com o papel `b2bon_app` (sem superusuário e sem `BYPASSRLS`). Só depois disso o RLS passa a proteger de verdade em produção; hoje ele está criado nas
 179 tabelas, mas a API conecta como `neondb_owner`, que o ignora. É o último passo para fechar o achado A01.
 
-> **Status (2026-10-29):** executado. O papel `b2bon_app` foi criado no branch `production`, `MIGRATION_DATABASE_URL` aponta para o dono e `DATABASE_URL` para `b2bon_app`; o deploy ficou Live às 19:55 e a produção aparece conectada como `b2bon_app`. Em observação por 24 a 48 horas; o A01 só passa a "resolvido" quando for declarado estável. Este documento fica como referência e como roteiro de reversão. Na execução real as senhas passaram pela conversa, então o "Depois que estiver estável" inclui trocar as senhas do `b2bon_app` e do `neondb_owner`.
+> **Status (2026-10-29):** executado. O papel `b2bon_app` foi criado no branch `production`, `MIGRATION_DATABASE_URL` aponta para o dono e `DATABASE_URL` para `b2bon_app`; o deploy ficou Live às 19:55 e a produção aparece conectada como `b2bon_app`. O A01 foi encerrado no mesmo dia por decisão do PO, sem a observação de 24 a 48 horas (D-112). Este documento fica como referência e como roteiro de reversão. Na execução real as senhas do `b2bon_app` e do `neondb_owner` passaram pela conversa; o PO informou que já foram trocadas.
 
 Estado de partida (confirmado em 2026-10-29): as duas migrações (`e7a9c1d3f5b8` e `a3c5e7b9d1f2`) já rodaram em produção; o branch `production` do Neon tem só o papel `neondb_owner`; o staging já roda assim
 desde o mesmo dia. Nada aqui altera dado nem esquema.

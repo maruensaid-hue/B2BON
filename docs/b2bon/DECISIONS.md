@@ -1623,7 +1623,7 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **A01 — isolamento (ALTA, risco sistêmico)**: a evidência da auditoria estava desatualizada: desde a V5.2.1 existe a varredura sistemática com dois tenants (`tests/integration/test_isolamento_sistematico.py`, com leitura, mutação e controle positivo) e a matriz por rota (`MATRIZ_ISOLAMENTO_ROTAS.md`, regenerada em 28/10). **RLS no PostgreSQL não foi implementado**: exige definir o tenant por transação atrás do pgbouncer, políticas para ~200 tabelas e exceções explícitas para o Shoal (cruzamento por desenho), cron e `super_admin`. É um projeto próprio, com teste de carga e plano de reversão, e fica como proposta.
 - **A07 — preços de planos no endpoint público**: **não alterado**, aguarda decisão comercial. `GET /planos` devolve os planos não self-service (por exemplo, o Government) com preços de licença; a própria auditoria pede para confirmar se a publicação é intencional.
 - **Fora do código**: bancos SQLite na pasta do OneDrive (`predator.db`, `onda_a_demo.db`, `dev.db`) — conferir se têm só dados fictícios; auditoria de dependências (`pip-audit` e `npm audit`) a rodar em ambiente com acesso ao índice.
-- **Status**: ACEITA (A07 e RLS pendentes).
+- **Status**: ACEITA (A07 pendente; o RLS foi concluído depois, em D-110 a D-112).
 
 ## D-110 · 2026-10-29 · RLS no PostgreSQL, primeira etapa (achado A01 da auditoria)
 
@@ -1653,5 +1653,16 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Achados do teste HTTP em PostgreSQL com RLS** (modo `B2BON_TESTE_PG_RLS_URL`): `INSERT` de notificação entre empresas falhava porque o SQLAlchemy acrescenta `RETURNING`; a identidade de rede do outro lado
   não podia ser criada; reivindicar demonstração da reserva dava 500 (releitura do usuário sem contexto); a rota que cria versão do ROPA da plataforma não tinha controle de papel e agora exige `super_admin`.
   Mudança visível: quem não é parte de uma sala recebe 404 (e não 403) com o RLS ligado.
-- **A01 NÃO está resolvido até o rollout.** Falta passar o roteiro completo em staging com o papel `b2bon_app` e, só então, produção. O RLS continua sem efeito enquanto a API conectar com o dono.
-- **Status**: ACEITA (etapa 2 implementada e testada localmente; staging e produção pendentes).
+- **Rollout**: staging e produção foram ligados em 29/10/2026 e o A01 foi encerrado; ver D-112 (inclui as ressalvas).
+- **Status**: ACEITA (etapa 2 implementada, testada e em produção desde 29/10/2026).
+
+## D-112 · 2026-10-29 · RLS ligado em produção; A01 encerrado
+
+- **Decisão do responsável**: depois de o staging passar pelo roteiro de leitura e de a produção ser trocada para o papel restrito, o PO pediu para **encerrar o A01 no mesmo dia**, sem esperar a leitura dos logs de 24 a 48 horas e considerando feita a troca das senhas expostas durante o rollout. A troca das senhas é informação do PO; não foi conferida pelo assistente.
+- **O que foi feito em produção**: papel `b2bon_app` criado no branch `production` do Neon (sem superusuário, sem `BYPASSRLS`, sem DDL, sem `TRUNCATE`, sem acesso a `alembic_version`) e testado só para leitura contra os dados reais antes da troca (sem contexto: zero linhas; com o tenant `cyberfort`: só as linhas dele). No Render, `MIGRATION_DATABASE_URL` = papel dono (só o Alembic) e `DATABASE_URL` = `b2bon_app`. Deploy das 19:55 UTC ficou Live; o Alembic rodou, a API subiu e o `/health` respondeu 200.
+- **O que foi verificado depois**: o Neon mostrou a produção conectada como `b2bon_app` (sessões com queries posteriores ao deploy) e o log do Render não trouxe `status=500`, `InsufficientPrivilege`, `row-level security`, `permission denied`, `OperationalError` nem `DeadlockDetected` nos primeiros minutos. O `403` do webhook do WhatsApp (Meta) já ocorria antes da troca e não tem relação com o RLS.
+- **Ressalvas aceitas ao encerrar** (o risco é de falta de contexto, que dá tela vazia ou com zeros e não erro): (1) o roteiro de escrita no staging foi dispensado (Shoal comentar/curtir/mensagem/sala, aprovar mensagem, salvar configuração, solicitar desconto no Registro de Oportunidade, atribuir vendedor); (2) a janela de observação de 24 a 48 horas e a leitura dos logs de produção do primeiro e do segundo dia não foram feitas; (3) o workflow `cron-envios.yml` e as telas principais ainda precisam ser exercitados em produção.
+- **Reversão** (segundos, sem migração, sem perda de dado): `DATABASE_URL` no Render volta à URL do papel dono e novo deploy. Se alguém reportar tela vazia ou com zeros, reverter primeiro e investigar depois.
+- **Limites que continuam valendo**: os de `RLS.md`, seção 7 (contextos de plataforma e de sistema com acesso total por desenho; leitura compartilhada do Shoal mais larga que a regra fina do código; sem proteção contra SQL arbitrário da própria aplicação).
+- **Pendente fora deste encerramento**: A07 (preços de planos no endpoint público, decisão comercial), MFA para administradores e atraso progressivo (A06), validade menor do token com refresh rotativo (A04).
+- **Status**: ACEITA (A01 encerrado em 29/10/2026 com as ressalvas acima).

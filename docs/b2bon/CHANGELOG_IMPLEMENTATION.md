@@ -1,13 +1,18 @@
 # CHANGELOG — IMPLEMENTATION
 
+## RLS ligado em produção; A01 encerrado (2026-10-29, D-112)
+
+- A API de produção passou a conectar com o papel restrito `b2bon_app` (sem superusuário e sem `BYPASSRLS`); o papel dono ficou só para as migrações (`MIGRATION_DATABASE_URL`). A partir de agora o banco impede, por conta própria, que uma empresa leia ou grave dado de outra pelas rotas comuns.
+- Encerrado por decisão do PO no mesmo dia, **sem** a observação de 24 a 48 horas e sem o roteiro de escrita completo no staging. Se uma tela vier vazia ou com zeros onde antes havia dado, voltar `DATABASE_URL` ao papel dono (segundos, sem perda de dado) e investigar. Ressalvas e limites em D-112 e `docs/b2bon/RLS.md`.
+
 ## RLS no banco, segunda etapa (2026-10-29, D-111)
 
 - As 98 tabelas que ainda dependiam só dos filtros do código passam a ter política no banco (CRM central, usuários, licenças, auditoria, IA e créditos, Shoal, sourcing, comissões e governo). Agora **todas as
-  179 tabelas com dado de empresa** têm Row-Level Security; as 33 restantes são globais (catálogos, preços, dados públicos). Continua sem efeito até a API usar o papel de execução.
+  179 tabelas com dado de empresa** têm Row-Level Security; as 33 restantes são globais (catálogos, preços, dados públicos). Passou a valer em produção em 29/10/2026 (D-112).
 - Rotas só de `super_admin`, cron e webhooks passam a ter um contexto próprio (acesso total, explícito e rastreável); ações entre empresas (agente corporativo, portal do fornecedor, tenant filho, solicitação
   de desconto, parceiros) abrem o contexto do tenant-alvo só depois de conferir a relação.
 - Corrigidos pontos em que o isolamento do banco faria a tela vir vazia sem erro (e-mail duplicado no cadastro, contas e registros de tenants filhos, relatórios gerenciais).
-- Documentação: `docs/b2bon/RLS.md` (matriz completa e riscos residuais) e D-111. **A01 segue em aberto até o rollout em produção.**
+- Documentação: `docs/b2bon/RLS.md` (matriz completa e riscos residuais) e D-111. **A01 foi encerrado com o rollout em produção (D-112).**
 
 ## RLS no banco, primeira etapa (2026-10-29, D-110)
 
@@ -23,7 +28,7 @@
 - Login e "esqueci a senha" também são limitados por conta, não só por IP, e o limite por IP passou a usar o IP real do cliente (A06).
 - Docker Compose local só aceita conexões da própria máquina e exige senhas definidas (A08).
 - O log de acesso não grava mais os tokens que viajam no endereço (webhook de CRM, NPS, opt-out, reagendamento, portal do fornecedor) (A09).
-- Pendentes: preços dos planos no endpoint público (A07, decisão comercial) e isolamento por RLS no banco (A01, projeto próprio).
+- Pendentes: preços dos planos no endpoint público (A07, decisão comercial) e isolamento por RLS no banco (A01, concluído depois: D-110 a D-112).
 
 ## Editar destinatário da campanha e lista de bloqueio (2026-10-28, D-108)
 
