@@ -148,6 +148,8 @@ export function RelatorioEntrega() {
   const [suprimindoDecisorId, setSuprimindoDecisorId] = useState<number | null>(null);
   const [contaEmEdicaoId, setContaEmEdicaoId] = useState<number | null>(null);
   const [textoBounces, setTextoBounces] = useState("");
+  // O resultado do registro aparece dentro do próprio cartão (o aviso do topo da página fica fora da tela, perto do botão não mudava nada).
+  const [retornoBounces, setRetornoBounces] = useState<{ tipo: "ok" | "aviso" | "erro"; linhas: string[] } | null>(null);
   const [bloqueios, setBloqueios] = useState<BloqueioContato[]>([]);
   const [liberandoId, setLiberandoId] = useState<number | null>(null);
   const [registrandoBounces, setRegistrandoBounces] = useState(false);
@@ -233,22 +235,35 @@ export function RelatorioEntrega() {
     setRegistrandoBounces(true);
     setErro(null);
     setMensagem(null);
+    setRetornoBounces(null);
     try {
-      const resposta = await api.post<{ registrados: string[]; ja_registrados: string[]; nao_encontrados: string[] }>(
-        "/relatorio-entrega/bounces-manuais",
-        { texto: textoBounces },
-      );
-      const partes = [`${resposta.registrados.length} endereço(s) registrado(s) como erro`];
-      if (resposta.ja_registrados.length > 0) partes.push(`${resposta.ja_registrados.length} já estavam registrados`);
-      if (resposta.nao_encontrados.length > 0) {
-        partes.push(`não encontrados entre os e-mails enviados: ${resposta.nao_encontrados.slice(0, 8).join(", ")}${resposta.nao_encontrados.length > 8 ? "…" : ""}`);
+      const resposta = await api.post<{
+        registrados: string[];
+        ja_registrados: string[];
+        nao_encontrados: string[];
+        motivo_nao_encontrados: string | null;
+      }>("/relatorio-entrega/bounces-manuais", { texto: textoBounces });
+      const linhas: string[] = [];
+      if (resposta.registrados.length > 0) {
+        linhas.push(
+          `${resposta.registrados.length} endereço(s) registrado(s) como inexistente(s): ${resposta.registrados.slice(0, 8).join(", ")}${resposta.registrados.length > 8 ? "…" : ""}. Eles não recebem mais nada da plataforma (campanhas, cadências e webmail).`,
+        );
       }
-      setMensagem(partes.join("; ") + ".");
-      if (resposta.registrados.length > 0) setTextoBounces("");
+      if (resposta.ja_registrados.length > 0) {
+        linhas.push(`${resposta.ja_registrados.length} já estavam registrado(s): ${resposta.ja_registrados.slice(0, 8).join(", ")}${resposta.ja_registrados.length > 8 ? "…" : ""}.`);
+      }
+      if (resposta.nao_encontrados.length > 0) {
+        linhas.push(
+          `${resposta.nao_encontrados.length} não registrado(s): ${resposta.nao_encontrados.slice(0, 8).join(", ")}${resposta.nao_encontrados.length > 8 ? "…" : ""}. Cada um ${resposta.motivo_nao_encontrados ?? "não foi encontrado."}`,
+        );
+      }
+      setRetornoBounces({ tipo: resposta.registrados.length + resposta.ja_registrados.length > 0 ? "ok" : "aviso", linhas });
+      if (resposta.registrados.length > 0 || resposta.ja_registrados.length > 0) setTextoBounces(resposta.nao_encontrados.join("\n"));
       await carregar();
+      await carregarBloqueios();
       await carregarEnvios(filtroStatus, pagina);
     } catch (error) {
-      setErro(error instanceof ApiError ? error.message : "Não foi possível registrar os e-mails.");
+      setRetornoBounces({ tipo: "erro", linhas: [error instanceof ApiError ? error.message : "Não foi possível registrar os e-mails."] });
     } finally {
       setRegistrandoBounces(false);
     }
@@ -372,7 +387,8 @@ export function RelatorioEntrega() {
       <Card className="mb-4">
         <SectionLabel>Contatos bloqueados ({bloqueios.length})</SectionLabel>
         <div className="mb-2 text-[11px] text-muted">
-          Quem pediu para não receber mais nada (marcado por você em “Não quer receber”, nas campanhas). Esses e-mails e telefones não recebem nenhuma campanha.
+          Quem pediu para não receber mais nada (marcado por você em “Não quer receber”, nas campanhas) e os e-mails registrados como inexistentes (que voltaram como não entregues).
+          Esses endereços e telefones não recebem nada da plataforma; “Liberar” desfaz o bloqueio.
         </div>
         {bloqueios.length === 0 ? (
           <div className="text-[12px] text-muted">Ninguém bloqueado.</div>
@@ -401,7 +417,8 @@ export function RelatorioEntrega() {
         <SectionLabel>Registrar e-mails que voltaram</SectionLabel>
         <div className="mb-2 text-[11px] text-muted">
           Quando o Gmail devolve um e-mail por endereço inexistente, o aviso de falha chega na sua caixa de entrada, não aqui. Cole abaixo os endereços
-          que voltaram (um por linha, ou o próprio aviso): eles passam a constar como erro, e o sistema deixa de enviar para esses endereços nas próximas campanhas.
+          que voltaram (um por linha, ou o próprio aviso): eles passam a constar como erro e o sistema deixa de enviar para esses endereços em qualquer área —
+          campanhas, cadências, webmail, lembretes e pesquisas. Só entram endereços que já aparecem em alguma campanha, cadência ou contato; se foi engano, libere em “Contatos bloqueados”.
         </div>
         <Textarea
           rows={3}
@@ -414,6 +431,16 @@ export function RelatorioEntrega() {
             {registrandoBounces ? "Registrando..." : "Registrar como erro"}
           </Button>
         </div>
+        {retornoBounces && (
+          <div
+            role="status"
+            className={`mt-2 flex flex-col gap-1 text-[12px] ${retornoBounces.tipo === "ok" ? "text-green" : retornoBounces.tipo === "erro" ? "text-red" : "text-amber"}`}
+          >
+            {retornoBounces.linhas.map((linha) => (
+              <div key={linha}>{linha}</div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card data-tutorial-id="relatorio-entrega:detalhamento">

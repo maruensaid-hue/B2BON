@@ -13,7 +13,6 @@ from app.db import rls
 from app.models.campanha import Campanha, CampanhaDestinatario
 from app.models.conta import Conta
 from app.models.decisor import Decisor
-from app.models.mensagem import Mensagem
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
@@ -48,16 +47,9 @@ def _email_valido(email: str | None) -> bool:
 
 
 def _emails_devolvidos(db: Session, tenant_id: str) -> set[str]:
-    """Endereços que já voltaram como não entregues (aviso do provedor ou registro manual) em campanhas ou cadências do tenant."""
-    de_campanhas = db.query(func.lower(CampanhaDestinatario.email)).filter(
-        CampanhaDestinatario.tenant_id == tenant_id, CampanhaDestinatario.bounce_em.isnot(None), CampanhaDestinatario.email.isnot(None)
-    )
-    de_cadencias = (
-        db.query(func.lower(Decisor.email))
-        .join(Mensagem, Mensagem.decisor_id == Decisor.id)
-        .filter(Mensagem.tenant_id == tenant_id, Mensagem.bounce_em.isnot(None), Decisor.email.isnot(None))
-    )
-    return {email for (email,) in [*de_campanhas.all(), *de_cadencias.all()]}
+    """Endereços que não devem receber e-mail: os que voltaram como não entregues (aviso do provedor ou registro manual) e os registrados como inexistentes.
+    A consulta é a mesma de cadências e webmail (`bloqueio_contato_service.emails_inviaveis`)."""
+    return bloqueio_contato_service.emails_inviaveis(db, tenant_id)
 
 
 def _motivo_sem_destino(
@@ -592,7 +584,7 @@ def _enviar_pendentes(
             campanha.processando_ate = _agora() + timedelta(minutes=_RESERVA_MINUTOS)
             db.commit()
             continue
-        sucesso, motivo_falha, adiado = _disparar_destinatario(db, campanha, destinatario, email_provider, whatsapp_provider)
+        sucesso, motivo_falha, adiado = _disparar_destinatario(db, campanha, destinatario, email_provider, whatsapp_provider, devolvidos)
         if sucesso:
             destinatario.status = "enviado"
             destinatario.motivo_falha = None  # limpa o aviso de tentativa adiada, se houve
@@ -688,6 +680,7 @@ def _disparar_destinatario(
     destinatario: CampanhaDestinatario,
     email_provider: EmailProvider,
     whatsapp_provider: WhatsAppProvider,
+    devolvidos: set[str] | None = None,
 ) -> tuple[bool, str | None, bool]:
     """Retorna `(sucesso, motivo_falha, adiado)` — `adiado=True` quando o
     e-mail não foi tentado por o canal estar pausado por reputação
@@ -699,7 +692,8 @@ def _disparar_destinatario(
     email_adiado = False
     falha_transitoria: str | None = None
 
-    if "email" in campanha.canais and _email_valido(destinatario.email):  # endereço que não é e-mail nunca chega ao servidor
+    email_devolvido = bloqueio_contato_service.email_esta_inviavel(destinatario.email, devolvidos or set())  # voltou antes: não insiste, mesmo com WhatsApp junto
+    if "email" in campanha.canais and _email_valido(destinatario.email) and not email_devolvido:  # endereço que não é e-mail nunca chega ao servidor
         if reputacao_service.canal_pausado(db, campanha.tenant_id, "email"):
             email_adiado = True
         else:

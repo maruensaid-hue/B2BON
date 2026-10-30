@@ -35,10 +35,11 @@ class RegistrarBouncesManuaisRequestSchema(BaseModel):
 
 
 class RegistroBouncesManuaisSchema(BaseModel):
-    """Resultado do registro manual: registrados, já registrados e não encontrados entre os e-mails enviados."""
+    """Resultado do registro manual: registrados (passam a ser barrados em toda a plataforma), já registrados e não encontrados, com o motivo."""
     registrados: list[str]
     ja_registrados: list[str]
     nao_encontrados: list[str]
+    motivo_nao_encontrados: str | None = None
 
 
 class ResumoEnviosSchema(BaseModel):

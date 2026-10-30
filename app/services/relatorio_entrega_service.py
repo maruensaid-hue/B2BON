@@ -12,7 +12,7 @@ from app.models.conta import Conta
 from app.models.decisor import Decisor
 from app.models.icp import ICP
 from app.models.mensagem import Mensagem
-from app.services import auditoria_service, panel_service, reputacao_service
+from app.services import auditoria_service, bloqueio_contato_service, panel_service, reputacao_service
 from app.services.errors import ValidacaoFalhou
 
 # Só e-mail tem um sinal real de entrega/bounce hoje (webhook do
@@ -32,7 +32,11 @@ _JANELA_RESUMO_DIAS = 7
 
 _EMAIL_NO_TEXTO = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}")
 _MAXIMO_BOUNCES_POR_VEZ = 500
-MOTIVO_BOUNCE_MANUAL = "Informado manualmente: o e-mail voltou como não entregue."
+MOTIVO_BOUNCE_MANUAL = bloqueio_contato_service.MOTIVO_BOUNCE_MANUAL
+MOTIVO_NAO_ENCONTRADO = (
+    "não aparece em nenhuma campanha, cadência ou contato desta empresa (nada foi bloqueado). Confira se o endereço está escrito igual ao cadastrado; "
+    "avisos de falha costumam trazer também o endereço do remetente e do servidor, que podem ser ignorados."
+)
 _LIMITE_MAXIMO_ENVIOS = 200
 
 
@@ -296,10 +300,13 @@ def _resumo_envios(db: Session, tenant_id: str) -> dict:
 
 
 def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, texto: str) -> dict:
-    """Marca como bounce os e-mails que o usuário informou ter voltado como não entregues (aviso de falha na caixa de entrada). Com conta SMTP própria
-    o provedor não devolve esse retorno ao sistema. Aceita texto livre (endereços separados por linha, vírgula, ponto e vírgula ou o próprio aviso colado):
-    todo endereço encontrado é procurado nos e-mails de campanha e de cadência já enviados. Não mexe nos contadores de reputação do canal: sem o retorno
-    do provedor eles não têm o total de envios, e uma taxa calculada em cima deles pausaria o canal por engano."""
+    """Registra como inexistentes os e-mails que o usuário informou ter voltado como não entregues (aviso de falha na caixa de entrada). Com conta SMTP própria
+    o provedor não devolve esse retorno ao sistema. Aceita texto livre (endereços separados por linha, vírgula, ponto e vírgula ou o próprio aviso colado).
+
+    Cada endereço é procurado em todos os destinatários de campanha (qualquer status: um endereço que o SMTP recusou na hora fica `falhou` e voltaria à fila de
+    retentativa) e nos contatos cadastrados. Achado em qualquer um, ele entra na lista de e-mails inexistentes: deixa de receber campanha, cadência, e-mail direto,
+    lembrete e pesquisa, em toda a plataforma. Os envios já feitos a ele ganham a marca de bounce. Não mexe nos contadores de reputação do canal: sem o retorno do
+    provedor eles não têm o total de envios, e uma taxa calculada em cima deles pausaria o canal por engano."""
     enderecos: list[str] = []
     for achado in _EMAIL_NO_TEXTO.findall(texto or ""):
         endereco = achado.lower()
@@ -313,14 +320,13 @@ def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, 
     de_campanhas: dict[str, list] = {}
     for destinatario in (
         db.query(CampanhaDestinatario)
-        .filter(
-            CampanhaDestinatario.tenant_id == tenant_id,
-            CampanhaDestinatario.status == "enviado",
-            func.lower(CampanhaDestinatario.email).in_(enderecos),
-        )
+        .filter(CampanhaDestinatario.tenant_id == tenant_id, func.lower(func.trim(CampanhaDestinatario.email)).in_(enderecos))
         .all()
     ):
-        de_campanhas.setdefault(destinatario.email.lower(), []).append(destinatario)
+        de_campanhas.setdefault(destinatario.email.strip().lower(), []).append(destinatario)
+    contatos: dict[str, list[Decisor]] = {}
+    for decisor in db.query(Decisor).filter(Decisor.tenant_id == tenant_id, func.lower(func.trim(Decisor.email)).in_(enderecos)).all():
+        contatos.setdefault(decisor.email.strip().lower(), []).append(decisor)
     de_cadencias: dict[str, list] = {}
     for mensagem, decisor in (
         db.query(Mensagem, Decisor)
@@ -329,36 +335,45 @@ def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, 
             Mensagem.tenant_id == tenant_id,
             Mensagem.canal == "email",
             Mensagem.status == "enviado",
-            func.lower(Decisor.email).in_(enderecos),
+            func.lower(func.trim(Decisor.email)).in_(enderecos),
         )
         .all()
     ):
-        de_cadencias.setdefault(decisor.email.lower(), []).append(mensagem)
+        de_cadencias.setdefault(decisor.email.strip().lower(), []).append(mensagem)
 
     agora = datetime.now(UTC)
     registrados: list[str] = []
     ja_registrados: list[str] = []
     nao_encontrados: list[str] = []
     for endereco in enderecos:
-        itens = de_campanhas.get(endereco, []) + de_cadencias.get(endereco, [])
-        if not itens:
+        enviados = [
+            item
+            for item in de_campanhas.get(endereco, [])
+            if item.status in ("enviado", "falhou")  # houve tentativa; pendente/retido/não enviado só ficam barrados pela lista
+        ] + de_cadencias.get(endereco, [])
+        if not de_campanhas.get(endereco) and not contatos.get(endereco):
             nao_encontrados.append(endereco)
             continue
-        novos = [item for item in itens if item.bounce_em is None]
-        if not novos:
-            ja_registrados.append(endereco)
-            continue
-        for item in novos:
-            item.bounce_em = agora
-            item.motivo_bounce = MOTIVO_BOUNCE_MANUAL
-        registrados.append(endereco)
+        marcou_algum = False
+        for item in enviados:
+            if item.bounce_em is None:
+                item.bounce_em = agora
+                item.motivo_bounce = MOTIVO_BOUNCE_MANUAL
+                marcou_algum = True
+        _, criado = bloqueio_contato_service.registrar_email_inexistente(db, tenant_id, ator_id, endereco, MOTIVO_BOUNCE_MANUAL)
+        (registrados if criado or marcou_algum else ja_registrados).append(endereco)
 
     auditoria_service.registrar(
         db, tenant_id, "bounce_registrado_manualmente", "relatorio_entrega", 0, ator_id,
         {"registrados": len(registrados), "ja_registrados": len(ja_registrados), "nao_encontrados": len(nao_encontrados)},
     )
     db.commit()
-    return {"registrados": registrados, "ja_registrados": ja_registrados, "nao_encontrados": nao_encontrados}
+    return {
+        "registrados": registrados,
+        "ja_registrados": ja_registrados,
+        "nao_encontrados": nao_encontrados,
+        "motivo_nao_encontrados": MOTIVO_NAO_ENCONTRADO if nao_encontrados else None,
+    }
 
 
 def obter(db: Session, tenant_id: str) -> dict:

@@ -636,13 +636,22 @@ ou outro provedor devolve um e-mail por endereço inexistente, o aviso de
 falha chega na **sua caixa de entrada**, não na B2B ON (e o sistema não
 lê a sua caixa). Em **Registrar e-mails que voltaram**, cole os
 endereços que voltaram — um por linha, ou o próprio texto do aviso — e
-clique em **Registrar como erro**: eles passam a constar como erro e o
-sistema deixa de enviar para esses endereços nas próximas campanhas.
+clique em **Registrar como erro**. Os endereços passam a constar como erro e
+entram na lista de e-mails inexistentes: o sistema **deixa de enviar para eles
+em qualquer área** — campanhas, cadências, Webmail, lembretes de reunião e
+pesquisas NPS (o telefone da mesma pessoa continua valendo). O resultado
+aparece logo abaixo do botão, com o motivo de cada endereço. Só entram
+endereços que já aparecem em alguma campanha, cadência ou contato: os demais
+(por exemplo, o endereço do remetente que vem no aviso de falha) são listados
+como **não registrados**, com a explicação, e nada é bloqueado. No Webmail,
+tentar escrever para um endereço registrado mostra um aviso e não envia; se foi
+engano, **Liberar** em **Contatos bloqueados**.
 
 **Contatos bloqueados.** Lista os e-mails e telefones de quem pediu para
-não receber (marcados em **Não quer receber**, seção 5.13), com o motivo
-e a data. Nenhum deles recebe campanha. **Liberar** (só `admin` e
-`super_admin`) desfaz o bloqueio.
+não receber (marcados em **Não quer receber**, seção 5.13) e os e-mails
+registrados como inexistentes, com o motivo e a data. Nenhum deles recebe
+mensagem da plataforma. **Liberar** (só `admin` e `super_admin`) desfaz o
+bloqueio.
 
 **Testando a conta de e-mail e o Webmail.** Depois de salvar a conta em
 Configuração → E-mail (SMTP), use **"Enviar e-mail de teste"**: a B2B ON

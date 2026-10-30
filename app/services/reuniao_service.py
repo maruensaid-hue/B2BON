@@ -19,7 +19,7 @@ from app.providers.calendar.base import CalendarProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.crm.base import CrmProvider
-from app.services import atividade_service, auditoria_service
+from app.services import atividade_service, auditoria_service, bloqueio_contato_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 _SEPARADOR = ":"
@@ -337,12 +337,14 @@ def reagendar_por_token(
 
 
 def _enviar_lembrete(
-    decisor: Decisor, reuniao: Reuniao, whatsapp: WhatsAppProvider, email: EmailProvider, texto_base: str
+    db: Session, decisor: Decisor, reuniao: Reuniao, whatsapp: WhatsAppProvider, email: EmailProvider, texto_base: str
 ) -> None:
     texto = f"{texto_base} Link: {reuniao.link_reuniao or ''}"
     if decisor.telefone:
         whatsapp.enviar_texto_livre(decisor.telefone, texto)
-    elif decisor.email:
+    elif decisor.email and not bloqueio_contato_service.email_esta_inviavel(
+        decisor.email, bloqueio_contato_service.emails_inviaveis(db, reuniao.tenant_id)
+    ):
         email.enviar(
             decisor.email, "Lembrete de reunião", texto, "PREDATOR", settings.sendgrid_remetente_email, reuniao.tenant_id
         )
@@ -373,12 +375,12 @@ def processar_lembretes(
         decisor = db.query(Decisor).filter_by(id=reuniao.decisor_id).one()
 
         if reuniao.lembrete_d1_enviado_em is None and timedelta(hours=20) <= faltam <= timedelta(hours=28):
-            _enviar_lembrete(decisor, reuniao, whatsapp, email, "Lembrete: sua reunião é amanhã.")
+            _enviar_lembrete(db, decisor, reuniao, whatsapp, email, "Lembrete: sua reunião é amanhã.")
             reuniao.lembrete_d1_enviado_em = agora
             lembretes_d1 += 1
 
         if reuniao.lembrete_h2_enviado_em is None and timedelta(hours=1) <= faltam <= timedelta(hours=3):
-            _enviar_lembrete(decisor, reuniao, whatsapp, email, "Lembrete: sua reunião é em 2 horas.")
+            _enviar_lembrete(db, decisor, reuniao, whatsapp, email, "Lembrete: sua reunião é em 2 horas.")
             reuniao.lembrete_h2_enviado_em = agora
             lembretes_h2 += 1
 

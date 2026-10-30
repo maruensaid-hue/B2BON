@@ -17,7 +17,7 @@ from app.models.reuniao import Reuniao
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
-from app.services import auditoria_service, indicacao_service
+from app.services import auditoria_service, bloqueio_contato_service, indicacao_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 _SEPARADOR = ":"
@@ -73,7 +73,7 @@ def _enviar_pesquisa(db: Session, tenant_id: str, pesquisa: PesquisaNps, decisor
     link = f"Responda de 0 a 10: qual a probabilidade de você nos indicar? {gerar_token(tenant_id, pesquisa.id)}"
     if decisor.telefone:
         whatsapp.enviar_texto_livre(decisor.telefone, link)
-    elif decisor.email:
+    elif decisor.email and not bloqueio_contato_service.email_esta_inviavel(decisor.email, bloqueio_contato_service.emails_inviaveis(db, tenant_id)):
         email.enviar(
             decisor.email, "Sua opinião é muito importante", link, "PREDATOR", settings.sendgrid_remetente_email, tenant_id
         )

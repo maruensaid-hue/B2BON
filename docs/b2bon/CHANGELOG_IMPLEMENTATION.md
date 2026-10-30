@@ -1,5 +1,11 @@
 # CHANGELOG — IMPLEMENTATION
 
+## E-mail inexistente barrado em toda a plataforma (2026-10-30, D-113)
+
+- "Registrar e-mails que voltaram" agora bloqueia o endereço em campanhas, cadências, Webmail, lembretes de reunião e pesquisas NPS (antes só valia para campanhas, e mesmo ali um endereço com WhatsApp junto ainda recebia o e-mail).
+- Corrigido o registro que "não registrava": só achava destinatários com status `enviado` (um endereço recusado na hora pelo SMTP fica `falhou` e voltava à fila de retentativa) e comparava o e-mail sem tirar espaços.
+- A resposta aparece dentro do cartão, com o motivo de cada endereço (antes era um aviso no topo da página, fora da tela); "Liberar" desfaz o bloqueio e as marcas manuais.
+
 ## RLS ligado em produção; A01 encerrado (2026-10-29, D-112)
 
 - A API de produção passou a conectar com o papel restrito `b2bon_app` (sem superusuário e sem `BYPASSRLS`); o papel dono ficou só para as migrações (`MIGRATION_DATABASE_URL`). A partir de agora o banco impede, por conta própria, que uma empresa leia ou grave dado de outra pelas rotas comuns.

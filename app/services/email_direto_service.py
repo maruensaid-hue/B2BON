@@ -13,7 +13,7 @@ from app.models.negocio import Negocio
 from app.models.estagio_funil import EstagioFunil
 from app.models.usuario import Usuario
 from app.providers.channels.email.base import EmailProvider
-from app.services import atividade_service, auditoria_service, comunicacao_service, resposta_service
+from app.services import atividade_service, auditoria_service, bloqueio_contato_service, comunicacao_service, resposta_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,11 @@ def enviar(
     decisor = _obter_decisor(db, tenant_id, decisor_id)
     if not decisor.email:
         raise RegraNegocioViolada(f"O decisor {decisor.nome} não tem e-mail cadastrado.")
+    if bloqueio_contato_service.email_esta_inviavel(decisor.email, bloqueio_contato_service.emails_inviaveis(db, tenant_id)):
+        raise RegraNegocioViolada(
+            f"O e-mail {decisor.email.strip()} está registrado como inexistente (voltou como não entregue), então o envio foi cancelado. "
+            "Corrija o e-mail do contato ou, se o registro foi um engano, libere o endereço em Relatório de Entrega > Contatos bloqueados."
+        )
     conta = db.query(Conta).filter_by(id=decisor.conta_id).one()
 
     config_envio = db.query(ConfiguracaoEnvio).filter_by(tenant_id=tenant_id).one_or_none()

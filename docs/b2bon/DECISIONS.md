@@ -1666,3 +1666,11 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Limites que continuam valendo**: os de `RLS.md`, seção 7 (contextos de plataforma e de sistema com acesso total por desenho; leitura compartilhada do Shoal mais larga que a regra fina do código; sem proteção contra SQL arbitrário da própria aplicação).
 - **Pendente fora deste encerramento**: A07 (preços de planos no endpoint público, decisão comercial), MFA para administradores e atraso progressivo (A06), validade menor do token com refresh rotativo (A04).
 - **Status**: ACEITA (A01 encerrado em 29/10/2026 com as ressalvas acima).
+
+## D-113 · 2026-10-30 · E-mail inexistente barrado em toda a plataforma
+
+- **Problema**: o registro manual de e-mails devolvidos não registrava e não explicava o porquê, e o bloqueio só valia nas campanhas. O aviso de resultado era desenhado no topo da página, longe do cartão (parecia que nada acontecia); a busca só considerava destinatários `enviado`, ignorando `falhou` (SMTP que recusa o endereço na hora, que a retentativa reenviaria) e não tirava espaços das pontas; cadência e Webmail nunca consultavam o bloqueio.
+- **Decisão**: um e-mail registrado como inexistente (ou que voltou por aviso do provedor) não recebe nada da plataforma. Consulta única `bloqueio_contato_service.emails_inviaveis`, usada por campanha, cadência (`envio_service`: mensagem `cancelado` com motivo e auditoria), Webmail (recusa com 409 e mensagem), lembrete de reunião e NPS. A lista é a `bloqueio_contato` com `origem = email_inexistente`: bloqueia só o e-mail, não o telefone, e "Liberar" também desfaz as marcas manuais de bounce. Sem tabela nem migração nova.
+- **Escopo do registro**: só entram endereços que já aparecem em algum destinatário de campanha (qualquer status) ou contato; o resto (remetente e servidor do aviso de falha) vai para "não registrados" com o motivo, sem bloquear nada.
+- **Campanha com e-mail e WhatsApp**: o e-mail de endereço devolvido deixou de ser enviado (antes só o pré-filtro olhava, e ele libera a campanha se há WhatsApp); o WhatsApp segue.
+- **Status**: ACEITA. Testes em `tests/integration/test_email_inexistente.py`. Não testado contra PostgreSQL com RLS (Docker indisponível na máquina de desenvolvimento): as consultas novas são todas do tenant do contexto, mas vale conferir em produção.

@@ -17,6 +17,7 @@ from app.services import (
     aprovacao_service,
     atividade_service,
     auditoria_service,
+    bloqueio_contato_service,
     optout_service,
     rampa_service,
     rastreamento_service,
@@ -144,10 +145,13 @@ def processar_pendentes(
         "tarefas_linkedin_criadas": 0,
         "descartadas_email_invalido": 0,
         "bloqueadas_crm": 0,
+        "bloqueadas_email_inexistente": 0,
     }
     # D-087: conexões de CRM com deduplicação ligada (uma consulta por rodada).
     escrita_crm = integracoes.obter_escrita()
     conexoes_dedup = [c.id for c in escrita_crm.conexoes_com(db, tenant_id, "deduplicar")]
+    # E-mails registrados como inexistentes ou que já voltaram (uma consulta por rodada): não se tenta de novo, em nenhuma área da plataforma.
+    inviaveis = bloqueio_contato_service.emails_inviaveis(db, tenant_id)
 
     for mensagem in candidatas:
         decisor = db.query(Decisor).filter_by(id=mensagem.decisor_id).one()
@@ -158,6 +162,14 @@ def processar_pendentes(
 
         if conexoes_dedup and _bloqueado_pelo_crm(db, tenant_id, mensagem, decisor, conexoes_dedup):
             resultado["bloqueadas_crm"] += 1
+            continue
+
+        if mensagem.canal == "email" and bloqueio_contato_service.email_esta_inviavel(decisor.email, inviaveis):
+            mensagem.status = "cancelado"
+            mensagem.motivo_falha = f"E-mail inexistente ou devolvido em envio anterior: {(decisor.email or '').strip()[:80]}"
+            auditoria_service.registrar(db, tenant_id, "envio_bloqueado_email_inexistente", "mensagem", mensagem.id, None, {},
+                                        conta_id=decisor.conta_id, canal=mensagem.canal)
+            resultado["bloqueadas_email_inexistente"] += 1
             continue
 
         if mensagem.canal == "linkedin":
