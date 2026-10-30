@@ -1623,7 +1623,7 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **A01 — isolamento (ALTA, risco sistêmico)**: a evidência da auditoria estava desatualizada: desde a V5.2.1 existe a varredura sistemática com dois tenants (`tests/integration/test_isolamento_sistematico.py`, com leitura, mutação e controle positivo) e a matriz por rota (`MATRIZ_ISOLAMENTO_ROTAS.md`, regenerada em 28/10). **RLS no PostgreSQL não foi implementado**: exige definir o tenant por transação atrás do pgbouncer, políticas para ~200 tabelas e exceções explícitas para o Shoal (cruzamento por desenho), cron e `super_admin`. É um projeto próprio, com teste de carga e plano de reversão, e fica como proposta.
 - **A07 — preços de planos no endpoint público**: **não alterado**, aguarda decisão comercial. `GET /planos` devolve os planos não self-service (por exemplo, o Government) com preços de licença; a própria auditoria pede para confirmar se a publicação é intencional.
 - **Fora do código**: bancos SQLite na pasta do OneDrive (`predator.db`, `onda_a_demo.db`, `dev.db`) — conferir se têm só dados fictícios; auditoria de dependências (`pip-audit` e `npm audit`) a rodar em ambiente com acesso ao índice.
-- **Status**: ACEITA (A07 pendente; o RLS foi concluído depois, em D-110 a D-112).
+- **Status**: ACEITA (o RLS foi concluído em D-110 a D-112 e o A07 foi decidido em D-114).
 
 ## D-110 · 2026-10-29 · RLS no PostgreSQL, primeira etapa (achado A01 da auditoria)
 
@@ -1674,3 +1674,11 @@ Formato: ID · data · fase · decisão · contexto · consequências · status.
 - **Escopo do registro**: só entram endereços que já aparecem em algum destinatário de campanha (qualquer status) ou contato; o resto (remetente e servidor do aviso de falha) vai para "não registrados" com o motivo, sem bloquear nada.
 - **Campanha com e-mail e WhatsApp**: o e-mail de endereço devolvido deixou de ser enviado (antes só o pré-filtro olhava, e ele libera a campanha se há WhatsApp); o WhatsApp segue.
 - **Status**: ACEITA. Testes em `tests/integration/test_email_inexistente.py`. Não testado contra PostgreSQL com RLS (Docker indisponível na máquina de desenvolvimento): as consultas novas são todas do tenant do contexto, mas vale conferir em produção.
+
+## D-114 · 2026-10-30 · Preços de planos no endpoint público (A07): mantidos públicos
+
+- **Decisão do responsável (PO)**: `GET /api/v1/planos` continua público e devolvendo os planos, inclusive os não self-service (por exemplo, o Government). A exposição é intencional e estratégica: dá aos interessados acesso aos valores e aos perfis de contratação, o que, segundo o PO, é prática dos fabricantes de CRM do mercado.
+- **O que fica público**: preços (mensal, licença, implantação, assinatura anual), franquias e limites, permissões de recursos, módulos contratados, categoria/segmento/modelo de cobrança e `entitlements`. O esquema de resposta (`PlanoSchema`) não tem campo de custo nem de margem; `GET /planos/enriquecimento` já documenta que devolve só dado de plataforma, nunca custo/margem de cliente.
+- **Mudança de código**: nenhuma. A auditoria de 28/10 classificava o achado como BAIXO e pedia só a confirmação da intenção comercial.
+- **Cuidado ao evoluir**: ao acrescentar campo a `PlanoSchema`/`entitlements`, conferir se é dado que o PO quer público; custo de infraestrutura, margem e condições negociadas por cliente não entram.
+- **Status**: ACEITA (A07 encerrado como risco aceito).

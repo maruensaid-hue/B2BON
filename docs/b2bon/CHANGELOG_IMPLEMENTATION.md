@@ -1,5 +1,9 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Preços de planos públicos mantidos (2026-10-30, D-114)
+
+- Decisão do PO sobre o achado A07 da auditoria: a lista pública de planos (preços, limites e perfis de contratação, inclusive os não self-service) é intencional e continua como está. Sem mudança de código; registrado como risco aceito.
+
 ## E-mail inexistente barrado em toda a plataforma (2026-10-30, D-113)
 
 - "Registrar e-mails que voltaram" agora bloqueia o endereço em campanhas, cadências, Webmail, lembretes de reunião e pesquisas NPS (antes só valia para campanhas, e mesmo ali um endereço com WhatsApp junto ainda recebia o e-mail).
@@ -34,7 +38,7 @@
 - Login e "esqueci a senha" também são limitados por conta, não só por IP, e o limite por IP passou a usar o IP real do cliente (A06).
 - Docker Compose local só aceita conexões da própria máquina e exige senhas definidas (A08).
 - O log de acesso não grava mais os tokens que viajam no endereço (webhook de CRM, NPS, opt-out, reagendamento, portal do fornecedor) (A09).
-- Pendentes: preços dos planos no endpoint público (A07, decisão comercial) e isolamento por RLS no banco (A01, concluído depois: D-110 a D-112).
+- Pendentes: preços dos planos no endpoint público (A07, decidido depois: D-114) e isolamento por RLS no banco (A01, concluído depois: D-110 a D-112).
 
 ## Editar destinatário da campanha e lista de bloqueio (2026-10-28, D-108)
 
