@@ -34,6 +34,26 @@ class ContaSchema(BaseModel):
     atualizado_em: datetime
 
 
+class ContaResumoSchema(BaseModel):
+    """O mínimo para escolher uma empresa numa lista (seletor com busca)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nome: str
+    nome_fantasia: str | None
+    icp_id: int | None
+
+
+class PaginaContasSchema(BaseModel):
+    """Uma página de empresas do escopo do usuário; `total` conta todas as que atendem à busca, não só as da página."""
+
+    itens: list[ContaResumoSchema]
+    total: int
+    limite: int
+    offset: int
+
+
 class GerarListaRequestSchema(BaseModel):
     quantidade: int
 

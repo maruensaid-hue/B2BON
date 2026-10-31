@@ -39,6 +39,7 @@ ROTAS = [
     ("get", "/api/v1/contas/limite-enriquecimento", None, {"predator"}),
     ("post", "/api/v1/contas/enriquecer-em-lote", {"conta_ids": []}, {"predator"}),
     ("get", "/api/v1/contas", None, {"crm", "predator"}),
+    ("get", "/api/v1/contas/pesquisa", None, {"crm", "predator"}),
     ("post", "/api/v1/leads/contas", {"nome": "Conta da Matriz"}, {"crm", "predator"}),
     ("get", "/api/v1/ofertas", None, {"crm", "predator"}),
     ("get", "/api/v1/nps/configuracao", None, {"map", "predator"}),

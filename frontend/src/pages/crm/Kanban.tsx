@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
 import { PropostasNegocio } from "@/components/PropostasNegocio";
+import { SeletorConta } from "@/components/SeletorConta";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -101,12 +102,9 @@ export function Kanban() {
   const [contaOrigem, setContaOrigem] = useState<"existente" | "nova">("existente");
   const [semIcp, setSemIcp] = useState(false);
   const [icpSelecionadoId, setIcpSelecionadoId] = useState<number | null>(null);
-  const [todasAsContas, setTodasAsContas] = useState<Conta[]>([]);
   const [ofertas, setOfertas] = useState<OfertaResumo[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
-  const [buscaContaExistente, setBuscaContaExistente] = useState("");
   const [contaExistenteSelecionadaId, setContaExistenteSelecionadaId] = useState<number | null>(null);
-  const [sugestoesContaAbertas, setSugestoesContaAbertas] = useState(false);
   const [negocioArrastadoId, setNegocioArrastadoId] = useState<number | null>(null);
   const [salvandoNegocio, setSalvandoNegocio] = useState(false);
   const [negocioEmEdicao, setNegocioEmEdicao] = useState<Negocio | null>(null);
@@ -185,10 +183,6 @@ export function Kanban() {
       .then(setIcps)
       .catch(() => undefined);
     api
-      .get<Conta[]>("/contas")
-      .then(setTodasAsContas)
-      .catch(() => setErro("Não foi possível carregar as contas existentes."));
-    api
       .get<OfertaResumo[]>("/ofertas")
       .then(setOfertas)
       .catch(() => undefined);
@@ -208,26 +202,6 @@ export function Kanban() {
     const negocio = negocios.find((n) => n.id === negocioIdPreSelecionadoId);
     if (negocio) setNegocioEmEdicao(negocio);
   }, [negocioIdPreSelecionadoId, negocios]);
-
-  // Filtro opcional por ICP na hora de escolher "conta existente" — sem
-  // ICP selecionado, mostra todas (inclusive leads sem ICP, que antes
-  // ficavam impossíveis de escolher aqui).
-  const contasParaSelecionar = useMemo(() => {
-    if (icpSelecionadoId === null) return todasAsContas;
-    return todasAsContas.filter((conta) => conta.icp_id === icpSelecionadoId);
-  }, [todasAsContas, icpSelecionadoId]);
-
-  // Busca com autocompletar — com muitas contas vinculadas a uma empresa
-  // ou vendedor, rolar uma lista inteira num <select> nativo fica
-  // inviável; digitar o nome e escolher entre os resultados é bem mais
-  // rápido (limita a 20 sugestões por vez, só por legibilidade).
-  const sugestoesContaExistente = useMemo(() => {
-    const termo = buscaContaExistente.trim().toLowerCase();
-    const lista = termo
-      ? contasParaSelecionar.filter((conta) => (conta.nome_fantasia || conta.nome).toLowerCase().includes(termo))
-      : contasParaSelecionar;
-    return lista.slice(0, 20);
-  }, [contasParaSelecionar, buscaContaExistente]);
 
   // O negócio precisa de um contato responsável — busca os decisores da
   // conta escolhida assim que ela é selecionada, pra popular o <Select>.
@@ -419,15 +393,8 @@ export function Kanban() {
       setContaOrigem("existente");
       setSemIcp(false);
       setIcpSelecionadoId(null);
-      setBuscaContaExistente("");
       setContaExistenteSelecionadaId(null);
       await carregar();
-      if (contaOrigem === "nova") {
-        api
-          .get<Conta[]>("/contas")
-          .then(setTodasAsContas)
-          .catch(() => undefined);
-      }
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível criar o negócio.");
     } finally {
@@ -739,45 +706,11 @@ export function Kanban() {
 
             {contaOrigem === "existente" ? (
               <div className="relative">
-                <Input
-                  value={buscaContaExistente}
-                  onChange={(event) => {
-                    setBuscaContaExistente(event.target.value);
-                    setContaExistenteSelecionadaId(null);
-                    setSugestoesContaAbertas(true);
-                  }}
-                  onFocus={() => setSugestoesContaAbertas(true)}
-                  onBlur={() => setTimeout(() => setSugestoesContaAbertas(false), 150)}
-                  autoComplete="off"
-                  placeholder={
-                    contasParaSelecionar.length === 0 ? "Nenhuma conta cadastrada ainda" : "Digite o nome da empresa..."
-                  }
+                <SeletorConta
+                  name="conta_id"
+                  icpId={icpSelecionadoId}
+                  onSelecionar={(conta) => setContaExistenteSelecionadaId(conta?.id ?? null)}
                 />
-                <input type="hidden" name="conta_id" value={contaExistenteSelecionadaId ?? ""} />
-                {sugestoesContaAbertas && sugestoesContaExistente.length > 0 && (
-                  <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-surf shadow-lg">
-                    {sugestoesContaExistente.map((conta) => (
-                      <button
-                        key={conta.id}
-                        type="button"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => {
-                          setContaExistenteSelecionadaId(conta.id);
-                          setBuscaContaExistente(conta.nome_fantasia || conta.nome);
-                          setSugestoesContaAbertas(false);
-                        }}
-                        className="block w-full px-3 py-2 text-left text-[12px] hover:bg-surf2"
-                      >
-                        {conta.nome_fantasia || conta.nome}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {sugestoesContaAbertas && buscaContaExistente && sugestoesContaExistente.length === 0 && (
-                  <div className="absolute z-10 mt-1 w-full rounded-lg border border-border bg-surf p-2 text-[12px] text-muted shadow-lg">
-                    Nenhuma conta encontrada com esse nome.
-                  </div>
-                )}
                 {contaExistenteSelecionadaId !== null && (
                   <div className="mt-2">
                     <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Contato responsável</div>

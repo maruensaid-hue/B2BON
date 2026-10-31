@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select, Textarea } from "@/components/ui/Input";
+import { SeletorConta } from "@/components/SeletorConta";
+import { rotuloDaConta } from "@/lib/conta";
 import { Modal } from "@/components/ui/Modal";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { api, ApiError } from "@/lib/api";
@@ -31,12 +33,6 @@ interface Decisor {
   linkedin_url: string | null;
   email: string | null;
   telefone: string | null;
-}
-
-interface ContaResumo {
-  id: number;
-  nome: string;
-  nome_fantasia: string | null;
 }
 
 interface EstagioFunil {
@@ -110,7 +106,6 @@ export function LeadsAcoesConta() {
   const [reunioes, setReunioes] = useState<Reuniao[]>([]);
   const [cadencias, setCadencias] = useState<Cadencia[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
-  const [todasAsContas, setTodasAsContas] = useState<ContaResumo[]>([]);
   const [registroPrime, setRegistroPrime] = useState<RegistroOportunidadeResumo | null>(null);
 
   const [editandoEmpresa, setEditandoEmpresa] = useState(false);
@@ -151,13 +146,6 @@ export function LeadsAcoesConta() {
   useEffect(() => {
     carregar();
   }, [contaId]);
-
-  useEffect(() => {
-    api
-      .get<ContaResumo[]>("/contas")
-      .then(setTodasAsContas)
-      .catch(() => undefined);
-  }, []);
 
   useEffect(() => {
     if (isGestor) {
@@ -518,13 +506,10 @@ export function LeadsAcoesConta() {
                   <Input name="linkedin_url" defaultValue={decisor.linkedin_url ?? ""} placeholder="LinkedIn (URL)" />
                   <div>
                     <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Empresa vinculada</div>
-                    <Select name="conta_id" defaultValue={contaId}>
-                      {todasAsContas.map((opcao) => (
-                        <option key={opcao.id} value={opcao.id}>
-                          {opcao.nome_fantasia || opcao.nome}
-                        </option>
-                      ))}
-                    </Select>
+                    <SeletorConta
+                      name="conta_id"
+                      valorInicial={conta ? { id: contaId, rotulo: rotuloDaConta(conta) } : null}
+                    />
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" type="submit" disabled={carregando !== null}>

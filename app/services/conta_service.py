@@ -3,7 +3,7 @@ import unicodedata
 from datetime import datetime
 
 from fpdf import FPDF
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
@@ -450,10 +450,12 @@ def listar_por_lista(
 
 
 def listar_todas(db: Session, tenant_id: str, usuario_id: int | None = None, restrito: bool = False) -> list[Conta]:
-    """Toda conta do tenant, com ou sem ICP — usado pelo seletor "conta
-    existente" do Kanban (E2), que antes só listava contas de um ICP e
-    deixava um lead (conta sem ICP) impossível de escolher pra criar um
-    negócio nele."""
+    """Toda conta do tenant, com ou sem ICP, sem paginação. **Legada**: só a rota `GET /contas` (versões antigas do frontend) a usa; os seletores usam `pesquisar_contas`."""
+    return _contas_do_escopo(db, tenant_id, usuario_id, restrito).order_by(Conta.criado_em.desc()).all()
+
+
+def _contas_do_escopo(db: Session, tenant_id: str, usuario_id: int | None, restrito: bool):
+    """Consulta base das contas que o usuário enxerga: as do tenant e, para o vendedor (`restrito`), só as dele."""
     query = db.query(Conta).outerjoin(ICP, ICP.id == Conta.icp_id).filter(Conta.tenant_id == tenant_id)
     if restrito:
         query = query.filter(
@@ -461,7 +463,42 @@ def listar_todas(db: Session, tenant_id: str, usuario_id: int | None = None, res
              | (ICP.criador_usuario_id == usuario_id)),
             ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
         )
-    return query.order_by(Conta.criado_em.desc()).all()
+    return query
+
+
+LIMITE_PADRAO_PESQUISA_CONTAS = 50
+LIMITE_MAXIMO_PESQUISA_CONTAS = 200
+
+
+def pesquisar_contas(
+    db: Session,
+    tenant_id: str,
+    usuario_id: int | None = None,
+    restrito: bool = False,
+    *,
+    busca: str | None = None,
+    icp_id: int | None = None,
+    limite: int = LIMITE_PADRAO_PESQUISA_CONTAS,
+    offset: int = 0,
+) -> tuple[list[Conta], int]:
+    """Uma página das contas do tenant, com ou sem ICP, e o total que atende ao filtro. Alimenta os seletores de empresa (o "conta existente" do Kanban
+    precisa enxergar também os leads, que são contas sem ICP): o tenant tem milhares de contas, então ninguém carrega a lista inteira, e a busca
+    por nome (razão social ou nome fantasia) roda no banco. A ordem inclui o `id` para a paginação não repetir nem pular linha quando duas contas
+    têm o mesmo `criado_em`."""
+    limite = max(1, min(limite, LIMITE_MAXIMO_PESQUISA_CONTAS))
+    offset = max(0, offset)
+    query = _contas_do_escopo(db, tenant_id, usuario_id, restrito)
+    if icp_id is not None:
+        query = query.filter(Conta.icp_id == icp_id)
+    termo = (busca or "").strip()
+    if termo:
+        minusculo = termo.lower()  # no Python: o lower() do banco nem sempre trata maiúsculas acentuadas (SQLite só trata ASCII)
+        query = query.filter(
+            or_(func.lower(Conta.nome).contains(minusculo, autoescape=True), func.lower(Conta.nome_fantasia).contains(minusculo, autoescape=True))
+        )
+    total = query.order_by(None).count()
+    contas = query.order_by(Conta.criado_em.desc(), Conta.id.desc()).limit(limite).offset(offset).all()
+    return contas, total
 
 
 def _sinais_de_trabalho_real(db: Session, tenant_id: str, conta: Conta, decisor_ids: list[int]) -> list[str]:

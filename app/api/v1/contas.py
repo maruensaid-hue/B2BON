@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -28,6 +28,7 @@ from app.schemas.conta import (
     DescartarContaRequestSchema,
     EstrategiaVendaSchema,
     GrafoContaResponseSchema,
+    PaginaContasSchema,
 )
 from app.schemas.crm import AtividadeSchema
 from app.schemas.decisor import (
@@ -162,8 +163,26 @@ def listar_todas_as_contas(
     usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> list[ContaSchema]:
-    """Contas disponíveis no escopo do usuário autenticado."""
+    """Contas disponíveis no escopo do usuário autenticado. **Legada**: devolve todas de uma vez (milhares num tenant grande). As telas usam `GET /contas/pesquisa`;
+    esta fica só para as versões antigas do frontend ainda abertas (PWA) durante a troca, e sai numa próxima versão."""
     return conta_service.listar_todas(db, tenant_id, usuario.id, usuario.papel == "user")
+
+
+@router.get("/contas/pesquisa", response_model=PaginaContasSchema)
+def pesquisar_contas(
+    busca: str | None = Query(default=None, max_length=100, description="Parte do nome ou do nome fantasia."),
+    icp_id: int | None = None,
+    limite: int = Query(default=conta_service.LIMITE_PADRAO_PESQUISA_CONTAS, ge=1, le=conta_service.LIMITE_MAXIMO_PESQUISA_CONTAS),
+    offset: int = Query(default=0, ge=0),
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> PaginaContasSchema:
+    """Uma página das contas do escopo do usuário autenticado, com busca por nome (seletores de empresa). Declarada antes de `/contas/{conta_id}` para que "pesquisa" não seja lido como id."""
+    contas, total = conta_service.pesquisar_contas(
+        db, tenant_id, usuario.id, usuario.papel == "user", busca=busca, icp_id=icp_id, limite=limite, offset=offset
+    )
+    return PaginaContasSchema(itens=contas, total=total, limite=limite, offset=offset)
 
 
 @router.get("/contas/{conta_id}", response_model=ContaSchema, dependencies=[Depends(exigir_escopo_conta_leitura)])

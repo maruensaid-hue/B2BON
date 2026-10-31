@@ -942,3 +942,104 @@ def test_definir_proximo_passo_nao_e_apagado_por_edicao_de_conta(client):
 
     assert resposta.status_code == 200
     assert resposta.json()["proximo_passo"] == "Ligar semana que vem"
+
+
+def _criar_contas(db_session, tenant_id: str, quantidade: int, prefixo: str = "Empresa", **extras) -> list[Conta]:
+    contas = [Conta(tenant_id=tenant_id, nome=f"{prefixo} {numero:03d}", status="prospectada", **extras) for numero in range(quantidade)]
+    db_session.add_all(contas)
+    db_session.commit()
+    return contas
+
+
+def test_listar_contas_e_paginado_e_informa_o_total(client, db_session):
+    _criar_contas(db_session, TENANT_ID, 120)
+
+    primeira = client.get("/api/v1/contas/pesquisa").json()
+    assert (primeira["limite"], primeira["offset"], primeira["total"]) == (50, 0, 120)
+    assert len(primeira["itens"]) == 50
+
+    segunda = client.get("/api/v1/contas/pesquisa", params={"limite": 50, "offset": 50}).json()
+    ultima = client.get("/api/v1/contas/pesquisa", params={"limite": 50, "offset": 100}).json()
+    assert len(segunda["itens"]) == 50 and len(ultima["itens"]) == 20
+    ids = [c["id"] for pagina in (primeira, segunda, ultima) for c in pagina["itens"]]
+    assert len(ids) == len(set(ids)) == 120  # nenhuma conta repetida nem pulada entre as páginas
+
+
+def test_listar_contas_so_devolve_o_resumo_do_seletor(client, db_session):
+    _criar_contas(db_session, TENANT_ID, 1)
+
+    item = client.get("/api/v1/contas/pesquisa").json()["itens"][0]
+
+    assert set(item) == {"id", "nome", "nome_fantasia", "icp_id"}
+
+
+def test_listar_contas_busca_por_nome_ou_nome_fantasia_sem_diferenciar_maiusculas(client, db_session):
+    _criar_contas(db_session, TENANT_ID, 3, prefixo="Aleatória")
+    db_session.add(Conta(tenant_id=TENANT_ID, nome="Razão Social Ltda", nome_fantasia="Padaria Estrela", status="prospectada"))
+    db_session.commit()
+
+    por_fantasia = client.get("/api/v1/contas/pesquisa", params={"busca": "estrela"}).json()
+    por_razao = client.get("/api/v1/contas/pesquisa", params={"busca": "RAZÃO SOCIAL"}).json()
+
+    assert por_fantasia["total"] == 1 and por_fantasia["itens"][0]["nome_fantasia"] == "Padaria Estrela"
+    assert por_razao["total"] == 1
+    assert client.get("/api/v1/contas/pesquisa", params={"busca": "inexistente"}).json() == {"itens": [], "total": 0, "limite": 50, "offset": 0}
+
+
+def test_listar_contas_trata_percentual_e_sublinhado_da_busca_como_texto(client, db_session):
+    _criar_contas(db_session, TENANT_ID, 3)
+
+    assert client.get("/api/v1/contas/pesquisa", params={"busca": "%"}).json()["total"] == 0
+    assert client.get("/api/v1/contas/pesquisa", params={"busca": "_"}).json()["total"] == 0
+
+
+def test_listar_contas_filtra_por_icp(client, criar_icp, db_session):
+    icp = criar_icp()
+    _criar_contas(db_session, TENANT_ID, 2, prefixo="Com ICP", icp_id=icp["id"])
+    _criar_contas(db_session, TENANT_ID, 3, prefixo="Lead")
+
+    corpo = client.get("/api/v1/contas/pesquisa", params={"icp_id": icp["id"]}).json()
+
+    assert corpo["total"] == 2 and all(item["icp_id"] == icp["id"] for item in corpo["itens"])
+
+
+def test_listar_contas_recusa_limite_fora_da_faixa(client):
+    assert client.get("/api/v1/contas/pesquisa", params={"limite": 0}).status_code == 422
+    assert client.get("/api/v1/contas/pesquisa", params={"limite": 201}).status_code == 422
+    assert client.get("/api/v1/contas/pesquisa", params={"offset": -1}).status_code == 422
+    assert client.get("/api/v1/contas/pesquisa", params={"limite": 200}).status_code == 200
+
+
+def test_listar_contas_nao_mostra_conta_de_outro_tenant(client, criar_usuario_autenticado, db_session):
+    _criar_contas(db_session, "outro-tenant", 4, prefixo="Alheia")
+    _criar_contas(db_session, TENANT_ID, 2, prefixo="Minha")
+
+    corpo = client.get("/api/v1/contas/pesquisa").json()
+
+    assert corpo["total"] == 2 and all(item["nome"].startswith("Minha") for item in corpo["itens"])
+
+
+def test_listar_contas_vendedor_so_ve_as_proprias_e_o_total_respeita_isso(client, criar_usuario_autenticado, db_session):
+    headers = criar_usuario_autenticado(TENANT_ID, papel="user", email="vendedor@tenant-teste.com.br")
+    vendedor = db_session.query(Usuario).filter_by(email="vendedor@tenant-teste.com.br").one()
+    _criar_contas(db_session, TENANT_ID, 3, prefixo="Do vendedor", vendedor_usuario_id=vendedor.id)
+    _criar_contas(db_session, TENANT_ID, 5, prefixo="De ninguém")
+
+    como_vendedor = client.get("/api/v1/contas/pesquisa", headers=headers).json()
+
+    assert como_vendedor["total"] == 3 and all(item["nome"].startswith("Do vendedor") for item in como_vendedor["itens"])
+
+
+def test_rota_antiga_de_contas_continua_devolvendo_lista_para_versoes_antigas_do_frontend(client, db_session):
+    _criar_contas(db_session, TENANT_ID, 3)
+
+    resposta = client.get("/api/v1/contas")
+
+    assert resposta.status_code == 200 and isinstance(resposta.json(), list) and len(resposta.json()) == 3
+
+
+def test_pesquisa_de_contas_nao_e_confundida_com_o_id_de_uma_conta(client, db_session):
+    _criar_contas(db_session, TENANT_ID, 1)
+
+    assert client.get("/api/v1/contas/pesquisa").status_code == 200
+    assert client.get("/api/v1/contas/999999").status_code == 404

@@ -1,5 +1,10 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Listagem de contas paginada (2026-10-30, D-115)
+
+- Nova rota `GET /contas/pesquisa`: devolve uma página (50 por padrão, até 200) com busca por nome, em vez das 15 mil contas de uma vez. Os seletores de empresa do Kanban ("conta existente"), da edição de contato e do modal da conta passam a buscar enquanto a pessoa digita.
+- Resposta `{itens, total, limite, offset}`, só com os campos que os seletores usam. `GET /contas` segue igual (legada) para as versões antigas do frontend; sai numa próxima versão.
+
 ## Preços de planos públicos mantidos (2026-10-30, D-114)
 
 - Decisão do PO sobre o achado A07 da auditoria: a lista pública de planos (preços, limites e perfis de contratação, inclusive os não self-service) é intencional e continua como está. Sem mudança de código; registrado como risco aceito.
