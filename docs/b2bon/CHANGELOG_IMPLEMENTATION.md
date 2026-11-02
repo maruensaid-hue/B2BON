@@ -1,5 +1,10 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Nomes com a codificação trocada (2026-10-31, D-116)
+
+- Nome de empresa e de contato que chegavam de planilhas e CSVs com a codificação trocada ("QuÃ©bec", "GestÃ£o") agora são corrigidos ao gravar, em qualquer caminho de importação.
+- Para o que já estava gravado, há uma rotina de correção com simulação (`scripts/ops/corrigir_codificacao_dados.py`); a aplicação em produção depende de autorização.
+
 ## Listagem de contas paginada (2026-10-30, D-115)
 
 - Nova rota `GET /contas/pesquisa`: devolve uma página (50 por padrão, até 200) com busca por nome, em vez das 15 mil contas de uma vez. Os seletores de empresa do Kanban ("conta existente"), da edição de contato e do modal da conta passam a buscar enquanto a pessoa digita.

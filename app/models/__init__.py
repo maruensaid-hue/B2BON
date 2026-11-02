@@ -401,3 +401,8 @@ from app.db.base import Base as _Base  # noqa: E402
 from app.models import indices_fk as _indices_fk  # noqa: E402
 
 _indices_fk.aplicar(_Base.metadata)
+
+# Nome de empresa e de contato com a codificação trocada ("QuÃ©bec") é corrigido na gravação.
+from app.models import codificacao as _codificacao  # noqa: E402
+
+_codificacao.aplicar()
