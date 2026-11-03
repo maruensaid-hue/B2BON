@@ -1,5 +1,6 @@
 import httpx
 
+from app.core.config import settings
 from app.providers.channels.whatsapp.base import InfoNumero, ResultadoEnvio, TemplateInfo, WhatsAppProvider
 
 
@@ -10,9 +11,9 @@ class MetaWhatsAppProvider(WhatsAppProvider):
     é por tenant, não compartilhado por toda a plataforma, e cada
     instância desta classe fala com um número específico."""
 
-    _BASE_URL = "https://graph.facebook.com/v20.0"
-
     def __init__(self, access_token: str, phone_number_id: str, business_account_id: str) -> None:
+        # Lida na criação (não no import): segue a versão configurada, inclusive em teste.
+        self._base_url = f"https://graph.facebook.com/{settings.meta_graph_versao}"
         self._token = access_token
         self._phone_number_id = phone_number_id
         self._waba_id = business_account_id
@@ -72,7 +73,7 @@ class MetaWhatsAppProvider(WhatsAppProvider):
     def _enviar(self, payload: dict) -> ResultadoEnvio:
         try:
             resposta = httpx.post(
-                f"{self._BASE_URL}/{self._phone_number_id}/messages",
+                f"{self._base_url}/{self._phone_number_id}/messages",
                 json=payload,
                 headers=self._headers(),
                 timeout=15.0,
@@ -87,7 +88,7 @@ class MetaWhatsAppProvider(WhatsAppProvider):
     def listar_templates(self) -> list[TemplateInfo]:
         try:
             resposta = httpx.get(
-                f"{self._BASE_URL}/{self._waba_id}/message_templates",
+                f"{self._base_url}/{self._waba_id}/message_templates",
                 headers=self._headers(),
                 timeout=15.0,
             )
@@ -109,7 +110,7 @@ class MetaWhatsAppProvider(WhatsAppProvider):
     def info_numero(self) -> InfoNumero:
         try:
             resposta = httpx.get(
-                f"{self._BASE_URL}/{self._phone_number_id}",
+                f"{self._base_url}/{self._phone_number_id}",
                 params={"fields": "display_phone_number,verified_name,quality_rating"},
                 headers=self._headers(),
                 timeout=15.0,

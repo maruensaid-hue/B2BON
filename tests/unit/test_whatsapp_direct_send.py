@@ -68,13 +68,20 @@ def test_provedor_envia_com_categoria_utilidade_e_le_o_erro_da_meta(monkeypatch)
             return _Resposta(200, {"messages": [{"id": "wamid.1"}]})
         return _Resposta(400, {"error": {"code": 131047, "message": "Re-engagement message"}})
 
-    monkeypatch.setattr(httpx, "post", post)
+    urls = []
+    monkeypatch.setattr(httpx, "post", lambda url, **kw: (urls.append(url), post(url, **kw))[1])
     provider = MetaWhatsAppProvider("t", "111", "222")
 
     assert provider.enviar_direct_send("5511", "Oi").id_externo == "wamid.1"
     assert chamadas[0]["category"] == "utility" and chamadas[0]["type"] == "text"
     falha = provider.enviar_texto_livre("5511", "Oi")
     assert falha.codigo_erro == 131047 and "Re-engagement" in falha.motivo_falha
+    assert urls[0] == f"https://graph.facebook.com/{settings.meta_graph_versao}/111/messages"
+
+
+def test_versao_da_graph_api_nao_esta_expirada():
+    # v20.0 expirou em 24/09/2026 (calendário de versões da Meta); a configuração padrão precisa ser uma versão ainda suportada.
+    assert int(settings.meta_graph_versao.lstrip("v").split(".")[0]) >= 26
 
 
 # --- Regras do serviço ----------------------------------------------------------------------------------------------------

@@ -168,7 +168,10 @@ class Settings(BaseSettings):
     # não aparece e vale só a configuração manual.
     meta_app_id: str = ""
     meta_embedded_signup_config_id: str = ""
-    meta_graph_versao: str = "v20.0"
+    # Versão da Graph API usada em TODA chamada à Meta (envio, templates, conexão do número). A Meta expira cada versão uns 2 anos
+    # depois de lançada (calendário em developers.facebook.com/docs/graph-api/changelog/versions); trocar aqui (ou pela variável
+    # META_GRAPH_VERSAO) atualiza tudo de uma vez. A v20.0 expirou em 24/09/2026; a v26.0 é de 29/07/2026.
+    meta_graph_versao: str = "v26.0"
     # Segredo dos endpoints internos de webhook (`/webhooks/whatsapp`, `/webhooks/email`, `/webhooks/reputacao`), que NÃO são
     # chamados por nenhum provedor real. Vazio nunca autoriza (mesma regra do `cron_secret`).
     webhook_interno_secret: str = ""
