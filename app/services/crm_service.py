@@ -287,7 +287,7 @@ def criar_negocio(
 
 
 def abrir_ou_reaproveitar_oportunidade(
-    db: Session, tenant_id: str, ator_id: str | None, conta_id: int, nome: str, origem: str
+    db: Session, tenant_id: str, ator_id: str | None, conta_id: int, nome: str, origem: str, descricao_atividade: str | None = None
 ) -> tuple[Negocio, bool]:
     """Network → CRM (Fase 8): uma conta com negócio em aberto não ganha
     outro. Sem negócio aberto, cria no primeiro estágio, sem contato
@@ -311,7 +311,7 @@ def abrir_ou_reaproveitar_oportunidade(
     db.flush()
     atividade_service.registrar(
         db, tenant_id, conta_id=conta_id, negocio_id=negocio.id, tipo="sistema",
-        descricao=f"Negócio '{nome}' criado a partir de sinal da rede", ator_id=ator_id,
+        descricao=descricao_atividade or f"Negócio '{nome}' criado a partir de sinal da rede", ator_id=ator_id,
     )
     auditoria_service.registrar(
         db, tenant_id, "negocio_criado", "negocio", negocio.id, ator_id, {"conta_id": conta_id, "origem": origem},

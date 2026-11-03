@@ -1,12 +1,15 @@
+import re
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from app.contexts.integrations import contract as integracoes
+from app.contexts.predator import contract as predator_contract
 from app.core.config import settings
 from app.models.conta import Conta
 from app.models.configuracao_envio import ConfiguracaoEnvio
 from app.models.decisor import Decisor
+from app.models.aprovacao import Aprovacao
 from app.models.mensagem import Mensagem
 from app.models.tarefa_linkedin import TarefaLinkedin
 from app.models.usuario import Usuario
@@ -18,12 +21,39 @@ from app.services import (
     atividade_service,
     auditoria_service,
     bloqueio_contato_service,
+    campanha_personalizacao,
     optout_service,
+    portao_envio_service,
     rampa_service,
     rastreamento_service,
     reputacao_service,
+    whatsapp_service,
 )
 from app.services.errors import RegraNegocioViolada
+
+_VARIAVEL = re.compile(r"\{\{\s*(nome|empresa|cargo)\s*\}\}", re.IGNORECASE)
+
+
+def _renderizar_variaveis(texto: str | None, decisor: Decisor, empresa: str | None) -> str | None:
+    """`{{nome}}` (primeiro nome), `{{empresa}}` e `{{cargo}}` — as variáveis que a edição na fila de aprovação aceita — trocadas pelos
+    dados do decisor na hora do envio. Antes disto elas saíam literais na cadência."""
+    if not texto or "{{" not in texto:
+        return texto
+    valores = {"nome": campanha_personalizacao.primeiro_nome(decisor.nome), "empresa": (empresa or "").strip() or campanha_personalizacao.EMPRESA_PADRAO,
+               "cargo": (decisor.cargo or "").strip()}
+    return _VARIAVEL.sub(lambda m: valores[m.group(1).lower()], texto)
+
+
+def _devolver_para_revisao(db: Session, tenant_id: str, mensagem: Mensagem, motivo: str) -> None:
+    """Mensagem com erro que nenhuma aprovação conserta sozinha (campo não preenchido, corpo vazio): volta para a fila de aprovação com
+    o motivo, em vez de sair ou de ser descartada em silêncio."""
+    mensagem.status = "aguardando_aprovacao"
+    mensagem.motivo_falha = motivo
+    aprovacao = db.query(Aprovacao).filter_by(tenant_id=tenant_id, mensagem_id=mensagem.id).order_by(Aprovacao.id.desc()).first()
+    if aprovacao is not None:
+        aprovacao.status, aprovacao.decidido_em = "pendente", None
+    auditoria_service.registrar(db, tenant_id, "envio_devolvido_para_revisao", "mensagem", mensagem.id, None, {"motivo": motivo},
+                                canal=mensagem.canal)
 
 MAX_TENTATIVAS_ENVIO = 3
 JANELA_LIVRE_WHATSAPP_HORAS = 24
@@ -56,16 +86,31 @@ def _processar_whatsapp(
     db: Session, mensagem: Mensagem, decisor: Decisor, provider: WhatsAppProvider
 ) -> ResultadoEnvio | None:
     if mensagem.template_id is None:
-        fora_da_janela = (
-            decisor.ultima_interacao_em is None
-            or (datetime.now(UTC) - decisor.ultima_interacao_em).total_seconds()
-            > JANELA_LIVRE_WHATSAPP_HORAS * 3600
-        )
-        if fora_da_janela:
+        ultima = decisor.ultima_interacao_em
+        if ultima is not None and ultima.tzinfo is None:
+            # A coluna é `timestamp` sem fuso (gravada em UTC): lida do banco vem "ingênua", e subtrair de um horário com fuso estourava
+            # TypeError, derrubando o envio de WhatsApp do tenant inteiro justamente para quem já tinha respondido.
+            ultima = ultima.replace(tzinfo=UTC)
+        fora_da_janela = ultima is None or (datetime.now(UTC) - ultima).total_seconds() > JANELA_LIVRE_WHATSAPP_HORAS * 3600
+        if not fora_da_janela:
+            return provider.enviar_texto_livre(decisor.telefone, mensagem.conteudo)
+        if mensagem.whatsapp_modo != "direct_send":
             # Mensagem livre fora da janela de 24h: exige template — adia,
             # não trata como falha (E3-H2).
             return None
-        return provider.enviar_texto_livre(decisor.telefone, mensagem.conteudo)
+        # Janela fechada e mensagem marcada para sair sem template (Direct Send, categoria utilidade), com as travas.
+        promocionais = predator_contract.portao_envio.termos_promocionais(mensagem.conteudo)
+        if promocionais:
+            _devolver_para_revisao(
+                db, mensagem.tenant_id, mensagem,
+                f"Texto promocional (\"{promocionais[0]}\") não pode sair pelo WhatsApp sem template: a Meta trata como marketing e pune "
+                "o número. Tire a promoção ou use um template aprovado.",
+            )
+            return None
+        resultado = whatsapp_service.enviar_direct_send(db, mensagem.tenant_id, provider, decisor.telefone, mensagem.conteudo)
+        if resultado is None:
+            mensagem.motivo_falha = "WhatsApp sem template indisponível para esta conta (desligado ou recusado pela Meta): aguardando."
+        return resultado
     variavel_botao = _variavel_botao_whatsapp(db, decisor)
     return provider.enviar_template(decisor.telefone, mensagem.template_id, {}, variavel_botao)
 
@@ -146,6 +191,8 @@ def processar_pendentes(
         "descartadas_email_invalido": 0,
         "bloqueadas_crm": 0,
         "bloqueadas_email_inexistente": 0,
+        "aguardando_confirmacao_email": 0,
+        "devolvidas_para_revisao": 0,
     }
     # D-087: conexões de CRM com deduplicação ligada (uma consulta por rodada).
     escrita_crm = integracoes.obter_escrita()
@@ -189,6 +236,23 @@ def processar_pendentes(
 
         if mensagem.canal == "email" and not _dentro_da_janela_dias_uteis_e_horario(config):
             resultado["adiadas"] += 1
+            continue
+
+        if mensagem.canal in ("email", "whatsapp"):
+            empresa = db.query(Conta.nome).filter_by(id=decisor.conta_id, tenant_id=tenant_id).scalar()
+            mensagem.conteudo = _renderizar_variaveis(mensagem.conteudo, decisor, empresa)
+            mensagem.assunto = _renderizar_variaveis(mensagem.assunto, decisor, empresa)
+            graves = [p for p in portao_envio_service.problemas(db, tenant_id, mensagem, decisor) if p.grave]
+            if graves:
+                _devolver_para_revisao(db, tenant_id, mensagem, "Devolvida para revisão: " + "; ".join(p.texto for p in graves))
+                resultado["devolvidas_para_revisao"] += 1
+                continue
+
+        if mensagem.canal == "email" and decisor.email_status == "inferido":
+            # E-mail montado pelo padrão da empresa: sem verificador de caixa contratado, um palpite não sai. Fica pendente, com o motivo à
+            # vista, até alguém confirmar o e-mail no cadastro do decisor (aí o envio segue sozinho na próxima rodada).
+            mensagem.motivo_falha = "E-mail deduzido pelo padrão do site: confirme o e-mail do decisor para liberar o envio."
+            resultado["aguardando_confirmacao_email"] += 1
             continue
 
         if mensagem.canal == "email":

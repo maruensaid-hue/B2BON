@@ -18,6 +18,10 @@ class CadenciaSchema(BaseModel):
     tipo: str
     data_inicio: datetime | None
     cancelar_ao_responder: bool
+    pausar_empresa_ao_responder: bool = False
+    prospeccao_automatica: bool = False
+    direct_send_aceito_por: str | None = None
+    direct_send_aceito_em: datetime | None = None
     criado_em: datetime
 
 
@@ -27,6 +31,7 @@ class ToqueCadenciaCreateSchema(BaseModel):
     intervalo_dias_apos_anterior: int = 0
     template_whatsapp_id: str | None = None
     ab_teste_habilitado: bool = False
+    whatsapp_sem_template: bool = False
 
 
 class ToqueCadenciaSchema(BaseModel):
@@ -39,6 +44,13 @@ class ToqueCadenciaSchema(BaseModel):
     intervalo_dias_apos_anterior: int
     template_whatsapp_id: str | None
     ab_teste_habilitado: bool
+    whatsapp_sem_template: bool = False
+
+
+class DefinirWhatsAppSemTemplateRequestSchema(BaseModel):
+    whatsapp_sem_template: bool
+    # Obrigatório para ligar: quem liga declara que leu o risco (suspensão/banimento do Direct Send pela Meta).
+    confirmo_risco: bool = False
 
 
 class DefinirTemplateWhatsAppRequestSchema(BaseModel):
@@ -51,6 +63,14 @@ class RenomearCadenciaRequestSchema(BaseModel):
 
 class DefinirCancelamentoAoResponderRequestSchema(BaseModel):
     cancelar_ao_responder: bool
+
+
+class DefinirPausaEmpresaAoResponderRequestSchema(BaseModel):
+    pausar_empresa_ao_responder: bool
+
+
+class DefinirProspeccaoAutomaticaRequestSchema(BaseModel):
+    prospeccao_automatica: bool
 
 
 class CancelarCadenciaResponseSchema(BaseModel):
@@ -85,6 +105,9 @@ class CadenciaCreateSchema(BaseModel):
     # Raio-X 2026-09-15: desligado por padrão — uma resposta do decisor
     # não interrompe mais a cadência a menos que isto seja marcado.
     cancelar_ao_responder: bool = False
+    pausar_empresa_ao_responder: bool = False
+    # Obrigatório quando algum toque de WhatsApp sai sem template (Direct Send): quem cria declara que leu o risco.
+    direct_send_risco_aceito: bool = False
 
 
 class GerarCadenciaRequestSchema(BaseModel):

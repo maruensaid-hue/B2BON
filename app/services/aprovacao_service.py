@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
+from app.contexts.predator import contract as predator_contract
 from app.contexts.shared import events as eventos
 from app.models.aprovacao import Aprovacao
 from app.models.decisor import Decisor
@@ -13,7 +14,7 @@ from app.models.mensagem import Mensagem
 from app.models.regra_auto_aprovacao import RegraAutoAprovacao
 from app.models.tarefa_linkedin import TarefaLinkedin
 from app.providers.plan_limits.base import PlanLimitsProvider
-from app.services import auditoria_service
+from app.services import auditoria_service, portao_envio_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 VARIAVEIS_PERMITIDAS = {"nome", "empresa", "cargo"}
@@ -33,6 +34,7 @@ def criar_proposta(
     variante_ab: str | None = None,
     agendado_para: datetime | None = None,
     assunto: str | None = None,
+    whatsapp_modo: str | None = None,
 ) -> Mensagem:
     """Cria uma mensagem proposta e a correspondente entrada na fila.
 
@@ -55,6 +57,7 @@ def criar_proposta(
         variante_ab=variante_ab,
         agendado_para=agendado_para,
         status="aguardando_aprovacao",
+        whatsapp_modo=whatsapp_modo,
     )
     db.add(mensagem)
     db.flush()
@@ -97,6 +100,17 @@ def _aplicar_regra_auto_aprovacao(
         .one_or_none()
     )
     if regra is None:
+        return
+    # Aprovação automática não aprova o que a checagem determinística aponta (link para domínio estranho, frase de spam, campo vazio):
+    # a mensagem segue para a fila humana com o motivo, que é quem decide.
+    decisor = db.query(Decisor).filter_by(id=mensagem.decisor_id, tenant_id=tenant_id).one_or_none()
+    apontados = portao_envio_service.problemas(db, tenant_id, mensagem, decisor)
+    if apontados:
+        mensagem.motivo_falha = "Retida para revisão: " + predator_contract.portao_envio.resumo(apontados)
+        auditoria_service.registrar(
+            db, tenant_id, "aprovacao_automatica_retida", "aprovacao", aprovacao.id, None,
+            {"motivos": [p.codigo for p in apontados]}, conta_id=_conta_id_da_mensagem(db, mensagem), canal=mensagem.canal,
+        )
         return
 
     aprovacao.status = "aprovado"

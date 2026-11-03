@@ -457,7 +457,37 @@ CyberFort" usado por todo mundo — se o seu tenant não tiver essa
 configuração feita, o toque de WhatsApp das suas cadências simplesmente
 nunca sai (silenciosamente, sem erro na tela).
 
-**Passo a passo para configurar:**
+**Jeito rápido: botão "Conectar com a Meta".** Em **Configuração →
+WhatsApp Business**, um administrador clica em **Conectar com a Meta**.
+Abre uma janela da própria Meta: entre com o Facebook da empresa,
+escolha (ou crie) a conta do WhatsApp Business e o número, e confirme.
+Em cerca de 2 minutos o B2B ON recebe a conexão sozinho, registra o
+número na API e mostra o número, o nome verificado e a qualidade.
+**Testar conexão** confirma a qualquer momento que está tudo ligado.
+O B2B ON nunca vê a sua senha. Quem preferir pode abrir **Prefiro
+configurar manualmente** e seguir o passo a passo abaixo.
+
+**Envio sem template (Direct Send da Meta).** A Meta passou a aceitar,
+em beta, mensagens iniciadas pela empresa **sem template pré-aprovado**,
+mas **só de utilidade** (lembrete de reunião, resposta a quem falou com
+você), nunca de marketing. Ligue **Envio sem template** em Configuração
+→ WhatsApp Business só se o WhatsApp Manager mostrar sua conta como
+elegível. Com ele ligado:
+
+- lembrete de reunião, pesquisa NPS, aviso ao vendedor e o rascunho de
+  resposta aprovado saem mesmo com a janela de 24 h fechada;
+- numa cadência, um administrador pode marcar o toque de WhatsApp como
+  **sem template**, aceitando o risco por escrito. A Meta trata
+  prospecção como marketing: revisa depois do envio e, se considerar
+  marketing, suspende o recurso por 7 dias, depois bloqueia por 30 e
+  por fim retira em definitivo do seu número. O B2B ON reduz o risco: a
+  IA escreve em formato de aviso, e **texto promocional** (desconto,
+  preço, "nossa solução"...) nunca sai por esse caminho; a mensagem
+  volta para a Fila de Aprovação com o motivo;
+- se a Meta recusar a conta, o B2B ON desliga o recurso sozinho e mostra
+  o motivo. As mensagens esperam um template.
+
+**Passo a passo para configurar manualmente:**
 
 1. Crie (ou reutilize) um app em [developers.facebook.com](https://developers.facebook.com/apps),
    adicionando o produto **WhatsApp** a ele.
@@ -844,6 +874,108 @@ pendentes). Você faz o último passo:
 
 **Ignorar** cancela a mensagem (pede confirmação). As abas
 **Pendentes**, **Enviadas** e **Ignoradas** guardam o histórico.
+
+### 5.15 Sinais da conta, critérios do ICP e descoberta por busca
+
+**Sinais da conta.** Cada vez que uma conta é enriquecida ("Pesquisar
+empresa (site)", "Enriquecer (dados cadastrais)" ou a fila em lote), o
+sistema grava **fatos com evidência**, sem custo de crédito e sem IA:
+
+- **Do site:** página de vagas, área de Relações com Investidores,
+  política de privacidade/LGPD, receita líquida publicada, tag de
+  anúncio do Google, pixel da Meta, botão de WhatsApp, agendamento
+  online, plataformas do site (WordPress, VTEX, RD Station...), quadro
+  de vagas em plataforma de recrutamento (Gupy, Solides...) e a agência
+  creditada no rodapé.
+- **Do cadastro público do CNPJ:** anos desde a abertura, capital social,
+  quantidade de sócios, opção pelo Simples e situação cadastral.
+
+Eles aparecem em **Sinais da conta**, no detalhe da conta, com a
+confiança de cada um e o link da evidência. Site cujo domínio não foi
+confirmado como da empresa conta menos, e site divergente (outro CNPJ)
+não gera sinal nenhum.
+
+**Critérios de sinais no ICP.** Em **Criar ICP** / **Nova versão**, a
+seção **Sinais das contas** monta a lista como uma consulta: escolha um
+sinal e diga se a conta **precisa ter**, **não pode ter** ou deve estar
+**entre** dois valores. Enquanto você monta, aparece quantas contas já
+atendem. Conta ainda não enriquecida não atende (dado não coletado nunca
+conta como "sim").
+
+**Mensagens que citam um fato real.** Ao gerar uma cadência, a IA recebe
+os sinais que podem ser ditos ao decisor (vagas abertas, anúncio no
+Google/Meta, RI, receita publicada, anos de empresa) e o resumo do site.
+A regra é usar no máximo um fato e nunca afirmar sobre a empresa algo que
+não esteja ali. No primeiro toque, ela abre com uma observação concreta e
+termina com uma pergunta.
+
+**Decisores do próprio site.** Quando o domínio é confirmado, quem o
+site nomeia com cargo de decisão (CEO, fundador, sócio, diretor...) vira
+decisor com a origem **Site da empresa**, sem gastar crédito. Se o site
+publica o e-mail de alguém nomeado (por exemplo `joao.silva@`), o sistema
+aprende o formato e o aplica a quem ainda não tem e-mail, inclusive aos
+sócios do QSA. E-mail montado assim aparece com o selo **deduzido** e
+**não é enviado** até alguém clicar em **Confirmar e-mail** (ou corrigir
+o e-mail no cadastro do decisor).
+
+**Checagem antes de enviar.** Sem IA, antes de cada envio:
+
+- campo de personalização não preenchido (`{{apelido}}`, `[EMPRESA]`) ou
+  mensagem vazia: a mensagem **volta para a Fila de Aprovação** com o
+  motivo, mesmo se já tinha sido aprovada. `{{nome}}`, `{{empresa}}` e
+  `{{cargo}}` são preenchidos com os dados do decisor na hora do envio;
+- frase batida ou de spam ("espero que esteja bem", "clique aqui"),
+  e-mail com mais de 220 palavras, mais de dois links ou link para um
+  domínio que não é seu nem do cliente: a **aprovação automática não
+  aprova**, e a mensagem vai para a fila humana com o motivo. Na geração,
+  a IA refaz o texto que trouxer frase proibida.
+
+**Respostas.** Quem responde "SAIR", "me tire da lista", "parem de me
+enviar" (ou só "Não tenho interesse.") é descadastrado na hora, em todos
+os canais. O texto citado do seu próprio e-mail não conta. Reclamação ou
+menção jurídica (Procon, advogado, denúncia de spam) cancela os envios
+para essa pessoa e fica registrada na conta para um humano, sem resposta
+automática. Na cadência, a opção **Se alguém da empresa responder,
+pausar para os colegas dele** cancela os toques pendentes para os outros
+decisores da mesma empresa assim que um deles responde. Fica desligada
+por padrão.
+
+**Descobrir por busca** (só administradores). Acha empresas que o recorte
+de CNPJ não mostra, a partir do que a empresa faz e da cidade, com
+posição no mapa, nota, quantidade de avaliações e se tem site próprio.
+Cada busca é paga: **Estimar custo** mostra o valor antes, e nada é
+gasto sem **Confirmar e buscar**. Empresa que já existe na sua base só
+recebe os sinais novos. Sem a integração configurada, o painel avisa e
+não faz nada. Empresa nova com site entra sozinha na fila de
+enriquecimento: o site é lido, os sinais são gravados e os decisores
+mapeados, sem outro clique.
+
+**Prospecção automática** (por cadência, desligada por padrão). Na
+cadência criada a partir de um ICP, marque **Prospecção automática**. A
+cada 15 minutos, as contas novas desse ICP que já tiveram o site
+confirmado no enriquecimento, têm decisor e atendem aos critérios de
+sinais ganham os rascunhos sozinhas, no máximo 4 por vez, as de maior
+score primeiro. Com 40 rascunhos esperando na Fila de Aprovação, o
+sistema para de gerar até a fila andar. Quando todos os rascunhos novos
+estão aprovados, a cadência é ativada sozinha (a franquia é consumida
+nessa hora, como na ativação manual). **Nada é enviado sem aprovação.**
+
+**Resposta vira negócio e rascunho.** Quando alguém responde a uma
+mensagem já enviada (e-mail ou WhatsApp):
+
+- a conta ganha um negócio aberto no primeiro estágio do funil do CRM,
+  com o decisor que respondeu. Se já existe negócio aberto, a resposta
+  entra no histórico dele;
+- a IA prepara um **rascunho de resposta**: responde o que foi
+  perguntado usando só o que a oferta diz, trata objeção com uma
+  pergunta e conduz para uma conversa de 20 a 30 minutos. O rascunho vai
+  para a Fila de Aprovação.
+
+Em **Configuração → Tom e restrições de comunicação** você pode desligar
+o rascunho e cadastrar o **link da sua agenda** (Calendly, Google
+Agenda...). Com o link, o rascunho oferece a agenda; sem ele, pede duas
+opções de dia e horário. Respostas automáticas (férias, fora do
+escritório) não abrem negócio nem geram rascunho.
 
 ---
 

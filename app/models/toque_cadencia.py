@@ -18,3 +18,6 @@ class ToqueCadencia(Base):
     template_whatsapp_id: Mapped[str | None] = mapped_column(String, nullable=True)
     # Teste A/B por toque (E3-H5): variantes A/B com distribuição controlada.
     ab_teste_habilitado: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Toque de WhatsApp SEM template (Direct Send da Meta, categoria utilidade). Só com o risco aceito na cadência por um admin
+    # (`Cadencia.direct_send_aceito_por`) e a conta habilitada; o texto passa pela checagem de conteúdo promocional antes de sair.
+    whatsapp_sem_template: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

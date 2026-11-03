@@ -16,6 +16,7 @@ from app.api.deps import (
     get_llm_provider,
     get_payout_provider,
     get_plan_limits_provider,
+    get_html_fetcher,
     get_site_fetcher,
     get_web_search_provider,
     resolver_email_provider,
@@ -35,7 +36,7 @@ from app.core.config import settings
 from app.db import rls, rls_registro
 from app.integrations.brasilapi_client import BrasilApiClient
 from app.graph.client import Neo4jClient
-from app.integrations.site_fetcher import SiteFetcher
+from app.integrations.site_fetcher import HtmlFetcher, SiteFetcher
 from app.llm.base import LLMProvider
 from app.models.tenant import Tenant
 from app.providers.account_data.base import AccountDataProvider
@@ -53,6 +54,7 @@ from app.services import (
     envio_service,
     nps_service,
     pagamento_licenca_service,
+    prospeccao_automatica_service,
     registro_oportunidade_service,
     relatorio_service,
     reuniao_service,
@@ -285,6 +287,7 @@ def processar_fila_enriquecimento(
     graph: Neo4jClient = Depends(get_graph_client),
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
     brasilapi_client: BrasilApiClient = Depends(get_brasilapi_client),
+    html_fetcher: HtmlFetcher | None = Depends(get_html_fetcher),
 ) -> dict:
     """Processa em lotes pequenos a fila de enriquecimento (site +
     decisores) de contas criadas em massa (ex.: importação de planilha de
@@ -294,8 +297,29 @@ def processar_fila_enriquecimento(
     (decisores: só o QSA da Receita; o provedor de contatos nunca é chamado aqui) (raio-X: planilha grande estourando timeout do proxy do
     Render, mesmo raciocínio do recorte de CNPJ)."""
     return enriquecimento_fila_service.processar_pendentes(
-        db, llm, site_fetcher, web_search, account_data, graph, plan_limits, brasilapi_client
+        db, llm, site_fetcher, web_search, account_data, graph, plan_limits, brasilapi_client, html_fetcher=html_fetcher
     )
+
+
+@router.post("/prospeccao-automatica", dependencies=[Depends(_exigir_segredo_cron)])
+def prospeccao_automatica_todos_os_tenants(
+    db: Session = Depends(get_db),
+    llm: LLMProvider = Depends(get_llm_provider),
+    plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
+) -> dict:
+    """Ciclo automático das cadências com `prospeccao_automatica`: gera os rascunhos das contas novas elegíveis (fila de aprovação) e
+    ativa a cadência quando tudo foi aprovado. Tenant a tenant, com falha isolada (mesmo padrão de `/processar-envios`)."""
+    por_tenant: dict[str, dict] = {}
+    tenants_com_falha: list[str] = []
+    for tenant in _tenants_reais(db):
+        try:
+            with rls.contexto_tenant(db, tenant.id):
+                por_tenant[tenant.id] = prospeccao_automatica_service.executar_para_tenant(db, tenant.id, llm, plan_limits)
+        except Exception:
+            db.rollback()
+            _registrar_falha_tenant(tenant.id)
+            tenants_com_falha.append(tenant.id)
+    return {"por_tenant": por_tenant, "tenants_com_falha": tenants_com_falha}
 
 
 @router.post("/disparar-relatorios-periodicos", dependencies=[Depends(_exigir_segredo_cron), Depends(_contexto_cron("cron-disparar-relatorios-periodicos"))])

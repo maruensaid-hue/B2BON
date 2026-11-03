@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.graph.client import Neo4jClient
 from app.integrations.brasilapi_client import BrasilApiClient
-from app.integrations.site_fetcher import SiteFetcher
+from app.integrations.site_fetcher import HtmlFetcher, SiteFetcher
 from app.llm.base import LLMProvider
 from app.models.fila_enriquecimento_conta import FilaEnriquecimentoConta
 from app.providers.account_data.base import AccountDataProvider
@@ -44,6 +44,7 @@ def processar_pendentes(
     graph: Neo4jClient,
     plan_limits: PlanLimitsProvider,
     consulta_cnpj: BrasilApiClient | None = None,
+    html_fetcher: HtmlFetcher | None = None,
 ) -> dict:
     """Processa um lote pequeno da fila por vez (cron, `/cron/processar-
     fila-enriquecimento`) — site + decisores por conta, tolerante a falha
@@ -66,7 +67,7 @@ def processar_pendentes(
         try:
             conta_service.enriquecer(
                 db, item.tenant_id, None, item.conta_id, llm, site_fetcher, web_search, plan_limits,
-                consulta_cnpj=consulta_cnpj, disparo="fila",
+                consulta_cnpj=consulta_cnpj, disparo="fila", html_fetcher=html_fetcher,
             )
             conta_service.mapear_decisores(
                 db, item.tenant_id, None, item.conta_id, account_data, graph, plan_limits

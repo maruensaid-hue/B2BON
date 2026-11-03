@@ -43,5 +43,8 @@ class Mensagem(Base):
     bounce_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     motivo_bounce: Mapped[str | None] = mapped_column(String, nullable=True)
     motivo_falha: Mapped[str | None] = mapped_column(String, nullable=True)
+    # WhatsApp: `direct_send` = pode sair sem template (categoria utilidade) quando a janela de 24 h estiver fechada. Nulo = regra
+    # antiga (template, ou texto livre só dentro da janela).
+    whatsapp_modo: Mapped[str | None] = mapped_column(String, nullable=True)
     tentativas_envio: Mapped[int] = mapped_column(Integer, default=0)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

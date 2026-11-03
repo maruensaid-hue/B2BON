@@ -24,6 +24,8 @@ class ICP(Base):
     gatilhos: Mapped[list] = mapped_column(JSON, default=list)
     cnae_codigos: Mapped[list] = mapped_column(JSON, default=list)
     ufs: Mapped[list] = mapped_column(JSON, default=list)
+    # Critérios sobre sinais de conta (`app.contexts.predator.sinais`): [{codigo, regra: exigir|excluir|faixa, minimo?, maximo?, valor?}].
+    criterios_sinais: Mapped[list] = mapped_column(JSON, default=list)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

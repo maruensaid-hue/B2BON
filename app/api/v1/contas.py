@@ -292,6 +292,19 @@ def confirmar_papel_decisor(
     return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, [decisor])[0]
 
 
+@router.post("/contas/{conta_id}/decisores/{decisor_id}/confirmar-email", response_model=DecisorSchema,
+             dependencies=[Depends(exigir_escopo_conta), Depends(exigir_escopo_decisor_usuario)])
+def confirmar_email_decisor(
+    conta_id: int,
+    decisor_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> DecisorSchema:
+    """Libera para envio o e-mail que o enriquecimento deduziu pelo padrão do site."""
+    return conta_service.confirmar_email_decisor(db, tenant_id, ator_id, conta_id, decisor_id)
+
+
 @router.post("/contas/{conta_id}/decisores/{decisor_id}/suprimir", dependencies=[Depends(exigir_escopo_conta), Depends(exigir_escopo_decisor_usuario)])
 def suprimir_decisor(
     conta_id: int,
@@ -378,6 +391,16 @@ def grafo_conta(
     graph: Neo4jClient = Depends(get_graph_client),
 ) -> GrafoContaResponseSchema:
     return GrafoContaResponseSchema(**conta_service.grafo(db, tenant_id, conta_id, graph))
+
+
+@router.get("/contas/{conta_id}/sinais", dependencies=[Depends(exigir_escopo_conta_leitura)])
+def sinais_da_conta(
+    conta_id: int,
+    tenant_id: str = Depends(get_tenant_id),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """Sinais vigentes da conta (fato, confiança, fonte e evidência), preenchidos pelo enriquecimento."""
+    return conta_service.sinais_da_conta(db, tenant_id, conta_id)
 
 
 @router.get("/contas/{conta_id}/atividades", response_model=list[AtividadeSchema], dependencies=[Depends(exigir_escopo_conta)])

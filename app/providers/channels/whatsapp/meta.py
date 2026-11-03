@@ -1,6 +1,6 @@
 import httpx
 
-from app.providers.channels.whatsapp.base import ResultadoEnvio, TemplateInfo, WhatsAppProvider
+from app.providers.channels.whatsapp.base import InfoNumero, ResultadoEnvio, TemplateInfo, WhatsAppProvider
 
 
 class MetaWhatsAppProvider(WhatsAppProvider):
@@ -58,6 +58,17 @@ class MetaWhatsAppProvider(WhatsAppProvider):
         }
         return self._enviar(payload)
 
+    def enviar_direct_send(self, telefone: str, texto: str, categoria: str = "utility") -> ResultadoEnvio:
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": telefone,
+            "type": "text",
+            "text": {"body": texto},
+            "category": categoria,
+        }
+        return self._enviar(payload)
+
     def _enviar(self, payload: dict) -> ResultadoEnvio:
         try:
             resposta = httpx.post(
@@ -66,12 +77,12 @@ class MetaWhatsAppProvider(WhatsAppProvider):
                 headers=self._headers(),
                 timeout=15.0,
             )
-            resposta.raise_for_status()
-            corpo = resposta.json()
-            id_externo = corpo.get("messages", [{}])[0].get("id")
-            return ResultadoEnvio(sucesso=True, id_externo=id_externo)
         except httpx.HTTPError as erro:
-            return ResultadoEnvio(sucesso=False, motivo_falha=str(erro))
+            return ResultadoEnvio(sucesso=False, motivo_falha=f"Sem resposta da Meta ({type(erro).__name__}).")
+        if resposta.is_success:
+            id_externo = resposta.json().get("messages", [{}])[0].get("id")
+            return ResultadoEnvio(sucesso=True, id_externo=id_externo)
+        return _falha_meta(resposta)
 
     def listar_templates(self) -> list[TemplateInfo]:
         try:
@@ -94,3 +105,34 @@ class MetaWhatsAppProvider(WhatsAppProvider):
             ]
         except httpx.HTTPError:
             return []
+
+    def info_numero(self) -> InfoNumero:
+        try:
+            resposta = httpx.get(
+                f"{self._BASE_URL}/{self._phone_number_id}",
+                params={"fields": "display_phone_number,verified_name,quality_rating"},
+                headers=self._headers(),
+                timeout=15.0,
+            )
+        except httpx.HTTPError as erro:
+            return InfoNumero(erro=f"Sem resposta da Meta ({type(erro).__name__}).")
+        if not resposta.is_success:
+            return InfoNumero(erro=_falha_meta(resposta).motivo_falha)
+        dados = resposta.json()
+        return InfoNumero(
+            numero_exibicao=dados.get("display_phone_number"), nome_verificado=dados.get("verified_name"),
+            qualidade=dados.get("quality_rating"),
+        )
+
+
+def _falha_meta(resposta: httpx.Response) -> ResultadoEnvio:
+    """Erro da Graph API com código e mensagem da própria Meta (antes só "400 Bad Request", impossível de diagnosticar)."""
+    try:
+        erro = resposta.json().get("error", {})
+    except ValueError:
+        erro = {}
+    codigo = erro.get("code")
+    mensagem = erro.get("error_user_msg") or erro.get("message") or f"HTTP {resposta.status_code}"
+    return ResultadoEnvio(sucesso=False, codigo_erro=codigo if isinstance(codigo, int) else None,
+                          motivo_falha=f"Meta recusou ({codigo}): {mensagem}"[:500])
+

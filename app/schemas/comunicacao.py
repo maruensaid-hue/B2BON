@@ -10,6 +10,8 @@ class ConfiguracaoComunicacaoSchema(BaseModel):
     tenant_id: str
     tom: str
     restricoes: list
+    rascunho_resposta: bool = True
+    link_agendamento: str | None = None
     criado_em: datetime
     atualizado_em: datetime
 
@@ -17,6 +19,8 @@ class ConfiguracaoComunicacaoSchema(BaseModel):
 class ConfiguracaoComunicacaoUpsertSchema(BaseModel):
     tom: str
     restricoes: list[str] = []
+    rascunho_resposta: bool = True
+    link_agendamento: str | None = None
 
 
 class ValidarTextoRequestSchema(BaseModel):

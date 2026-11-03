@@ -28,14 +28,15 @@ function cabecalhosDeSeguranca(): Plugin {
       )
       const csp = [
         "default-src 'self'",
-        `script-src 'self' https://accounts.google.com ${hashes.join(' ')}`.trim(),
+        // connect.facebook.net: SDK da Meta para o botão "Conectar com a Meta" (cadastro incorporado do WhatsApp, só em Configuração)
+        `script-src 'self' https://accounts.google.com https://connect.facebook.net ${hashes.join(' ')}`.trim(),
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
         "font-src 'self' data: https://fonts.gstatic.com",
         // logos e imagens de perfil/post são endereços colados pelos usuários (qualquer https); mídia própria vem de /api
         "img-src 'self' data: blob: https:",
         "media-src 'self' blob: data:",
-        "connect-src 'self' https://accounts.google.com",
-        'frame-src https://accounts.google.com',
+        "connect-src 'self' https://accounts.google.com https://www.facebook.com https://graph.facebook.com",
+        'frame-src https://accounts.google.com https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com',
         "frame-ancestors 'none'",
         "base-uri 'self'",
         "form-action 'self'",

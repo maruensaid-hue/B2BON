@@ -9,6 +9,7 @@ from app.api.deps import (
     get_db,
     get_llm_provider,
     get_plan_limits_provider,
+    get_html_fetcher,
     get_site_fetcher,
     get_tenant_id,
     get_web_search_provider,
@@ -16,7 +17,7 @@ from app.api.deps import (
 )
 from app.contexts.predator import contract as prospeccao
 from app.integrations.brasilapi_client import BrasilApiClient
-from app.integrations.site_fetcher import SiteFetcher
+from app.integrations.site_fetcher import HtmlFetcher, SiteFetcher
 from app.llm.base import LLMProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.providers.web_search.base import WebSearchProvider
@@ -52,6 +53,7 @@ def reprocessar(
     db: Session = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
     site_fetcher: SiteFetcher = Depends(get_site_fetcher),
+    html_fetcher: HtmlFetcher | None = Depends(get_html_fetcher),
     web_search: WebSearchProvider = Depends(get_web_search_provider),
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
     brasilapi_client: BrasilApiClient = Depends(get_brasilapi_client),
@@ -63,7 +65,7 @@ def reprocessar(
         raise RegraNegocioViolada("Esta coleta ainda está em andamento.")
     prospeccao.enriquecer(
         db, tenant_id, ator_id, original.conta_id, llm, site_fetcher, web_search, plan_limits,
-        consulta_cnpj=brasilapi_client, disparo="reprocesso", reprocesso_de_id=original.id,
+        consulta_cnpj=brasilapi_client, disparo="reprocesso", reprocesso_de_id=original.id, html_fetcher=html_fetcher,
     )
     nova = coleta_site_service.listar(db, tenant_id, conta_id=original.conta_id, limite=1)[0]
     return coleta_site_service.detalhe(db, tenant_id, nova["id"])

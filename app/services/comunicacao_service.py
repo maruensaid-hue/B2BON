@@ -9,7 +9,7 @@ from app.models.icp import ICP
 from app.models.oferta import Oferta
 from app.schemas.comunicacao import ConfiguracaoComunicacaoUpsertSchema
 from app.services import auditoria_service, optout_service
-from app.services.errors import RegraNegocioViolada
+from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 
 
 def obter(db: Session, tenant_id: str) -> ConfiguracaoComunicacao | None:
@@ -19,6 +19,9 @@ def obter(db: Session, tenant_id: str) -> ConfiguracaoComunicacao | None:
 def salvar(
     db: Session, tenant_id: str, ator_id: str | None, dados: ConfiguracaoComunicacaoUpsertSchema
 ) -> ConfiguracaoComunicacao:
+    link = (dados.link_agendamento or "").strip() or None
+    if link is not None and not link.lower().startswith("https://"):
+        raise ValidacaoFalhou("O link de agendamento precisa começar com https://.")
     config = obter(db, tenant_id)
     if config is None:
         config = ConfiguracaoComunicacao(tenant_id=tenant_id, tom=dados.tom, restricoes=dados.restricoes)
@@ -26,6 +29,8 @@ def salvar(
     else:
         config.tom = dados.tom
         config.restricoes = dados.restricoes
+    config.rascunho_resposta = dados.rascunho_resposta
+    config.link_agendamento = link
     db.flush()
 
     auditoria_service.registrar(

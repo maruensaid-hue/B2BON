@@ -163,6 +163,12 @@ class Settings(BaseSettings):
     # App Secret do app da Meta: a Meta assina cada POST com HMAC-SHA256 (`X-Hub-Signature-256`). Vazio = webhook recusado
     # (falha fechada, como o SendGrid e o Mercado Pago): sem assinatura, qualquer um forja resposta/opt-out de um decisor.
     whatsapp_app_secret: str = ""
+    # Botão "Conectar com a Meta" (cadastro incorporado / Embedded Signup): o app da CyberFort na Meta, configurado como Tech
+    # Provider. Sem o ID do app, o ID da configuração e o `whatsapp_app_secret` (o mesmo app, que troca o código pelo token), o botão
+    # não aparece e vale só a configuração manual.
+    meta_app_id: str = ""
+    meta_embedded_signup_config_id: str = ""
+    meta_graph_versao: str = "v20.0"
     # Segredo dos endpoints internos de webhook (`/webhooks/whatsapp`, `/webhooks/email`, `/webhooks/reputacao`), que NÃO são
     # chamados por nenhum provedor real. Vazio nunca autoriza (mesma regra do `cron_secret`).
     webhook_interno_secret: str = ""
@@ -264,6 +270,12 @@ class Settings(BaseSettings):
     # cadastrado (`conta_service.enriquecer`). Vazio usa StubWebSearchProvider
     # em dev/teste.
     brave_search_api_key: str = ""
+
+    # Descoberta de empresas por busca de mapa (fora do recorte de CNPJ). PAGA por busca: vazio = desligada (nada é cobrado). O custo por
+    # busca alimenta a estimativa mostrada antes de executar; o teto limita quantas buscas uma execução pode fazer.
+    descoberta_busca_api_key: str = ""
+    descoberta_busca_custo_por_busca_usd: float = 0.001
+    descoberta_busca_max_buscas_por_execucao: int = 20
 
     # Padrão recomendado do limiar de qualificação — ajustável por tenant
     # (E5-H2 pede explicitamente um "padrão recomendado").

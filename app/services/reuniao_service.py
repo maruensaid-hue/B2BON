@@ -19,7 +19,7 @@ from app.providers.calendar.base import CalendarProvider
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.crm.base import CrmProvider
-from app.services import atividade_service, auditoria_service, bloqueio_contato_service
+from app.services import atividade_service, auditoria_service, bloqueio_contato_service, whatsapp_service
 from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 _SEPARADOR = ":"
@@ -341,7 +341,7 @@ def _enviar_lembrete(
 ) -> None:
     texto = f"{texto_base} Link: {reuniao.link_reuniao or ''}"
     if decisor.telefone:
-        whatsapp.enviar_texto_livre(decisor.telefone, texto)
+        whatsapp_service.enviar_aviso(db, decisor.tenant_id, whatsapp, decisor.telefone, texto)
     elif decisor.email and not bloqueio_contato_service.email_esta_inviavel(
         decisor.email, bloqueio_contato_service.emails_inviaveis(db, reuniao.tenant_id)
     ):

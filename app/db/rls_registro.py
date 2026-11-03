@@ -50,10 +50,10 @@ BUSCAS: dict[str, tuple[Busca, ...]] = {
 # entrou em `TENANT_DIRETO` nesta etapa, e só passam a valer como política depois de revisadas rotina a rotina.
 CONTEXTOS_SISTEMA: dict[str, dict[str, str]] = {
     "cron-suspender-licencas-vencidas": {"assinatura_webhook_parceiro": "ler", "audit_log": "escrever", "licenca": "escrever"},
-    "cron-podar-historicos": {"alerta_licitacao": "escrever", "cache_resposta_ia": "escrever", "coleta_site_conta": "ler", "entrega_webhook": "escrever", "evento_dominio": "escrever", "execucao_coleta_fonte": "ler", "licitacao": "ler"},
+    "cron-podar-historicos": {"alerta_licitacao": "escrever", "cache_resposta_ia": "escrever", "coleta_site_conta": "ler", "entrega_webhook": "escrever", "evento_dominio": "escrever", "execucao_coleta_fonte": "ler", "licitacao": "ler", "sinal_conta": "escrever"},
     "cron-podar-recorte-cnpj": {"icp": "ler"},
     "cron-disparar-webhooks-parceiros": {},
-    "cron-processar-fila-enriquecimento": {"atividade": "escrever", "audit_log": "escrever", "carteira_creditos": "escrever", "coleta_site_conta": "escrever", "configuracao_credito_tenant": "escrever", "conta": "escrever", "conteudo_pagina_site": "escrever", "decisor": "ler", "enriquecimento_movimento": "escrever", "execucao_ia": "escrever", "fila_enriquecimento_conta": "escrever", "licenca": "ler", "lote_credito": "escrever", "movimento_credito": "escrever", "orcamento_ia": "ler", "registro_uso_ia": "escrever"},
+    "cron-processar-fila-enriquecimento": {"atividade": "escrever", "audit_log": "escrever", "carteira_creditos": "escrever", "coleta_site_conta": "escrever", "configuracao_credito_tenant": "escrever", "conta": "escrever", "conteudo_pagina_site": "escrever", "decisor": "ler", "enriquecimento_movimento": "escrever", "execucao_ia": "escrever", "fila_enriquecimento_conta": "escrever", "licenca": "ler", "lote_credito": "escrever", "movimento_credito": "escrever", "orcamento_ia": "ler", "registro_uso_ia": "escrever", "sinal_conta": "escrever"},
     "cron-disparar-relatorios-periodicos": {"configuracao_relatorio": "ler"},
     "cron-enviar-lembretes-cobranca": {"licenca": "ler"},
     "cron-expirar-registros-oportunidade": {"registro_oportunidade": "escrever"},
@@ -126,6 +126,12 @@ TENANT_DIRETO_ETAPA2: tuple[str, ...] = (
     "participante_sourcing", "sinal_oportunidade", "verificacao_empresa", "necessidade_oportunidade",
     "notificacao_rede_social",
 ) + _comprador.TENANT_DIRETO_ETAPA2
+
+# --- Tabelas criadas depois da segunda etapa ---------------------------------------------------------------------------------------------------------
+# Tenant direto desde a migração que cria a tabela (a política nasce junto com ela; a lista das etapas anteriores fica congelada).
+TENANT_DIRETO_POSTERIORES: dict[str, str] = {
+    "sinal_conta": "d1f3a5c7e9b2",  # tabela -> revisão que a cria com RLS
+}
 
 # `tenant_id` pode ser nulo: a linha sem dono é de plataforma (só os contextos privilegiados a gravam; a leitura segue a política de cada tabela em POLITICAS_ESPECIAIS).
 TENANT_NULAVEL_ETAPA2: tuple[str, ...] = ("enriquecimento_config_plano", "oportunidade_governo", "empresa_rede")
@@ -201,7 +207,7 @@ for _escopo, _itens in BUSCAS_ETAPA2.items():
     BUSCAS[_escopo] = _itens
 
 # Conjunto completo, sem distinguir a etapa (o resto do código e os testes usam estes nomes).
-TENANT_DIRETO: tuple[str, ...] = TENANT_DIRETO_ETAPA1 + TENANT_DIRETO_ETAPA2
+TENANT_DIRETO: tuple[str, ...] = TENANT_DIRETO_ETAPA1 + TENANT_DIRETO_ETAPA2 + tuple(TENANT_DIRETO_POSTERIORES)
 DUAS_PARTES: dict[str, tuple[str, str]] = {**DUAS_PARTES_ETAPA1, **DUAS_PARTES_ETAPA2}
 LEITURA_COMPARTILHADA: tuple[str, ...] = LEITURA_COMPARTILHADA_ETAPA2
 HERDADAS: dict[str, tuple[str, str, bool]] = dict(HERDADAS_ETAPA2)

@@ -11,6 +11,7 @@ from app.db.base import Base
 from app.models.coleta_site import ColetaSiteConta, IndicadorFinanceiroConta
 from app.models.conta import Conta
 from app.models.conteudo_pagina_site import ConteudoPaginaSite
+from app.models.sinal_conta import SinalConta
 from app.models.tenant import Tenant
 from app.models.usuario import Usuario
 from app.services import conta_service, tenant_service
@@ -51,12 +52,14 @@ def _conta_com_dados_de_site(db, nome="Alpha", sem_atividade=True) -> Conta:
                                     valor=1.0, moeda="BRL", escala="unidade", valor_original="R$ 1", url_fonte="https://x", trecho="t",
                                     metodo_extracao="m", confianca="alta", origens=[]))
     db.add(ConteudoPaginaSite(tenant_id=TENANT, conta_id=conta.id, url="https://x", conteudo="texto"))
+    db.add(SinalConta(tenant_id=TENANT, conta_id=conta.id, coleta_id=reprocesso.id, codigo="PAGINA_VAGAS", valor_num=1, confianca=0.9,
+                      fonte="pesquisa_no_site", vigente=True))
     db.commit()
     return conta
 
 
 def _restos(db, conta_ids=None) -> dict[str, int]:
-    return {m.__tablename__: db.query(m).count() for m in (ColetaSiteConta, IndicadorFinanceiroConta, ConteudoPaginaSite)}
+    return {m.__tablename__: db.query(m).count() for m in (ColetaSiteConta, IndicadorFinanceiroConta, ConteudoPaginaSite, SinalConta)}
 
 
 def test_excluir_conta_apaga_coletas_reprocessos_indicadores_e_conteudo(db):
@@ -80,7 +83,7 @@ def test_excluir_em_lote_apaga_os_dados_do_site_das_contas_elegiveis(db):
     resultado = conta_service._excluir_contas_em_lote(db, TENANT, None, contas)
 
     assert resultado["apagadas"] == 3
-    assert _restos(db) == {"coleta_site_conta": 0, "indicador_financeiro_conta": 0, "conteudo_pagina_site": 0}
+    assert _restos(db) == {"coleta_site_conta": 0, "indicador_financeiro_conta": 0, "conteudo_pagina_site": 0, "sinal_conta": 0}
 
 
 def test_excluir_tenant_apaga_conteudo_coletas_e_indicadores(db):
@@ -90,5 +93,5 @@ def test_excluir_tenant_apaga_conteudo_coletas_e_indicadores(db):
 
     tenant_service.apagar_dados(db, TENANT)
 
-    assert _restos(db) == {"coleta_site_conta": 0, "indicador_financeiro_conta": 0, "conteudo_pagina_site": 0}
+    assert _restos(db) == {"coleta_site_conta": 0, "indicador_financeiro_conta": 0, "conteudo_pagina_site": 0, "sinal_conta": 0}
     assert db.query(Conta).filter_by(tenant_id=TENANT).count() == 0

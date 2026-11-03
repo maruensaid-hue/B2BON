@@ -18,12 +18,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
-from app.contexts.predator import inteligencia_site
+from app.contexts.predator import inteligencia_site, pessoas_site, sinais
 from app.contexts.shared import matching
 from app.contexts.shared.organizations import decisores_da_conta, normalizar_dominio, obter_conta
 from app.graph.client import Neo4jClient, sincronizar_com_tolerancia
+from app.graph.nulo import GrafoNulo
 from app.integrations.brasilapi_client import BrasilApiClient
-from app.integrations.site_fetcher import ConteudoNaoSuportado, HostNaoPublico, SiteFetcher
+from app.integrations.site_fetcher import ConteudoNaoSuportado, HostNaoPublico, HtmlFetcher, SiteFetcher
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.campo_enriquecido import CampoEnriquecido
@@ -371,6 +372,7 @@ def enriquecer(
     consulta_cnpj: BrasilApiClient | None = None,
     disparo: str = "manual",
     reprocesso_de_id: int | None = None,
+    html_fetcher: HtmlFetcher | None = None,
 ) -> list[CampoEnriquecido]:
     """Pesquisa ampla dentro do site institucional da conta, com ficha de campos enriquecidos, fonte/data de cada dado
     (E2-H2) e um registro persistido de cada execução (`ColetaSiteConta`).
@@ -499,6 +501,20 @@ def enriquecer(
         )
     )
     _guardar_paginas(db, tenant_id, conta.id, paginas, agora)
+    sinais.registrar_da_coleta(db, tenant_id, conta.id, coleta.id, paginas, coleta.dominio_situacao or "inconclusivo", indicadores, agora)
+    sinais.registrar_do_cadastro(db, tenant_id, conta.id, registro, agora)
+    if html_fetcher is not None and not divergente:
+        # Sinais técnicos da home (pixel, plataforma, vagas, agência). Melhor esforço: falhar aqui nunca derruba a coleta.
+        try:
+            html_home = html_fetcher(dominio)
+        except (httpx.HTTPError, HostNaoPublico) as erro:
+            avisos.append(f"Sinais técnicos do site não lidos (a home não devolveu HTML: {type(erro).__name__}).")
+        else:
+            sinais.registrar_do_html(db, tenant_id, conta.id, coleta.id, html_home, dominio, coleta.dominio_situacao or "inconclusivo", agora)
+    if coleta.dominio_situacao in ("confirmado", "confirmado_manualmente"):
+        novos_do_site = _decisores_do_site(db, tenant_id, conta, paginas, dominio)
+        if novos_do_site:
+            avisos.append(f"{novos_do_site} decisor(es) novo(s) nomeado(s) no próprio site.")
 
     if divergente:
         coleta.estado, coleta.avisos, coleta.concluida_em = "concluida", avisos, datetime.now(UTC)
@@ -612,6 +628,39 @@ def enriquecer(
     return campos
 
 
+def _decisores_do_site(db: Session, tenant_id: str, conta: Conta, paginas: list[tuple[str, str]], dominio: str) -> int:
+    """Pessoas com cargo de decisão nomeadas no site viram decisores (sem custo, `origem="site_institucional"`), e o padrão de e-mail
+    da empresa, aprendido de um endereço publicado de alguém nomeado, completa o e-mail de quem ainda não tem (QSA incluído).
+
+    E-mail escrito no site e atribuído à pessoa = `publicado`. E-mail montado pelo padrão = `inferido`: fica no cadastro para o vendedor
+    ver e confirmar, mas o envio não o usa enquanto ninguém confirmar (sem verificador de caixa contratado, um palpite não sai)."""
+    pessoas = pessoas_site.pessoas(paginas)
+    emails = pessoas_site.emails_publicados(paginas, dominio)
+    existentes = decisores_da_conta(db, conta)
+    nomes = [p.nome for p in pessoas] + [d.nome for d in existentes]
+    padrao = pessoas_site.aprender_padrao(emails, nomes)
+
+    def email_para(nome: str) -> tuple[str | None, str | None]:
+        publicado = next((e for e in emails if not pessoas_site.generico(e) and pessoas_site.dono_do_email(e, nomes) == nome), None)
+        if publicado:
+            return publicado, "publicado"
+        if padrao and (inferido := pessoas_site.aplicar_padrao(padrao, nome, dominio)):
+            return inferido, "inferido"
+        return None, None
+
+    candidatos = []
+    for pessoa in pessoas:
+        email, situacao = email_para(pessoa.nome)
+        candidatos.append(ContatoCandidato(nome=pessoa.nome, cargo=pessoa.cargo, email=email, email_status=situacao, fonte="site_institucional"))
+    novos = registrar_candidatos(db, tenant_id, conta, candidatos, GrafoNulo())
+    for decisor in existentes:
+        if not decisor.email:
+            email, situacao = email_para(decisor.nome)
+            if email:
+                decisor.email, decisor.email_status = email, situacao
+    return novos
+
+
 def _registrar_uso_fonte(db: Session, tenant_id: str, fonte: str, operacao: str, ator_id: str | None, conta_id: int) -> None:
     """Contabiliza o uso da fonte (sem custo de crédito) para o painel de enriquecimento. Melhor esforço, em savepoint: uma falha aqui nunca
     derruba o fluxo do QSA/Brasil API, que não depende de nenhuma configuração de créditos."""
@@ -675,6 +724,7 @@ def enriquecer_via_brasilapi(
         )
         db.add(registro)
         campos.append(registro)
+    sinais.registrar_do_cadastro(db, tenant_id, conta.id, resposta, agora)
 
     atividade_service.registrar(
         db, tenant_id, conta_id=conta.id, tipo="sistema", descricao="IA enriqueceu com dados cadastrais públicos", ator_id=ator_id
@@ -709,6 +759,7 @@ def _dados_candidato(candidato: DecisorCandidato | ContatoCandidato) -> dict:
         "telefone": getattr(candidato, "telefone", None),
         "linkedin_url": getattr(candidato, "linkedin_url", None),
         "fonte": candidato.fonte,
+        "email_status": getattr(candidato, "email_status", None),
     }
 
 
@@ -770,7 +821,8 @@ def registrar_candidatos(
         if decisor_existente is not None:
             # Já mapeado antes (reclique ou mesma pessoa nas duas fontes) —
             # só completa o que estava vazio, não duplica a linha.
-            decisor_existente.email = decisor_existente.email or dados["email"]
+            if not decisor_existente.email and dados["email"]:
+                decisor_existente.email, decisor_existente.email_status = dados["email"], dados["email_status"]
             decisor_existente.telefone = decisor_existente.telefone or dados["telefone"]
             decisor_existente.linkedin_url = decisor_existente.linkedin_url or dados["linkedin_url"]
             decisor_existente.origem = decisor_existente.origem or dados["fonte"]
@@ -784,6 +836,7 @@ def registrar_candidatos(
             # Canal pelo dado que veio: e-mail quando há; senão telefone (WhatsApp) quando só o telefone foi revelado; senão o perfil no LinkedIn.
             canal_provavel="email" if dados["email"] or not (dados["telefone"] or dados["linkedin_url"]) else ("whatsapp" if dados["telefone"] else "linkedin"),
             email=dados["email"],
+            email_status=dados["email_status"] if dados["email"] else None,
             telefone=dados["telefone"],
             linkedin_url=dados["linkedin_url"],
             origem=dados["fonte"],

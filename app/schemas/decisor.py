@@ -20,6 +20,7 @@ class DecisorSchema(BaseModel):
     linkedin_conectado: bool = False
     papel_confirmado: str | None = None
     papel_sugerido: str | None = None
+    email_status: str | None = None
     criado_em: datetime
 
 

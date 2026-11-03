@@ -7,6 +7,17 @@ class ResultadoEnvio(BaseModel):
     sucesso: bool
     id_externo: str | None = None
     motivo_falha: str | None = None
+    # Código de erro devolvido pela Meta (ex.: 131047 = fora da janela de 24 h; 100 = parâmetro inválido / conta sem Direct Send).
+    codigo_erro: int | None = None
+
+
+class InfoNumero(BaseModel):
+    """O que a Meta diz do número conectado: serve para mostrar "conectado: +55 11 ..., nome X, qualidade verde" e testar a conexão."""
+
+    numero_exibicao: str | None = None
+    nome_verificado: str | None = None
+    qualidade: str | None = None  # GREEN | YELLOW | RED | UNKNOWN
+    erro: str | None = None
 
 
 class TemplateInfo(BaseModel):
@@ -40,5 +51,15 @@ class WhatsAppProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def enviar_direct_send(self, telefone: str, texto: str, categoria: str = "utility") -> ResultadoEnvio:
+        """Direct Send da Meta (beta): mensagem iniciada pela empresa SEM template pré-aprovado, só nas categorias `utility` e
+        `authentication` (marketing não existe aqui). A Meta revisa depois do envio; uso indevido leva a suspensão de 7 dias, bloqueio
+        de 30 e perda definitiva do recurso. Quem chama decide se pode (ver `whatsapp_service`)."""
+        raise NotImplementedError
+
+    @abstractmethod
     def listar_templates(self) -> list[TemplateInfo]:
         raise NotImplementedError
+
+    def info_numero(self) -> InfoNumero:
+        return InfoNumero(erro="Conexão com a Meta não disponível neste ambiente.")

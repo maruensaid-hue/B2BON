@@ -20,7 +20,7 @@ from app.integrations.central_negocios_client import (
     buscar_mercado,
     buscar_noticias,
 )
-from app.integrations.site_fetcher import SiteFetcher, buscar_conteudo_site
+from app.integrations.site_fetcher import HtmlFetcher, buscar_html_home, SiteFetcher, buscar_conteudo_site
 from app.llm.base import LLMProvider
 from app.llm.fallback import construir_provedor
 from app.models.chave_api_parceiro import ChaveApiParceiro
@@ -64,6 +64,9 @@ from app.providers.channels.whatsapp.meta import MetaWhatsAppProvider
 from app.providers.channels.whatsapp.stub import StubWhatsAppProvider
 from app.providers.crm.base import CrmProvider
 from app.providers.crm.nucleo import NucleoCrmProvider
+from app.providers.descoberta_empresas.base import DescobertaEmpresasProvider
+from app.providers.descoberta_empresas.desativado import DescobertaDesativadaProvider
+from app.providers.descoberta_empresas.serper import SerperMapasProvider
 from app.providers.email_validation.base import EmailVerificationProvider
 from app.providers.email_validation.stub import StubEmailVerificationProvider
 from app.providers.fiscal.base import FiscalProvider
@@ -119,6 +122,20 @@ def get_site_fetcher() -> SiteFetcher:
     if demo_contexto.ativo():  # D-083: a demonstração não faz o servidor acessar sites externos
         return _site_ficticio
     return buscar_conteudo_site
+
+
+def get_descoberta_provider() -> DescobertaEmpresasProvider:
+    """Busca de mapa paga: só existe com chave configurada. A demonstração nunca chama fonte paga."""
+    if demo_contexto.ativo() or not settings.descoberta_busca_api_key:
+        return DescobertaDesativadaProvider()
+    return SerperMapasProvider()
+
+
+def get_html_fetcher() -> HtmlFetcher | None:
+    """HTML bruto da home, para os sinais técnicos. A demonstração não acessa sites externos: sem HTML, sem esses sinais."""
+    if demo_contexto.ativo():
+        return None
+    return buscar_html_home
 
 
 def get_mercado_client() -> MercadoClient:

@@ -32,6 +32,7 @@ from app.contexts.bids import contract as bids_contract
 from app.core.config import settings
 from app.models.coleta_fonte import ExecucaoColetaFonte
 from app.models.coleta_site import ColetaSiteConta, IndicadorFinanceiroConta
+from app.models.sinal_conta import SinalConta
 from app.models.creditos_ia import CacheRespostaIa
 from app.models.entrega_webhook import EntregaWebhook
 from app.models.alerta_licitacao import AlertaLicitacao
@@ -93,6 +94,9 @@ def _podar_coletas_site(db: Session, agora: datetime) -> dict:
             {ColetaSiteConta.reprocesso_de_id: None}, synchronize_session=False
         )
         indicadores = db.query(IndicadorFinanceiroConta).filter(IndicadorFinanceiroConta.coleta_id.in_(candidatas)).delete(synchronize_session=False)
+        # Sinal já substituído sai com a coleta; o vigente continua valendo (é o fato atual da conta) e só perde o vínculo com ela.
+        db.query(SinalConta).filter(SinalConta.coleta_id.in_(candidatas), SinalConta.vigente.is_(False)).delete(synchronize_session=False)
+        db.query(SinalConta).filter(SinalConta.coleta_id.in_(candidatas)).update({SinalConta.coleta_id: None}, synchronize_session=False)
         db.query(ColetaSiteConta).filter(ColetaSiteConta.id.in_(candidatas)).delete(synchronize_session=False)
     db.commit()
     return {"coletas": len(candidatas), "indicadores": indicadores}

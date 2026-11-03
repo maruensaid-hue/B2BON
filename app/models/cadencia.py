@@ -45,4 +45,14 @@ class Cadencia(Base):
     # fino (por mensagem individual) continua disponível via
     # `aprovacao_service.cancelar_mensagem`, independente desta flag.
     cancelar_ao_responder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Resposta de QUALQUER decisor da empresa pausa os toques pendentes desta cadência para os colegas dele na mesma conta (quem
+    # respondeu já é uma conversa; seguir escrevendo para o resto da empresa atropela). Desligado por padrão, como o de cima.
+    pausar_empresa_ao_responder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Ciclo automático (cron a cada 15 min): contas novas do ICP desta cadência, já enriquecidas e dentro dos critérios de sinais,
+    # ganham os rascunhos sozinhas (fila de aprovação); aprovados todos, a cadência é ativada sozinha. Nada sai sem aprovação.
+    prospeccao_automatica: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Quem aceitou (e quando) o risco de usar WhatsApp sem template nesta cadência: a Meta classifica prospecção como marketing, e
+    # mensagem de marketing enviada como utilidade leva a suspensão de 7 dias, bloqueio de 30 e perda definitiva do Direct Send.
+    direct_send_aceito_por: Mapped[str | None] = mapped_column(String, nullable=True)
+    direct_send_aceito_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

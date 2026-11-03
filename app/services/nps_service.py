@@ -17,7 +17,7 @@ from app.models.reuniao import Reuniao
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
-from app.services import auditoria_service, bloqueio_contato_service, indicacao_service
+from app.services import auditoria_service, bloqueio_contato_service, indicacao_service, whatsapp_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 _SEPARADOR = ":"
@@ -72,7 +72,7 @@ def definir_configuracao(db: Session, tenant_id: str, dias_apos_reuniao_realizad
 def _enviar_pesquisa(db: Session, tenant_id: str, pesquisa: PesquisaNps, decisor: Decisor, whatsapp, email) -> None:
     link = f"Responda de 0 a 10: qual a probabilidade de você nos indicar? {gerar_token(tenant_id, pesquisa.id)}"
     if decisor.telefone:
-        whatsapp.enviar_texto_livre(decisor.telefone, link)
+        whatsapp_service.enviar_aviso(db, tenant_id, whatsapp, decisor.telefone, link)
     elif decisor.email and not bloqueio_contato_service.email_esta_inviavel(decisor.email, bloqueio_contato_service.emails_inviaveis(db, tenant_id)):
         email.enviar(
             decisor.email, "Sua opinião é muito importante", link, "PREDATOR", settings.sendgrid_remetente_email, tenant_id
@@ -166,8 +166,8 @@ def _gerar_alerta_detrator(db: Session, tenant_id: str, pesquisa: PesquisaNps, w
 
     config = db.query(ConfiguracaoNotificacao).filter_by(tenant_id=tenant_id).one_or_none()
     if config and config.vendedor_telefone:
-        whatsapp.enviar_texto_livre(
-            config.vendedor_telefone, f"Detrator identificado (nota {pesquisa.nota}). {sugestao}"
+        whatsapp_service.enviar_aviso(
+            db, tenant_id, whatsapp, config.vendedor_telefone, f"Detrator identificado (nota {pesquisa.nota}). {sugestao}"
         )
 
     auditoria_service.registrar(

@@ -180,6 +180,7 @@ class FakeWhatsAppProvider(WhatsAppProvider):
             TemplateInfo(nome="prospeccao_inicial", status="aprovado", corpo="Olá {{1}}")
         ]
         self.falhar_proximos = 0
+        self.erro_direct_send: tuple[int, str] | None = None  # (código Meta, motivo) para simular recusa do Direct Send
 
     def _resultado(self) -> ResultadoEnvioWhatsApp:
         if self.falhar_proximos > 0:
@@ -197,6 +198,13 @@ class FakeWhatsAppProvider(WhatsAppProvider):
 
     def enviar_texto_livre(self, telefone: str, texto: str) -> ResultadoEnvioWhatsApp:
         self.envios.append({"tipo": "livre", "telefone": telefone, "texto": texto})
+        return self._resultado()
+
+    def enviar_direct_send(self, telefone: str, texto: str, categoria: str = "utility") -> ResultadoEnvioWhatsApp:
+        self.envios.append({"tipo": "direct_send", "telefone": telefone, "texto": texto, "categoria": categoria})
+        if self.erro_direct_send is not None:
+            codigo, motivo = self.erro_direct_send
+            return ResultadoEnvioWhatsApp(sucesso=False, codigo_erro=codigo, motivo_falha=motivo)
         return self._resultado()
 
     def listar_templates(self) -> list[TemplateInfo]:

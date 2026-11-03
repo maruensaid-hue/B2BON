@@ -19,6 +19,7 @@ from app.api.deps import (
     get_graph_client,
     get_llm_provider,
     get_plan_limits_provider,
+    get_html_fetcher,
     get_site_fetcher,
     get_tenant_id,
     get_web_search_provider,
@@ -27,7 +28,7 @@ from app.api.deps import (
 from app.contexts.predator import contract as prospeccao
 from app.graph.client import Neo4jClient
 from app.integrations.brasilapi_client import BrasilApiClient
-from app.integrations.site_fetcher import SiteFetcher
+from app.integrations.site_fetcher import HtmlFetcher, SiteFetcher
 from app.llm.base import LLMProvider
 from app.providers.account_data.base import AccountDataProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
@@ -113,12 +114,13 @@ def enriquecer_conta(
     db: Session = Depends(get_db),
     llm: LLMProvider = Depends(get_llm_provider),
     site_fetcher: SiteFetcher = Depends(get_site_fetcher),
+    html_fetcher: HtmlFetcher | None = Depends(get_html_fetcher),
     web_search: WebSearchProvider = Depends(get_web_search_provider),
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
     brasilapi_client: BrasilApiClient = Depends(get_brasilapi_client),
 ) -> EnriquecerContaResponseSchema:
     campos = prospeccao.enriquecer(
-        db, tenant_id, ator_id, conta_id, llm, site_fetcher, web_search, plan_limits, consulta_cnpj=brasilapi_client
+        db, tenant_id, ator_id, conta_id, llm, site_fetcher, web_search, plan_limits, consulta_cnpj=brasilapi_client, html_fetcher=html_fetcher
     )
     return EnriquecerContaResponseSchema(campos=campos)
 

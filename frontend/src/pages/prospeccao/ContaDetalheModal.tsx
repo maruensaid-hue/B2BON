@@ -29,6 +29,23 @@ interface ContaCompleta {
   observacoes: string | null;
 }
 
+interface SinalConta {
+  codigo: string;
+  rotulo: string;
+  tipo: "bool" | "num" | "texto";
+  valor_num: number | null;
+  valor_texto: string | null;
+  confianca: number;
+  url_evidencia: string | null;
+  trecho: string | null;
+}
+
+function valorDoSinal(sinal: SinalConta): string {
+  if (sinal.tipo === "bool") return sinal.valor_num === 1 ? "sim" : "não";
+  if (sinal.tipo === "texto") return sinal.valor_texto ?? "—";
+  return sinal.valor_num === null ? "—" : sinal.valor_num.toLocaleString("pt-BR");
+}
+
 interface CampoEnriquecido {
   campo: string;
   valor: string;
@@ -48,6 +65,7 @@ interface Decisor {
   linkedin_conectado: boolean;
   papel_confirmado: string | null;
   papel_sugerido: string | null;
+  email_status: string | null;
 }
 
 const ROTULOS_ORIGEM: Record<string, string> = {
@@ -55,6 +73,7 @@ const ROTULOS_ORIGEM: Record<string, string> = {
   enriquecimento_contatos: "Enriquecimento",
   manual: "Manual",
   evento: "Evento",
+  site_institucional: "Site da empresa",
 };
 
 // Stakeholder Map (master prompt §27, §56, Fase 5B).
@@ -111,6 +130,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
   const [campos, setCampos] = useState<CampoEnriquecido[]>([]);
   const [decisores, setDecisores] = useState<Decisor[]>([]);
   const [atividades, setAtividades] = useState<Atividade[]>([]);
+  const [sinais, setSinais] = useState<SinalConta[]>([]);
   const [vendedores, setVendedores] = useState<UsuarioResumo[]>([]);
   const [registroPrime, setRegistroPrime] = useState<RegistroOportunidadeResumo | null>(null);
   const [mostrarDescarte, setMostrarDescarte] = useState(false);
@@ -134,6 +154,8 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
       setConta(contaResp);
       setDecisores(decisoresResp);
       setAtividades(atividadesResp);
+      // Sinais à parte: falha aqui não pode esconder a conta.
+      api.get<SinalConta[]>(`/contas/${contaId}/sinais`).then(setSinais).catch(() => setSinais([]));
     } catch {
       setErro("Não foi possível carregar a conta.");
     }
@@ -247,6 +269,13 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
         conta_id: novaContaId && novaContaId !== contaId ? novaContaId : null,
       });
       setDecisorEmEdicaoId(null);
+      await carregar();
+    });
+  }
+
+  async function confirmarEmailDecisor(decisorId: number) {
+    await executar(`confirmar-email-${decisorId}`, async () => {
+      await api.post(`/contas/${contaId}/decisores/${decisorId}/confirmar-email`);
       await carregar();
     });
   }
@@ -402,6 +431,24 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                 <div className="mb-2">
                   <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Resumo da pesquisa de site</div>
                   <div className="rounded-lg bg-surf2 p-2 text-[11px] whitespace-pre-wrap text-text">{conta.resumo_site}</div>
+                </div>
+              )}
+              {sinais.length > 0 && (
+                <div className="mb-2">
+                  <div className="mb-1 text-[10px] tracking-wide text-muted uppercase">Sinais da conta</div>
+                  <div className="space-y-0.5 rounded-lg bg-surf2 p-2 text-[11px] text-text">
+                    {sinais.map((sinal) => (
+                      <div key={sinal.codigo} title={sinal.trecho ?? undefined}>
+                        {sinal.rotulo}: <span className="font-medium">{valorDoSinal(sinal)}</span>
+                        <span className="text-muted"> · confiança {Math.round(sinal.confianca * 100)}%</span>
+                        {sinal.url_evidencia && (
+                          <a className="ml-1 text-cyan hover:underline" href={sinal.url_evidencia} target="_blank" rel="noopener noreferrer">
+                            evidência
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               {conta.observacoes && (
@@ -575,6 +622,14 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                           <span className="font-semibold text-text">{decisor.nome}</span>
                           {decisor.cargo && <span className="text-muted"> · {decisor.cargo}</span>}
                           {decisor.email && <span className="text-muted"> · {decisor.email}</span>}
+                          {decisor.email && decisor.email_status === "inferido" && (
+                            <span className="ml-1 inline-flex items-center gap-1">
+                              <Badge tone="amber">deduzido</Badge>
+                              <Button size="sm" disabled={carregando !== null} onClick={() => confirmarEmailDecisor(decisor.id)}>
+                                {carregando === `confirmar-email-${decisor.id}` ? "Confirmando..." : "Confirmar e-mail"}
+                              </Button>
+                            </span>
+                          )}
                           {decisor.telefone && <span className="text-muted"> · {decisor.telefone}</span>}
                           {decisor.canal_provavel && <span className="text-muted"> · canal: {decisor.canal_provavel}</span>}
                           <div className="mt-1 flex items-center gap-1.5">

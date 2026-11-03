@@ -8,6 +8,8 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { Modal } from "@/components/ui/Modal";
 import { AcessoRestrito } from "@/pages/admin/AcessoRestrito";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
+import { CriteriosSinais, type CriterioSinal } from "@/pages/prospeccao/CriteriosSinais";
+import { DescobertaModal } from "@/pages/prospeccao/DescobertaModal";
 import { PesquisaDecisoresModal } from "@/pages/prospeccao/PesquisaDecisoresModal";
 import { TutorialProspeccao } from "@/pages/prospeccao/TutorialProspeccao";
 import { api, ApiError } from "@/lib/api";
@@ -27,6 +29,7 @@ export interface ICP {
   gatilhos: string[];
   cnae_codigos: string[];
   ufs: string[];
+  criterios_sinais?: CriterioSinal[];
 }
 
 export interface Conta {
@@ -228,6 +231,7 @@ export function Prospeccao() {
   const [modalIcpAberto, setModalIcpAberto] = useState(false);
   const [icpEmEdicao, setIcpEmEdicao] = useState<ICP | null>(null);
   const [modalGerarAberto, setModalGerarAberto] = useState(false);
+  const [modalDescobertaAberto, setModalDescobertaAberto] = useState(false);
   const [modalListaAberto, setModalListaAberto] = useState(false);
   const [modalImportarAberto, setModalImportarAberto] = useState(false);
   const [contaSelecionadaId, setContaSelecionadaId] = useState<number | null>(null);
@@ -375,6 +379,7 @@ export function Prospeccao() {
       gatilhos: paraListaPorLinha(String(form.get("gatilhos") ?? "")),
       cnae_codigos: paraLista(String(form.get("cnae_codigos") ?? "")),
       ufs: paraLista(String(form.get("ufs") ?? "")),
+      criterios_sinais: JSON.parse(String(form.get("criterios_sinais") || "[]")) as CriterioSinal[],
     };
 
     try {
@@ -794,6 +799,11 @@ export function Prospeccao() {
                   <Button size="sm" data-tutorial-id="prospeccao:gerar-lista" onClick={() => setModalGerarAberto(true)}>
                     Gerar lista
                   </Button>
+                  {(usuario?.papel === "admin" || usuario?.papel === "super_admin") && (
+                    <Button size="sm" onClick={() => setModalDescobertaAberto(true)}>
+                      Descobrir por busca
+                    </Button>
+                  )}
                   {confirmandoExclusaoIcpId === icpSelecionado.id ? (
                     <div className="flex items-center gap-1.5 text-[11px]">
                       <span className="text-muted">Excluir "{icpSelecionado.nome}"?</span>
@@ -1053,11 +1063,25 @@ export function Prospeccao() {
               />
             </div>
           ))}
+          <CriteriosSinais
+            key={icpEmEdicao?.id ?? "novo"}
+            inicial={icpEmEdicao?.criterios_sinais ?? []}
+            icpId={icpEmEdicao?.id ?? null}
+          />
           <Button type="submit" className="mt-1 w-full justify-center">
             Salvar
           </Button>
         </form>
       </Modal>
+
+      <DescobertaModal
+        open={modalDescobertaAberto}
+        onClose={() => setModalDescobertaAberto(false)}
+        icpId={icpSelecionadoId}
+        onConcluido={() => {
+          if (icpSelecionadoId !== null) carregarContas(icpSelecionadoId);
+        }}
+      />
 
       <Modal title="Gerar lista de contas" open={modalGerarAberto} onClose={() => setModalGerarAberto(false)}>
         <form onSubmit={gerarLista} className="flex flex-col gap-3">

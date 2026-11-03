@@ -12,6 +12,7 @@ from app.api.deps import (
     get_fiscal_provider,
     get_llm_provider,
     get_payment_provider,
+    get_plan_limits_provider,
     resolver_email_provider,
     resolver_whatsapp_provider,
 )
@@ -29,6 +30,7 @@ from app.providers.payment.base import PaymentProvider
 from app.schemas.reputacao import RegistrarEventoReputacaoRequestSchema, SaudeCanalSchema
 from app.schemas.whatsapp import WebhookEmailRequestSchema, WebhookWhatsAppRequestSchema
 from app.services import (
+    conversa_comercial_service,
     email_direto_service,
     optout_service,
     pagamento_licenca_service,
@@ -99,12 +101,16 @@ def _processar_mensagem_whatsapp(
 
     if texto.strip().lower() in _PALAVRAS_OPTOUT:
         return optout_service.processar(db, tenant_id, decisor.id, origem="whatsapp")
+    lida = resposta_service.ler_resposta(db, tenant_id, decisor, texto, "whatsapp")
+    if lida is not None:  # descadastro escrito ou reclamação: sem resposta automática
+        return lida
 
     resultado_resposta = resposta_service.marcar_resposta(db, tenant_id, decisor.id)
     resultado_qualificacao = qualificacao_service.processar_mensagem_recebida(
         db, tenant_id, decisor.id, "whatsapp", texto, llm, whatsapp
     )
-    return {**resultado_resposta, **resultado_qualificacao}
+    conversa = conversa_comercial_service.apos_resposta(db, tenant_id, decisor, texto, "whatsapp", llm, get_plan_limits_provider(db))
+    return {**resultado_resposta, **resultado_qualificacao, "conversa_comercial": conversa}
 
 
 @router.post("/whatsapp", dependencies=[Depends(_exigir_segredo_interno)])
@@ -193,12 +199,16 @@ def webhook_email(
     decisor = db.query(Decisor).filter_by(tenant_id=dados.tenant_id, email=dados.email).first()
     if decisor is None:
         raise NaoEncontrado("Decisor não encontrado para este e-mail.")
+    lida = resposta_service.ler_resposta(db, dados.tenant_id, decisor, dados.texto, "email")
+    if lida is not None:  # descadastro escrito ou reclamação: sem resposta automática
+        return lida
 
     resultado_resposta = resposta_service.marcar_resposta(db, dados.tenant_id, decisor.id)
     resultado_qualificacao = qualificacao_service.processar_mensagem_recebida(
         db, dados.tenant_id, decisor.id, "email", dados.texto, llm, whatsapp
     )
-    return {**resultado_resposta, **resultado_qualificacao}
+    conversa = conversa_comercial_service.apos_resposta(db, dados.tenant_id, decisor, dados.texto, "email", llm, get_plan_limits_provider(db))
+    return {**resultado_resposta, **resultado_qualificacao, "conversa_comercial": conversa}
 
 
 _PADRAO_TOKEN_RESPOSTA = re.compile(r"resp\+([^@]+)@")
@@ -244,7 +254,10 @@ async def webhook_email_inbound(request: Request, db: Session = Depends(get_db))
     corpo = str(formulario.get("text", ""))
 
     email_provider = resolver_email_provider(tenant_id, db)
-    email_direto_service.processar_recebido(db, tenant_id, decisor_id, remetente_email, assunto, corpo, email_provider)
+    email_direto_service.processar_recebido(
+        db, tenant_id, decisor_id, remetente_email, assunto, corpo, email_provider,
+        llm=get_llm_provider(db), plan_limits=get_plan_limits_provider(db),
+    )
     return {"recebido": True, "processado": True}
 
 

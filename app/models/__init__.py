@@ -187,6 +187,7 @@ from app.models.redefinicao_senha import RedefinicaoSenha
 from app.models.relacionamento_empresarial import RelacionamentoEmpresarial
 from app.models.seguidor_empresa import SeguidorEmpresa
 from app.models.sinal_oportunidade import SinalOportunidade
+from app.models.sinal_conta import SinalConta
 from app.models.turno_conversa import TurnoConversa
 from app.models.usuario import Usuario
 from app.models.verificacao_empresa import VerificacaoEmpresa
@@ -336,6 +337,7 @@ __all__ = [
     "RedefinicaoSenha",
     "NotificacaoRedeSocial",
     "Intent",
+    "SinalConta",
     "SinalOportunidade",
     "SalaCorporativa",
     "SalaCompra",

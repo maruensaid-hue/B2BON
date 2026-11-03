@@ -2,14 +2,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    exigir_escopo_cadencia_usuario, get_ator_id, get_db, get_llm_provider,
+    exigir_escopo_cadencia_usuario, exigir_papel, get_ator_id, get_db, get_llm_provider,
     get_plan_limits_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant,
 )
 from app.llm.base import LLMProvider
 from app.models.conta import Conta
 from app.models.icp import ICP
 from app.models.usuario import Usuario
-from app.services.errors import NaoEncontrado
+from app.services.errors import NaoAutorizado, NaoEncontrado
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.cadencia import (
     AdicionarToqueRequestSchema,
@@ -19,6 +19,9 @@ from app.schemas.cadencia import (
     CadenciaSchema,
     CancelarCadenciaResponseSchema,
     DefinirCancelamentoAoResponderRequestSchema,
+    DefinirPausaEmpresaAoResponderRequestSchema,
+    DefinirProspeccaoAutomaticaRequestSchema,
+    DefinirWhatsAppSemTemplateRequestSchema,
     DefinirTemplateWhatsAppRequestSchema,
     GerarCadenciaRequestSchema,
     GerarCadenciaResponseSchema,
@@ -40,6 +43,8 @@ def criar_cadencia(
     db: Session = Depends(get_db),
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> CadenciaSchema:
+    if usuario.papel == "user" and any(t.canal == "whatsapp" and t.whatsapp_sem_template for t in dados.toques):
+        raise NaoAutorizado("Só um administrador pode criar cadência com WhatsApp sem template.")
     if usuario.papel == "user":
         if dados.lista_prospeccao_id is not None:
             lista_prospeccao_service.obter(db, tenant_id, dados.lista_prospeccao_id, usuario.id, True)  # só uma lista do próprio vendedor
@@ -123,6 +128,24 @@ def remover_toque(
     cadencia_service.remover_toque(db, tenant_id, ator_id, cadencia_id, toque_id)
 
 
+@router.put(
+    "/{cadencia_id}/toques/{toque_id}/whatsapp-sem-template", response_model=ToqueCadenciaSchema,
+    dependencies=[Depends(exigir_papel("super_admin", "admin")), Depends(exigir_escopo_cadencia_usuario)],
+)
+def definir_whatsapp_sem_template(
+    cadencia_id: int,
+    toque_id: int,
+    dados: DefinirWhatsAppSemTemplateRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ToqueCadenciaSchema:
+    """Toque de WhatsApp sem template (Direct Send). Só administradores: o risco (suspensão do recurso pela Meta) é do número da empresa."""
+    return cadencia_service.definir_whatsapp_sem_template(
+        db, tenant_id, ator_id, cadencia_id, toque_id, dados.whatsapp_sem_template, dados.confirmo_risco
+    )
+
+
 @router.put("/{cadencia_id}/toques/{toque_id}/template-whatsapp", response_model=ToqueCadenciaSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
 def definir_template_whatsapp(
     cadencia_id: int,
@@ -173,6 +196,30 @@ def definir_cancelamento_ao_responder(
     return cadencia_service.definir_cancelamento_ao_responder(
         db, tenant_id, ator_id, cadencia_id, dados.cancelar_ao_responder
     )
+
+
+@router.put("/{cadencia_id}/pausa-empresa-ao-responder", response_model=CadenciaSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
+def definir_pausa_empresa_ao_responder(
+    cadencia_id: int,
+    dados: DefinirPausaEmpresaAoResponderRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> CadenciaSchema:
+    """Liga/desliga: resposta de um decisor pausa os toques desta cadência para os colegas dele na mesma empresa."""
+    return cadencia_service.definir_pausa_empresa_ao_responder(db, tenant_id, ator_id, cadencia_id, dados.pausar_empresa_ao_responder)
+
+
+@router.put("/{cadencia_id}/prospeccao-automatica", response_model=CadenciaSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
+def definir_prospeccao_automatica(
+    cadencia_id: int,
+    dados: DefinirProspeccaoAutomaticaRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> CadenciaSchema:
+    """Liga/desliga o ciclo automático: contas novas e elegíveis do ICP ganham rascunhos sozinhas, e a cadência ativa quando tudo foi aprovado."""
+    return cadencia_service.definir_prospeccao_automatica(db, tenant_id, ator_id, cadencia_id, dados.prospeccao_automatica)
 
 
 @router.post("/{cadencia_id}/cancelar", response_model=CancelarCadenciaResponseSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])

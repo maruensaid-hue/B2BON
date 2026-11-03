@@ -68,6 +68,7 @@ from app.api.v1.coletas_site import router as coletas_site_router
 from app.api.v1.pesquisas_decisores import router as pesquisas_decisores_router
 from app.api.v1.ri import router as ri_router
 from app.api.v1.prospeccao_contas import router as prospeccao_contas_router
+from app.api.v1.descoberta import router as descoberta_router
 from app.api.v1.regras_aprendidas import router as regras_aprendidas_router
 from app.api.v1.relatorio_consumo import router as relatorio_consumo_router
 from app.api.v1.relatorios import router as relatorios_router
@@ -126,6 +127,7 @@ router.include_router(onboarding_router, dependencies=_exige_licenca)
 # Prospecção (C3) ANTES de `contas`: `/contas/franquia` não pode cair em
 # `/contas/{conta_id}`.
 router.include_router(prospeccao_contas_router, dependencies=_exige_predator)
+router.include_router(descoberta_router, dependencies=_exige_predator)
 router.include_router(coletas_site_router, dependencies=_exige_predator)
 router.include_router(ri_router, dependencies=_exige_predator)
 router.include_router(pesquisas_decisores_router, dependencies=_exige_predator)

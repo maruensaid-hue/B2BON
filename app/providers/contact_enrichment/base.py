@@ -28,6 +28,7 @@ class ContatoCandidato(BaseModel):
     telefone: str | None = None
     linkedin_url: str | None = None
     fonte: str = "enriquecimento_contatos"
+    email_status: str | None = None  # ver `Decisor.email_status`
 
 
 # ok: o provedor devolveu contatos revelados. sem_resultados: respondeu e não havia ninguém. erro_seguro: tem-se certeza de que NADA foi

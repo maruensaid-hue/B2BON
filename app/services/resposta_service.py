@@ -6,10 +6,11 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.contexts.predator import contract as predator_contract
 from app.models.cadencia import Cadencia
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
-from app.services import auditoria_service
+from app.services import atividade_service, auditoria_service, optout_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 # Separador seguro pra local-part de e-mail (raio-X 2026-09-24, Webmail
@@ -71,6 +72,24 @@ def marcar_resposta(db: Session, tenant_id: str, decisor_id: int) -> dict:
     for mensagem in pendentes:
         mensagem.status = "cancelado"
 
+    # Colegas da mesma empresa, nas cadências que pedem isso: quem respondeu virou conversa, o resto da empresa para de receber.
+    colegas = (
+        db.query(Mensagem)
+        .join(Cadencia, Mensagem.cadencia_id == Cadencia.id)
+        .join(Decisor, Mensagem.decisor_id == Decisor.id)
+        .filter(
+            Decisor.tenant_id == tenant_id,
+            Decisor.conta_id == decisor.conta_id,
+            Decisor.id != decisor.id,
+            Mensagem.status.in_(["aguardando_aprovacao", "aprovado"]),
+            Cadencia.pausar_empresa_ao_responder.is_(True),
+        )
+        .all()
+    )
+    for mensagem in colegas:
+        mensagem.status = "cancelado"
+        mensagem.motivo_falha = f"Pausada: {decisor.nome}, da mesma empresa, respondeu."
+
     auditoria_service.registrar(
         db,
         tenant_id,
@@ -78,8 +97,38 @@ def marcar_resposta(db: Session, tenant_id: str, decisor_id: int) -> dict:
         "decisor",
         decisor.id,
         None,
-        {"mensagens_canceladas": len(pendentes)},
+        {"mensagens_canceladas": len(pendentes), "mensagens_da_empresa_pausadas": len(colegas)},
         conta_id=decisor.conta_id,
     )
     db.commit()
-    return {"decisor_id": decisor.id, "mensagens_canceladas": len(pendentes)}
+    return {"decisor_id": decisor.id, "mensagens_canceladas": len(pendentes), "mensagens_da_empresa_pausadas": len(colegas)}
+
+
+def ler_resposta(db: Session, tenant_id: str, decisor: Decisor, texto: str, origem: str) -> dict | None:
+    """Lê o texto da resposta antes de qualquer automação. Pedido de descadastro escrito ("SAIR", "me tire da lista") vira opt-out
+    imediato e permanente, devolvendo o resultado (quem chama não responde nem qualifica). Ameaça jurídica ou reclamação fica registrada
+    na conta para um humano e devolve `{"escalar": True}`: quem chama não deixa a IA responder. Resposta comum devolve `None`."""
+    leitura = predator_contract.optout_resposta.ler(texto or "")
+    if leitura.escalar:
+        atividade_service.registrar(
+            db, tenant_id, conta_id=decisor.conta_id, tipo="sistema",
+            descricao=f"Resposta de {decisor.nome} pede atenção humana (possível reclamação ou menção jurídica): nenhuma resposta automática.",
+        )
+    if leitura.optout:
+        atividade_service.registrar(
+            db, tenant_id, conta_id=decisor.conta_id, tipo="sistema",
+            descricao=f"{decisor.nome} pediu para não receber mais mensagens ({origem}): \"{(leitura.trecho or '')[:80]}\"",
+        )
+        resultado = optout_service.processar(db, tenant_id, decisor.id, origem=f"resposta_{origem}")
+        return {**resultado, "optout_por_resposta": True, "escalar": leitura.escalar}
+    if leitura.escalar:
+        # Reclamação não é descadastro, mas nada mais sai para essa pessoa até um humano decidir.
+        decisor.ultima_interacao_em = datetime.now(UTC)
+        pendentes = db.query(Mensagem).filter(Mensagem.decisor_id == decisor.id, Mensagem.status.in_(["aguardando_aprovacao", "aprovado"])).all()
+        for mensagem in pendentes:
+            mensagem.status, mensagem.motivo_falha = "cancelado", "Resposta pede atenção humana (possível reclamação)."
+        auditoria_service.registrar(db, tenant_id, "resposta_escalada", "decisor", decisor.id, None, {"mensagens_canceladas": len(pendentes)},
+                                    conta_id=decisor.conta_id)
+        db.commit()
+        return {"decisor_id": decisor.id, "escalar": True, "mensagens_canceladas": len(pendentes)}
+    return None

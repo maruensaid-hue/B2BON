@@ -9,6 +9,8 @@ import httpx
 from app.core.ssrf import DestinoNaoPublico, requisitar_publico, resolver_publico
 
 SiteFetcher = Callable[[str], str]
+# Domínio -> HTML bruto da home (scripts e links incluídos), para os sinais técnicos que o texto visível não mostra.
+HtmlFetcher = Callable[[str], str]
 
 _MAX_PAGINAS = 8
 _MAX_CHARS_POR_PAGINA = 8000  # de TEXTO visível por página (a IA recebe só os primeiros 2.500 de cada; a extração determinística lê tudo)
@@ -183,3 +185,15 @@ def buscar_conteudo_site(dominio: str) -> str:
             paginas[url] = conteudo
 
     return "\n\n".join(f"=== {url} ===\n{texto}" for url, texto in paginas.items())
+
+
+def buscar_html_home(dominio: str) -> str:
+    """HTML bruto da home, com as mesmas defesas de `_get_seguro` (SSRF, portas, teto de bytes). Uma requisição a mais por coleta,
+    sem IA: é dela que saem pixel de anúncio, plataforma do site, link de vagas e crédito da agência no rodapé."""
+    dominio_limpo = re.sub(r"^[a-zA-Z]+://", "", dominio).strip("/")
+    resposta = _get_seguro(f"https://{dominio_limpo}")
+    resposta.raise_for_status()
+    tipo = resposta.headers.get("content-type", "").split(";")[0].strip().lower()
+    if tipo and tipo not in _TIPOS_ACEITOS:
+        raise ConteudoNaoSuportado(f"Tipo de conteúdo não suportado: {tipo}")
+    return resposta.text

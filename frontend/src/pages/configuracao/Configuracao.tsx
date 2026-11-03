@@ -8,6 +8,7 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
 import { TutorialConfiguracao } from "@/pages/configuracao/TutorialConfiguracao";
+import { type ConfiguracaoWhatsApp, WhatsAppConexao } from "@/pages/configuracao/WhatsAppConexao";
 import { api, ApiError, getBlob, postFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -56,13 +57,8 @@ interface ConfiguracaoComunicacao {
   id: number;
   tom: string;
   restricoes: string[];
-}
-
-interface ConfiguracaoWhatsApp {
-  id: number;
-  phone_number_id: string;
-  business_account_id: string;
-  access_token_mascarado: string;
+  rascunho_resposta: boolean;
+  link_agendamento: string | null;
 }
 
 interface ConfiguracaoEmailSmtp {
@@ -349,7 +345,6 @@ export function Configuracao() {
   const [statusLinkedin, setStatusLinkedin] = useState<StatusConexoesLinkedin | null>(null);
   const [ofertaEmEdicaoId, setOfertaEmEdicaoId] = useState<number | null>(null);
   const [salvandoOferta, setSalvandoOferta] = useState(false);
-  const [salvandoWhatsapp, setSalvandoWhatsapp] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [templateProposta, setTemplateProposta] = useState<TemplateProposta | null>(null);
@@ -549,6 +544,8 @@ export function Configuracao() {
       await api.put("/comunicacao", {
         tom: String(form.get("tom")),
         restricoes: paraLista(String(form.get("restricoes") ?? "")),
+        rascunho_resposta: form.get("rascunho_resposta") === "on",
+        link_agendamento: String(form.get("link_agendamento") ?? "").trim() || null,
       });
       setMensagem("Comunicação salva.");
       await carregarTudo();
@@ -557,26 +554,12 @@ export function Configuracao() {
     }
   }
 
-  async function salvarWhatsapp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (salvandoWhatsapp) return;
-    const form = new FormData(event.currentTarget);
-    const accessToken = String(form.get("access_token") ?? "").trim();
-    setSalvandoWhatsapp(true);
-    setErro(null);
+  async function recarregarWhatsapp() {
     try {
-      const salvo = await api.put<ConfiguracaoWhatsApp>("/configuracao-whatsapp", {
-        phone_number_id: String(form.get("phone_number_id")),
-        business_account_id: String(form.get("business_account_id")),
-        access_token: accessToken || null,
-      });
-      setWhatsapp(salvo);
+      setWhatsapp(await api.get<ConfiguracaoWhatsApp | null>("/configuracao-whatsapp"));
       setErroWhatsapp(null);
-      setMensagem("WhatsApp Business salvo.");
-    } catch (error) {
-      setErro(error instanceof ApiError ? error.message : "Não foi possível salvar o WhatsApp Business.");
-    } finally {
-      setSalvandoWhatsapp(false);
+    } catch {
+      setErroWhatsapp("Não foi possível ler a configuração do WhatsApp. Reconecte com a Meta ou refaça a configuração manual.");
     }
   }
 
@@ -966,6 +949,34 @@ export function Configuracao() {
               </div>
             )}
           </div>
+          <label className="flex items-start gap-2 text-[12px] text-muted">
+            <input
+              type="checkbox"
+              name="rascunho_resposta"
+              className="mt-0.5"
+              defaultChecked={comunicacao?.rascunho_resposta ?? true}
+              key={`rascunho-${comunicacao?.id ?? "novo"}`}
+            />
+            <span>
+              Quando um lead responder, preparar um rascunho de resposta que conduz para a reunião
+              <span className="block text-[11px] text-muted/70">
+                O rascunho vai para a Fila de Aprovação: nada é enviado sem alguém aprovar.
+              </span>
+            </span>
+          </label>
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Link da sua agenda (opcional)</div>
+            <Input
+              name="link_agendamento"
+              type="url"
+              defaultValue={comunicacao?.link_agendamento ?? ""}
+              key={`link-${comunicacao?.id ?? "novo"}`}
+              placeholder="https://calendly.com/seu-nome/30min"
+            />
+            <div className="mt-1 text-[11px] text-muted/70">
+              Com o link, o rascunho oferece a sua agenda; sem ele, pede duas opções de dia e horário ao lead.
+            </div>
+          </div>
           <Button type="submit" className="w-full justify-center">
             Salvar
           </Button>
@@ -975,35 +986,7 @@ export function Configuracao() {
       {isGestor && (
         <Card className="mt-4" data-tutorial-id="configuracao:whatsapp">
           <SectionLabel>WhatsApp Business</SectionLabel>
-          <div className="mb-3 text-[11px] text-muted">
-            Conta própria da Meta pra este cliente — obrigatória pra disparar WhatsApp de cadência/campanha.
-            Sem ela configurada aqui, o envio fica desativado (nenhuma mensagem sai).
-          </div>
-          {whatsapp && (
-            <div className="mb-3 text-[12px] text-muted">
-              Token atual: <span className="font-mono">{whatsapp.access_token_mascarado}</span>
-            </div>
-          )}
-          {erroWhatsapp && <div className="mb-3 text-[12px] text-red">{erroWhatsapp}</div>}
-          <form key={whatsapp?.id ?? "novo"} onSubmit={salvarWhatsapp} className="flex flex-col gap-3">
-            <div>
-              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Phone Number ID</div>
-              <Input name="phone_number_id" required defaultValue={whatsapp?.phone_number_id} />
-            </div>
-            <div>
-              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">Business Account ID</div>
-              <Input name="business_account_id" required defaultValue={whatsapp?.business_account_id} />
-            </div>
-            <div>
-              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
-                Access Token {whatsapp && !erroWhatsapp ? "(deixe em branco para manter o atual)" : ""}
-              </div>
-              <Input name="access_token" type="password" required={!whatsapp || !!erroWhatsapp} placeholder="EAAG..." />
-            </div>
-            <Button type="submit" disabled={salvandoWhatsapp} className="w-full justify-center">
-              {salvandoWhatsapp ? "Salvando..." : "Salvar WhatsApp Business"}
-            </Button>
-          </form>
+          <WhatsAppConexao config={whatsapp} erroCarregamento={erroWhatsapp} onAtualizado={recarregarWhatsapp} />
         </Card>
       )}
 

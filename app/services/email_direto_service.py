@@ -12,8 +12,17 @@ from app.models.email_recebido import EmailRecebido
 from app.models.negocio import Negocio
 from app.models.estagio_funil import EstagioFunil
 from app.models.usuario import Usuario
+from app.llm.base import LLMProvider
 from app.providers.channels.email.base import EmailProvider
-from app.services import atividade_service, auditoria_service, bloqueio_contato_service, comunicacao_service, resposta_service
+from app.providers.plan_limits.base import PlanLimitsProvider
+from app.services import (
+    atividade_service,
+    auditoria_service,
+    bloqueio_contato_service,
+    comunicacao_service,
+    conversa_comercial_service,
+    resposta_service,
+)
 from app.services.errors import NaoEncontrado, RegraNegocioViolada
 
 logger = logging.getLogger(__name__)
@@ -235,6 +244,8 @@ def processar_recebido(
     assunto: str,
     corpo: str,
     email_provider: EmailProvider,
+    llm: LLMProvider | None = None,
+    plan_limits: PlanLimitsProvider | None = None,
 ) -> EmailRecebido:
     """Chamado pelo webhook de Inbound Parse (`POST /webhooks/email/
     inbound`) já com `tenant_id`/`decisor_id` decodificados do token de
@@ -260,8 +271,10 @@ def processar_recebido(
             db, tenant_id, conta_id=decisor.conta_id, tipo="email", descricao=f"E-mail recebido: {assunto}"
         )
         # Já comita — cobre o `add` do EmailRecebido/Atividade acima
-        # dentro da mesma transação.
-        resposta_service.marcar_resposta(db, tenant_id, decisor.id)
+        # dentro da mesma transação. Descadastro escrito ou reclamação no corpo: `ler_resposta` resolve e comita no lugar.
+        if resposta_service.ler_resposta(db, tenant_id, decisor, corpo, "email") is None:
+            resposta_service.marcar_resposta(db, tenant_id, decisor.id)
+            conversa_comercial_service.apos_resposta(db, tenant_id, decisor, corpo, "email", llm, plan_limits)
     else:
         db.commit()
     db.refresh(email)

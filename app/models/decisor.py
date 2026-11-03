@@ -37,4 +37,7 @@ class Decisor(Base):
     # ficar desatualizada (§27: "inferências devem ser identificadas
     # como sugestões da IA", nunca um fato confirmado por conta própria).
     papel_confirmado: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Procedência do e-mail: publicado (escrito no site, atribuído a esta pessoa) | inferido (padrão de e-mail da empresa aplicado ao nome;
+    # NÃO é enviado até alguém confirmar) | confirmado (digitado ou confirmado por um usuário). `None` = legado, manual antigo ou provedor.
+    email_status: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

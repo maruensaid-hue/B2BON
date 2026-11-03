@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.crypto import TextoCriptografado
@@ -30,5 +30,17 @@ class ConfiguracaoWhatsApp(Base):
     access_token: Mapped[str] = mapped_column(TextoCriptografado)
     phone_number_id: Mapped[str] = mapped_column(TextoCriptografado)
     business_account_id: Mapped[str] = mapped_column(TextoCriptografado)
+    # Como o número foi conectado: meta_conectar (botão "Conectar com a Meta", cadastro incorporado) | manual (IDs e token colados).
+    origem_conexao: Mapped[str | None] = mapped_column(String, nullable=True)
+    # PIN de 6 dígitos da verificação em duas etapas, criado no registro do número pela conexão com a Meta (preciso para registrar de novo).
+    pin_registro: Mapped[str | None] = mapped_column(TextoCriptografado, nullable=True)
+    # O que a Meta informou na última conexão/teste (sem segredo): mostrado na tela como prova de que está ligado.
+    numero_exibicao: Mapped[str | None] = mapped_column(String, nullable=True)
+    nome_verificado: Mapped[str | None] = mapped_column(String, nullable=True)
+    qualidade: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Direct Send (envio sem template, categoria utilidade): o admin declara que a conta está habilitada no WhatsApp Manager. Se a
+    # Meta recusar a conta (erro 100 de Direct Send), o sistema desliga sozinho e guarda o motivo.
+    direct_send_habilitado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    direct_send_motivo_desligado: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

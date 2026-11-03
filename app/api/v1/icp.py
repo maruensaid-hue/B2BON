@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_ator_id, get_db, get_tenant_id, get_usuario_atual
 from app.models.usuario import Usuario
-from app.schemas.icp import ICPCreateSchema, ICPPerformanceItemSchema, ICPSchema
-from app.services import icp_service
+from app.contexts.predator import contract as predator_contract
+from app.schemas.icp import CoorteRequestSchema, CoorteSchema, ICPCreateSchema, ICPPerformanceItemSchema, ICPSchema, SinalCatalogoSchema
+from app.services import conta_service, icp_service
 
 router = APIRouter(prefix="/icp", tags=["icp"])
 
@@ -37,6 +38,25 @@ def performance_icp(
     db: Session = Depends(get_db),
 ) -> list[ICPPerformanceItemSchema]:
     return icp_service.performance(db, tenant_id, usuario.id, usuario.papel == "user")
+
+
+@router.get("/sinais/catalogo", response_model=list[SinalCatalogoSchema])
+def catalogo_sinais(_usuario: Usuario = Depends(get_usuario_atual)) -> list[SinalCatalogoSchema]:
+    """Sinais de conta que o PREDATOR sabe coletar (todos sem custo de crédito), para montar os critérios do ICP."""
+    return predator_contract.sinais.catalogo()
+
+
+@router.post("/coorte", response_model=CoorteSchema)
+def coorte_por_sinais(
+    dados: CoorteRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+) -> CoorteSchema:
+    """Quantas contas (e quais, com o motivo) atendem aos critérios — para ver o efeito dos critérios antes de salvá-los no ICP."""
+    return conta_service.coorte_por_sinais(
+        db, tenant_id, usuario.id, usuario.papel == "user", dados.criterios, icp_id=dados.icp_id, limite=dados.limite
+    )
 
 
 @router.get("/grupo/{grupo_id}", response_model=list[ICPSchema])

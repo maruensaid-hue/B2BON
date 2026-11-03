@@ -19,6 +19,7 @@ from app.models.campanha import CampanhaDestinatario
 from app.models.campo_enriquecido import CampoEnriquecido
 from app.models.coleta_site import ColetaSiteConta, IndicadorFinanceiroConta
 from app.models.conteudo_pagina_site import ConteudoPaginaSite
+from app.models.sinal_conta import SinalConta
 from app.models.conta import Conta
 from app.models.conta_franquia_consumo import ContaFranquiaConsumo
 from app.models.conversa_qualificacao import ConversaQualificacao
@@ -466,6 +467,36 @@ def _contas_do_escopo(db: Session, tenant_id: str, usuario_id: int | None, restr
     return query
 
 
+def confirmar_email_decisor(db: Session, tenant_id: str, ator_id: str | None, conta_id: int, decisor_id: int) -> Decisor:
+    """Um usuário confirma o e-mail deduzido (ou publicado) do decisor: a partir daí o envio pode usá-lo."""
+    decisor = db.query(Decisor).filter_by(id=decisor_id, conta_id=conta_id, tenant_id=tenant_id).one_or_none()
+    if decisor is None:
+        raise NaoEncontrado(f"Decisor {decisor_id} não encontrado nesta conta")
+    if not decisor.email:
+        raise RegraNegocioViolada("Este decisor não tem e-mail para confirmar.")
+    anterior = decisor.email_status
+    decisor.email_status = "confirmado"
+    auditoria_service.registrar(db, tenant_id, "decisor_email_confirmado", "decisor", decisor.id, ator_id, {"antes": anterior}, conta_id=conta_id)
+    db.commit()
+    db.refresh(decisor)
+    return decisor
+
+
+def coorte_por_sinais(
+    db: Session, tenant_id: str, usuario_id: int | None, restrito: bool, criterios: list[dict], icp_id: int | None = None, limite: int = 50
+) -> dict:
+    """Contas do escopo do usuário que atendem aos critérios de sinais (o vendedor só conta as dele)."""
+    return predator_contract.sinais.coorte(db, tenant_id, criterios, _contas_do_escopo(db, tenant_id, usuario_id, restrito), icp_id=icp_id, limite=limite)
+
+
+def sinais_da_conta(db: Session, tenant_id: str, conta_id: int) -> list[dict]:
+    """Sinais vigentes da conta, com a evidência de cada um, na ordem do catálogo."""
+    sinais = predator_contract.sinais
+    obter(db, tenant_id, conta_id)
+    da_conta = sinais.vigentes(db, tenant_id, [conta_id]).get(conta_id, {})
+    return [sinais.sinal_para_dict(da_conta[c]) for c in sinais.CATALOGO if c in da_conta]
+
+
 LIMITE_PADRAO_PESQUISA_CONTAS = 50
 LIMITE_MAXIMO_PESQUISA_CONTAS = 200
 
@@ -693,6 +724,7 @@ def _apagar_dados_do_site(db: Session, conta_ids: list[int]) -> None:
     linhas saem num único DELETE, cuja FK é checada no fim da instrução) → conteúdo das páginas. Sem isto, apagar uma conta com histórico
     de coleta violava a chave estrangeira (erro 500 no PostgreSQL)."""
     db.query(IndicadorFinanceiroConta).filter(IndicadorFinanceiroConta.conta_id.in_(conta_ids)).delete(synchronize_session=False)
+    db.query(SinalConta).filter(SinalConta.conta_id.in_(conta_ids)).delete(synchronize_session=False)  # aponta para a coleta
     db.query(ColetaSiteConta).filter(ColetaSiteConta.conta_id.in_(conta_ids)).delete(synchronize_session=False)
     db.query(ConteudoPaginaSite).filter(ConteudoPaginaSite.conta_id.in_(conta_ids)).delete(synchronize_session=False)
     predator_contract.ri.apagar_da_conta(db, conta_ids)  # documentos de RI e seus indicadores (FK para a conta)
@@ -993,6 +1025,8 @@ def atualizar_decisor(
         raise NaoEncontrado(f"Decisor {decisor_id} não encontrado nesta conta")
     decisor.nome = nome
     decisor.cargo = cargo
+    if (email or None) != (decisor.email or None):
+        decisor.email_status = "confirmado" if email else None  # digitado por um usuário
     decisor.email = email
     decisor.telefone = telefone
     decisor.linkedin_url = linkedin_url

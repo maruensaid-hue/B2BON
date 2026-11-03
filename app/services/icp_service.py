@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from app.contexts.predator import contract as predator_contract
 from app.models.conta import Conta
 from app.models.icp import ICP
 from app.models.oferta import Oferta
@@ -64,6 +65,7 @@ def criar(db: Session, tenant_id: str, ator_id: str | None, dados: ICPCreateSche
         # `cnpj_recorte_service`) já normaliza no ponto de uso.
         cnae_codigos=dados.cnae_codigos,
         ufs=[normalizar_uf(uf) for uf in dados.ufs],
+        criterios_sinais=predator_contract.sinais.validar_criterios(dados.criterios_sinais),
     )
     db.add(icp)
     db.flush()
@@ -94,6 +96,7 @@ def nova_versao(db: Session, tenant_id: str, ator_id: str | None, icp_id: int, d
         gatilhos=dados.gatilhos,
         cnae_codigos=dados.cnae_codigos,
         ufs=[normalizar_uf(uf) for uf in dados.ufs],
+        criterios_sinais=predator_contract.sinais.validar_criterios(dados.criterios_sinais),
     )
 
     db.query(ICP).filter_by(tenant_id=tenant_id, grupo_id=atual.grupo_id).update({"ativo": False})
@@ -128,6 +131,7 @@ def clonar(db: Session, tenant_id: str, ator_id: str | None, icp_id: int) -> ICP
         gatilhos=list(origem.gatilhos),
         cnae_codigos=list(origem.cnae_codigos),
         ufs=[normalizar_uf(uf) for uf in origem.ufs],
+        criterios_sinais=list(origem.criterios_sinais or []),
     )
     db.add(clone)
     db.flush()

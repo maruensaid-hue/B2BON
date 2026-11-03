@@ -6,7 +6,7 @@ from app.models.configuracao_notificacao import ConfiguracaoNotificacao
 from app.models.conversa_qualificacao import ConversaQualificacao
 from app.models.notificacao_vendedor import NotificacaoVendedor
 from app.providers.channels.whatsapp.base import WhatsAppProvider
-from app.services import auditoria_service
+from app.services import auditoria_service, whatsapp_service
 from app.services.errors import NaoEncontrado
 
 
@@ -31,7 +31,7 @@ def notificar_vendedor(
     db.flush()
 
     if config and config.vendedor_telefone:
-        whatsapp.enviar_texto_livre(config.vendedor_telefone, resumo)
+        whatsapp_service.enviar_aviso(db, tenant_id, whatsapp, config.vendedor_telefone, resumo)
 
     auditoria_service.registrar(
         db,

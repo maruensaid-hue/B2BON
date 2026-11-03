@@ -19,5 +19,8 @@ class WhatsAppDesativadoProvider(WhatsAppProvider):
     def enviar_texto_livre(self, telefone: str, texto: str) -> ResultadoEnvio:
         return ResultadoEnvio(sucesso=False, motivo_falha=self._MOTIVO)
 
+    def enviar_direct_send(self, telefone: str, texto: str, categoria: str = "utility") -> ResultadoEnvio:
+        return ResultadoEnvio(sucesso=False, motivo_falha=self._MOTIVO)
+
     def listar_templates(self) -> list[TemplateInfo]:
         return []

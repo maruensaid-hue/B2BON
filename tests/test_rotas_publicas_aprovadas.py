@@ -62,7 +62,7 @@ APROVADAS = {
     **{("POST", f"/api/v1/cron/{nome}"): "cron" for nome in (
         "coletar-licitacoes", "creditos-ia", "disparar-relatorios-periodicos", "disparar-webhooks-parceiros", "enviar-lembretes-cobranca",
         "expirar-registros-oportunidade", "expirar-titulares", "integracoes-crm", "integracoes-crm-diario", "podar-historicos",
-        "podar-recorte-cnpj", "processar-alertas-licitacoes", "processar-campanhas", "processar-envios", "processar-eventos", "processar-fila-enriquecimento",
+        "podar-recorte-cnpj", "processar-alertas-licitacoes", "processar-campanhas", "processar-envios", "processar-eventos", "processar-fila-enriquecimento", "prospeccao-automatica",
         "processar-retorno", "repassar-comissoes", "sourcing-sincronizar", "suspender-licencas-vencidas",
     )},
 }

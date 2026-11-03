@@ -28,6 +28,8 @@ interface Cadencia {
    * `false` (padrão), a nutrição continua e o cancelamento passa a ser
    * manual, toque a toque. */
   cancelar_ao_responder: boolean;
+  pausar_empresa_ao_responder: boolean;
+  prospeccao_automatica: boolean;
 }
 
 interface OfertaResumo {
@@ -48,6 +50,7 @@ interface ToqueCadencia {
   intervalo_dias_apos_anterior: number;
   template_whatsapp_id: string | null;
   ab_teste_habilitado: boolean;
+  whatsapp_sem_template: boolean;
 }
 
 interface ToqueRascunho {
@@ -56,7 +59,15 @@ interface ToqueRascunho {
   intervalo_dias_apos_anterior: number;
   template_whatsapp_id: string;
   ab_teste_habilitado: boolean;
+  whatsapp_sem_template?: boolean;
 }
+
+// Valor especial no seletor de template: toque de WhatsApp que sai sem template (Direct Send da Meta, categoria utilidade).
+const SEM_TEMPLATE = "__sem_template__";
+const AVISO_RISCO_SEM_TEMPLATE =
+  "WhatsApp sem template usa o Direct Send da Meta, que só aceita mensagens de UTILIDADE. A Meta trata prospecção como marketing: " +
+  "revisa depois do envio e, se considerar marketing, suspende o recurso por 7 dias, depois bloqueia por 30 e por fim retira em " +
+  "definitivo do seu número. O B2B ON escreve em formato de aviso e não deixa sair texto promocional, mas isso reduz o risco, não o elimina.";
 
 interface GerarLoteResultado {
   contas_processadas: number[];
@@ -143,6 +154,9 @@ export function Cadencias() {
     toqueVazio(5, "email"),
   ]);
   const [cancelarAoResponderNaCriacao, setCancelarAoResponderNaCriacao] = useState(false);
+  const [pausarEmpresaNaCriacao, setPausarEmpresaNaCriacao] = useState(false);
+  const [riscoSemTemplateAceito, setRiscoSemTemplateAceito] = useState(false);
+  const [toqueSemTemplateEmConfirmacao, setToqueSemTemplateEmConfirmacao] = useState<number | null>(null);
   const [salvandoCancelamentoAoResponder, setSalvandoCancelamentoAoResponder] = useState(false);
   const [resultadoGeracao, setResultadoGeracao] = useState<GerarLoteResultado | null>(null);
   const [progressoGeracao, setProgressoGeracao] = useState<{ atual: number; total: number } | null>(null);
@@ -241,6 +255,22 @@ export function Cadencias() {
     carregarToques(cadenciaSelecionadaId);
   }, [cadenciaSelecionadaId]);
 
+  const ehAdmin = usuario?.papel === "admin" || usuario?.papel === "super_admin";
+
+  async function definirWhatsappSemTemplate(toqueId: number, ligar: boolean) {
+    if (cadenciaSelecionadaId === null) return;
+    try {
+      await api.put(`/cadencias/${cadenciaSelecionadaId}/toques/${toqueId}/whatsapp-sem-template`, {
+        whatsapp_sem_template: ligar,
+        confirmo_risco: ligar,
+      });
+      setToqueSemTemplateEmConfirmacao(null);
+      await carregarToques(cadenciaSelecionadaId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível mudar o envio deste toque.");
+    }
+  }
+
   async function definirTemplateWhatsapp(toqueId: number, templateId: string) {
     if (cadenciaSelecionadaId === null || !templateId) return;
     try {
@@ -302,8 +332,13 @@ export function Cadencias() {
   async function criarCadencia(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const toquesWhatsappSemTemplate = rascunhoToques.filter(
-      (toque) => toque.canal === "whatsapp" && !toque.template_whatsapp_id,
+      (toque) => toque.canal === "whatsapp" && !toque.template_whatsapp_id && !toque.whatsapp_sem_template,
     );
+    const usaSemTemplate = rascunhoToques.some((toque) => toque.canal === "whatsapp" && toque.whatsapp_sem_template);
+    if (usaSemTemplate && !riscoSemTemplateAceito) {
+      setErro("Marque que leu o risco de usar WhatsApp sem template.");
+      return;
+    }
     if (toquesWhatsappSemTemplate.length > 0) {
       setErro("O toque de WhatsApp precisa de um template aprovado selecionado.");
       return;
@@ -320,12 +355,15 @@ export function Cadencias() {
         icp_id: alvoCriacao === "icp" ? icpParaCriacaoId : null,
         lista_prospeccao_id: alvoCriacao === "lista" ? listaParaCriacaoId : null,
         cancelar_ao_responder: cancelarAoResponderNaCriacao,
+        pausar_empresa_ao_responder: pausarEmpresaNaCriacao,
+        direct_send_risco_aceito: usaSemTemplate && riscoSemTemplateAceito,
         toques: rascunhoToques.map((toque) => ({
           ordem: toque.ordem,
           canal: toque.canal,
           intervalo_dias_apos_anterior: Number(toque.intervalo_dias_apos_anterior),
-          template_whatsapp_id: toque.canal === "whatsapp" ? toque.template_whatsapp_id || null : null,
+          template_whatsapp_id: toque.canal === "whatsapp" && !toque.whatsapp_sem_template ? toque.template_whatsapp_id || null : null,
           ab_teste_habilitado: toque.ab_teste_habilitado,
+          whatsapp_sem_template: toque.canal === "whatsapp" && !!toque.whatsapp_sem_template,
         })),
       });
       setModalCriarAberto(false);
@@ -353,6 +391,38 @@ export function Cadencias() {
     try {
       await api.put(`/cadencias/${cadenciaSelecionadaId}/cancelamento-ao-responder`, {
         cancelar_ao_responder: !cadenciaSelecionada?.cancelar_ao_responder,
+      });
+      await carregarCadencias();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível atualizar essa opção.");
+    } finally {
+      setSalvandoCancelamentoAoResponder(false);
+    }
+  }
+
+  async function alternarProspeccaoAutomatica() {
+    if (cadenciaSelecionadaId === null || salvandoCancelamentoAoResponder) return;
+    setSalvandoCancelamentoAoResponder(true);
+    setErro(null);
+    try {
+      await api.put(`/cadencias/${cadenciaSelecionadaId}/prospeccao-automatica`, {
+        prospeccao_automatica: !cadenciaSelecionada?.prospeccao_automatica,
+      });
+      await carregarCadencias();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível atualizar essa opção.");
+    } finally {
+      setSalvandoCancelamentoAoResponder(false);
+    }
+  }
+
+  async function alternarPausaEmpresaAoResponder() {
+    if (cadenciaSelecionadaId === null || salvandoCancelamentoAoResponder) return;
+    setSalvandoCancelamentoAoResponder(true);
+    setErro(null);
+    try {
+      await api.put(`/cadencias/${cadenciaSelecionadaId}/pausa-empresa-ao-responder`, {
+        pausar_empresa_ao_responder: !cadenciaSelecionada?.pausar_empresa_ao_responder,
       });
       await carregarCadencias();
     } catch (error) {
@@ -672,6 +742,32 @@ export function Cadencias() {
                 Parar esta cadência automaticamente se o cliente responder
               </label>
             )}
+            {cadenciaSelecionada.status !== "cancelada" && (
+              <label className="mb-2 flex items-center gap-1.5 text-[11px] text-muted">
+                <input
+                  type="checkbox"
+                  checked={cadenciaSelecionada.pausar_empresa_ao_responder}
+                  disabled={salvandoCancelamentoAoResponder}
+                  onChange={alternarPausaEmpresaAoResponder}
+                />
+                Se alguém da empresa responder, pausar esta cadência para os colegas dele
+              </label>
+            )}
+            {cadenciaSelecionada.status !== "cancelada" && cadenciaSelecionada.icp_id !== null && (
+              <label className="mb-2 flex items-start gap-1.5 text-[11px] text-muted">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={cadenciaSelecionada.prospeccao_automatica}
+                  disabled={salvandoCancelamentoAoResponder}
+                  onChange={alternarProspeccaoAutomatica}
+                />
+                <span>
+                  Prospecção automática: a cada 15 minutos, contas novas do ICP (já enriquecidas e dentro dos critérios de sinais) ganham
+                  rascunhos sozinhas, e a cadência é ativada quando tudo estiver aprovado. Nada é enviado sem aprovação.
+                </span>
+              </label>
+            )}
             {toques.some((toque) => toque.canal === "linkedin") && (
               <div className="mb-2 rounded-md bg-surf2 p-2 text-[11px] text-muted"><strong className="text-text">LinkedIn é um toque manual.</strong> O B2B ON prepara a mensagem e cria uma tarefa em “Tarefas de LinkedIn”; você envia pelo LinkedIn e marca como enviada. Não enviamos pela sua conta, para protegê-la de restrições.</div>
             )}
@@ -710,7 +806,22 @@ export function Cadencias() {
                       d depois do anterior
                     </span>
                   )}
-                  {toque.canal === "whatsapp" &&
+                  {toque.canal === "whatsapp" && toque.whatsapp_sem_template && (
+                    <>
+                      <Badge tone="amber">sem template (Direct Send)</Badge>
+                      {ehAdmin && toque.template_whatsapp_id && cadenciaSelecionada.status !== "cancelada" && (
+                        <button type="button" className="text-[11px] text-cyan hover:underline" onClick={() => definirWhatsappSemTemplate(toque.id, false)}>
+                          voltar a usar o template
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {toque.canal === "whatsapp" && !toque.whatsapp_sem_template && ehAdmin && cadenciaSelecionada.status !== "cancelada" && (
+                    <button type="button" className="text-[11px] text-muted hover:text-amber" onClick={() => setToqueSemTemplateEmConfirmacao(toque.id)}>
+                      enviar sem template…
+                    </button>
+                  )}
+                  {toque.canal === "whatsapp" && !toque.whatsapp_sem_template &&
                     (toque.template_whatsapp_id ? (
                       <>
                         <Badge tone="cyan">
@@ -969,6 +1080,29 @@ export function Cadencias() {
         </>
       )}
 
+      <Modal
+        title="Enviar este toque de WhatsApp sem template?"
+        open={toqueSemTemplateEmConfirmacao !== null}
+        onClose={() => setToqueSemTemplateEmConfirmacao(null)}
+      >
+        <div className="flex flex-col gap-3 text-[12px] text-text">
+          <div>{AVISO_RISCO_SEM_TEMPLATE}</div>
+          <div className="text-[11px] text-muted">
+            Só funciona com a conta habilitada para Direct Send (Configuração → WhatsApp). Se a Meta recusar, o B2B ON desliga o recurso
+            sozinho e as mensagens esperam um template.
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="danger"
+              onClick={() => toqueSemTemplateEmConfirmacao !== null && definirWhatsappSemTemplate(toqueSemTemplateEmConfirmacao, true)}
+            >
+              Li e aceito o risco
+            </Button>
+            <Button onClick={() => setToqueSemTemplateEmConfirmacao(null)}>Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal title="Nova cadência" open={modalCriarAberto} onClose={() => setModalCriarAberto(false)}>
         <form onSubmit={criarCadencia} className="flex flex-col gap-3">
           <div>
@@ -1065,6 +1199,34 @@ export function Cadencias() {
               </span>
             </span>
           </label>
+          <label className="flex items-start gap-2 text-[12px] text-muted">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={pausarEmpresaNaCriacao}
+              onChange={(event) => setPausarEmpresaNaCriacao(event.target.checked)}
+            />
+            <span>
+              Se alguém da empresa responder, pausar para os colegas dele
+              <span className="block text-[11px] text-muted/70">
+                Quem respondeu virou conversa; os outros decisores da mesma empresa param de receber esta cadência.
+              </span>
+            </span>
+          </label>
+          {rascunhoToques.some((toque) => toque.canal === "whatsapp" && toque.whatsapp_sem_template) && (
+            <label className="flex items-start gap-2 rounded-md bg-amber/10 p-2 text-[12px] text-text">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={riscoSemTemplateAceito}
+                onChange={(event) => setRiscoSemTemplateAceito(event.target.checked)}
+              />
+              <span>
+                Li e aceito o risco de enviar WhatsApp sem template
+                <span className="block text-[11px] text-muted">{AVISO_RISCO_SEM_TEMPLATE}</span>
+              </span>
+            </label>
+          )}
 
           <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
             Toques (mínimo 5, em pelo menos 2 canais)
@@ -1088,12 +1250,21 @@ export function Cadencias() {
                   <option value="linkedin">LinkedIn (manual)</option>
                 </Select>
                 {toque.canal === "whatsapp" &&
-                  (templatesWhatsapp.length > 0 ? (
+                  (templatesWhatsapp.length > 0 || ehAdmin ? (
                     <Select
                       className="min-w-[180px] flex-1"
                       required
-                      value={toque.template_whatsapp_id}
-                      onChange={(event) => atualizarToque(indice, "template_whatsapp_id", event.target.value)}
+                      value={toque.whatsapp_sem_template ? SEM_TEMPLATE : toque.template_whatsapp_id}
+                      onChange={(event) => {
+                        const semTemplate = event.target.value === SEM_TEMPLATE;
+                        setRascunhoToques((atual) =>
+                          atual.map((t, i) =>
+                            i === indice
+                              ? { ...t, whatsapp_sem_template: semTemplate, template_whatsapp_id: semTemplate ? "" : event.target.value }
+                              : t,
+                          ),
+                        );
+                      }}
                     >
                       <option value="" disabled>
                         Selecione o template aprovado
@@ -1103,6 +1274,7 @@ export function Cadencias() {
                           {template.nome}
                         </option>
                       ))}
+                      {ehAdmin && <option value={SEM_TEMPLATE}>Sem template (Direct Send — leia o risco)</option>}
                     </Select>
                   ) : (
                     <span className="basis-full text-[10.5px] text-amber">

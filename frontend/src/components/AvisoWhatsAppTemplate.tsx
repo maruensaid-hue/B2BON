@@ -48,6 +48,11 @@ export function AvisoWhatsAppTemplate() {
           Depois que o contato responder (mesmo um "oi"), a janela de 24h abre e as mensagens seguintes
           daquela conversa podem ser texto livre normalmente.
         </p>
+        <p>
+          A Meta também aceita, em beta, envio <b>sem template</b> (Direct Send), mas só de mensagens de utilidade. Um
+          administrador pode usar isso num toque de cadência aceitando o risco: a Meta trata prospecção como marketing e pode
+          suspender o recurso no seu número.
+        </p>
         <p className="text-muted">
           Veja o passo a passo completo (criar app na Meta, gerar token, cadastrar o template) no Manual do
           Usuário, seção WhatsApp Business.
