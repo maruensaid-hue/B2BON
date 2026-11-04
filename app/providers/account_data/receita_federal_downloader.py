@@ -66,6 +66,47 @@ def normalizar_uf(uf: str) -> str:
     return _NOME_ESTADO_PARA_UF.get(texto, texto)
 
 
+_REGIOES = {
+    "NORTE": ("AC", "AM", "AP", "PA", "RO", "RR", "TO"),
+    "NORDESTE": ("AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"),
+    "CENTRO-OESTE": ("DF", "GO", "MS", "MT"),
+    "CENTROESTE": ("DF", "GO", "MS", "MT"),
+    "SUDESTE": ("ES", "MG", "RJ", "SP"),
+    "SUL": ("PR", "RS", "SC"),
+}
+
+
+def extrair_ufs(valores: list[str]) -> tuple[list[str], list[str]]:
+    """(UFs reconhecidas, sem repetição e na ordem; valores sem nenhuma UF). Aceita sigla ("sp"), nome ("São Paulo"), região
+    ("Sudeste" = ES, MG, RJ, SP) e entradas misturadas como "SC SUDESTE: ES" (visto em produção em 04/11/2026: gravado assim,
+    SC e ES nunca casavam). Quem chama decide o que fazer com o que não foi reconhecido (o cadastro do ICP recusa)."""
+    ufs: list[str] = []
+    nao_reconhecidos: list[str] = []
+    for valor in valores:
+        if not valor or not valor.strip():
+            continue
+        inteiro = normalizar_uf(valor)
+        if inteiro in _UFS_VALIDAS:
+            achadas = [inteiro]
+        else:
+            texto = "".join(c for c in unicodedata.normalize("NFKD", valor.upper()) if not unicodedata.combining(c))
+            achadas = []
+            # nome mais longo primeiro: "MATO GROSSO DO SUL" antes de "MATO GROSSO"; o nome achado sai do texto antes das siglas
+            for nome, uf in sorted(_NOME_ESTADO_PARA_UF.items(), key=lambda item: -len(item[0])):
+                if re.search(rf"(?<![A-Z]){re.escape(nome)}(?![A-Z])", texto):
+                    achadas.append(uf)
+                    texto = texto.replace(nome, " ")
+            palavras = re.findall(r"[A-Z]+(?:-[A-Z]+)?", texto)
+            achadas += [p for p in palavras if len(p) == 2 and p in _UFS_VALIDAS]
+            if not achadas:  # região só vale sozinha; em "SUDESTE: ES" ela é rótulo e não acrescenta MG, RJ, SP
+                for palavra in palavras:
+                    achadas.extend(_REGIOES.get(palavra, ()))
+        if not achadas:
+            nao_reconhecidos.append(valor.strip())
+        ufs.extend(uf for uf in achadas if uf not in ufs)
+    return ufs, nao_reconhecidos
+
+
 class MesCompetenciaIndisponivel(RuntimeError):
     """Nenhuma pasta de competência encontrada no índice do espelho — ou a
     Receita Federal/o espelho está fora do ar, ou o layout/domínio mudou de

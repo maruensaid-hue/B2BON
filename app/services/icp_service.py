@@ -6,10 +6,22 @@ from app.contexts.predator import contract as predator_contract
 from app.models.conta import Conta
 from app.models.icp import ICP
 from app.models.oferta import Oferta
-from app.providers.account_data.receita_federal_downloader import normalizar_uf
+from app.providers.account_data.receita_federal_downloader import extrair_ufs
 from app.schemas.icp import ICPCreateSchema
 from app.services import auditoria_service
-from app.services.errors import NaoEncontrado
+from app.services.errors import NaoEncontrado, ValidacaoFalhou
+
+
+def _ufs_validas(valores: list[str]) -> list[str]:
+    """UFs do ICP como siglas. O campo da tela é texto livre: aceita sigla, nome do estado e região, e recusa o que não for estado
+    (antes passava adiante e nunca casava em nada; ex.: "SUL: PR" gravado assim em produção)."""
+    ufs, nao_reconhecidos = extrair_ufs(valores)
+    if nao_reconhecidos:
+        raise ValidacaoFalhou(
+            f"Não reconheci como estado: {', '.join(repr(v) for v in nao_reconhecidos)}. Use siglas separadas por vírgula (ex.: SP, RJ), "
+            "o nome do estado ou a região (Norte, Nordeste, Centro-Oeste, Sudeste, Sul)."
+        )
+    return ufs
 
 
 def existe_icp_ativo(db: Session, tenant_id: str) -> bool:
@@ -64,7 +76,7 @@ def criar(db: Session, tenant_id: str, ator_id: str | None, dados: ICPCreateSche
         # Receita Federal (`receita_federal.buscar_candidatos`,
         # `cnpj_recorte_service`) já normaliza no ponto de uso.
         cnae_codigos=dados.cnae_codigos,
-        ufs=[normalizar_uf(uf) for uf in dados.ufs],
+        ufs=_ufs_validas(dados.ufs),
         criterios_sinais=predator_contract.sinais.validar_criterios(dados.criterios_sinais),
     )
     db.add(icp)
@@ -95,7 +107,7 @@ def nova_versao(db: Session, tenant_id: str, ator_id: str | None, icp_id: int, d
         dores=dados.dores,
         gatilhos=dados.gatilhos,
         cnae_codigos=dados.cnae_codigos,
-        ufs=[normalizar_uf(uf) for uf in dados.ufs],
+        ufs=_ufs_validas(dados.ufs),
         criterios_sinais=predator_contract.sinais.validar_criterios(dados.criterios_sinais),
     )
 
@@ -130,7 +142,7 @@ def clonar(db: Session, tenant_id: str, ator_id: str | None, icp_id: int) -> ICP
         dores=list(origem.dores),
         gatilhos=list(origem.gatilhos),
         cnae_codigos=list(origem.cnae_codigos),
-        ufs=[normalizar_uf(uf) for uf in origem.ufs],
+        ufs=extrair_ufs(origem.ufs)[0],  # clone de ICP antigo: aproveita o que der, sem travar
         criterios_sinais=list(origem.criterios_sinais or []),
     )
     db.add(clone)

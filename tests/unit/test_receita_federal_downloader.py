@@ -125,3 +125,24 @@ def test_baixar_shards_pula_indices_ausentes_sem_abortar(monkeypatch: pytest.Mon
     caminhos = downloader.baixar_shards("2026-01", "Estabelecimentos", tmp_path)
 
     assert len(caminhos) == 1
+
+
+@pytest.mark.parametrize(
+    ("valores", "esperado", "nao_reconhecidos"),
+    [
+        (["sp", " RJ "], ["SP", "RJ"], []),
+        (["São Paulo", "Mato Grosso do Sul", "mato grosso", "Pará", "Paraná"], ["SP", "MS", "MT", "PA", "PR"], []),
+        (["Sudeste"], ["ES", "MG", "RJ", "SP"], []),
+        (["Centro-Oeste"], ["DF", "GO", "MS", "MT"], []),
+        # o que estava gravado em produção (04/11/2026): região colada na sigla
+        (["SUL: PR", "RS", "SC SUDESTE: ES", "SP CENTRO-OESTE: DF", "MT NORDESTE: AL", "SE NORTE: AC"],
+         ["PR", "RS", "SC", "ES", "SP", "DF", "MT", "AL", "SE", "AC"], []),  # a região é rótulo: só as siglas escritas
+        (["SP", "Interior", "XX"], ["SP"], ["Interior", "XX"]),
+        (["SUDESTE: ES", "SUL: PR"], ["ES", "PR"], []),  # região como rótulo não acrescenta estados
+        (["", "  "], [], []),
+    ],
+)
+def test_extrair_ufs_aceita_sigla_nome_e_regiao_e_aponta_o_que_nao_e_estado(valores, esperado, nao_reconhecidos):
+    ufs, recusados = downloader.extrair_ufs(valores)
+    assert set(ufs) == set(esperado) and len(ufs) == len(set(ufs))
+    assert recusados == nao_reconhecidos

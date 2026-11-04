@@ -8,8 +8,8 @@ from app.models.icp import ICP
 from app.models.recorte_cnpj_estado import RecorteCnpjEstado
 from app.providers.account_data.receita_federal_downloader import (
     baixar_shards,
+    extrair_ufs,
     normalizar_cnae,
-    normalizar_uf,
     resolver_mes_competencia,
 )
 from app.providers.account_data.receita_federal_loader import carregar_recorte
@@ -27,7 +27,7 @@ def uniao_cnae_uf_ativos_todos_tenants(db: Session) -> tuple[list[str], list[str
     ufs: set[str] = set()
     for icp in db.query(ICP).filter_by(ativo=True).all():
         cnae_codigos.update(normalizar_cnae(codigo) for codigo in icp.cnae_codigos)
-        ufs.update(normalizar_uf(uf) for uf in icp.ufs)
+        ufs.update(extrair_ufs(icp.ufs)[0])
     return sorted(cnae_codigos), sorted(ufs)
 
 
