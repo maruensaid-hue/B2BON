@@ -100,8 +100,8 @@ export function WhatsAppConexao({
     api.get<ParametrosMeta>("/configuracao-whatsapp/conectar-meta/parametros").then(setParametros).catch(() => setParametros(null));
     // A janela da Meta avisa por mensagem qual número e conta foram escolhidos (cadastro incorporado).
     function ouvir(evento: MessageEvent) {
-      if (!/(^|\.)facebook\.com$/.test(new URL(evento.origin).hostname)) return;
       try {
+        if (!/(^|\.)facebook\.com$/.test(new URL(evento.origin).hostname)) return;
         const dados = typeof evento.data === "string" ? JSON.parse(evento.data) : evento.data;
         if (dados?.type === "WA_EMBEDDED_SIGNUP" && dados.data) {
           idsDaJanela.current = { phone_number_id: dados.data.phone_number_id, waba_id: dados.data.waba_id };
@@ -130,6 +130,7 @@ export function WhatsAppConexao({
   async function conectarComMeta() {
     if (!parametros?.disponivel) return;
     await executar("conectar", async () => {
+      idsDaJanela.current = {};
       const fb = await carregarSdk(parametros);
       const codigo = await new Promise<string | null>((resolver) =>
         fb.login((resposta) => resolver(resposta.authResponse?.code ?? null), {
@@ -142,6 +143,11 @@ export function WhatsAppConexao({
       if (!codigo) {
         setAviso("A janela da Meta foi fechada antes de terminar. Clique em Conectar de novo quando quiser.");
         return;
+      }
+      // A mensagem da janela com o número escolhido pode chegar logo depois do código: espera um instante. Se não vier, o
+      // servidor descobre conta e número pelo próprio token.
+      for (let i = 0; i < 10 && !idsDaJanela.current.phone_number_id; i += 1) {
+        await new Promise((r) => setTimeout(r, 150));
       }
       const { phone_number_id, waba_id } = idsDaJanela.current;
       const resultado = await api.post<ResultadoConexao>("/configuracao-whatsapp/conectar-meta", {

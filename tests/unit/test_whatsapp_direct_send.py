@@ -260,6 +260,47 @@ def test_validade_do_token_vem_da_meta_e_zero_e_sem_prazo(meta_configurada, monk
     assert whatsapp_conexao_service.validade_do_token("EAAG") is None
 
 
+def test_sem_ids_da_janela_descobre_conta_e_numero_pelo_token(db_session, meta_configurada, monkeypatch):
+    chamadas = []
+
+    def get(url, params=None, **_):
+        chamadas.append(url)
+        if url.endswith("/oauth/access_token"):
+            return _Resposta(200, {"access_token": "EAAGnovo"})
+        if url.endswith("/debug_token"):
+            return _Resposta(200, {"data": {"granular_scopes": [
+                {"scope": "whatsapp_business_management", "target_ids": ["222"]},
+                {"scope": "whatsapp_business_messaging", "target_ids": ["222"]},
+            ]}})
+        if url.endswith("/222/phone_numbers"):
+            return _Resposta(200, {"data": [{"id": "111", "display_phone_number": "+55 11 98888-7777"}]})
+        return _Resposta(200, {"display_phone_number": "+55 11 98888-7777"})
+
+    monkeypatch.setattr(httpx, "get", get)
+    monkeypatch.setattr(httpx, "post", lambda url, **_: chamadas.append(url) or _Resposta(200, {}))
+
+    resultado = whatsapp_conexao_service.conectar(db_session, TENANT, "1", "c", "", "")
+
+    assert resultado["numero_exibicao"] == "+55 11 98888-7777"
+    assert any(u.endswith("/111/register") for u in chamadas) and any(u.endswith("/222/subscribed_apps") for u in chamadas)
+    config = db_session.query(ConfiguracaoWhatsApp).one()
+    assert config.phone_number_id == "111" and config.business_account_id == "222"
+
+
+def test_sem_ids_e_conta_com_varios_numeros_recusa_sem_salvar(db_session, meta_configurada, monkeypatch):
+    def get(url, params=None, **_):
+        if url.endswith("/oauth/access_token"):
+            return _Resposta(200, {"access_token": "EAAGnovo"})
+        if url.endswith("/debug_token"):
+            return _Resposta(200, {"data": {"granular_scopes": [{"scope": "whatsapp_business_management", "target_ids": ["222"]}]}})
+        return _Resposta(200, {"data": [{"id": "111"}, {"id": "333"}]})
+
+    monkeypatch.setattr(httpx, "get", get)
+    with pytest.raises(RegraNegocioViolada, match="mais de um número"):
+        whatsapp_conexao_service.conectar(db_session, TENANT, "1", "c", "", "")
+    assert db_session.query(ConfiguracaoWhatsApp).count() == 0
+
+
 def test_conectar_guarda_a_validade_do_token(db_session, meta_configurada, monkeypatch):
     def get(url, params=None, **_):
         if url.endswith("/oauth/access_token"):

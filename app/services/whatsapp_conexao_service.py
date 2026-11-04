@@ -86,11 +86,10 @@ def _registrar_numero(token: str, phone_number_id: str, pin: str) -> str | None:
     )
 
 
-def validade_do_token(token: str) -> datetime | None:
-    """Quando o token vence, perguntado à Meta (`debug_token`, com o token do app). `None` = sem prazo, app não configurado ou Meta
-    sem resposta: quem chama não trata isso como erro (a validade é aviso, não condição para enviar)."""
+def _debug_token(token: str) -> dict:
+    """O que a Meta sabe do token (`debug_token`, consultado com o token do app). `{}` = app não configurado ou Meta sem resposta."""
     if not (settings.meta_app_id and settings.whatsapp_app_secret):
-        return None
+        return {}
     try:
         resposta = httpx.get(
             f"{_graph()}/debug_token",
@@ -98,12 +97,46 @@ def validade_do_token(token: str) -> datetime | None:
             timeout=_TIMEOUT,
         )
     except httpx.HTTPError:
-        return None
+        return {}
     if not resposta.is_success:
-        return None
-    expira = (resposta.json().get("data") or {}).get("expires_at")
+        return {}
+    return resposta.json().get("data") or {}
+
+
+def validade_do_token(token: str) -> datetime | None:
+    """Quando o token vence. `None` = sem prazo, app não configurado ou Meta sem resposta: quem chama não trata isso como erro
+    (a validade é aviso, não condição para enviar)."""
+    expira = _debug_token(token).get("expires_at")
     # 0 (ou ausente) = o token não vence
     return datetime.fromtimestamp(expira, UTC).replace(tzinfo=None) if isinstance(expira, int) and expira > 0 else None
+
+
+def _descobrir_ids(token: str) -> tuple[str, str]:
+    """Conta do WhatsApp e número autorizados no token, quando a janela da Meta não os mandou ao navegador (a mensagem dela às
+    vezes não chega à página, visto no staging em 04/11/2026). A conta vem das permissões do token; o número, da lista da conta."""
+    wabas: list[str] = []
+    for escopo in _debug_token(token).get("granular_scopes") or []:
+        if escopo.get("scope") == "whatsapp_business_management":
+            wabas += [str(i) for i in escopo.get("target_ids") or [] if str(i) not in wabas]
+    if len(wabas) != 1:
+        raise RegraNegocioViolada(
+            "Não foi possível identificar a conta do WhatsApp escolhida na janela da Meta"
+            + (" (mais de uma foi autorizada)" if wabas else "")
+            + ". Clique em Conectar de novo e escolha uma única conta e um único número."
+        )
+    waba_id = wabas[0]
+    try:
+        resposta = httpx.get(f"{_graph()}/{waba_id}/phone_numbers", headers={"Authorization": f"Bearer {token}"},
+                             params={"fields": "id,display_phone_number"}, timeout=_TIMEOUT)
+    except httpx.HTTPError as erro:
+        raise RegraNegocioViolada(f"A Meta não respondeu ao listar os números ({type(erro).__name__}). Tente de novo.") from erro
+    numeros = [str(n["id"]) for n in (resposta.json().get("data") or []) if n.get("id")] if resposta.is_success else []
+    if len(numeros) != 1:
+        raise RegraNegocioViolada(
+            ("A conta do WhatsApp escolhida não tem número" if not numeros else "A conta do WhatsApp escolhida tem mais de um número")
+            + ". Use a configuração manual informando o ID do número, ou deixe só um número na conta e conecte de novo."
+        )
+    return numeros[0], waba_id
 
 
 def _salvar(db: Session, tenant_id: str, valores: dict) -> int:
@@ -120,11 +153,15 @@ def _salvar(db: Session, tenant_id: str, valores: dict) -> int:
 def conectar(db: Session, tenant_id: str, ator_id: str | None, codigo: str, phone_number_id: str, waba_id: str) -> dict:
     if not parametros()["disponivel"]:
         raise RegraNegocioViolada("A conexão pela Meta não está disponível nesta instalação: use a configuração manual.")
-    if not (codigo and phone_number_id.strip().isdigit() and waba_id.strip().isdigit()):
-        raise ValidacaoFalhou("A janela da Meta não devolveu os dados do número. Clique em Conectar e conclua todas as etapas.")
-    phone_number_id, waba_id = phone_number_id.strip(), waba_id.strip()
+    if not codigo:
+        raise ValidacaoFalhou("A janela da Meta não devolveu o código de autorização. Clique em Conectar e conclua todas as etapas.")
+    phone_number_id, waba_id = (phone_number_id or "").strip(), (waba_id or "").strip()
+    if (phone_number_id and not phone_number_id.isdigit()) or (waba_id and not waba_id.isdigit()):
+        raise ValidacaoFalhou("A janela da Meta devolveu dados do número inválidos. Clique em Conectar de novo.")
 
     token = _trocar_codigo(codigo)
+    if not (phone_number_id and waba_id):
+        phone_number_id, waba_id = _descobrir_ids(token)
     pin = f"{secrets.randbelow(10**6):06d}"
     aviso_registro = _registrar_numero(token, phone_number_id, pin)
     avisos = [a for a in (_inscrever_app(token, waba_id), aviso_registro) if a]
