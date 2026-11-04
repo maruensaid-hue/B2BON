@@ -51,8 +51,10 @@ def _erro_meta(resposta: httpx.Response) -> str:
 def _candidatos_redirect(pagina: str | None) -> list[str | None]:
     """Em que endereço a Meta pode ter amarrado o código. Sem `redirect_uri` é o documentado; mas o código vindo da janela do SDK
     JavaScript às vezes fica preso à página onde o botão foi clicado ("Error validating verification code... redirect_uri", visto
-    no staging em 04/11/2026). Só endereços https, sem query nem fragmento."""
-    candidatos: list[str | None] = [None]
+    no staging em 04/11/2026). O código do SDK JavaScript fica amarrado a um endereço interno da própria Meta, e a troca dele
+    pede `redirect_uri` PRESENTE e VAZIO (é o que o SDK oficial de PHP da Meta faz com códigos vindos do JS): é a 2ª tentativa.
+    Endereço da página por último, só https, sem query nem fragmento (exige o domínio cadastrado no app)."""
+    candidatos: list[str | None] = [None, ""]
     pagina = (pagina or "").split("#")[0].split("?")[0].strip()
     if pagina.startswith("https://"):
         origem = "/".join(pagina.split("/")[:3]) + "/"
@@ -64,6 +66,7 @@ def _candidatos_redirect(pagina: str | None) -> list[str | None]:
 
 def _trocar_codigo(codigo: str, pagina: str | None = None) -> str:
     resposta = None
+    primeiro_erro = None
     for redirect in _candidatos_redirect(pagina):
         params = {"client_id": settings.meta_app_id, "client_secret": settings.whatsapp_app_secret, "code": codigo}
         if redirect is not None:
@@ -74,9 +77,11 @@ def _trocar_codigo(codigo: str, pagina: str | None = None) -> str:
             raise RegraNegocioViolada(f"A Meta não respondeu ao concluir a conexão ({type(erro).__name__}). Tente de novo.") from erro
         if resposta.is_success and resposta.json().get("access_token"):
             return resposta.json()["access_token"]
-        if "redirect_uri" not in _erro_meta(resposta):
+        erro = _erro_meta(resposta)
+        primeiro_erro = primeiro_erro or erro
+        if "redirect_uri" not in erro and redirect is None:
             break  # outro motivo (código vencido, segredo errado): tentar outro endereço não adianta
-    raise RegraNegocioViolada(f"A Meta não aceitou concluir a conexão: {_erro_meta(resposta)}. Clique em Conectar de novo.")
+    raise RegraNegocioViolada(f"A Meta não aceitou concluir a conexão: {primeiro_erro}. Clique em Conectar de novo.")
 
 
 def _inscrever_app(token: str, waba_id: str) -> str | None:
