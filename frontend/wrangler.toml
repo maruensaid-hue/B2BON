@@ -3,6 +3,9 @@
 name = "b2bon"
 main = "./worker.js"
 compatibility_date = "2026-08-03"
+# Mantém as variáveis criadas no painel do Cloudflare a cada deploy. Sem isto o `wrangler deploy` as apaga, e o Worker de
+# staging perdia o `API_ORIGIN` a cada push, voltando a mandar o front de staging para a API de PRODUÇÃO (visto em 04/11/2026).
+keep_vars = true
 
 [assets]
 directory = "./dist"
