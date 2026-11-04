@@ -1,3 +1,6 @@
+import re
+import unicodedata
+
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -6,6 +9,7 @@ from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
 from app.models.template_whatsapp import TemplateWhatsApp
 from app.providers.channels.whatsapp.base import ResultadoEnvio, WhatsAppProvider
 from app.services import auditoria_service
+from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 
 
 def sincronizar_templates(db: Session, tenant_id: str, provider: WhatsAppProvider) -> list[TemplateWhatsApp]:
@@ -26,6 +30,53 @@ def sincronizar_templates(db: Session, tenant_id: str, provider: WhatsAppProvide
     for template in resultado:
         db.refresh(template)
     return resultado
+
+
+# --- Criar modelo de mensagem pela plataforma ------------------------------------------------------------------------------
+
+CATEGORIAS_TEMPLATE = ("UTILITY", "MARKETING")
+_NOME_TEMPLATE = re.compile(r"^[a-z0-9_]{1,512}$")
+
+
+def nome_de_template(nome: str) -> str:
+    """A Meta só aceita minúsculas, números e "_": "Boas-vindas Cliente" vira "boas_vindas_cliente"."""
+    texto = unicodedata.normalize("NFKD", nome or "").encode("ascii", "ignore").decode("ascii").lower()
+    return re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", texto)).strip("_")
+
+
+def criar_template(db: Session, tenant_id: str, ator_id: str | None, provider: WhatsAppProvider, nome: str, categoria: str,
+                   corpo: str, rodape: str | None = None) -> TemplateWhatsApp:
+    """Cria o modelo na conta do WhatsApp do próprio tenant e guarda no cache local com o status que a Meta devolveu.
+
+    Sem variáveis ({{1}}, {{nome}}): o envio de modelos ainda não preenche variáveis (`enviar_template` recebe `{}`), e um modelo com
+    variável seria recusado pela Meta na hora de enviar por falta de parâmetro."""
+    nome = nome_de_template(nome)
+    corpo = (corpo or "").strip()
+    rodape = (rodape or "").strip() or None
+    if not _NOME_TEMPLATE.match(nome):
+        raise ValidacaoFalhou("Dê um nome ao modelo (letras e números; espaços viram _).")
+    if categoria not in CATEGORIAS_TEMPLATE:
+        raise ValidacaoFalhou("Categoria inválida: use utilidade ou marketing.")
+    if not 1 <= len(corpo) <= 1024:
+        raise ValidacaoFalhou("O texto do modelo precisa ter entre 1 e 1.024 caracteres.")
+    if "{{" in corpo or "}}" in corpo or (rodape and ("{{" in rodape or "}}" in rodape)):
+        raise ValidacaoFalhou("Variáveis como {{nome}} ainda não são preenchidas no envio de modelos: escreva o texto sem elas.")
+    if rodape and len(rodape) > 60:
+        raise ValidacaoFalhou("O rodapé tem no máximo 60 caracteres.")
+    if db.query(TemplateWhatsApp.id).filter_by(tenant_id=tenant_id, nome=nome).first() is not None:
+        raise RegraNegocioViolada(f"Já existe um modelo chamado \"{nome}\" na sua conta: escolha outro nome.")
+
+    criado = provider.criar_template(nome, categoria, corpo, rodape)
+    if criado.erro:
+        raise RegraNegocioViolada(f"A Meta não aceitou o modelo: {criado.erro}")
+    template = TemplateWhatsApp(tenant_id=tenant_id, nome=nome, corpo=corpo, status=criado.status or "pending")
+    db.add(template)
+    db.flush()
+    auditoria_service.registrar(db, tenant_id, "whatsapp_template_criado", "template_whatsapp", template.id, ator_id,
+                                {"nome": nome, "categoria": categoria, "status": template.status, "id_meta": criado.id_externo})
+    db.commit()
+    db.refresh(template)
+    return template
 
 
 # --- Direct Send (envio sem template, categoria utilidade) -------------------------------------------------------------------

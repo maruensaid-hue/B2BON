@@ -1,7 +1,7 @@
 import httpx
 
 from app.core.config import settings
-from app.providers.channels.whatsapp.base import InfoNumero, ResultadoEnvio, TemplateInfo, WhatsAppProvider
+from app.providers.channels.whatsapp.base import InfoNumero, ResultadoEnvio, TemplateCriado, TemplateInfo, WhatsAppProvider
 
 
 class MetaWhatsAppProvider(WhatsAppProvider):
@@ -106,6 +106,25 @@ class MetaWhatsAppProvider(WhatsAppProvider):
             ]
         except httpx.HTTPError:
             return []
+
+    def criar_template(self, nome: str, categoria: str, corpo: str, rodape: str | None = None) -> TemplateCriado:
+        # pt_BR: o envio (`enviar_template`) sempre pede o idioma pt_BR, então o modelo nasce nele.
+        componentes: list[dict] = [{"type": "BODY", "text": corpo}]
+        if rodape:
+            componentes.append({"type": "FOOTER", "text": rodape})
+        try:
+            resposta = httpx.post(
+                f"{self._base_url}/{self._waba_id}/message_templates",
+                json={"name": nome, "language": "pt_BR", "category": categoria, "components": componentes},
+                headers=self._headers(),
+                timeout=15.0,
+            )
+        except httpx.HTTPError as erro:
+            return TemplateCriado(erro=f"Sem resposta da Meta ({type(erro).__name__}).")
+        if not resposta.is_success:
+            return TemplateCriado(erro=_falha_meta(resposta).motivo_falha)
+        dados = resposta.json()
+        return TemplateCriado(id_externo=dados.get("id"), status=(dados.get("status") or "PENDING").lower())
 
     def info_numero(self) -> InfoNumero:
         try:

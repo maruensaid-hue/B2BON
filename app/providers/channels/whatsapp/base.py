@@ -11,6 +11,14 @@ class ResultadoEnvio(BaseModel):
     codigo_erro: int | None = None
 
 
+class TemplateCriado(BaseModel):
+    """Resposta da Meta ao criar um modelo: o id e o status inicial (em geral PENDING; utilidade às vezes já vem APPROVED)."""
+
+    id_externo: str | None = None
+    status: str | None = None
+    erro: str | None = None
+
+
 class InfoNumero(BaseModel):
     """O que a Meta diz do número conectado: serve para mostrar "conectado: +55 11 ..., nome X, qualidade verde" e testar a conexão."""
 
@@ -63,3 +71,7 @@ class WhatsAppProvider(ABC):
 
     def info_numero(self) -> InfoNumero:
         return InfoNumero(erro="Conexão com a Meta não disponível neste ambiente.")
+
+    def criar_template(self, nome: str, categoria: str, corpo: str, rodape: str | None = None) -> TemplateCriado:
+        """Envia um modelo de mensagem para aprovação da Meta (whatsapp_business_management). Padrão: indisponível."""
+        return TemplateCriado(erro="Criação de modelos não disponível neste ambiente.")

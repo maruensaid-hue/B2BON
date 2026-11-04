@@ -8,6 +8,7 @@ import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
 import { TutorialConfiguracao } from "@/pages/configuracao/TutorialConfiguracao";
+import { TemplatesWhatsApp } from "@/pages/configuracao/TemplatesWhatsApp";
 import { type ConfiguracaoWhatsApp, WhatsAppConexao } from "@/pages/configuracao/WhatsAppConexao";
 import { api, ApiError, getBlob, postFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -987,6 +988,7 @@ export function Configuracao() {
         <Card className="mt-4" data-tutorial-id="configuracao:whatsapp">
           <SectionLabel>WhatsApp Business</SectionLabel>
           <WhatsAppConexao config={whatsapp} erroCarregamento={erroWhatsapp} onAtualizado={recarregarWhatsapp} />
+          <TemplatesWhatsApp conectado={Boolean(whatsapp?.phone_number_id)} />
         </Card>
       )}
 

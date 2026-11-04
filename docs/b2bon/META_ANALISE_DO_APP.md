@@ -84,31 +84,39 @@ Roteiro (o que fazer, na ordem):
 
 ---
 
-## 4. Vídeo 2 — `whatsapp_business_management` (gerenciar a conta e os templates)
+## 4. Vídeo 2 — `whatsapp_business_management` (criar um modelo de mensagem)
 
-**Duração alvo:** 1 a 2 minutos.
+A Meta exige, para esta permissão, **um vídeo único e separado mostrando a criação de um modelo de mensagem (template) pelo app**,
+com chamadas reais à API. O B2B ON faz isso em Configuração → WhatsApp Business → **Novo modelo**.
+
+**Duração alvo:** 1 a 2 minutos. Use um nome de modelo que ainda não exista na conta (ex.: `demo_revisao_meta`).
 
 1. Login com o usuário de teste. *(legenda: "Logging in as the business administrator")*
-2. **Configuração → WhatsApp Business**: clique em **Testar conexão** e mostre o número, o nome verificado e a qualidade lidos da Meta.
-   *(legenda: "We read the phone number, verified name and quality rating from the WhatsApp Business Account")*
-3. **PREDATOR → Cadências → toque de WhatsApp**: abra a lista de templates e mostre que ela vem da conta do cliente, com o status
-   de aprovação. *(legenda: "We list the message templates of the customer's WhatsApp Business Account and their approval status")*
-4. Mostre o aviso que aparece quando não há template aprovado (o envio fica bloqueado até haver um).
-   *(legenda: "Without an approved template, the first message is not sent")*
+2. **Configuração → WhatsApp Business**: clique em **Testar conexão** e mostre o número e a qualidade lidos da Meta.
+   *(legenda: "We read the phone number and quality rating from the customer's WhatsApp Business Account")*
+3. Em **Modelos de mensagem**, clique em **Novo modelo**, preencha nome, categoria **Utilidade**, o texto e o rodapé, e clique em
+   **Enviar para aprovação da Meta**. *(legenda: "We create a message template in the customer's WhatsApp Business Account via the API")*
+4. Mostre o modelo aparecendo na lista com o status **"em análise na Meta"**.
+   *(legenda: "The template is submitted to Meta and its approval status is shown")*
+5. Abra o **WhatsApp Manager** (business.facebook.com → Contas do WhatsApp → Gerenciar modelos) e mostre o mesmo modelo lá.
+   *(legenda: "The same template appears in WhatsApp Manager, created by B2B ON")*
+6. Volte ao B2B ON, clique em **Atualizar status** e, se a Meta já tiver aprovado, mostre o status **"aprovado"** (se ainda não,
+   pode pular). *(legenda: "Once approved, the template can be used in outreach sequences")*
 
 **Texto para colar:**
 
-> We use whatsapp_business_management to read the customer's own WhatsApp Business Account: the phone number details (display number,
-> verified name and quality rating) so the customer can confirm the connection, and the list of message templates with their approval
-> status so the customer can choose an approved template for each outreach step. We only access the WhatsApp Business Account that the
-> customer itself connected to B2B ON, and only to show this information and to send messages on its behalf.
+> We use whatsapp_business_management to manage the customer's own WhatsApp Business Account from inside B2B ON: we create message
+> templates (name, category, body and footer) through the message_templates endpoint and show their approval status, and we read
+> the phone number details (display number and quality rating) so the customer can confirm the connection. Only templates approved by
+> Meta are used to start conversations. We only access the WhatsApp Business Account that the customer itself connected to B2B ON.
 
 ---
 
 ## 5. Instruções para o revisor (campo "notas de teste")
 
 > Test user: [e-mail do usuário de teste] / [senha]. After logging in at https://b2bon.cyberfort.com.br, go to Configuração (Settings)
-> → WhatsApp Business to see the connected number and click "Testar conexão" (Test connection). Outreach messages are in PREDATOR →
+> → WhatsApp Business to see the connected number, click "Testar conexão" (Test connection) and create a template in "Novo modelo"
+> (New template). Outreach messages are in PREDATOR →
 > Cadências (Sequences); pending messages are approved in Aprovações (Approvals) before being sent, and go out in the next sending
 > cycle (a few minutes). The interface is in Portuguese; the
 > videos include English captions for every step.
