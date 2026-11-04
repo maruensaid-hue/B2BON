@@ -26,9 +26,15 @@ Em developers.facebook.com → B2B ON Mensageria:
 | WhatsApp → Configuração | URL de callback do webhook | `https://b2bon-api.onrender.com/api/v1/webhooks/whatsapp/meta` (já deve estar; é a que recebe as respostas dos clientes) |
 | Análise do app → Verificação | Verificação da empresa | **concluída** (portfólio B2BON verificado em 04/11/2026) |
 
-Também é exigido um **usuário de teste** para a Meta entrar na plataforma. Crie no B2B ON uma conta só para isso (não use a sua), com
-papel **admin** num tenant de demonstração que já tenha o número conectado, e informe login e senha no campo de instruções da análise.
-Troque a senha depois que a análise terminar.
+Também é exigido um **usuário de teste** para a Meta entrar na plataforma. **Nunca** num tenant com dados reais (LGPD):
+
+1. Crie no B2B ON um tenant só para a análise ("Revisão Meta") com um usuário admin próprio.
+2. Nele, em Configuração → WhatsApp → configuração manual, conecte o **número de teste da Meta** (+1 555-200-5471, da "Test WhatsApp
+   Business Account" do portfólio B2BON), com o token permanente do usuário do sistema.
+3. No painel do app (WhatsApp → Configuração da API), cadastre o seu celular como destinatário de teste (o número de teste só envia para
+   números cadastrados).
+4. Crie uma conta fictícia com um decisor usando o seu celular e uma cadência com toque de WhatsApp e template aprovado.
+5. Grave os vídeos nesse tenant e informe login e senha dele no campo de instruções. Depois da análise, troque a senha ou desative o tenant.
 
 ---
 
