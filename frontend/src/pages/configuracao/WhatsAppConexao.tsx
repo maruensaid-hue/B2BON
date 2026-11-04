@@ -146,8 +146,12 @@ export function WhatsAppConexao({
       const autorizacao = await new Promise<{ code?: string; accessToken?: string } | null>((resolver) =>
         fb.login((resposta) => resolver(resposta.authResponse ?? null), {
           config_id: parametros.config_id,
-          ...(porCodigo ? { response_type: "code", override_default_response_type: true } : {}),
-          extras: { setup: {}, sessionInfoVersion: "3" },
+          // `extras.setup` põe a janela no fluxo de cadastro incorporado, que só aceita código: a Meta recusou o token nele
+          // ("response_type=token não é compatível com esse fluxo", staging 04/11/2026). Sem os extras é o Login para Empresas
+          // comum, que devolve o token; conta e número saem das permissões do token no servidor.
+          ...(porCodigo
+            ? { response_type: "code", override_default_response_type: true, extras: { setup: {}, sessionInfoVersion: "3" } }
+            : {}),
         }),
       );
       const codigo = porCodigo ? autorizacao?.code : undefined;
