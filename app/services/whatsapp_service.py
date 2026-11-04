@@ -14,9 +14,13 @@ from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 
 def sincronizar_templates(db: Session, tenant_id: str, provider: WhatsAppProvider) -> list[TemplateWhatsApp]:
     """Status de aprovação visível (E3-H2): sincroniza os templates do
-    provedor para o cache local."""
+    provedor para o cache local. Se a Meta não devolver nada (falha ou instabilidade), mostra o que já está guardado em vez de uma
+    lista vazia (visto em produção em 04/11/2026: o modelo recém-criado "sumia" da tela ao recarregar)."""
+    lidos = provider.listar_templates()
+    if not lidos:
+        return db.query(TemplateWhatsApp).filter_by(tenant_id=tenant_id).order_by(TemplateWhatsApp.id.desc()).all()
     resultado: list[TemplateWhatsApp] = []
-    for info in provider.listar_templates():
+    for info in lidos:
         existente = db.query(TemplateWhatsApp).filter_by(tenant_id=tenant_id, nome=info.nome).one_or_none()
         if existente is None:
             existente = TemplateWhatsApp(tenant_id=tenant_id, nome=info.nome, corpo=info.corpo, status=info.status)

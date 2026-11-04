@@ -79,3 +79,13 @@ def test_nome_repetido_e_erro_da_meta_viram_mensagem_clara(db_session, monkeypat
 
 def test_nome_de_template_segue_a_regra_da_meta():
     assert whatsapp_service.nome_de_template("  Promoção de Março!! ") == "promocao_de_marco"
+
+
+def test_meta_sem_resposta_mostra_os_modelos_guardados_em_vez_de_lista_vazia(db_session, monkeypatch):
+    db_session.add(TemplateWhatsApp(tenant_id=TENANT, nome="retorno_contato", corpo="Olá", status="pending"))
+    db_session.commit()
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _Resposta(400, {"error": {"code": 80008, "message": "rate limit"}}))
+
+    lista = whatsapp_service.sincronizar_templates(db_session, TENANT, _provider())
+
+    assert [t.nome for t in lista] == ["retorno_contato"]

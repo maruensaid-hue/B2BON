@@ -1,7 +1,11 @@
+import logging
+
 import httpx
 
 from app.core.config import settings
 from app.providers.channels.whatsapp.base import InfoNumero, ResultadoEnvio, TemplateCriado, TemplateInfo, WhatsAppProvider
+
+logger = logging.getLogger(__name__)
 
 
 class MetaWhatsAppProvider(WhatsAppProvider):
@@ -92,7 +96,10 @@ class MetaWhatsAppProvider(WhatsAppProvider):
                 headers=self._headers(),
                 timeout=15.0,
             )
-            resposta.raise_for_status()
+            if not resposta.is_success:
+                # Antes a falha sumia (lista vazia, sem motivo): agora fica no log com o código da Meta.
+                logger.warning("META_LISTAR_TEMPLATES_FALHOU status=%s motivo=%s", resposta.status_code, _falha_meta(resposta).motivo_falha)
+                return []
             dados = resposta.json().get("data", [])
             return [
                 TemplateInfo(
@@ -104,7 +111,8 @@ class MetaWhatsAppProvider(WhatsAppProvider):
                 )
                 for item in dados
             ]
-        except httpx.HTTPError:
+        except httpx.HTTPError as erro:
+            logger.warning("META_LISTAR_TEMPLATES_FALHOU sem_resposta=%s", type(erro).__name__)
             return []
 
     def criar_template(self, nome: str, categoria: str, corpo: str, rodape: str | None = None) -> TemplateCriado:
