@@ -154,6 +154,7 @@ export function WhatsAppConexao({
         codigo,
         phone_number_id: phone_number_id ?? "",
         business_account_id: waba_id ?? "",
+        pagina: window.location.origin + window.location.pathname,
       });
       setTeste(resultado);
       if (resultado.avisos?.length) setAviso(resultado.avisos.join(" "));

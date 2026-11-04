@@ -48,18 +48,35 @@ def _erro_meta(resposta: httpx.Response) -> str:
     return erro.get("error_user_msg") or erro.get("message") or f"HTTP {resposta.status_code}"
 
 
-def _trocar_codigo(codigo: str) -> str:
-    try:
-        resposta = httpx.get(
-            f"{_graph()}/oauth/access_token",
-            params={"client_id": settings.meta_app_id, "client_secret": settings.whatsapp_app_secret, "code": codigo},
-            timeout=_TIMEOUT,
-        )
-    except httpx.HTTPError as erro:
-        raise RegraNegocioViolada(f"A Meta não respondeu ao concluir a conexão ({type(erro).__name__}). Tente de novo.") from erro
-    if not resposta.is_success or not resposta.json().get("access_token"):
-        raise RegraNegocioViolada(f"A Meta não aceitou concluir a conexão: {_erro_meta(resposta)}. Clique em Conectar de novo.")
-    return resposta.json()["access_token"]
+def _candidatos_redirect(pagina: str | None) -> list[str | None]:
+    """Em que endereço a Meta pode ter amarrado o código. Sem `redirect_uri` é o documentado; mas o código vindo da janela do SDK
+    JavaScript às vezes fica preso à página onde o botão foi clicado ("Error validating verification code... redirect_uri", visto
+    no staging em 04/11/2026). Só endereços https, sem query nem fragmento."""
+    candidatos: list[str | None] = [None]
+    pagina = (pagina or "").split("#")[0].split("?")[0].strip()
+    if pagina.startswith("https://"):
+        origem = "/".join(pagina.split("/")[:3]) + "/"
+        for c in (pagina, origem):
+            if c not in candidatos:
+                candidatos.append(c)
+    return candidatos
+
+
+def _trocar_codigo(codigo: str, pagina: str | None = None) -> str:
+    resposta = None
+    for redirect in _candidatos_redirect(pagina):
+        params = {"client_id": settings.meta_app_id, "client_secret": settings.whatsapp_app_secret, "code": codigo}
+        if redirect is not None:
+            params["redirect_uri"] = redirect
+        try:
+            resposta = httpx.get(f"{_graph()}/oauth/access_token", params=params, timeout=_TIMEOUT)
+        except httpx.HTTPError as erro:
+            raise RegraNegocioViolada(f"A Meta não respondeu ao concluir a conexão ({type(erro).__name__}). Tente de novo.") from erro
+        if resposta.is_success and resposta.json().get("access_token"):
+            return resposta.json()["access_token"]
+        if "redirect_uri" not in _erro_meta(resposta):
+            break  # outro motivo (código vencido, segredo errado): tentar outro endereço não adianta
+    raise RegraNegocioViolada(f"A Meta não aceitou concluir a conexão: {_erro_meta(resposta)}. Clique em Conectar de novo.")
 
 
 def _inscrever_app(token: str, waba_id: str) -> str | None:
@@ -150,7 +167,8 @@ def _salvar(db: Session, tenant_id: str, valores: dict) -> int:
     return existente.id
 
 
-def conectar(db: Session, tenant_id: str, ator_id: str | None, codigo: str, phone_number_id: str, waba_id: str) -> dict:
+def conectar(db: Session, tenant_id: str, ator_id: str | None, codigo: str, phone_number_id: str, waba_id: str,
+             pagina: str | None = None) -> dict:
     if not parametros()["disponivel"]:
         raise RegraNegocioViolada("A conexão pela Meta não está disponível nesta instalação: use a configuração manual.")
     if not codigo:
@@ -159,7 +177,7 @@ def conectar(db: Session, tenant_id: str, ator_id: str | None, codigo: str, phon
     if (phone_number_id and not phone_number_id.isdigit()) or (waba_id and not waba_id.isdigit()):
         raise ValidacaoFalhou("A janela da Meta devolveu dados do número inválidos. Clique em Conectar de novo.")
 
-    token = _trocar_codigo(codigo)
+    token = _trocar_codigo(codigo, pagina)
     if not (phone_number_id and waba_id):
         phone_number_id, waba_id = _descobrir_ids(token)
     pin = f"{secrets.randbelow(10**6):06d}"

@@ -32,6 +32,7 @@ class ConectarMetaRequestSchema(BaseModel):
     codigo: str
     phone_number_id: str
     business_account_id: str
+    pagina: str | None = None  # endereço da tela onde o botão foi clicado (a Meta pode exigir como redirect_uri na troca do código)
 
 
 class DefinirDirectSendRequestSchema(BaseModel):

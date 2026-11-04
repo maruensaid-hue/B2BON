@@ -287,6 +287,26 @@ def test_sem_ids_da_janela_descobre_conta_e_numero_pelo_token(db_session, meta_c
     assert config.phone_number_id == "111" and config.business_account_id == "222"
 
 
+def test_codigo_preso_a_pagina_tenta_de_novo_com_o_endereco_dela(db_session, meta_configurada, monkeypatch):
+    tentativas = []
+
+    def get(url, params=None, **_):
+        if url.endswith("/oauth/access_token"):
+            tentativas.append(params.get("redirect_uri"))
+            if params.get("redirect_uri") != "https://staging.exemplo.dev/configuracao":
+                return _Resposta(400, {"error": {"message": "Error validating verification code. Please make sure your redirect_uri is identical"}})
+            return _Resposta(200, {"access_token": "EAAGnovo"})
+        return _Resposta(200, {"display_phone_number": "+55 11 98888-7777"})
+
+    monkeypatch.setattr(httpx, "get", get)
+    monkeypatch.setattr(httpx, "post", lambda url, **_: _Resposta(200, {}))
+
+    whatsapp_conexao_service.conectar(db_session, TENANT, "1", "c", "111", "222", "https://staging.exemplo.dev/configuracao?x=1")
+
+    assert tentativas == [None, "https://staging.exemplo.dev/configuracao"]
+    assert db_session.query(ConfiguracaoWhatsApp).one().access_token == "EAAGnovo"
+
+
 def test_sem_ids_e_conta_com_varios_numeros_recusa_sem_salvar(db_session, meta_configurada, monkeypatch):
     def get(url, params=None, **_):
         if url.endswith("/oauth/access_token"):
