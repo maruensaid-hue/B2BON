@@ -944,9 +944,13 @@ por padrão.
 de CNPJ não mostra, a partir do que a empresa faz e da cidade, com
 posição no mapa e se tem site próprio (nota e quantidade de avaliações
 quando a fonte informa). Cada busca (um termo numa cidade) consome a
-franquia de buscas do seu plano: **Ver consumo** mostra quantas buscas
-o pedido usa e quantas já foram usadas no mês, e nada é contado sem
-**Confirmar e buscar**. Empresa que já existe na sua base só recebe os
+franquia de buscas do seu plano, a mesma régua da pesquisa de decisores
+(uma busca no lugar de um crédito): Teste e Starter 30 por mês,
+Professional 60, Business 120, Corporate 180, Enterprise conforme o
+contrato e POC 3 no total. **Ver consumo** mostra quantas buscas o
+pedido usa e quantas já foram usadas, e nada é contado sem **Confirmar
+e buscar**; busca que falha não conta. A busca pode levar alguns
+minutos: as empresas aparecem na lista de contas quando terminar. Empresa que já existe na sua base só recebe os
 sinais novos. Informe a cidade com a UF (ex.: "Campinas SP"). Empresa nova com site entra sozinha na fila de
 enriquecimento: o site é lido, os sinais são gravados e os decisores
 mapeados, sem outro clique.

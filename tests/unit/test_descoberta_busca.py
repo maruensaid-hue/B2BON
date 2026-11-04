@@ -188,6 +188,10 @@ def test_sem_chave_paga_a_fonte_padrao_e_a_base_aberta(monkeypatch):
     assert isinstance(deps.get_descoberta_provider(), MapaAbertoProvider)
 
 
+class _Admin:
+    papel = "admin"
+
+
 def test_fonte_lenta_confere_na_hora_e_roda_em_segundo_plano(db_session, monkeypatch):
     from fastapi import BackgroundTasks
 
@@ -201,7 +205,7 @@ def test_fonte_lenta_confere_na_hora_e_roda_em_segundo_plano(db_session, monkeyp
     tarefas = BackgroundTasks()
     pedido = rota.ExecutarDescobertaSchema(termos=["contabilidade"], cidades=["Campinas"], buscas_confirmadas=1)
 
-    resposta = rota.executar(pedido, tarefas, TENANT, "1", db_session, fonte, lambda: db_session)
+    resposta = rota.executar(pedido, tarefas, TENANT, "1", db_session, fonte, lambda: db_session, _Admin())
 
     assert resposta == {"em_segundo_plano": True, "buscas": 1} and fonte.chamadas == []  # nada buscado antes de responder
     monkeypatch.setattr(db_session, "close", lambda: None)
@@ -212,4 +216,39 @@ def test_fonte_lenta_confere_na_hora_e_roda_em_segundo_plano(db_session, monkeyp
 
     monkeypatch.setattr(settings, "descoberta_busca_franquia_mensal", 1)
     with pytest.raises(RegraNegocioViolada, match="franquia"):  # recusa aparece na hora, não some no segundo plano
-        rota.executar(pedido, BackgroundTasks(), TENANT, "1", db_session, fonte, lambda: db_session)
+        rota.executar(pedido, BackgroundTasks(), TENANT, "1", db_session, fonte, lambda: db_session, _Admin())
+
+
+def test_franquia_segue_a_regua_da_pesquisa_de_decisores(db_session, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.api.v1 import descoberta as rota
+    from app.contexts.enriquecimento import config as config_enriquecimento
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "descoberta_busca_franquia_mensal", 0)
+    monkeypatch.setattr(settings, "enriquecimento_super_admin_sem_limites", True)
+    monkeypatch.setattr(config_enriquecimento, "config_vigente", lambda _db, _t: (SimpleNamespace(franquia_creditos=60), None))
+    assert rota.franquia_do_tenant(db_session, TENANT, "admin") == (60, False)  # Professional: 60 por mês
+    assert rota.franquia_do_tenant(db_session, TENANT, "super_admin") == (0, False)  # super admin sem limites, como nos decisores
+
+    monkeypatch.setattr(config_enriquecimento, "config_vigente", lambda _db, _t: (None, "poc_sem_autorizacao"))
+    assert rota.franquia_do_tenant(db_session, TENANT, "admin") == (3, True)  # POC: 3 na vida da empresa
+
+    monkeypatch.setattr(config_enriquecimento, "config_vigente", lambda _db, _t: (None, "sem_plano_ativo"))
+    assert rota.franquia_do_tenant(db_session, TENANT, "admin") == (0, False)  # sem configuração: não bloqueia
+
+
+def test_franquia_da_poc_conta_a_vida_toda(db_session):
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.auditoria import AuditLog
+
+    antigo = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=90)
+    db_session.add(AuditLog(tenant_id=TENANT, evento_tipo="descoberta_busca_executada", entidade_tipo="tenant", entidade_id=0,
+                            detalhes={"buscas": 2}, criado_em=antigo))
+    db_session.commit()
+    assert descoberta.usadas_no_mes(db_session, TENANT) == 0
+    assert descoberta.usadas_no_mes(db_session, TENANT, vida_toda=True) == 2
+    with pytest.raises(RegraNegocioViolada, match="do seu plano"):
+        descoberta.executar(db_session, TENANT, "1", FonteFalsa(), ["a1b2", "c3d4"], ["Campinas"], 2, 20, franquia_mensal=3, franquia_vida_toda=True)

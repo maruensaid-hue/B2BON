@@ -10,6 +10,7 @@ interface Estimativa {
   configurado: boolean;
   usadas_no_mes: number;
   franquia_mensal: number; // 0 = sem limite definido
+  franquia_vida_toda?: boolean; // POC: a franquia vale para toda a vida da empresa
 }
 
 interface Resultado {
@@ -83,7 +84,7 @@ export function DescobertaModal({ open, onClose, icpId, onConcluido }: { open: b
           <div className="rounded-md bg-surf2 p-2 text-[12px] text-text">
             Esta execução usa {estimativa.buscas} busca(s) da sua franquia.{" "}
             {estimativa.franquia_mensal > 0
-              ? `Usadas neste mês: ${estimativa.usadas_no_mes} de ${estimativa.franquia_mensal}.`
+              ? `Usadas ${estimativa.franquia_vida_toda ? "no seu plano" : "neste mês"}: ${estimativa.usadas_no_mes} de ${estimativa.franquia_mensal}.`
               : `Usadas neste mês: ${estimativa.usadas_no_mes}.`}
           </div>
         )}

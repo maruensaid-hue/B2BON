@@ -11,7 +11,7 @@ export function Termos() {
 
       <Card>
         <div className="mb-1 font-head text-xl font-bold">Termos de Uso — B2B ON</div>
-        <div className="mb-5 text-[11px] text-muted">Última atualização: agosto de 2026</div>
+        <div className="mb-5 text-[11px] text-muted">Última atualização: novembro de 2026</div>
 
         <div className="flex flex-col gap-4 text-[13px] leading-relaxed text-text">
           <div>
@@ -75,7 +75,20 @@ export function Termos() {
           </div>
 
           <div>
-            <div className="mb-1.5 font-semibold text-cyan">7. Alterações destes termos</div>
+            <div className="mb-1.5 font-semibold text-cyan">7. Fontes de dados públicos</div>
+            <p>
+              Parte das informações cadastrais de empresas vem de bases de dados abertas: os dados
+              públicos de CNPJ da Receita Federal e, na busca de mapa, dados © colaboradores do
+              OpenStreetMap, disponíveis sob a Open Database License (
+              <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="text-cyan hover:underline">
+                openstreetmap.org/copyright
+              </a>
+              ).
+            </p>
+          </div>
+
+          <div>
+            <div className="mb-1.5 font-semibold text-cyan">8. Alterações destes termos</div>
             <p>
               Estes termos podem ser atualizados para refletir mudanças na plataforma ou em
               requisitos legais. A data no topo desta página indica a versão vigente.

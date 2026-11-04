@@ -42,6 +42,7 @@ class Estimativa:
     configurado: bool
     usadas_no_mes: int = 0
     franquia_mensal: int = 0  # 0 = sem limite definido
+    franquia_vida_toda: bool = False  # POC: a franquia vale para toda a vida da empresa, não por mês
 
 
 def _inicio_do_mes_utc(agora: datetime) -> datetime:
@@ -50,12 +51,12 @@ def _inicio_do_mes_utc(agora: datetime) -> datetime:
     return local.replace(day=1, hour=0, minute=0, second=0, microsecond=0) + timedelta(hours=3)
 
 
-def usadas_no_mes(db: Session, tenant_id: str, agora: datetime | None = None) -> int:
-    """Buscas feitas pela empresa no mês corrente (as que falharam não contam)."""
-    inicio = _inicio_do_mes_utc(agora or datetime.now(UTC))
-    registros = db.query(AuditLog.detalhes).filter(
-        AuditLog.tenant_id == tenant_id, AuditLog.evento_tipo == _EVENTO, AuditLog.criado_em >= inicio
-    ).all()
+def usadas_no_mes(db: Session, tenant_id: str, agora: datetime | None = None, vida_toda: bool = False) -> int:
+    """Buscas feitas pela empresa no mês corrente, ou desde sempre (POC). As que falharam não contam."""
+    filtros = [AuditLog.tenant_id == tenant_id, AuditLog.evento_tipo == _EVENTO]
+    if not vida_toda:
+        filtros.append(AuditLog.criado_em >= _inicio_do_mes_utc(agora or datetime.now(UTC)))
+    registros = db.query(AuditLog.detalhes).filter(*filtros).all()
     return sum(int((detalhes or {}).get("buscas") or 0) for (detalhes,) in registros)
 
 
@@ -69,16 +70,16 @@ def _termos_e_cidades(termos: list[str], cidades: list[str]) -> tuple[list[str],
 
 def estimar(
     provedor: DescobertaEmpresasProvider, termos: list[str], cidades: list[str], max_buscas: int,
-    db: Session | None = None, tenant_id: str | None = None, franquia_mensal: int = 0,
+    db: Session | None = None, tenant_id: str | None = None, franquia_mensal: int = 0, franquia_vida_toda: bool = False,
 ) -> Estimativa:
     termos, cidades = _termos_e_cidades(termos, cidades)
     buscas = len(termos) * len(cidades)
     if buscas > max_buscas:
         raise ValidacaoFalhou(f"{buscas} buscas passam do teto de {max_buscas} por execução: reduza termos ou cidades.")
-    usadas = usadas_no_mes(db, tenant_id) if db is not None and tenant_id else 0
+    usadas = usadas_no_mes(db, tenant_id, vida_toda=franquia_vida_toda) if db is not None and tenant_id else 0
     return Estimativa(
         buscas=buscas, custo_usd=round(buscas * provedor.custo_por_busca_usd, 4), configurado=provedor.configurado,
-        usadas_no_mes=usadas, franquia_mensal=max(franquia_mensal, 0),
+        usadas_no_mes=usadas, franquia_mensal=max(franquia_mensal, 0), franquia_vida_toda=franquia_vida_toda,
     )
 
 
@@ -117,21 +118,22 @@ def executar(
     icp_id: int | None = None,
     limite_por_busca: int = 20,
     franquia_mensal: int = 0,
+    franquia_vida_toda: bool = False,
 ) -> dict:
     """Roda as buscas (termos x cidades) e cria/atualiza as contas. Exige o número de buscas confirmado igual ao estimado e, com franquia
     definida, que caiba no que resta dela no mês."""
-    estimativa = conferir_pedido(db, tenant_id, provedor, termos, cidades, buscas_confirmadas, max_buscas, franquia_mensal)
+    estimativa = conferir_pedido(db, tenant_id, provedor, termos, cidades, buscas_confirmadas, max_buscas, franquia_mensal, franquia_vida_toda)
     termos, cidades = _termos_e_cidades(termos, cidades)
     return _rodar(db, tenant_id, ator_id, provedor, termos, cidades, estimativa, icp_id, limite_por_busca)
 
 
 def conferir_pedido(
     db: Session, tenant_id: str, provedor: DescobertaEmpresasProvider, termos: list[str], cidades: list[str],
-    buscas_confirmadas: int, max_buscas: int, franquia_mensal: int = 0,
+    buscas_confirmadas: int, max_buscas: int, franquia_mensal: int = 0, franquia_vida_toda: bool = False,
 ) -> Estimativa:
     """Tudo o que precisa valer antes de chamar a fonte (disponível, buscas confirmadas, franquia). Usado também antes de mandar a
     execução para o segundo plano, para a recusa aparecer na hora."""
-    estimativa = estimar(provedor, termos, cidades, max_buscas, db, tenant_id, franquia_mensal)
+    estimativa = estimar(provedor, termos, cidades, max_buscas, db, tenant_id, franquia_mensal, franquia_vida_toda)
     if not estimativa.configurado:
         raise RegraNegocioViolada("A descoberta por busca não está disponível nesta instalação.")
     if buscas_confirmadas != estimativa.buscas:
@@ -139,7 +141,8 @@ def conferir_pedido(
     if estimativa.franquia_mensal and estimativa.usadas_no_mes + estimativa.buscas > estimativa.franquia_mensal:
         restam = max(estimativa.franquia_mensal - estimativa.usadas_no_mes, 0)
         raise RegraNegocioViolada(
-            f"A franquia do mês tem {restam} busca(s) restante(s) e este pedido usa {estimativa.buscas}: reduza termos ou cidades."
+            f"A franquia {'do seu plano' if estimativa.franquia_vida_toda else 'do mês'} tem {restam} busca(s) restante(s) e este "
+            f"pedido usa {estimativa.buscas}: reduza termos ou cidades."
         )
     return estimativa
 
