@@ -356,3 +356,46 @@ def test_conectar_guarda_a_validade_do_token(db_session, meta_configurada, monke
 
     assert resultado["token_expira_em"] is not None
     assert db_session.query(ConfiguracaoWhatsApp).one().token_expira_em == resultado["token_expira_em"]
+
+
+def test_token_da_janela_e_conferido_e_trocado_pelo_de_60_dias(db_session, meta_configurada, monkeypatch):
+    chamadas = []
+
+    def get(url, params=None, **_):
+        chamadas.append((url.rsplit("/", 1)[-1], dict(params or {})))
+        if url.endswith("/debug_token"):
+            return _Resposta(200, {"data": {"is_valid": True, "app_id": "123", "expires_at": 1_790_000_000}})
+        if url.endswith("/oauth/access_token"):
+            assert params["grant_type"] == "fb_exchange_token" and params["fb_exchange_token"] == "EAAcurto"
+            return _Resposta(200, {"access_token": "EAAlongo"})
+        return _Resposta(200, {"display_phone_number": "+55 11 93214-3499"})
+
+    monkeypatch.setattr(httpx, "get", get)
+    monkeypatch.setattr(httpx, "post", lambda url, **_: _Resposta(200, {}))
+
+    resultado = whatsapp_conexao_service.conectar(db_session, TENANT, "1", "", "111", "222", access_token="EAAcurto")
+
+    assert resultado["numero_exibicao"] == "+55 11 93214-3499"
+    assert db_session.query(ConfiguracaoWhatsApp).one().access_token == "EAAlongo"  # nunca o token curto
+    assert not any("code" in p for _, p in chamadas)  # sem troca de código nesse caminho
+
+
+def test_token_de_outro_app_e_recusado_sem_salvar(db_session, meta_configurada, monkeypatch):
+    trocas = []
+
+    def get(url, params=None, **_):
+        if url.endswith("/debug_token"):
+            return _Resposta(200, {"data": {"is_valid": True, "app_id": "999"}})
+        trocas.append(url)
+        return _Resposta(200, {"access_token": "x"})
+
+    monkeypatch.setattr(httpx, "get", get)
+    with pytest.raises(RegraNegocioViolada, match="não confirmou"):
+        whatsapp_conexao_service.conectar(db_session, TENANT, "1", "", "111", "222", access_token="EAAdeoutro")
+    assert trocas == [] and db_session.query(ConfiguracaoWhatsApp).count() == 0
+
+
+def test_parametros_dizem_o_tipo_de_retorno(meta_configurada, monkeypatch):
+    assert whatsapp_conexao_service.parametros()["retorno"] == "token"
+    monkeypatch.setattr(settings, "meta_embedded_signup_retorno", "codigo")
+    assert whatsapp_conexao_service.parametros()["retorno"] == "codigo"

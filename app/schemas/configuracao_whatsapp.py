@@ -29,7 +29,8 @@ class ConfiguracaoWhatsAppUpsertSchema(BaseModel):
 
 
 class ConectarMetaRequestSchema(BaseModel):
-    codigo: str
+    codigo: str = ""
+    access_token: str | None = None  # configuração do tipo "token de acesso do usuário": a janela devolve o token, não um código
     phone_number_id: str
     business_account_id: str
     pagina: str | None = None  # endereço da tela onde o botão foi clicado (a Meta pode exigir como redirect_uri na troca do código)

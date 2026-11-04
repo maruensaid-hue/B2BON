@@ -9,6 +9,7 @@ janela da própria Meta, escolhe ou cria a conta e o número, e o navegador devo
 O passo 3 pode falhar sem impedir a conexão (número já registrado com outro PIN): fica o aviso com o que fazer.
 """
 
+import logging
 import secrets
 from datetime import UTC, datetime
 
@@ -23,6 +24,7 @@ from app.services import auditoria_service
 from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 
 _TIMEOUT = 20.0
+logger = logging.getLogger(__name__)
 
 
 def _graph() -> str:
@@ -37,7 +39,24 @@ def parametros() -> dict:
         "app_id": settings.meta_app_id if disponivel else None,
         "config_id": settings.meta_embedded_signup_config_id if disponivel else None,
         "graph_versao": settings.meta_graph_versao,
+        "retorno": "codigo" if settings.meta_embedded_signup_retorno == "codigo" else "token",
     }
+
+
+def _registrar_recusa(etapa: str, resposta: httpx.Response | None, **contexto) -> None:
+    """Guarda no log a resposta exata da Meta (código, subcódigo, rastreio), sem token nem segredo: é o que permite diagnosticar
+    em vez de tentar às cegas."""
+    erro = {}
+    if resposta is not None:
+        try:
+            erro = resposta.json().get("error") or {}
+        except ValueError:
+            erro = {}
+    logger.warning(
+        "META_CONEXAO_RECUSADA etapa=%s status=%s codigo=%s subcodigo=%s tipo=%s fbtrace=%s mensagem=%s contexto=%s",
+        etapa, resposta.status_code if resposta is not None else None, erro.get("code"), erro.get("error_subcode"), erro.get("type"),
+        erro.get("fbtrace_id"), (erro.get("message") or "")[:300], contexto,
+    )
 
 
 def _erro_meta(resposta: httpx.Response) -> str:
@@ -78,6 +97,7 @@ def _trocar_codigo(codigo: str, pagina: str | None = None) -> str:
         if resposta.is_success and resposta.json().get("access_token"):
             return resposta.json()["access_token"]
         erro = _erro_meta(resposta)
+        _registrar_recusa("troca_codigo", resposta, redirect=("ausente" if redirect is None else redirect or "vazio"))
         primeiro_erro = primeiro_erro or erro
         if "redirect_uri" not in erro and redirect is None:
             break  # outro motivo (código vencido, segredo errado): tentar outro endereço não adianta
@@ -123,6 +143,29 @@ def _debug_token(token: str) -> dict:
     if not resposta.is_success:
         return {}
     return resposta.json().get("data") or {}
+
+
+def _token_do_navegador(token_curto: str) -> str:
+    """Configuração "token de acesso do usuário": a janela devolve o token. Antes de usar, confere com a Meta que ele é válido e foi
+    emitido para ESTE app (um token de outro app colado aqui seria recusado), e troca pelo de longa duração (60 dias)."""
+    dados = _debug_token(token_curto)
+    if not dados.get("is_valid") or str(dados.get("app_id")) != str(settings.meta_app_id):
+        logger.warning("META_CONEXAO_RECUSADA etapa=token_navegador valido=%s app_confere=%s", dados.get("is_valid"),
+                       str(dados.get("app_id")) == str(settings.meta_app_id))
+        raise RegraNegocioViolada("A Meta não confirmou a autorização deste aplicativo. Clique em Conectar de novo.")
+    try:
+        resposta = httpx.get(
+            f"{_graph()}/oauth/access_token",
+            params={"grant_type": "fb_exchange_token", "client_id": settings.meta_app_id, "client_secret": settings.whatsapp_app_secret,
+                    "fb_exchange_token": token_curto},
+            timeout=_TIMEOUT,
+        )
+    except httpx.HTTPError as erro:
+        raise RegraNegocioViolada(f"A Meta não respondeu ao concluir a conexão ({type(erro).__name__}). Tente de novo.") from erro
+    if not resposta.is_success or not resposta.json().get("access_token"):
+        _registrar_recusa("token_longo", resposta)
+        raise RegraNegocioViolada(f"A Meta não aceitou concluir a conexão: {_erro_meta(resposta)}. Clique em Conectar de novo.")
+    return resposta.json()["access_token"]
 
 
 def validade_do_token(token: str) -> datetime | None:
@@ -173,16 +216,16 @@ def _salvar(db: Session, tenant_id: str, valores: dict) -> int:
 
 
 def conectar(db: Session, tenant_id: str, ator_id: str | None, codigo: str, phone_number_id: str, waba_id: str,
-             pagina: str | None = None) -> dict:
+             pagina: str | None = None, access_token: str | None = None) -> dict:
     if not parametros()["disponivel"]:
         raise RegraNegocioViolada("A conexão pela Meta não está disponível nesta instalação: use a configuração manual.")
-    if not codigo:
-        raise ValidacaoFalhou("A janela da Meta não devolveu o código de autorização. Clique em Conectar e conclua todas as etapas.")
+    if not codigo and not access_token:
+        raise ValidacaoFalhou("A janela da Meta não devolveu a autorização. Clique em Conectar e conclua todas as etapas.")
     phone_number_id, waba_id = (phone_number_id or "").strip(), (waba_id or "").strip()
     if (phone_number_id and not phone_number_id.isdigit()) or (waba_id and not waba_id.isdigit()):
         raise ValidacaoFalhou("A janela da Meta devolveu dados do número inválidos. Clique em Conectar de novo.")
 
-    token = _trocar_codigo(codigo, pagina)
+    token = _token_do_navegador(access_token) if access_token else _trocar_codigo(codigo, pagina)
     if not (phone_number_id and waba_id):
         phone_number_id, waba_id = _descobrir_ids(token)
     pin = f"{secrets.randbelow(10**6):06d}"

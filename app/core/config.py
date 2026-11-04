@@ -168,6 +168,11 @@ class Settings(BaseSettings):
     # não aparece e vale só a configuração manual.
     meta_app_id: str = ""
     meta_embedded_signup_config_id: str = ""
+    # Tipo da configuração de login criada no painel da Meta. "token" = configuração "Token de acesso do usuário" (a janela devolve o
+    # token, o servidor confere que é deste app e o troca pelo de 60 dias; o CÓDIGO dessa configuração fica preso a um endereço interno
+    # do SDK e não pode ser trocado no servidor, visto no staging em 04/11/2026). "codigo" = configuração de cadastro incorporado com
+    # token de usuário do sistema (a janela devolve um código de uso único).
+    meta_embedded_signup_retorno: str = "token"
     # Versão da Graph API usada em TODA chamada à Meta (envio, templates, conexão do número). A Meta expira cada versão uns 2 anos
     # depois de lançada (calendário em developers.facebook.com/docs/graph-api/changelog/versions); trocar aqui (ou pela variável
     # META_GRAPH_VERSAO) atualiza tudo de uma vez. A v20.0 expirou em 24/09/2026; a v26.0 é de 29/07/2026.

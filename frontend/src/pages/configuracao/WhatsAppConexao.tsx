@@ -24,6 +24,7 @@ interface ParametrosMeta {
   app_id: string | null;
   config_id: string | null;
   graph_versao: string;
+  retorno?: "token" | "codigo"; // tipo da configuração de login criada no painel da Meta
 }
 
 interface ResultadoConexao {
@@ -46,7 +47,7 @@ function diasAteVencer(expiraEm: string | null | undefined): number | null {
 
 interface FacebookSdk {
   init: (opcoes: Record<string, unknown>) => void;
-  login: (callback: (resposta: { authResponse?: { code?: string } }) => void, opcoes: Record<string, unknown>) => void;
+  login: (callback: (resposta: { authResponse?: { code?: string; accessToken?: string } }) => void, opcoes: Record<string, unknown>) => void;
 }
 
 declare global {
@@ -139,15 +140,19 @@ export function WhatsAppConexao({
     await executar("conectar", async () => {
       idsDaJanela.current = {};
       const fb = await carregarSdk(parametros);
-      const codigo = await new Promise<string | null>((resolver) =>
-        fb.login((resposta) => resolver(resposta.authResponse?.code ?? null), {
+      // Configuração "token de acesso do usuário" devolve o token (o código dela não pode ser trocado no servidor); a de cadastro
+      // incorporado com usuário do sistema devolve um código de uso único.
+      const porCodigo = parametros.retorno === "codigo";
+      const autorizacao = await new Promise<{ code?: string; accessToken?: string } | null>((resolver) =>
+        fb.login((resposta) => resolver(resposta.authResponse ?? null), {
           config_id: parametros.config_id,
-          response_type: "code",
-          override_default_response_type: true,
+          ...(porCodigo ? { response_type: "code", override_default_response_type: true } : {}),
           extras: { setup: {}, sessionInfoVersion: "3" },
         }),
       );
-      if (!codigo) {
+      const codigo = porCodigo ? autorizacao?.code : undefined;
+      const accessToken = porCodigo ? undefined : autorizacao?.accessToken;
+      if (!codigo && !accessToken) {
         setAviso("A janela da Meta foi fechada antes de terminar. Clique em Conectar de novo quando quiser.");
         return;
       }
@@ -158,7 +163,8 @@ export function WhatsAppConexao({
       }
       const { phone_number_id, waba_id } = idsDaJanela.current;
       const resultado = await api.post<ResultadoConexao>("/configuracao-whatsapp/conectar-meta", {
-        codigo,
+        codigo: codigo ?? "",
+        access_token: accessToken ?? null,
         phone_number_id: phone_number_id ?? "",
         business_account_id: waba_id ?? "",
         pagina: window.location.origin + window.location.pathname,

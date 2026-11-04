@@ -119,7 +119,7 @@ def conectar_pela_meta(
 ) -> dict:
     """Conclui o cadastro incorporado: troca o código pelo token, inscreve o app, registra o número e devolve o que a Meta mostrou."""
     return whatsapp_conexao_service.conectar(db, tenant_id, ator_id, dados.codigo, dados.phone_number_id, dados.business_account_id,
-                                           dados.pagina)
+                                           dados.pagina, access_token=dados.access_token)
 
 
 @router.post("/testar", dependencies=_SO_ADMIN)
