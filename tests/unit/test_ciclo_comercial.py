@@ -1,7 +1,7 @@
 """As quatro lacunas fechadas depois da comparação com o vídeo do harvey: resposta move o funil, rascunho que conduz à reunião, ciclo
 automático de geração/ativação e descoberta alimentando o enriquecimento (este último em `test_descoberta_busca`)."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 
