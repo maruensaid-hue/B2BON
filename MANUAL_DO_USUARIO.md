@@ -942,11 +942,12 @@ por padrão.
 
 **Descobrir por busca** (só administradores). Acha empresas que o recorte
 de CNPJ não mostra, a partir do que a empresa faz e da cidade, com
-posição no mapa, nota, quantidade de avaliações e se tem site próprio.
-Cada busca é paga: **Estimar custo** mostra o valor antes, e nada é
-gasto sem **Confirmar e buscar**. Empresa que já existe na sua base só
-recebe os sinais novos. Sem a integração configurada, o painel avisa e
-não faz nada. Empresa nova com site entra sozinha na fila de
+posição no mapa e se tem site próprio (nota e quantidade de avaliações
+quando a fonte informa). Cada busca (um termo numa cidade) consome a
+franquia de buscas do seu plano: **Ver consumo** mostra quantas buscas
+o pedido usa e quantas já foram usadas no mês, e nada é contado sem
+**Confirmar e buscar**. Empresa que já existe na sua base só recebe os
+sinais novos. Informe a cidade com a UF (ex.: "Campinas SP"). Empresa nova com site entra sozinha na fila de
 enriquecimento: o site é lido, os sinais são gravados e os decisores
 mapeados, sem outro clique.
 

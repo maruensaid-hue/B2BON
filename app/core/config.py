@@ -279,6 +279,9 @@ class Settings(BaseSettings):
     descoberta_busca_api_key: str = ""
     descoberta_busca_custo_por_busca_usd: float = 0.001
     descoberta_busca_max_buscas_por_execucao: int = 20
+    # Franquia mensal de buscas por empresa (mês de Brasília). 0 = sem limite definido: o uso é contado e mostrado ao cliente como
+    # consumo da franquia, para que a troca por uma fonte paga não mude a regra para ele.
+    descoberta_busca_franquia_mensal: int = 0
 
     # Padrão recomendado do limiar de qualificação — ajustável por tenant
     # (E5-H2 pede explicitamente um "padrão recomendado").

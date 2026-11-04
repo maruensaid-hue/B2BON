@@ -1,22 +1,23 @@
 """Descoberta de empresas por busca de mapa: acha quem o recorte de CNPJ não mostra (presença digital, posição, nota, empresa sem site).
 
-É a única etapa da prospecção que cobra por chamada, por isso ela sempre estima antes e só executa com o custo confirmado pela pessoa
-(o valor confirmado precisa bater com a estimativa daquele pedido). Sem chave configurada, não existe: nada é inventado nem cobrado.
+Sempre estima antes e só executa com o número de buscas confirmado pela pessoa (precisa bater com a estimativa daquele pedido). Para o
+cliente, cada busca é consumo da franquia do mês (nunca aparece custo nem a fonte): assim a troca da base aberta de mapas por uma fonte
+paga não muda a regra para ele. O custo interno da fonte fica só na auditoria.
 Cada empresa achada vira conta (`origem="descoberta_busca"`) com os sinais da busca; a que já existe no tenant (mesmo domínio, ou mesmo
 nome sem domínio) só recebe os sinais novos. Ficha que aponta para rede social ou diretório conta como "sem site".
 """
 
-import math
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.contexts.predator import sinais
 from app.contexts.predator.prospeccao import enfileirar_enriquecimento_em_lote
 from app.contexts.shared.organizations import normalizar_dominio
+from app.models.auditoria import AuditLog
 from app.models.conta import Conta
 from app.providers.descoberta_empresas.base import DescobertaEmpresasProvider, DescobertaIndisponivel, EmpresaDescoberta
 from app.services import auditoria_service
@@ -31,11 +32,31 @@ _NAO_E_SITE = re.compile(
 )
 
 
+_EVENTO = "descoberta_busca_executada"
+
+
 @dataclass
 class Estimativa:
     buscas: int
-    custo_usd: float
+    custo_usd: float  # custo interno da fonte: só para a auditoria, nunca vai ao cliente
     configurado: bool
+    usadas_no_mes: int = 0
+    franquia_mensal: int = 0  # 0 = sem limite definido
+
+
+def _inicio_do_mes_utc(agora: datetime) -> datetime:
+    """Início do mês de Brasília (UTC-3), em UTC sem fuso, como o banco guarda `criado_em`."""
+    local = agora.astimezone(UTC).replace(tzinfo=None) - timedelta(hours=3)
+    return local.replace(day=1, hour=0, minute=0, second=0, microsecond=0) + timedelta(hours=3)
+
+
+def usadas_no_mes(db: Session, tenant_id: str, agora: datetime | None = None) -> int:
+    """Buscas feitas pela empresa no mês corrente (as que falharam não contam)."""
+    inicio = _inicio_do_mes_utc(agora or datetime.now(UTC))
+    registros = db.query(AuditLog.detalhes).filter(
+        AuditLog.tenant_id == tenant_id, AuditLog.evento_tipo == _EVENTO, AuditLog.criado_em >= inicio
+    ).all()
+    return sum(int((detalhes or {}).get("buscas") or 0) for (detalhes,) in registros)
 
 
 def _termos_e_cidades(termos: list[str], cidades: list[str]) -> tuple[list[str], list[str]]:
@@ -46,12 +67,19 @@ def _termos_e_cidades(termos: list[str], cidades: list[str]) -> tuple[list[str],
     return termos, cidades
 
 
-def estimar(provedor: DescobertaEmpresasProvider, termos: list[str], cidades: list[str], max_buscas: int) -> Estimativa:
+def estimar(
+    provedor: DescobertaEmpresasProvider, termos: list[str], cidades: list[str], max_buscas: int,
+    db: Session | None = None, tenant_id: str | None = None, franquia_mensal: int = 0,
+) -> Estimativa:
     termos, cidades = _termos_e_cidades(termos, cidades)
     buscas = len(termos) * len(cidades)
     if buscas > max_buscas:
         raise ValidacaoFalhou(f"{buscas} buscas passam do teto de {max_buscas} por execução: reduza termos ou cidades.")
-    return Estimativa(buscas=buscas, custo_usd=round(buscas * provedor.custo_por_busca_usd, 4), configurado=provedor.configurado)
+    usadas = usadas_no_mes(db, tenant_id) if db is not None and tenant_id else 0
+    return Estimativa(
+        buscas=buscas, custo_usd=round(buscas * provedor.custo_por_busca_usd, 4), configurado=provedor.configurado,
+        usadas_no_mes=usadas, franquia_mensal=max(franquia_mensal, 0),
+    )
 
 
 def _site_proprio(site: str | None) -> str | None:
@@ -84,20 +112,42 @@ def executar(
     provedor: DescobertaEmpresasProvider,
     termos: list[str],
     cidades: list[str],
-    custo_confirmado_usd: float,
+    buscas_confirmadas: int,
     max_buscas: int,
     icp_id: int | None = None,
     limite_por_busca: int = 20,
+    franquia_mensal: int = 0,
 ) -> dict:
-    """Roda as buscas (termos x cidades) e cria/atualiza as contas. Exige o custo confirmado igual ao estimado para este pedido."""
-    estimativa = estimar(provedor, termos, cidades, max_buscas)
-    if not estimativa.configurado:
-        raise RegraNegocioViolada("A descoberta por busca não está configurada nesta instalação.")
-    if not math.isclose(custo_confirmado_usd, estimativa.custo_usd, abs_tol=1e-6):
-        raise RegraNegocioViolada(
-            f"Confirme o custo estimado (US$ {estimativa.custo_usd:.4f} por {estimativa.buscas} busca(s)) antes de executar."
-        )
+    """Roda as buscas (termos x cidades) e cria/atualiza as contas. Exige o número de buscas confirmado igual ao estimado e, com franquia
+    definida, que caiba no que resta dela no mês."""
+    estimativa = conferir_pedido(db, tenant_id, provedor, termos, cidades, buscas_confirmadas, max_buscas, franquia_mensal)
     termos, cidades = _termos_e_cidades(termos, cidades)
+    return _rodar(db, tenant_id, ator_id, provedor, termos, cidades, estimativa, icp_id, limite_por_busca)
+
+
+def conferir_pedido(
+    db: Session, tenant_id: str, provedor: DescobertaEmpresasProvider, termos: list[str], cidades: list[str],
+    buscas_confirmadas: int, max_buscas: int, franquia_mensal: int = 0,
+) -> Estimativa:
+    """Tudo o que precisa valer antes de chamar a fonte (disponível, buscas confirmadas, franquia). Usado também antes de mandar a
+    execução para o segundo plano, para a recusa aparecer na hora."""
+    estimativa = estimar(provedor, termos, cidades, max_buscas, db, tenant_id, franquia_mensal)
+    if not estimativa.configurado:
+        raise RegraNegocioViolada("A descoberta por busca não está disponível nesta instalação.")
+    if buscas_confirmadas != estimativa.buscas:
+        raise RegraNegocioViolada(f"Confirme as {estimativa.buscas} busca(s) estimadas antes de executar.")
+    if estimativa.franquia_mensal and estimativa.usadas_no_mes + estimativa.buscas > estimativa.franquia_mensal:
+        restam = max(estimativa.franquia_mensal - estimativa.usadas_no_mes, 0)
+        raise RegraNegocioViolada(
+            f"A franquia do mês tem {restam} busca(s) restante(s) e este pedido usa {estimativa.buscas}: reduza termos ou cidades."
+        )
+    return estimativa
+
+
+def _rodar(
+    db: Session, tenant_id: str, ator_id: str | None, provedor: DescobertaEmpresasProvider, termos: list[str], cidades: list[str],
+    estimativa: Estimativa, icp_id: int | None, limite_por_busca: int,
+) -> dict:
 
     contas = db.query(Conta).filter(Conta.tenant_id == tenant_id).all()
     por_dominio = {re.sub(r"^www\.", "", c.dominio.lower()): c for c in contas if c.dominio}
@@ -135,7 +185,7 @@ def executar(
                 _gravar_sinais(db, tenant_id, conta.id, achada, sem_site=dominio is None, agora=agora)
 
     auditoria_service.registrar(
-        db, tenant_id, "descoberta_busca_executada", "icp" if icp_id else "tenant", icp_id or 0, ator_id,
+        db, tenant_id, _EVENTO, "icp" if icp_id else "tenant", icp_id or 0, ator_id,
         {"buscas": buscas_feitas, "custo_estimado_usd": estimativa.custo_usd, "criadas": criadas, "atualizadas": atualizadas, "falhas": len(falhas)},
     )
     db.commit()

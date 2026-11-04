@@ -66,6 +66,7 @@ from app.providers.crm.base import CrmProvider
 from app.providers.crm.nucleo import NucleoCrmProvider
 from app.providers.descoberta_empresas.base import DescobertaEmpresasProvider
 from app.providers.descoberta_empresas.desativado import DescobertaDesativadaProvider
+from app.providers.descoberta_empresas.mapa_aberto import MapaAbertoProvider
 from app.providers.descoberta_empresas.serper import SerperMapasProvider
 from app.providers.email_validation.base import EmailVerificationProvider
 from app.providers.email_validation.stub import StubEmailVerificationProvider
@@ -125,10 +126,12 @@ def get_site_fetcher() -> SiteFetcher:
 
 
 def get_descoberta_provider() -> DescobertaEmpresasProvider:
-    """Busca de mapa paga: só existe com chave configurada. A demonstração nunca chama fonte paga."""
-    if demo_contexto.ativo() or not settings.descoberta_busca_api_key:
+    """Busca de mapa: fonte paga quando há chave; sem chave, a base aberta de mapas (sem custo). A demonstração não acessa fonte externa."""
+    if demo_contexto.ativo():
         return DescobertaDesativadaProvider()
-    return SerperMapasProvider()
+    if settings.descoberta_busca_api_key:
+        return SerperMapasProvider()
+    return MapaAbertoProvider()
 
 
 def get_html_fetcher() -> HtmlFetcher | None:

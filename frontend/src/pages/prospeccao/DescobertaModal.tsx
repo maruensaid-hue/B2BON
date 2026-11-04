@@ -7,20 +7,22 @@ import { api, ApiError } from "@/lib/api";
 
 interface Estimativa {
   buscas: number;
-  custo_usd: number;
   configurado: boolean;
+  usadas_no_mes: number;
+  franquia_mensal: number; // 0 = sem limite definido
 }
 
 interface Resultado {
   buscas: number;
-  criadas: number;
-  atualizadas: number;
-  falhas: string[];
+  em_segundo_plano?: boolean;
+  criadas?: number;
+  atualizadas?: number;
+  falhas?: string[];
 }
 
 const linhas = (texto: string) => texto.split("\n").map((l) => l.trim()).filter(Boolean);
 
-/** Descoberta paga por busca de mapa: primeiro a estimativa (sem custo), depois a execução com o valor confirmado. */
+/** Descoberta por busca de mapa: primeiro a estimativa (quantas buscas da franquia), depois a execução com as buscas confirmadas. */
 export function DescobertaModal({ open, onClose, icpId, onConcluido }: { open: boolean; onClose: () => void; icpId: number | null; onConcluido: () => void }) {
   const [termos, setTermos] = useState("");
   const [cidades, setCidades] = useState("");
@@ -49,7 +51,7 @@ export function DescobertaModal({ open, onClose, icpId, onConcluido }: { open: b
     setErro(null);
     setOcupado(true);
     try {
-      setResultado(await api.post<Resultado>("/descoberta/executar", { ...pedido(), custo_confirmado_usd: estimativa.custo_usd }));
+      setResultado(await api.post<Resultado>("/descoberta/executar", { ...pedido(), buscas_confirmadas: estimativa.buscas }));
       setEstimativa(null);
       onConcluido();
     } catch (error) {
@@ -63,8 +65,8 @@ export function DescobertaModal({ open, onClose, icpId, onConcluido }: { open: b
     <Modal title="Descobrir empresas por busca de mapa" open={open} onClose={onClose}>
       <div className="flex flex-col gap-3">
         <div className="text-[11px] text-muted">
-          Acha empresas que o recorte de CNPJ não mostra, com posição no mapa, nota e se têm site. Cada busca (termo × cidade) é cobrada:
-          o custo aparece antes e só é gasto depois de você confirmar.
+          Acha empresas que o recorte de CNPJ não mostra, com a posição no mapa e se têm site. Cada busca (termo × cidade) consome a
+          franquia de buscas do seu plano: o consumo aparece antes e só é contado depois de você confirmar.
         </div>
         <div>
           <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">O que a empresa faz (um por linha)</div>
@@ -75,27 +77,36 @@ export function DescobertaModal({ open, onClose, icpId, onConcluido }: { open: b
           <Textarea rows={3} value={cidades} onChange={(e) => { setCidades(e.target.value); setEstimativa(null); }} placeholder={"Campinas SP\nRibeirão Preto SP"} />
         </div>
         {estimativa && !estimativa.configurado && (
-          <div className="rounded-md bg-surf2 p-2 text-[11px] text-muted">A descoberta por busca não está configurada nesta instalação.</div>
+          <div className="rounded-md bg-surf2 p-2 text-[11px] text-muted">A descoberta por busca não está disponível no momento.</div>
         )}
         {estimativa?.configurado && (
           <div className="rounded-md bg-surf2 p-2 text-[12px] text-text">
-            {estimativa.buscas} busca(s), custo estimado de US$ {estimativa.custo_usd.toFixed(4)}.
+            Esta execução usa {estimativa.buscas} busca(s) da sua franquia.{" "}
+            {estimativa.franquia_mensal > 0
+              ? `Usadas neste mês: ${estimativa.usadas_no_mes} de ${estimativa.franquia_mensal}.`
+              : `Usadas neste mês: ${estimativa.usadas_no_mes}.`}
           </div>
         )}
-        {resultado && (
+        {resultado?.em_segundo_plano && (
+          <div className="rounded-md bg-surf2 p-2 text-[12px] text-text">
+            Buscando em segundo plano ({resultado.buscas} busca{resultado.buscas === 1 ? "" : "s"}). As empresas encontradas aparecem na lista
+            de contas em alguns minutos; pode fechar esta janela.
+          </div>
+        )}
+        {resultado && !resultado.em_segundo_plano && (
           <div className="rounded-md bg-surf2 p-2 text-[12px] text-text">
             {resultado.buscas} busca(s): {resultado.criadas} conta(s) nova(s), {resultado.atualizadas} já existente(s) com sinais atualizados.
-            {resultado.falhas.length > 0 && <div className="mt-1 text-[11px] text-muted">Falharam: {resultado.falhas.join("; ")}</div>}
+            {(resultado.falhas?.length ?? 0) > 0 && <div className="mt-1 text-[11px] text-muted">Falharam: {resultado.falhas?.join("; ")}</div>}
           </div>
         )}
         {erro && <div className="text-[11px] text-red">{erro}</div>}
         <div className="flex gap-2">
           <Button type="button" disabled={ocupado || !linhas(termos).length || !linhas(cidades).length} onClick={estimar}>
-            Estimar custo
+            Ver consumo
           </Button>
           {estimativa?.configurado && (
             <Button type="button" disabled={ocupado} onClick={executar}>
-              {ocupado ? "Buscando..." : `Confirmar e buscar (US$ ${estimativa.custo_usd.toFixed(4)})`}
+              {ocupado ? "Buscando..." : `Confirmar e buscar (${estimativa.buscas} busca${estimativa.buscas === 1 ? "" : "s"})`}
             </Button>
           )}
         </div>

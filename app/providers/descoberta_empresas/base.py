@@ -26,6 +26,8 @@ class DescobertaEmpresasProvider(ABC):
 
     configurado: bool = True
     custo_por_busca_usd: float = 0.0
+    # Fonte que pode levar mais de um minuto por busca: a execução vai para o segundo plano (a tela não espera a resposta).
+    lenta: bool = False
 
     @abstractmethod
     def buscar(self, termo: str, cidade: str, limite: int = 20) -> list[EmpresaDescoberta]:
