@@ -57,7 +57,14 @@ declare global {
 }
 
 const TOM_QUALIDADE: Record<string, "green" | "amber" | "red" | "muted"> = { GREEN: "green", YELLOW: "amber", RED: "red" };
-const ROTULO_QUALIDADE: Record<string, string> = { GREEN: "qualidade alta", YELLOW: "qualidade média", RED: "qualidade baixa" };
+// UNKNOWN = a Meta ainda não avaliou o número (sem volume de envios). Valor desconhecido nunca aparece cru, em inglês.
+const ROTULO_QUALIDADE: Record<string, string> = {
+  GREEN: "qualidade alta",
+  YELLOW: "qualidade média",
+  RED: "qualidade baixa",
+  UNKNOWN: "qualidade sem avaliação ainda",
+  NA: "qualidade sem avaliação ainda",
+};
 
 function carregarSdk(parametros: ParametrosMeta): Promise<FacebookSdk> {
   return new Promise((resolver, rejeitar) => {
@@ -209,7 +216,7 @@ export function WhatsAppConexao({
             <Badge tone="green">Conectado</Badge>
             <span className="font-medium">{numero ?? "número ainda não lido"}</span>
             {nome && <span className="text-muted">· {nome}</span>}
-            {qualidade && <Badge tone={TOM_QUALIDADE[qualidade] ?? "muted"}>{ROTULO_QUALIDADE[qualidade] ?? qualidade}</Badge>}
+            {qualidade && <Badge tone={TOM_QUALIDADE[qualidade] ?? "muted"}>{ROTULO_QUALIDADE[qualidade] ?? "qualidade sem avaliação ainda"}</Badge>}
           </div>
           <div className="mt-1 text-[11px] text-muted">
             {config.origem_conexao === "meta_conectar" ? "Conectado pelo botão da Meta" : "Configurado manualmente"} · token{" "}

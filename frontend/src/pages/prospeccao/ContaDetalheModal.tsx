@@ -11,6 +11,7 @@ import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
 import { api, ApiError, getBlob } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { CrmExternoConta } from "@/pages/prospeccao/CrmExternoConta";
+import { PainelRi } from "@/pages/prospeccao/PainelRi";
 
 interface ContaCompleta {
   id: number;
@@ -582,6 +583,8 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
               </div>
             </div>
           )}
+
+          <PainelRi contaId={conta.id} />
 
           {decisores.length > 0 && (
             <div>
