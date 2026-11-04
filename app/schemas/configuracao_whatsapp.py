@@ -15,6 +15,7 @@ class ConfiguracaoWhatsAppSchema(BaseModel):
     numero_exibicao: str | None = None
     nome_verificado: str | None = None
     qualidade: str | None = None
+    token_expira_em: datetime | None = None
     direct_send_habilitado: bool = False
     direct_send_motivo_desligado: str | None = None
     criado_em: datetime

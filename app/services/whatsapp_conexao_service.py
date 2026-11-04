@@ -10,6 +10,7 @@ O passo 3 pode falhar sem impedir a conexão (número já registrado com outro P
 """
 
 import secrets
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import select, update
@@ -85,6 +86,26 @@ def _registrar_numero(token: str, phone_number_id: str, pin: str) -> str | None:
     )
 
 
+def validade_do_token(token: str) -> datetime | None:
+    """Quando o token vence, perguntado à Meta (`debug_token`, com o token do app). `None` = sem prazo, app não configurado ou Meta
+    sem resposta: quem chama não trata isso como erro (a validade é aviso, não condição para enviar)."""
+    if not (settings.meta_app_id and settings.whatsapp_app_secret):
+        return None
+    try:
+        resposta = httpx.get(
+            f"{_graph()}/debug_token",
+            params={"input_token": token, "access_token": f"{settings.meta_app_id}|{settings.whatsapp_app_secret}"},
+            timeout=_TIMEOUT,
+        )
+    except httpx.HTTPError:
+        return None
+    if not resposta.is_success:
+        return None
+    expira = (resposta.json().get("data") or {}).get("expires_at")
+    # 0 (ou ausente) = o token não vence
+    return datetime.fromtimestamp(expira, UTC).replace(tzinfo=None) if isinstance(expira, int) and expira > 0 else None
+
+
 def _salvar(db: Session, tenant_id: str, valores: dict) -> int:
     existente = db.execute(select(ConfiguracaoWhatsApp.id).where(ConfiguracaoWhatsApp.tenant_id == tenant_id)).one_or_none()
     if existente is None:
@@ -108,29 +129,39 @@ def conectar(db: Session, tenant_id: str, ator_id: str | None, codigo: str, phon
     aviso_registro = _registrar_numero(token, phone_number_id, pin)
     avisos = [a for a in (_inscrever_app(token, waba_id), aviso_registro) if a]
     info = MetaWhatsAppProvider(token, phone_number_id, waba_id).info_numero()
+    expira_em = validade_do_token(token)
 
     config_id = _salvar(db, tenant_id, {
         "access_token": token, "phone_number_id": phone_number_id, "business_account_id": waba_id, "origem_conexao": "meta_conectar",
         "pin_registro": pin if aviso_registro is None else None,
         "numero_exibicao": info.numero_exibicao, "nome_verificado": info.nome_verificado, "qualidade": info.qualidade,
+        "token_expira_em": expira_em,
     })
     auditoria_service.registrar(db, tenant_id, "whatsapp_conectado_pela_meta", "configuracao_whatsapp", config_id, ator_id,
                                 {"avisos": len(avisos), "numero": info.numero_exibicao})
     db.commit()
-    return {"numero_exibicao": info.numero_exibicao, "nome_verificado": info.nome_verificado, "qualidade": info.qualidade, "avisos": avisos}
+    return {"numero_exibicao": info.numero_exibicao, "nome_verificado": info.nome_verificado, "qualidade": info.qualidade, "avisos": avisos,
+            "token_expira_em": expira_em}
 
 
 def testar(db: Session, tenant_id: str, provider) -> dict:
     """Pergunta à Meta pelo número configurado e guarda o que ela disse: prova de que token e IDs funcionam."""
     info = provider.info_numero()
+    expira_em = None
     if info.erro is None:
+        try:
+            token = db.execute(select(ConfiguracaoWhatsApp.access_token).where(ConfiguracaoWhatsApp.tenant_id == tenant_id)).scalar()
+        except Exception:  # noqa: BLE001 — token que não decifra: a validade fica sem consulta, o teste em si já passou
+            token = None
+        expira_em = validade_do_token(token) if token else None
         db.execute(
             update(ConfiguracaoWhatsApp).where(ConfiguracaoWhatsApp.tenant_id == tenant_id)
-            .values(numero_exibicao=info.numero_exibicao, nome_verificado=info.nome_verificado, qualidade=info.qualidade)
+            .values(numero_exibicao=info.numero_exibicao, nome_verificado=info.nome_verificado, qualidade=info.qualidade,
+                    token_expira_em=expira_em)
         )
         db.commit()
     return {"ok": info.erro is None, "numero_exibicao": info.numero_exibicao, "nome_verificado": info.nome_verificado,
-            "qualidade": info.qualidade, "erro": info.erro}
+            "qualidade": info.qualidade, "erro": info.erro, "token_expira_em": expira_em}
 
 
 def definir_direct_send(db: Session, tenant_id: str, ator_id: str | None, habilitado: bool) -> None:

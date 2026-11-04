@@ -28,6 +28,7 @@ def _para_schema(config: ConfiguracaoWhatsApp) -> ConfiguracaoWhatsAppSchema:
         numero_exibicao=config.numero_exibicao,
         nome_verificado=config.nome_verificado,
         qualidade=config.qualidade,
+        token_expira_em=config.token_expira_em,
         direct_send_habilitado=bool(config.direct_send_habilitado),
         direct_send_motivo_desligado=config.direct_send_motivo_desligado,
         criado_em=config.criado_em,

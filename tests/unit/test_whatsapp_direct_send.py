@@ -241,3 +241,37 @@ def test_codigo_recusado_nao_salva_nada(db_session, meta_configurada, monkeypatc
     with pytest.raises(RegraNegocioViolada, match="Code expired"):
         whatsapp_conexao_service.conectar(db_session, TENANT, "1", "c", "111", "222")
     assert db_session.query(ConfiguracaoWhatsApp).count() == 0
+
+
+def test_validade_do_token_vem_da_meta_e_zero_e_sem_prazo(meta_configurada, monkeypatch):
+    from datetime import datetime
+
+    chamadas = []
+
+    def get(url, params=None, **_):
+        chamadas.append(params)
+        return _Resposta(200, {"data": {"is_valid": True, "expires_at": 1_790_000_000}})
+
+    monkeypatch.setattr(httpx, "get", get)
+    assert whatsapp_conexao_service.validade_do_token("EAAG") == datetime(2026, 9, 21, 14, 13, 20)  # 1.790.000.000 em UTC, sem fuso como no banco
+    assert chamadas[0]["access_token"] == "123|segredo" and chamadas[0]["input_token"] == "EAAG"
+
+    monkeypatch.setattr(httpx, "get", lambda url, **_: _Resposta(200, {"data": {"expires_at": 0}}))
+    assert whatsapp_conexao_service.validade_do_token("EAAG") is None
+
+
+def test_conectar_guarda_a_validade_do_token(db_session, meta_configurada, monkeypatch):
+    def get(url, params=None, **_):
+        if url.endswith("/oauth/access_token"):
+            return _Resposta(200, {"access_token": "EAAGnovo"})
+        if url.endswith("/debug_token"):
+            return _Resposta(200, {"data": {"expires_at": 1_790_000_000}})
+        return _Resposta(200, {"display_phone_number": "+55 11 98888-7777"})
+
+    monkeypatch.setattr(httpx, "get", get)
+    monkeypatch.setattr(httpx, "post", lambda url, **_: _Resposta(200, {}))
+
+    resultado = whatsapp_conexao_service.conectar(db_session, TENANT, "1", "c", "111", "222")
+
+    assert resultado["token_expira_em"] is not None
+    assert db_session.query(ConfiguracaoWhatsApp).one().token_expira_em == resultado["token_expira_em"]

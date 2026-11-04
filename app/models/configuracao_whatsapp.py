@@ -38,6 +38,9 @@ class ConfiguracaoWhatsApp(Base):
     numero_exibicao: Mapped[str | None] = mapped_column(String, nullable=True)
     nome_verificado: Mapped[str | None] = mapped_column(String, nullable=True)
     qualidade: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Quando o token vence, segundo a Meta (debug_token). Nulo = sem prazo (ou ainda não consultado). O token do cadastro incorporado
+    # vence em 60 dias: a tela avisa antes e "Reconectar com a Meta" renova.
+    token_expira_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Direct Send (envio sem template, categoria utilidade): o admin declara que a conta está habilitada no WhatsApp Manager. Se a
     # Meta recusar a conta (erro 100 de Direct Send), o sistema desliga sozinho e guarda o motivo.
     direct_send_habilitado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

@@ -14,6 +14,7 @@ export interface ConfiguracaoWhatsApp {
   numero_exibicao: string | null;
   nome_verificado: string | null;
   qualidade: string | null;
+  token_expira_em: string | null;
   direct_send_habilitado: boolean;
   direct_send_motivo_desligado: string | null;
 }
@@ -29,8 +30,18 @@ interface ResultadoConexao {
   numero_exibicao: string | null;
   nome_verificado: string | null;
   qualidade: string | null;
+  token_expira_em?: string | null;
   avisos?: string[];
   erro?: string | null;
+}
+
+const DIAS_PARA_AVISAR = 15;
+
+/** Dias até o token vencer (negativo = vencido). A API devolve a data em UTC sem fuso. */
+function diasAteVencer(expiraEm: string | null | undefined): number | null {
+  if (!expiraEm) return null;
+  const vence = new Date(expiraEm.endsWith("Z") ? expiraEm : `${expiraEm}Z`).getTime();
+  return Math.floor((vence - Date.now()) / 86_400_000);
 }
 
 interface FacebookSdk {
@@ -176,6 +187,8 @@ export function WhatsAppConexao({
   const numero = teste?.numero_exibicao ?? config?.numero_exibicao;
   const nome = teste?.nome_verificado ?? config?.nome_verificado;
   const qualidade = teste?.qualidade ?? config?.qualidade;
+  const expiraEm = teste?.token_expira_em ?? config?.token_expira_em ?? null;
+  const dias = diasAteVencer(expiraEm);
 
   return (
     <div className="flex flex-col gap-3">
@@ -195,6 +208,14 @@ export function WhatsAppConexao({
             {config.origem_conexao === "meta_conectar" ? "Conectado pelo botão da Meta" : "Configurado manualmente"} · token{" "}
             <span className="font-mono">{config.access_token_mascarado}</span>
           </div>
+          {expiraEm && dias !== null && (
+            <div className={`mt-1 text-[11px] ${dias < 0 ? "text-red" : dias <= DIAS_PARA_AVISAR ? "text-amber" : "text-muted"}`}>
+              {dias < 0
+                ? "O acesso à Meta venceu: nenhuma mensagem de WhatsApp sai. Clique em Reconectar com a Meta."
+                : `Acesso à Meta vence em ${new Date(`${expiraEm}${expiraEm.endsWith("Z") ? "" : "Z"}`).toLocaleDateString("pt-BR")}` +
+                  (dias <= DIAS_PARA_AVISAR ? ` (faltam ${dias} dia${dias === 1 ? "" : "s"}): clique em Reconectar com a Meta para renovar.` : ".")}
+            </div>
+          )}
           {teste?.erro && <div className="mt-1 text-[11px] text-red">A Meta não reconheceu a conexão: {teste.erro}</div>}
         </div>
       ) : (
