@@ -71,3 +71,15 @@ termos pedem para não enviar dado pessoal ou confidencial. Só faria sentido no
    dado público** (editais, normalização de texto), preciso de um ajuste pequeno no código: uma lista de tarefas permitidas por
    provedor. Faço quando você decidir seguir por esse caminho.
 4. Teto diário de 200 chamadas por provedor (já existe), para nenhuma reserva ser usada sem limite.
+
+## Decisão e configuração aplicada (05/11/2026)
+
+- O PO escolheu a opção **"Tudo"**: a reserva vale para todas as tarefas, inclusive com dados de clientes, e ele aceitou a
+  transferência internacional para Groq e Cloudflare (EUA) do ponto de vista da LGPD. A Anthropic já estava nessa situação.
+- Produção (b2bon-api), variáveis definidas:
+  - `AI_PROVEDORES_FALLBACK=groq,cloudflare`;
+  - `GROQ_MODELO=llama-3.3-70b-versatile` e `GROQ_APROVADO_DADOS_REAIS=true`;
+  - `CLOUDFLARE_AI_MODELO=@cf/meta/llama-3.3-70b-instruct-fp8-fast` e `CLOUDFLARE_AI_APROVADO_DADOS_REAIS=true`;
+  - as chaves e os planos (`gratuito`) foram salvos pelo PO.
+- Conferência: **AI FinOps → IA de reserva → Testar**. O botão envia um texto fictício direto a cada reserva.
+- Pendência: atualizar a Política de Privacidade para citar subprocessadores de IA nos EUA (sem nome de fornecedor na tela).
