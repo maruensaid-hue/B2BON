@@ -210,7 +210,7 @@ def construir_provedor(db: Session, transport: httpx.BaseTransport | None = None
 _PROMPT_DE_TESTE = LLMRequest(
     system="Responda em português do Brasil, em uma frase curta.",
     prompt="Teste de conexão com dados fictícios: a empresa Exemplo Ltda. pediu uma proposta. Responda apenas 'conexão ok' e uma saudação.",
-    max_tokens=60,
+    max_tokens=300,
 )
 
 

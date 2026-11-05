@@ -22,7 +22,8 @@ class _ProvedorHttp(LLMProvider):
     id: str = ""
 
     def __init__(self, *, chave: str, modelo: str, timeout: float = 25.0, transport: httpx.BaseTransport | None = None) -> None:
-        self._chave, self._modelo = chave, modelo
+        # chave colada com espaço/quebra de linha no painel vira cabeçalho inválido (httpx LocalProtocolError, visto em 05/11/2026)
+        self._chave, self._modelo = chave.strip(), modelo.strip()
         self._cliente = httpx.Client(timeout=timeout, transport=transport, trust_env=False, follow_redirects=False)
 
     def _post(self, url: str, cabecalhos: dict[str, str], corpo: dict) -> dict:
@@ -58,6 +59,10 @@ class OpenAICompativel(_ProvedorHttp):
         corpo: dict = {"model": self._modelo, "messages": mensagens, "max_tokens": request.max_tokens}
         if request.temperature is not None:
             corpo["temperature"] = request.temperature
+        if self.id == "groq" and "gpt-oss" in self._modelo:
+            # modelo de raciocínio: sem isto o raciocínio consome o limite de tokens e a resposta vem cortada
+            corpo["reasoning_effort"] = "low"
+            corpo["include_reasoning"] = False
         dados = self._post(self._url, {"Authorization": f"Bearer {self._chave}", "Content-Type": "application/json", **self._extras}, corpo)
         escolhas = dados.get("choices")
         if not isinstance(escolhas, list) or not escolhas or not isinstance(escolhas[0], dict):
@@ -92,7 +97,7 @@ class CloudflareWorkersAI(_ProvedorHttp):
 
     def __init__(self, *, account_id: str, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._account_id = account_id
+        self._account_id = account_id.strip()
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         mensagens = ([{"role": "system", "content": request.system}] if request.system else []) + [{"role": "user", "content": request.prompt}]

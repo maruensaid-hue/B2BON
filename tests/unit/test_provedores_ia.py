@@ -366,3 +366,17 @@ def test_endpoint_de_teste_e_so_super_admin(client, criar_usuario_autenticado, l
     assert client.post("/api/v1/admin/provedores-ia/inexistente/testar").status_code == 404
     admin = criar_usuario_autenticado("tenant-prov-ia2", papel="admin", email="admin2@prov-ia.com")
     assert client.post("/api/v1/admin/provedores-ia/groq/testar", headers=admin).status_code == 403
+
+
+def test_credenciais_coladas_com_espaco_ou_quebra_de_linha_sao_limpas():
+    transporte, capturas = _mock(httpx.Response(200, json={"success": True, "result": {"response": "ok"}}))
+    provedor = provedores.CloudflareWorkersAI(account_id=" conta\n", chave=f"{CHAVE}\n", modelo=" @cf/m ", transport=transporte)
+    assert provedor.generate(REQ).content == "ok"
+    assert capturas[0].headers["authorization"] == f"Bearer {CHAVE}" and "/accounts/conta/ai/run/@cf/m" in str(capturas[0].url)
+
+
+def test_groq_gpt_oss_pede_raciocinio_baixo_e_sem_texto_de_raciocinio():
+    transporte, capturas = _mock(OPENAI_OK)
+    provedores.groq(chave=CHAVE, modelo="openai/gpt-oss-120b", transport=transporte).generate(REQ)
+    corpo = _corpo(capturas[0])
+    assert corpo["reasoning_effort"] == "low" and corpo["include_reasoning"] is False
