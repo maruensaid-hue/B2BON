@@ -12,6 +12,8 @@ Estado de cada adapter (ver `docs/b2bon/PROVEDORES_IA.md`): implementado e testa
 **nenhum foi testado contra o serviço real** (sem credenciais) e nenhum está habilitado por padrão.
 """
 
+import re
+
 import httpx
 
 from app.llm.base import LLMFalhaDeProvedor, LLMIndisponivel, LLMProvider
@@ -99,7 +101,21 @@ class CloudflareWorkersAI(_ProvedorHttp):
         super().__init__(**kwargs)
         self._account_id = account_id.strip()
 
+    def _conferir_credenciais(self) -> None:
+        """Diz QUAL variável está fora do formato (sem mostrar o valor): antes só aparecia "LocalProtocolError" (visto em 05/11/2026)."""
+        problemas = []
+        if not re.fullmatch(r"[0-9a-f]{32}", self._account_id):
+            problemas.append(f"CLOUDFLARE_AI_ACCOUNT_ID fora do formato (esperado 32 letras/números hexadecimais; tem {len(self._account_id)} caracteres"
+                             + ("; parece um link ou e-mail" if any(c in self._account_id for c in "/:@.") else "") + ")")
+        if not re.fullmatch(r"[A-Za-z0-9_\-]+", self._chave):
+            invalidos = sorted({"espaço" if c.isspace() else ("aspas" if c in "\"'“”" else "outro") for c in self._chave if not (c.isalnum() and c.isascii()) and c not in "_-"})
+            problemas.append(f"CLOUDFLARE_AI_API_TOKEN com caractere inválido ({', '.join(invalidos)}; tem {len(self._chave)} caracteres)"
+                             + ("; não inclua a palavra Bearer" if self._chave.lower().startswith("bearer") else ""))
+        if problemas:
+            raise LLMFalhaDeProvedor("cloudflare: " + "; ".join(problemas) + ".")
+
     def generate(self, request: LLMRequest) -> LLMResponse:
+        self._conferir_credenciais()
         mensagens = ([{"role": "system", "content": request.system}] if request.system else []) + [{"role": "user", "content": request.prompt}]
         corpo: dict = {"messages": mensagens, "max_tokens": request.max_tokens}
         if request.temperature is not None:

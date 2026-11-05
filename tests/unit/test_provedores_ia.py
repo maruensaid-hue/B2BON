@@ -72,13 +72,13 @@ def test_temperature_e_system_so_vao_quando_informados():
 
 def test_cloudflare_contrato():
     transporte, capturas = _mock(httpx.Response(200, json={"success": True, "errors": [], "result": {"response": "Oi!"}}))
-    provedor = provedores.CloudflareWorkersAI(account_id="conta123", chave=CHAVE, modelo="@cf/meta/modelo", transport=transporte)
+    provedor = provedores.CloudflareWorkersAI(account_id="0123456789abcdef0123456789abcdef", chave=CHAVE, modelo="@cf/meta/modelo", transport=transporte)
 
     resposta = provedor.generate(REQ)
 
     assert (resposta.content, resposta.provider, resposta.model, resposta.input_tokens) == ("Oi!", "cloudflare", "@cf/meta/modelo", 0)
     [captura] = capturas
-    assert str(captura.url) == "https://api.cloudflare.com/client/v4/accounts/conta123/ai/run/@cf/meta/modelo"
+    assert str(captura.url) == "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/meta/modelo"
     assert captura.headers["authorization"] == f"Bearer {CHAVE}"
     assert _corpo(captura)["messages"][-1] == {"role": "user", "content": "Pergunta"}
 
@@ -86,7 +86,7 @@ def test_cloudflare_contrato():
 def test_cloudflare_success_false_e_falha_do_provedor():
     transporte, _ = _mock(httpx.Response(200, json={"success": False, "errors": [{"message": "x"}], "result": None}))
     with pytest.raises(LLMFalhaDeProvedor):
-        provedores.CloudflareWorkersAI(account_id="c", chave=CHAVE, modelo="m", transport=transporte).generate(REQ)
+        provedores.CloudflareWorkersAI(account_id="0123456789abcdef0123456789abcdef", chave=CHAVE, modelo="m", transport=transporte).generate(REQ)
 
 
 # --- Gemini --------------------------------------------------------------------------------------------------------
@@ -120,7 +120,7 @@ def test_gemini_sem_candidatos_e_resposta_sem_texto_nao_falha_de_provedor():
 ADAPTERS = [
     lambda t: provedores.groq(chave=CHAVE, modelo="m", transport=t),
     lambda t: provedores.openrouter(chave=CHAVE, modelo="m", transport=t),
-    lambda t: provedores.CloudflareWorkersAI(account_id="c", chave=CHAVE, modelo="m", transport=t),
+    lambda t: provedores.CloudflareWorkersAI(account_id="0123456789abcdef0123456789abcdef", chave=CHAVE, modelo="m", transport=t),
     lambda t: provedores.GoogleGemini(chave=CHAVE, modelo="m", transport=t),
 ]
 
@@ -370,9 +370,9 @@ def test_endpoint_de_teste_e_so_super_admin(client, criar_usuario_autenticado, l
 
 def test_credenciais_coladas_com_espaco_ou_quebra_de_linha_sao_limpas():
     transporte, capturas = _mock(httpx.Response(200, json={"success": True, "result": {"response": "ok"}}))
-    provedor = provedores.CloudflareWorkersAI(account_id=" conta\n", chave=f"{CHAVE}\n", modelo=" @cf/m ", transport=transporte)
+    provedor = provedores.CloudflareWorkersAI(account_id=" 0123456789abcdef0123456789abcdef\n", chave=f"{CHAVE}\n", modelo=" @cf/m ", transport=transporte)
     assert provedor.generate(REQ).content == "ok"
-    assert capturas[0].headers["authorization"] == f"Bearer {CHAVE}" and "/accounts/conta/ai/run/@cf/m" in str(capturas[0].url)
+    assert capturas[0].headers["authorization"] == f"Bearer {CHAVE}" and "/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/m" in str(capturas[0].url)
 
 
 def test_groq_gpt_oss_pede_raciocinio_baixo_e_sem_texto_de_raciocinio():
@@ -380,3 +380,13 @@ def test_groq_gpt_oss_pede_raciocinio_baixo_e_sem_texto_de_raciocinio():
     provedores.groq(chave=CHAVE, modelo="openai/gpt-oss-120b", transport=transporte).generate(REQ)
     corpo = _corpo(capturas[0])
     assert corpo["reasoning_effort"] == "low" and corpo["include_reasoning"] is False
+
+
+def test_cloudflare_diz_qual_credencial_esta_fora_do_formato_sem_mostrar_o_valor():
+    transporte, capturas = _mock(httpx.Response(200, json={}))
+    provedor = provedores.CloudflareWorkersAI(account_id="https://dash.cloudflare.com/x", chave="Bearer abc def", modelo="m", transport=transporte)
+    with pytest.raises(LLMFalhaDeProvedor) as erro:
+        provedor.generate(REQ)
+    texto = str(erro.value)
+    assert "CLOUDFLARE_AI_ACCOUNT_ID" in texto and "link" in texto and "CLOUDFLARE_AI_API_TOKEN" in texto and "Bearer" in texto
+    assert "abc def" not in texto and "dash.cloudflare" not in texto and capturas == []
