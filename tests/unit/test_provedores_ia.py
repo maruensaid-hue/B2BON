@@ -338,3 +338,31 @@ def test_gateway_registra_o_provedor_do_fallback_no_ledger(db_session):
     assert resposta.content == "de-groq"
     linha = db_session.query(RegistroUsoIa).filter_by(tenant_id="t-fb").one()
     assert (linha.provider, linha.status) == ("groq", "sucesso")
+
+
+def test_testar_provedor_chama_direto_com_texto_ficticio_e_nao_vaza_chave(monkeypatch):
+    monkeypatch.setattr(settings, "ai_provedores_fallback", "groq,cloudflare")
+    monkeypatch.setattr(settings, "groq_api_key", CHAVE)
+    monkeypatch.setattr(settings, "groq_modelo", "m")
+    transporte, capturas = _mock(OPENAI_OK)
+
+    resultado = fallback.testar("groq", transport=transporte)
+
+    assert resultado["ok"] is True and resultado["resposta"] == "Olá" and resultado["rotulo"] == "IA reserva 1"
+    assert "Exemplo Ltda." in capturas[0].content.decode() and CHAVE not in str(resultado)
+
+
+def test_testar_provedor_sem_credencial_ou_com_falha(monkeypatch):
+    monkeypatch.setattr(settings, "cloudflare_ai_account_id", "")
+    assert fallback.testar("cloudflare")["ok"] is False
+    monkeypatch.setattr(settings, "groq_api_key", CHAVE)
+    monkeypatch.setattr(settings, "groq_modelo", "m")
+    transporte, _ = _mock(httpx.Response(401, json={}))
+    falha = fallback.testar("groq", transport=transporte)
+    assert falha["ok"] is False and "401" in falha["erro"]
+
+
+def test_endpoint_de_teste_e_so_super_admin(client, criar_usuario_autenticado, limpo):
+    assert client.post("/api/v1/admin/provedores-ia/inexistente/testar").status_code == 404
+    admin = criar_usuario_autenticado("tenant-prov-ia2", papel="admin", email="admin2@prov-ia.com")
+    assert client.post("/api/v1/admin/provedores-ia/groq/testar", headers=admin).status_code == 403

@@ -740,6 +740,80 @@ function AjustesEConciliacao() {
   );
 }
 
+interface StatusProvedor {
+  id: string;
+  estado: string;
+  bloqueios: string[];
+  habilitado_na_lista?: boolean;
+}
+
+interface TesteProvedor {
+  ok: boolean;
+  rotulo: string;
+  latencia_ms?: number;
+  resposta?: string;
+  erro?: string;
+}
+
+const ESTADO_RESERVA: Record<string, { rotulo: string; tom: "green" | "amber" | "red" | "muted" }> = {
+  ativo: { rotulo: "ligada", tom: "green" },
+  configurado: { rotulo: "configurada, fora da ordem", tom: "amber" },
+  bloqueado: { rotulo: "bloqueada", tom: "red" },
+  nao_configurado: { rotulo: "sem credencial", tom: "muted" },
+};
+
+/** IA de reserva: entra só quando a IA principal falha. O teste envia um texto fictício direto a cada reserva. */
+function IaReserva() {
+  const { dados, erro } = useCarregar<StatusProvedor[]>("/admin/provedores-ia");
+  const [testes, setTestes] = useState<Record<string, TesteProvedor | "testando">>({});
+  if (!dados) return <div className="mb-4 text-[12px] text-muted">{erro ?? "Carregando…"}</div>;
+  const reservas = dados.filter((p) => p.id !== "anthropic" && p.habilitado_na_lista);
+  async function testar(id: string) {
+    setTestes((t) => ({ ...t, [id]: "testando" }));
+    try {
+      const r = await api.post<TesteProvedor>(`/admin/provedores-ia/${id}/testar`, {});
+      setTestes((t) => ({ ...t, [id]: r }));
+    } catch (e) {
+      setTestes((t) => ({ ...t, [id]: { ok: false, rotulo: "", erro: e instanceof ApiError ? e.message : "Falha no teste." } }));
+    }
+  }
+  return (
+    <Card className="mb-4">
+      <SectionLabel>IA de reserva</SectionLabel>
+      <div className="mb-2 text-[11px] text-muted">
+        Usada só quando a IA principal fica fora do ar. O teste envia um texto fictício, sem dados de clientes.
+      </div>
+      {reservas.length === 0 ? (
+        <div className="text-[12px] text-muted">Nenhuma reserva na ordem de uso.</div>
+      ) : (
+        <div className="flex flex-col gap-2 text-[12px]">
+          {reservas.map((p, i) => {
+            const estado = ESTADO_RESERVA[p.estado] ?? { rotulo: p.estado, tom: "muted" as const };
+            const teste = testes[p.id];
+            return (
+              <div key={p.id} className="border-b border-border pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">IA reserva {i + 1}</span>
+                  <Badge tone={estado.tom}>{estado.rotulo}</Badge>
+                  <Button type="button" size="sm" variant="ghost" disabled={teste === "testando"} onClick={() => testar(p.id)}>
+                    {teste === "testando" ? "Testando…" : "Testar"}
+                  </Button>
+                </div>
+                {p.bloqueios.length > 0 && <div className="mt-0.5 text-[11px] text-red">{p.bloqueios.join("; ")}</div>}
+                {teste && teste !== "testando" && (
+                  <div className={`mt-0.5 text-[11px] ${teste.ok ? "text-green" : "text-red"}`}>
+                    {teste.ok ? `Respondeu em ${teste.latencia_ms} ms: "${teste.resposta}"` : `Falhou: ${teste.erro}`}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function FinOpsIa() {
   const { usuario } = useAuth();
   const [dias, setDias] = useState(30);
@@ -771,6 +845,7 @@ export function FinOpsIa() {
       <CatalogoVersionado />
       <Pacotes />
       <AjustesEConciliacao />
+      <IaReserva />
     </div>
   );
 }

@@ -205,3 +205,36 @@ def construir_provedor(db: Session, transport: httpx.BaseTransport | None = None
     ordem = {pid: i for i, pid in enumerate(_listados())}
     adicionais = [(d.id, d.construir(transport)) for d in sorted(ativos, key=lambda d: ordem[d.id])]
     return ProvedorComFallback(primario, adicionais, lambda pid: contar_sucessos_hoje(db, pid), settings.ai_fallback_limite_diario)
+
+
+_PROMPT_DE_TESTE = LLMRequest(
+    system="Responda em português do Brasil, em uma frase curta.",
+    prompt="Teste de conexão com dados fictícios: a empresa Exemplo Ltda. pediu uma proposta. Responda apenas 'conexão ok' e uma saudação.",
+    max_tokens=60,
+)
+
+
+def rotulo(provider_id: str) -> str:
+    """Rótulo exibido na tela (sem nome de fornecedor): a posição na ordem de reserva."""
+    lista = _listados()
+    return f"IA reserva {lista.index(provider_id) + 1}" if provider_id in lista else "IA reserva (fora da ordem)"
+
+
+def testar(provider_id: str, transport: httpx.BaseTransport | None = None) -> dict:
+    """Chama UM provedor adicional direto (sem passar pelo principal) com um texto fictício, para conferir credencial e modelo.
+    Não exige estar na lista nem a aprovação de privacidade, porque nenhum dado real é enviado."""
+    definicao = _POR_ID.get(provider_id)
+    if definicao is None:
+        raise KeyError(provider_id)
+    base = {"id": definicao.id, "rotulo": rotulo(definicao.id), "estado": avaliar(definicao)[0]}
+    if base["estado"] == "nao_configurado":
+        return {**base, "ok": False, "erro": "Credencial ou modelo ausente nas variáveis de ambiente."}
+    inicio = datetime.now(UTC)
+    try:
+        resposta = definicao.construir(transport).generate(_PROMPT_DE_TESTE)
+    except Exception as erro:  # o motivo vai para a tela e o log; a chave nunca entra na mensagem dos adapters
+        logger.warning("TESTE_PROVEDOR_IA_FALHOU provider=%s motivo=%s", definicao.id, erro)
+        return {**base, "ok": False, "erro": str(erro)}
+    latencia = int((datetime.now(UTC) - inicio).total_seconds() * 1000)
+    logger.info("TESTE_PROVEDOR_IA_OK provider=%s latencia_ms=%s", definicao.id, latencia)
+    return {**base, "ok": True, "latencia_ms": latencia, "resposta": resposta.content.strip()[:200]}
