@@ -1,9 +1,12 @@
+import logging
 import smtplib
 import time
 from email.message import EmailMessage
 
 from app.core.config import settings
 from app.providers.channels.email.base import EmailProvider, ResultadoEnvio, montar_html_com_pixel
+
+logger = logging.getLogger(__name__)
 
 
 _TENTATIVAS = 3
@@ -66,9 +69,12 @@ class SmtpEmailProvider(EmailProvider):
         for tentativa in range(1, _TENTATIVAS + 1):
             ultimo = self._enviar_uma_vez(mensagem)
             if ultimo.sucesso or not ultimo.transitoria:
-                return ultimo
+                break
             if tentativa < _TENTATIVAS:
                 time.sleep(_ESPERA_ENTRE_TENTATIVAS * tentativa)  # a rede costuma voltar em segundos (reinício do serviço, oscilação)
+        if ultimo is not None and not ultimo.sucesso:
+            # Vários chamadores (redefinição de senha, convites) ignoram o resultado: sem este log a falha sumia (visto em 05/11/2026).
+            logger.warning("SMTP_ENVIO_FALHOU remetente=%s motivo=%s", mensagem["From"], ultimo.motivo_falha)
         return ultimo
 
     def _enviar_uma_vez(self, mensagem: EmailMessage) -> ResultadoEnvio:
