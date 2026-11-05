@@ -82,4 +82,4 @@ termos pedem para não enviar dado pessoal ou confidencial. Só faria sentido no
   - `CLOUDFLARE_AI_MODELO=@cf/meta/llama-3.3-70b-instruct-fp8-fast` e `CLOUDFLARE_AI_APROVADO_DADOS_REAIS=true`;
   - as chaves e os planos (`gratuito`) foram salvos pelo PO.
 - Conferência: **AI FinOps → IA de reserva → Testar**. O botão envia um texto fictício direto a cada reserva.
-- Pendência: atualizar a Política de Privacidade para citar subprocessadores de IA nos EUA (sem nome de fornecedor na tela).
+- Política de Privacidade atualizada (seção 6). Teste real em 05/11/2026: as duas reservas responderam (Groq 375 ms, Cloudflare 1410 ms).
