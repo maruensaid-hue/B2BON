@@ -390,3 +390,28 @@ def test_cloudflare_diz_qual_credencial_esta_fora_do_formato_sem_mostrar_o_valor
     texto = str(erro.value)
     assert "CLOUDFLARE_AI_ACCOUNT_ID" in texto and "link" in texto and "CLOUDFLARE_AI_API_TOKEN" in texto and "Bearer" in texto
     assert "abc def" not in texto and "dash.cloudflare" not in texto and capturas == []
+
+
+def test_erro_do_provedor_traz_codigo_e_mensagem_sem_a_chave():
+    transporte, _ = _mock(httpx.Response(401, json={"errors": [{"code": 10000, "message": f"Authentication error {CHAVE}"}]}))
+    provedor = provedores.CloudflareWorkersAI(account_id="0123456789abcdef0123456789abcdef", chave=CHAVE, modelo="m", transport=transporte)
+    with pytest.raises(LLMFalhaDeProvedor) as erro:
+        provedor.generate(REQ)
+    assert "401: 10000 Authentication error ***" in str(erro.value) and CHAVE not in str(erro.value)
+
+
+def test_teste_do_cloudflare_com_401_consulta_a_verificacao_do_token(monkeypatch):
+    monkeypatch.setattr(settings, "cloudflare_ai_account_id", "0123456789abcdef0123456789abcdef")
+    monkeypatch.setattr(settings, "cloudflare_ai_api_token", CHAVE)
+    monkeypatch.setattr(settings, "cloudflare_ai_modelo", "@cf/m")
+
+    def responder(request):
+        if "/user/tokens/verify" in str(request.url):
+            return httpx.Response(401, json={"errors": [{"code": 1000, "message": "Invalid API Token"}]})
+        if "/tokens/verify" in str(request.url):
+            return httpx.Response(200, json={"result": {"status": "active"}})
+        return httpx.Response(401, json={"errors": [{"code": 10000, "message": "Authentication error"}]})
+
+    transporte, _ = _mock(responder)
+    resultado = fallback.testar("cloudflare", transport=transporte)
+    assert resultado["ok"] is False and "token da conta (status: active)" in resultado["erro"] and CHAVE not in resultado["erro"]

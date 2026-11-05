@@ -233,8 +233,14 @@ def testar(provider_id: str, transport: httpx.BaseTransport | None = None) -> di
     try:
         resposta = definicao.construir(transport).generate(_PROMPT_DE_TESTE)
     except Exception as erro:  # o motivo vai para a tela e o log; a chave nunca entra na mensagem dos adapters
-        logger.warning("TESTE_PROVEDOR_IA_FALHOU provider=%s motivo=%s", definicao.id, erro)
-        return {**base, "ok": False, "erro": str(erro)}
+        motivo = str(erro)
+        if definicao.id == "cloudflare" and " 401" in motivo:
+            try:
+                motivo += " Verificação do token: " + definicao.construir(transport).verificar_token() + "."
+            except Exception as falha:  # a verificação é só diagnóstico: nunca derruba o teste
+                motivo += f" (verificação do token indisponível: {type(falha).__name__})"
+        logger.warning("TESTE_PROVEDOR_IA_FALHOU provider=%s motivo=%s", definicao.id, motivo)
+        return {**base, "ok": False, "erro": motivo}
     latencia = int((datetime.now(UTC) - inicio).total_seconds() * 1000)
     logger.info("TESTE_PROVEDOR_IA_OK provider=%s latencia_ms=%s", definicao.id, latencia)
     return {**base, "ok": True, "latencia_ms": latencia, "resposta": resposta.content.strip()[:200]}

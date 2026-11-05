@@ -34,7 +34,8 @@ class _ProvedorHttp(LLMProvider):
         except httpx.HTTPError as erro:
             raise LLMFalhaDeProvedor(f"{self.id}: falha de rede ({type(erro).__name__}).") from erro
         if resposta.status_code != 200:
-            raise LLMFalhaDeProvedor(f"{self.id} respondeu {resposta.status_code}.")
+            detalhe = self._detalhe_do_erro(resposta)
+            raise LLMFalhaDeProvedor(f"{self.id} respondeu {resposta.status_code}" + (f": {detalhe}" if detalhe else "") + ".")
         try:
             dados = resposta.json()
         except ValueError as erro:
@@ -42,6 +43,24 @@ class _ProvedorHttp(LLMProvider):
         if not isinstance(dados, dict):
             raise LLMFalhaDeProvedor(f"{self.id} devolveu uma resposta fora do formato esperado.")
         return dados
+
+    def _detalhe_do_erro(self, resposta: httpx.Response) -> str:
+        """Código/mensagem que o provedor devolve no erro (sem a chave): só "respondeu 401" não dizia o que corrigir (visto em 05/11/2026)."""
+        try:
+            dados = resposta.json()
+        except ValueError:
+            return ""
+        partes: list[str] = []
+        if isinstance(dados, dict):
+            erros = dados.get("errors")
+            if isinstance(erros, list):  # formato Cloudflare
+                partes = [f"{e.get('code')} {e.get('message')}" for e in erros if isinstance(e, dict)]
+            elif isinstance(dados.get("error"), dict):  # formato OpenAI (Groq/OpenRouter)
+                partes = [str(dados["error"].get("message") or dados["error"].get("code") or "")]
+        texto = "; ".join(p for p in partes if p.strip())
+        if self._chave:
+            texto = texto.replace(self._chave, "***")
+        return texto[:200]
 
     def _texto_valido(self, texto: object) -> str:
         if not isinstance(texto, str) or not texto.strip():
@@ -113,6 +132,23 @@ class CloudflareWorkersAI(_ProvedorHttp):
                              + ("; não inclua a palavra Bearer" if self._chave.lower().startswith("bearer") else ""))
         if problemas:
             raise LLMFalhaDeProvedor("cloudflare: " + "; ".join(problemas) + ".")
+
+    def verificar_token(self) -> str:
+        """Pergunta ao Cloudflare se o token é válido (token de usuário e, se não for, token da conta). Só para o botão de teste."""
+        cabecalhos = {"Authorization": f"Bearer {self._chave}"}
+        resultados = []
+        for nome, url in (("token de usuário", "https://api.cloudflare.com/client/v4/user/tokens/verify"),
+                          ("token da conta", f"https://api.cloudflare.com/client/v4/accounts/{self._account_id}/tokens/verify")):
+            try:
+                resposta = self._cliente.get(url, headers=cabecalhos)
+            except httpx.HTTPError as erro:
+                resultados.append(f"{nome}: sem resposta ({type(erro).__name__})")
+                continue
+            if resposta.status_code == 200:
+                status = ((resposta.json() or {}).get("result") or {}).get("status", "?")
+                return f"o Cloudflare reconhece o token como {nome} (status: {status}); se ele está ativo, falta a permissão Workers AI ou o Account ID é de outra conta"
+            resultados.append(f"{nome}: {resposta.status_code} {self._detalhe_do_erro(resposta)}".strip())
+        return "o Cloudflare não reconhece o token (" + "; ".join(resultados) + "): crie um novo em Workers AI → Use REST API"
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         self._conferir_credenciais()
