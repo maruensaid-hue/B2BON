@@ -11,7 +11,7 @@ export function Privacidade() {
 
       <Card>
         <div className="mb-1 font-head text-xl font-bold">Política de Privacidade — B2B ON</div>
-        <div className="mb-5 text-[11px] text-muted">Última atualização: agosto de 2026</div>
+        <div className="mb-5 text-[11px] text-muted">Última atualização: novembro de 2026</div>
 
         <div className="flex flex-col gap-4 text-[13px] leading-relaxed text-text">
           <p>
@@ -96,7 +96,24 @@ export function Privacidade() {
           </div>
 
           <div>
-            <div className="mb-1.5 font-semibold text-cyan">6. Alterações</div>
+            <div className="mb-1.5 font-semibold text-cyan">
+              6. Suboperadores e transferência internacional
+            </div>
+            <p>
+              Para operar a plataforma, a CyberFort usa prestadores de infraestrutura (hospedagem,
+              banco de dados, envio de e-mail e de mensagens) e de inteligência artificial
+              (redação de mensagens, resumos e análises). Parte desses prestadores fica fora do
+              Brasil, principalmente nos Estados Unidos, e os dados podem ser processados lá. A
+              transferência segue o art. 33 da LGPD: só usamos prestadores que se comprometem por
+              contrato com padrões de segurança e confidencialidade, e os serviços de inteligência
+              artificial que usamos não usam o conteúdo enviado pela plataforma para treinar seus
+              modelos. Quando o serviço principal de inteligência artificial fica indisponível, a
+              mesma tarefa pode ser feita por um serviço de reserva sob as mesmas condições.
+            </p>
+          </div>
+
+          <div>
+            <div className="mb-1.5 font-semibold text-cyan">7. Alterações</div>
             <p>
               Esta política pode ser atualizada para refletir mudanças na plataforma ou na
               legislação. A data no topo desta página indica a versão vigente.
