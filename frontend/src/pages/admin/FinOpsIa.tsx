@@ -767,7 +767,7 @@ function IaReserva() {
   const { dados, erro } = useCarregar<StatusProvedor[]>("/admin/provedores-ia");
   const [testes, setTestes] = useState<Record<string, TesteProvedor | "testando">>({});
   if (!dados) return <div className="mb-4 text-[12px] text-muted">{erro ?? "Carregando…"}</div>;
-  const reservas = dados.filter((p) => p.id !== "anthropic" && p.habilitado_na_lista);
+  const reservas = dados.filter((p) => p.habilitado_na_lista === true);
   async function testar(id: string) {
     setTestes((t) => ({ ...t, [id]: "testando" }));
     try {
