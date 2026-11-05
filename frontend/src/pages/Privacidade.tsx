@@ -105,9 +105,7 @@ export function Privacidade() {
               (redação de mensagens, resumos e análises). Parte desses prestadores fica fora do
               Brasil, principalmente nos Estados Unidos, e os dados podem ser processados lá. A
               transferência segue o art. 33 da LGPD: só usamos prestadores que se comprometem por
-              contrato com padrões de segurança e confidencialidade, e os serviços de inteligência
-              artificial que usamos não usam o conteúdo enviado pela plataforma para treinar seus
-              modelos. Quando o serviço principal de inteligência artificial fica indisponível, a
+              contrato com padrões de segurança e confidencialidade. Quando o serviço principal de inteligência artificial fica indisponível, a
               mesma tarefa pode ser feita por um serviço de reserva sob as mesmas condições.
             </p>
           </div>
