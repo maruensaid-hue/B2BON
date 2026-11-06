@@ -103,3 +103,25 @@ def test_status_da_meta_vira_o_status_que_a_cadencia_filtra(db_session, monkeypa
     lista = whatsapp_service.sincronizar_templates(db_session, TENANT, _provider())
 
     assert {t.nome: t.status for t in lista} == {"confirmacao": "aprovado", "novo": "pendente", "recusado": "rejeitado"}
+
+
+def test_envio_de_toque_usa_o_nome_do_modelo_mesmo_quando_o_toque_guarda_o_id_local(db_session):
+    """Visto em produção em 06/11/2026: o toque da cadência guarda o id local do modelo ("11"), e o envio mandava "11" para a Meta
+    como nome do modelo, o que a Meta recusa. A campanha guarda o nome; os dois precisam funcionar."""
+    from app.models.decisor import Decisor
+    from app.models.mensagem import Mensagem
+    from app.providers.channels.whatsapp.stub import StubWhatsAppProvider
+    from app.services import envio_service
+
+    modelo = TemplateWhatsApp(tenant_id=TENANT, nome="confirmacao", corpo="Olá!", status="aprovado")
+    db_session.add(modelo)
+    db_session.commit()
+    decisor = Decisor(tenant_id=TENANT, conta_id=999999, nome="Ana", telefone="+5511999990000")
+    provider = StubWhatsAppProvider()
+
+    for referencia in (str(modelo.id), "confirmacao"):
+        mensagem = Mensagem(tenant_id=TENANT, canal="whatsapp", template_id=referencia, conteudo="Olá!")
+        envio_service._processar_whatsapp(db_session, mensagem, decisor, provider)
+
+    assert [envio["template_id"] for envio in provider.envios] == ["confirmacao", "confirmacao"]
+    assert whatsapp_service.nome_do_template_para_envio(db_session, TENANT, "nao_existe") == "nao_existe"

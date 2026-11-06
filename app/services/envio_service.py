@@ -112,7 +112,8 @@ def _processar_whatsapp(
             mensagem.motivo_falha = "WhatsApp sem template indisponível para esta conta (desligado ou recusado pela Meta): aguardando."
         return resultado
     variavel_botao = _variavel_botao_whatsapp(db, decisor)
-    return provider.enviar_template(decisor.telefone, mensagem.template_id, {}, variavel_botao)
+    nome_template = whatsapp_service.nome_do_template_para_envio(db, mensagem.tenant_id, mensagem.template_id)
+    return provider.enviar_template(decisor.telefone, nome_template, {}, variavel_botao)
 
 
 def _processar_email(

@@ -87,7 +87,7 @@ def test_mensagens_personalizadas_usam_dados_do_decisor(
     assert corpo["mensagens_geradas"] == 5
 
     prompts = [chamada.prompt for chamada in fake_llm.chamadas]
-    assert len(prompts) == 5
+    assert len(prompts) == 4  # o toque de WhatsApp usa o modelo aprovado, sem IA
     assert all(decisor.nome in prompt and conta.nome in prompt for prompt in prompts)
     # a descrição/diferenciais/provas sociais da oferta e as dores/gatilhos do
     # ICP precisam alimentar o texto gerado, não só o nome da oferta
@@ -139,13 +139,12 @@ def test_toque_email_extrai_assunto_do_formato_da_ia(
     (assunto=None, texto inteiro vira conteudo), nunca derruba o toque."""
     conta, _ = criar_conta_com_decisor()
     cadencia = criar_cadencia()
-    # toques 1, 3, 5 são email; 2 e 4 são whatsapp (cadência-padrão).
+    # toques 1, 3, 5 são email; 2 é whatsapp com modelo (não chama a IA); 4 é linkedin.
     fake_llm.definir_respostas(
         [
             "ASSUNTO: Proposta para sua empresa\nCORPO:\nOlá, temos uma solução para você.",
-            "Mensagem de whatsapp normal.",
             "Mensagem de prospecção sem o formato esperado.",
-            "Outra mensagem de whatsapp.",
+            "Mensagem de linkedin.",
             "ASSUNTO: Follow-up\nCORPO:\nSegunda tentativa de contato.",
         ]
     )
@@ -223,7 +222,7 @@ def test_gerar_retenta_quando_texto_viola_restricao_e_recupera(
     conta, _ = criar_conta_com_decisor()
     cadencia = criar_cadencia()
     # 5 toques x (1 resposta violadora + 1 válida) = 10 respostas.
-    fake_llm.definir_respostas(["Fale com a concorrente x." if i % 2 == 0 else "Mensagem válida." for i in range(10)])
+    fake_llm.definir_respostas(["Fale com a concorrente x." if i % 2 == 0 else "Mensagem válida." for i in range(8)])
 
     resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
 
@@ -231,7 +230,7 @@ def test_gerar_retenta_quando_texto_viola_restricao_e_recupera(
     corpo = resposta.json()
     assert corpo["mensagens_geradas"] == 5
     assert corpo["toques_bloqueados_restricao"] == 0
-    assert len(fake_llm.chamadas) == 10
+    assert len(fake_llm.chamadas) == 8
 
 
 def test_gerar_avisa_quando_toque_so_viola_restricao_apos_todas_as_tentativas(
@@ -245,17 +244,17 @@ def test_gerar_avisa_quando_toque_so_viola_restricao_apos_todas_as_tentativas(
     configurar_comunicacao(restricoes=["empresa"])
     conta, _ = criar_conta_com_decisor()
     cadencia = criar_cadencia()
-    fake_llm.definir_respostas(["Fale com a empresa deles."] * 15)  # 5 toques x 3 tentativas
+    fake_llm.definir_respostas(["Fale com a empresa deles."] * 12)  # 4 toques com IA x 3 tentativas
 
     resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
 
     assert resposta.status_code == 200
     corpo = resposta.json()
-    assert corpo["mensagens_geradas"] == 0
-    assert corpo["toques_bloqueados_restricao"] == 5
+    assert corpo["mensagens_geradas"] == 1  # só o toque de WhatsApp, que usa o modelo aprovado
+    assert corpo["toques_bloqueados_restricao"] == 4
 
     pendentes = client.get("/api/v1/aprovacoes", params={"status": "pendente"}).json()
-    assert pendentes == []
+    assert [item["canal"] for item in pendentes] == ["whatsapp"]
 
 
 def test_gerar_recupera_de_falha_intermitente_da_ia(
@@ -325,8 +324,8 @@ def test_gerar_nao_derruba_lote_inteiro_quando_ia_falha_persistentemente(
 
     assert resposta.status_code == 200
     corpo = resposta.json()
-    assert corpo["mensagens_geradas"] == 0
-    assert corpo["toques_falha_ia"] == 5
+    assert corpo["mensagens_geradas"] == 1  # o toque de WhatsApp usa o modelo aprovado, sem IA
+    assert corpo["toques_falha_ia"] == 4
     assert corpo["toques_bloqueados_restricao"] == 0
 
 
@@ -754,3 +753,32 @@ def test_definir_cancelamento_ao_responder(client, criar_cadencia):
     assert resposta.status_code == 200
     assert resposta.json()["cancelar_ao_responder"] is True
     assert client.get(f"/api/v1/cadencias/{cadencia['id']}").json()["cancelar_ao_responder"] is True
+
+
+def test_toque_whatsapp_com_modelo_usa_o_texto_do_modelo_e_nao_chama_a_ia(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm, db_session
+):
+    """Visto em produção em 06/11/2026: com um modelo aprovado no toque de WhatsApp, a IA escrevia uma mensagem nova, que aparecia
+    na aprovação mas nunca saía (o envio usa o modelo). Agora a aprovação mostra o texto do modelo; a tela grava o id local."""
+    from app.models.template_whatsapp import TemplateWhatsApp
+
+    modelo = TemplateWhatsApp(tenant_id="tenant-teste", nome="confirmacao", corpo="Olá! Confirmando nossa conversa.", status="aprovado")
+    db_session.add(modelo)
+    db_session.commit()
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    toques = client.get(f"/api/v1/cadencias/{cadencia['id']}/toques").json()
+    toque_whatsapp = next(t for t in toques if t["canal"] == "whatsapp")
+    definido = client.put(
+        f"/api/v1/cadencias/{cadencia['id']}/toques/{toque_whatsapp['id']}/template-whatsapp",
+        json={"template_whatsapp_id": str(modelo.id)},
+    )
+    assert definido.status_code == 200
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    assert resposta.status_code == 200
+    assert all("canal whatsapp" not in chamada.prompt for chamada in fake_llm.chamadas)
+    itens = client.get("/api/v1/aprovacoes", params={"cadencia_id": cadencia["id"]}).json()
+    item_whatsapp = next(item for item in itens if item["canal"] == "whatsapp")
+    assert item_whatsapp["conteudo"] == "Olá! Confirmando nossa conversa."

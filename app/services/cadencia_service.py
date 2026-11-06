@@ -773,6 +773,17 @@ def gerar_para_lote(
         contas_processadas.append(conta_id)
         for toque in toques:
             variante = variante_ab_para_decisor(decisor.id) if toque.ab_teste_habilitado else None
+            if toque.canal == "whatsapp" and toque.template_whatsapp_id and not toque.whatsapp_sem_template:
+                # Toque com modelo aprovado: o que sai é o modelo, não um texto da IA. Antes a IA escrevia uma mensagem nova, que
+                # aparecia na aprovação mas nunca era enviada (visto em produção em 06/11/2026). A aprovação mostra o texto do modelo.
+                template = whatsapp_service.resolver_template(db, tenant_id, toque.template_whatsapp_id)
+                conteudo = template.corpo if template is not None else f"Modelo aprovado: {toque.template_whatsapp_id}"
+                aprovacao_service.criar_proposta(
+                    db, tenant_id, cadencia.id, decisor.id, toque.canal, toque.template_whatsapp_id, conteudo, plan_limits,
+                    toque_cadencia_id=toque.id, variante_ab=None, assunto=None, whatsapp_modo=None,
+                )
+                mensagens_geradas += 1
+                continue
             conteudo, assunto, falhou_por_erro_ia = _gerar_conteudo_toque(
                 db, llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal], lista
             )

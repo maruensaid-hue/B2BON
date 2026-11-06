@@ -22,6 +22,23 @@ def _status_local(status: str | None) -> str:
     return _STATUS_META.get(valor, valor)
 
 
+def resolver_template(db: Session, tenant_id: str, referencia: str | None) -> TemplateWhatsApp | None:
+    """O toque da cadência guarda o id local do modelo ("11"); a campanha guarda o nome ("confirmacao"). Aceita os dois.
+    Antes o id local ia direto para a Meta como nome do modelo, e a Meta recusaria o envio (visto em produção em 06/11/2026)."""
+    if not referencia:
+        return None
+    if referencia.isdigit():
+        por_id = db.query(TemplateWhatsApp).filter_by(tenant_id=tenant_id, id=int(referencia)).one_or_none()
+        if por_id is not None:
+            return por_id
+    return db.query(TemplateWhatsApp).filter_by(tenant_id=tenant_id, nome=referencia).one_or_none()
+
+
+def nome_do_template_para_envio(db: Session, tenant_id: str, referencia: str) -> str:
+    template = resolver_template(db, tenant_id, referencia)
+    return template.nome if template is not None else referencia
+
+
 def sincronizar_templates(db: Session, tenant_id: str, provider: WhatsAppProvider) -> list[TemplateWhatsApp]:
     """Status de aprovação visível (E3-H2): sincroniza os templates do
     provedor para o cache local. Se a Meta não devolver nada (falha ou instabilidade), mostra o que já está guardado em vez de uma
