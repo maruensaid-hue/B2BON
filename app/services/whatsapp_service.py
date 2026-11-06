@@ -12,6 +12,16 @@ from app.services import auditoria_service
 from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 
 
+_STATUS_META = {"approved": "aprovado", "pending": "pendente", "rejected": "rejeitado"}
+
+
+def _status_local(status: str | None) -> str:
+    """A Meta devolve APPROVED/PENDING/REJECTED; o resto do sistema (filtro da cadência) usa aprovado/pendente/rejeitado.
+    Sem isto o modelo aprovado não aparecia para escolher no toque de WhatsApp (visto em produção em 06/11/2026)."""
+    valor = (status or "pending").strip().lower()
+    return _STATUS_META.get(valor, valor)
+
+
 def sincronizar_templates(db: Session, tenant_id: str, provider: WhatsAppProvider) -> list[TemplateWhatsApp]:
     """Status de aprovação visível (E3-H2): sincroniza os templates do
     provedor para o cache local. Se a Meta não devolver nada (falha ou instabilidade), mostra o que já está guardado em vez de uma
@@ -23,11 +33,11 @@ def sincronizar_templates(db: Session, tenant_id: str, provider: WhatsAppProvide
     for info in lidos:
         existente = db.query(TemplateWhatsApp).filter_by(tenant_id=tenant_id, nome=info.nome).one_or_none()
         if existente is None:
-            existente = TemplateWhatsApp(tenant_id=tenant_id, nome=info.nome, corpo=info.corpo, status=info.status)
+            existente = TemplateWhatsApp(tenant_id=tenant_id, nome=info.nome, corpo=info.corpo, status=_status_local(info.status))
             db.add(existente)
         else:
             existente.corpo = info.corpo
-            existente.status = info.status
+            existente.status = _status_local(info.status)
         resultado.append(existente)
 
     db.commit()
@@ -73,7 +83,7 @@ def criar_template(db: Session, tenant_id: str, ator_id: str | None, provider: W
     criado = provider.criar_template(nome, categoria, corpo, rodape)
     if criado.erro:
         raise RegraNegocioViolada(f"A Meta não aceitou o modelo: {criado.erro}")
-    template = TemplateWhatsApp(tenant_id=tenant_id, nome=nome, corpo=corpo, status=criado.status or "pending")
+    template = TemplateWhatsApp(tenant_id=tenant_id, nome=nome, corpo=corpo, status=_status_local(criado.status))
     db.add(template)
     db.flush()
     auditoria_service.registrar(db, tenant_id, "whatsapp_template_criado", "template_whatsapp", template.id, ator_id,

@@ -44,7 +44,7 @@ def test_cria_na_conta_do_tenant_com_nome_normalizado_e_guarda_o_status(db_sessi
     assert corpo["name"] == "retorno_do_contato" and corpo["language"] == "pt_BR" and corpo["category"] == "UTILITY"
     assert corpo["components"] == [{"type": "BODY", "text": "Olá! Retornando o contato que você pediu."},
                                    {"type": "FOOTER", "text": "Responda SAIR para não receber mais"}]
-    assert template.status == "pending"
+    assert template.status == "pendente"
     assert db_session.query(TemplateWhatsApp).filter_by(tenant_id=TENANT, nome="retorno_do_contato").count() == 1
 
 
@@ -89,3 +89,17 @@ def test_meta_sem_resposta_mostra_os_modelos_guardados_em_vez_de_lista_vazia(db_
     lista = whatsapp_service.sincronizar_templates(db_session, TENANT, _provider())
 
     assert [t.nome for t in lista] == ["retorno_contato"]
+
+
+def test_status_da_meta_vira_o_status_que_a_cadencia_filtra(db_session, monkeypatch):
+    """A cadência só lista modelos com status "aprovado"; a Meta devolve APPROVED (produção, 06/11/2026)."""
+    db_session.add(TemplateWhatsApp(tenant_id=TENANT, nome="confirmacao", corpo="x", status="approved"))
+    db_session.commit()
+    dados = {"data": [{"name": "confirmacao", "status": "APPROVED", "components": [{"type": "BODY", "text": "Olá"}]},
+                      {"name": "novo", "status": "PENDING", "components": [{"type": "BODY", "text": "Oi"}]},
+                      {"name": "recusado", "status": "REJECTED", "components": [{"type": "BODY", "text": "Ei"}]}]}
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _Resposta(200, dados))
+
+    lista = whatsapp_service.sincronizar_templates(db_session, TENANT, _provider())
+
+    assert {t.nome: t.status for t in lista} == {"confirmacao": "aprovado", "novo": "pendente", "recusado": "rejeitado"}
