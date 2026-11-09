@@ -273,6 +273,11 @@ class Settings(BaseSettings):
     enriquecimento_item_enviado_stale_min: int = 10  # empresa "enviada" há mais que isso sem resposta vira "ambígua" (não é repetida)
     enriquecimento_max_selecao_requisicao: int = 500  # teto de ids aceitos numa requisição (proteção de entrada, não regra de plano)
     enriquecimento_estorno_exige_segundo_aprovador: bool = True  # estorno/chargeback de pacote: quem solicita não aprova (quatro olhos)
+    # Gerenciador de recursos (`app/contexts/enriquecimento/gerenciador.py`): fontes gratuitas/freemium antes do provedor pago. DESLIGADO por padrão;
+    # ligar só depois de conferir os termos do fornecedor e a chave. Desligado, a pesquisa de decisores se comporta exatamente como antes.
+    enriquecimento_gerenciador_ativo: bool = False
+    enriquecimento_cache_dias: int = 90  # validade da resposta de uma fonte para uma empresa: dentro dela, não se consulta a mesma fonte de novo
+    hunter_api_key: str = ""  # plano gratuito: 50 créditos/mês, 10 resultados por consulta; vazio = fonte indisponível
 
     # Brave Search API — descobre o site oficial de uma conta sem domínio
     # cadastrado (`conta_service.enriquecer`). Vazio usa StubWebSearchProvider

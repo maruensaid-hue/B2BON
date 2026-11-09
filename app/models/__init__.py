@@ -87,6 +87,7 @@ from app.models.enriquecimento_creditos import (
     PesquisaDecisoresEmpresa,
     PesquisaDecisoresTransicao,
 )
+from app.models.enriquecimento_fontes import EnriquecimentoConsulta, EnriquecimentoFonte
 from app.models.documento_ri import DocumentoRi, IndicadorRi
 from app.models.documento_licitacao import DocumentoLicitacao
 from app.models.requisito_licitacao import RequisitoLicitacao
@@ -229,6 +230,8 @@ __all__ = [
     "EnriquecimentoPagamentoProvedor",
     "EnriquecimentoConfigPlano",
     "EnriquecimentoLoteCompra",
+    "EnriquecimentoConsulta",
+    "EnriquecimentoFonte",
     "EnriquecimentoMovimento",
     "EnriquecimentoOrcamentoGlobal",
     "EnriquecimentoPacote",

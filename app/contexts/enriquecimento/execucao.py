@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from app.contexts.enriquecimento import ledger, precos
+from app.contexts.enriquecimento import gerenciador, ledger, precos
 from app.contexts.enriquecimento.config import PoliticaResolvida, agora_utc, obter_politica
 from app.contexts.enriquecimento.pesquisa import (
     FALHAS_SEGUIDAS_PARA_PARAR,
@@ -25,7 +25,7 @@ from app.contexts.enriquecimento.pesquisa import (
 from app.core.config import settings
 from app.graph.client import Neo4jClient
 from app.models.conta import Conta
-from app.models.enriquecimento_creditos import PesquisaDecisores, PesquisaDecisoresEmpresa
+from app.models.enriquecimento_creditos import EnriquecimentoMovimento, PesquisaDecisores, PesquisaDecisoresEmpresa
 from app.models.lista_prospeccao import ListaProspeccao
 from app.providers.contact_enrichment.base import ContactEnrichmentProvider, FiltroContatos, ResultadoBuscaContatos
 from app.services import atividade_service, auditoria_service
@@ -62,7 +62,54 @@ def _liquidar_item(db: Session, pesquisa: PesquisaDecisores, item: PesquisaDecis
     elif medidos > reservados:
         pesquisa.requer_reconciliacao = True
         logger.error("ENRIQUECIMENTO_ACIMA_DO_RESERVADO pesquisa=%s item=%s medido=%s reservado=%s", pesquisa.id, item.id, medidos, reservados)
-    item.provedor_medidos, item.creditos_consumidos = medidos, medidos * fator
+    item.provedor_medidos, item.creditos_consumidos = medidos, medidos * fator + _cobrado_das_fontes_gratuitas(db, pesquisa, item)
+
+
+def _cobrado_das_fontes_gratuitas(db: Session, pesquisa: PesquisaDecisores, item: PesquisaDecisoresEmpresa) -> int:
+    """Créditos do cliente já debitados nesta empresa por decisores vindos de fontes gratuitas (0 se não houve). Lido do razão: repetir a liquidação
+    nunca soma duas vezes."""
+    lancamento = db.query(EnriquecimentoMovimento).filter_by(tenant_id=pesquisa.tenant_id, idempotency_key=f"gratuito:{item.id}").one_or_none()
+    return -lancamento.delta_saldo if lancamento is not None else 0
+
+
+def _etapa_gratuita(db: Session, pesquisa: PesquisaDecisores, item: PesquisaDecisoresEmpresa, conta: Conta, politica: PoliticaResolvida, graph: Neo4jClient,
+                    ator_id: str | None, agora: datetime, provedores: list[ContactEnrichmentProvider] | None) -> gerenciador.ResultadoCascata | None:
+    """Cascata gratuita ANTES do provedor pago (só com `enriquecimento_gerenciador_ativo`). Devolve None quando não se aplica ou falhou (aí o fluxo
+    é exatamente o de sempre).
+
+    Cobrança: o que veio do cadastro que a empresa já tinha não é decisor novo e não custa nada; cada decisor NOVO achado por fonte gratuita custa
+    1 crédito do cliente, tirado da reserva desta empresa (a reserva foi dimensionada para o provedor pago e é maior que isso). Só com
+    `creditos_cliente_por_credito_provedor == 1`: com outro fator a conversão para a reserva do provedor não é exata, e então a etapa não roda."""
+    if not settings.enriquecimento_gerenciador_ativo:
+        return None
+    if _cobrado_das_fontes_gratuitas(db, pesquisa, item) > 0:  # já cobrada (repetição da mesma empresa): nunca cobra nem desconta a reserva duas vezes
+        return None
+    if politica.creditos_cliente_por_credito_provedor != 1:
+        logger.warning("ENRIQUECIMENTO_GRATUITO_PULADO pesquisa=%s: fator de conversão diferente de 1", pesquisa.id)
+        return None
+    necessidade = gerenciador.Necessidade(item.decisores_solicitados, exige_email=pesquisa.revelar_emails, exige_telefone=pesquisa.revelar_telefones)
+    try:
+        with db.begin_nested():  # falha no meio desfaz só a etapa gratuita
+            resultado = gerenciador.completar(db, pesquisa.tenant_id, conta, necessidade, graph=graph, ator_id=ator_id, provedores=provedores,
+                                              ignorar_origem=pesquisa.provedor, agora=agora, item_id=item.id)
+            cobrar = min(resultado.novos_gratuitos, item.provedor_reservados)
+            if resultado.novos_gratuitos > cobrar:  # nunca debita além da reserva: o que passar disso é registrado para revisão
+                logger.error("ENRIQUECIMENTO_GRATUITO_ACIMA_DA_RESERVA pesquisa=%s item=%s novos=%s reservado=%s", pesquisa.id, item.id,
+                             resultado.novos_gratuitos, item.provedor_reservados)
+            if cobrar > 0:
+                ledger.travar_carteira(db, pesquisa.tenant_id)
+                ledger.lancar(db, pesquisa.tenant_id, "CONSUMO", delta_saldo=-cobrar, delta_reservado=-cobrar, provedor_delta_reservado=-cobrar,
+                              provedor=pesquisa.provedor, pesquisa_id=pesquisa.id, item_id=item.id, origem="fonte_gratuita",
+                              motivo=f"decisores_novos={cobrar}", ator_id=ator_id, idempotency_key=f"gratuito:{item.id}", agora=agora,
+                              custo_total_brl=precos.valor(0, politica.custo_unitario_brl), valor_venda_brl=precos.valor(cobrar, politica.preco_unitario_brl),
+                              preco_unitario_brl=politica.preco_unitario_brl, politica_id=politica.id)
+                item.provedor_reservados -= cobrar
+                item.creditos_reservados -= cobrar  # o que a empresa ainda segura da reserva é o que sobrou
+                item.creditos_consumidos = cobrar
+            return resultado
+    except Exception:  # noqa: BLE001 — a etapa gratuita é opcional: nunca impede a pesquisa paga
+        logger.exception("ENRIQUECIMENTO_GRATUITO_FALHOU pesquisa=%s item=%s", pesquisa.id, item.id)
+        return None
 
 
 def _marcar_envios_antigos_como_ambiguos(db: Session, pesquisa: PesquisaDecisores, agora: datetime) -> None:
@@ -119,7 +166,7 @@ def _medicao(provider: ContactEnrichmentProvider, resultado: ResultadoBuscaConta
 
 
 def executar(db: Session, *, tenant_id: str, pesquisa_id: str, provider: ContactEnrichmentProvider, graph: Neo4jClient,
-             ator_id: str | None, agora: datetime | None = None) -> PesquisaDecisores:
+             ator_id: str | None, agora: datetime | None = None, gratuitos: list[ContactEnrichmentProvider] | None = None) -> PesquisaDecisores:
     """Envia ao provedor, empresa por empresa, o que está reservado. Só avança de `reservada`/`enviada`; retomar uma pesquisa interrompida
     processa apenas as empresas ainda `pendente` (nunca repete uma já enviada)."""
     # Import tardio: o contrato do PREDATOR puxa a cadeia de contextos (sourcing → intelligence) e, importado primeiro, quebra por ciclo já
@@ -161,6 +208,21 @@ def executar(db: Session, *, tenant_id: str, pesquisa_id: str, provider: Contact
         _registrar_transicao(db, pesquisa, "enviado", "chamada_ao_provedor", ator_id, item=item, anterior="pendente")
         db.commit()  # rastro gravado antes de o provedor ser chamado
 
+        gratis = _etapa_gratuita(db, pesquisa, item, conta, politica, graph, ator_id, agora, gratuitos)
+        if gratis is not None and gratis.restante <= 0:  # as fontes gratuitas cobriram tudo: o provedor pago nem é chamado
+            item.decisores_retornados = gratis.encontrados
+            _liquidar_item(db, pesquisa, item, 0, origem="execucao", motivo="atendido_por_fontes_gratuitas", ator_id=ator_id, agora=agora_utc(), politica=politica)
+            _mudar_estado_item(db, pesquisa, item, "concluido", f"fontes_gratuitas banco={gratis.atendidos_pelo_banco} novos={gratis.novos_gratuitos}", ator_id)
+            atividade_service.registrar(db, tenant_id, conta_id=conta.id, tipo="sistema",
+                                        descricao=f"Pesquisa de decisores: {gratis.novos_gratuitos} decisor(es) novo(s) sem usar o provedor pago", ator_id=ator_id)
+            auditoria_service.registrar(db, tenant_id, "decisores_pesquisados", "conta", conta.id, ator_id,
+                                        {"pesquisa_id": pesquisa.id, "novos": gratis.novos_gratuitos, "creditos_provedor": 0}, conta_id=conta.id)
+            seguidas = 0
+            db.commit()
+            continue
+        if gratis is not None and gratis.encontrados:
+            filtro = filtro.model_copy(update={"limite_contatos": gratis.restante})  # o provedor pago só busca o que as gratuitas não cobriram
+
         try:
             resultado = provider.buscar_contatos_governado(filtro)
         except Exception:  # noqa: BLE001 — qualquer exceção depois do envio é desfecho desconhecido
@@ -174,7 +236,7 @@ def executar(db: Session, *, tenant_id: str, pesquisa_id: str, provider: Contact
             resultado = ResultadoBuscaContatos(estado="ambiguo", detalhe="medicao_ausente", ids_provedor=resultado.ids_provedor)
         if resultado.estado == "ok":
             novos = registrar_candidatos(db, tenant_id, conta, resultado.contatos[: item.decisores_solicitados], graph)
-            item.decisores_retornados = len(resultado.contatos)
+            item.decisores_retornados = len(resultado.contatos) + (gratis.encontrados if gratis is not None else 0)
             item.decisores_com_linkedin = sum(1 for c in resultado.contatos[: item.decisores_solicitados] if getattr(c, "linkedin_url", None))
             _liquidar_item(db, pesquisa, item, medidos, origem="execucao", motivo=f"medido={medidos}", ator_id=ator_id, agora=agora_item, politica=politica)
             _mudar_estado_item(db, pesquisa, item, "concluido", f"revelados={len(resultado.contatos)} creditos_provedor={medidos}", ator_id)

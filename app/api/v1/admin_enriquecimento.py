@@ -9,7 +9,21 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_contact_enrichment_provider, get_db, get_fiscal_provider
-from app.contexts.enriquecimento.contract import conciliacao, config, custo, estornos, execucao, ledger, matriz, pacotes, painel, poc, vendas
+from app.contexts.enriquecimento.contract import (
+    conciliacao,
+    config,
+    custo,
+    estornos,
+    execucao,
+    gerenciador,
+    indicadores,
+    ledger,
+    matriz,
+    pacotes,
+    painel,
+    poc,
+    vendas,
+)
 from app.models.enriquecimento_creditos import (
     EnriquecimentoCompra,
     EnriquecimentoCustoProvedor,
@@ -208,6 +222,47 @@ def _linha_politica(p: EnriquecimentoPoliticaProvedor) -> dict:
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------- planos
+
+
+@router.get("/recursos", dependencies=[_super])
+def recursos(dias: int = 30, db: Session = Depends(get_db)) -> dict:
+    """Fontes de decisores (cota técnica, disjuntor, uso comercial confirmado) e indicadores: taxa de uso de fontes gratuitas, custo de provedor pago evitado
+    (estimativa que informa o método) e desempenho por fonte. Só leitura."""
+    return indicadores.visao(db, dias=min(max(dias, 1), 365))
+
+
+class FonteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ativo: bool | None = None
+    limite_mensal: int | None = Field(default=None, ge=0)
+    prioridade: int | None = Field(default=None, ge=1, le=1000)
+    permite_uso_comercial: bool | None = None
+    politica_uso: str | None = Field(default=None, max_length=500)
+    motivo: str = Field(min_length=3, max_length=300)
+
+
+@router.put("/recursos/{codigo}")
+def alterar_fonte(codigo: str, dados: FonteRequest, usuario: Usuario = _super, db: Session = Depends(get_db)) -> dict:
+    """Liga/desliga uma fonte, ajusta a cota técnica e registra a conclusão sobre o uso comercial (depois de conferir os termos do fornecedor). Auditado."""
+    from app.services import auditoria_service
+
+    fonte = gerenciador.obter_fonte(db, codigo)
+    if fonte is None:
+        raise ValidacaoFalhou("Fonte desconhecida.")
+    campos = ("ativo", "limite_mensal", "prioridade", "permite_uso_comercial", "politica_uso")
+    antes = {c: getattr(fonte, c) for c in campos}
+    for campo in campos:
+        valor = getattr(dados, campo)
+        if valor is not None:
+            setattr(fonte, campo, valor)
+    if fonte.ativo and fonte.permite_uso_comercial is None and fonte.camada != "existente":
+        db.rollback()
+        raise ValidacaoFalhou("Antes de ligar uma fonte externa, registre se os termos do fornecedor permitem o uso comercial (permite_uso_comercial).")
+    auditoria_service.registrar(db, usuario.tenant_id, "enriquecimento_fonte_alterada", "enriquecimento_fonte", fonte.id, str(usuario.id),
+                                {"codigo": codigo, "antes": antes, "motivo": dados.motivo})
+    db.commit()
+    return {c: getattr(fonte, c) for c in campos} | {"codigo": codigo}
 
 
 @router.get("/planos", dependencies=[_super])

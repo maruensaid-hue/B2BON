@@ -51,6 +51,10 @@ real percorrido (inclui os desvios da versão original do plano).
      reais além do QSA da Receita Federal. Vazio usa dados fictícios em
      dev/teste; sem preencher, produção também cai no fallback QSA-only
      (sem quebrar nada).
+   - `HUNTER_API_KEY` (opcional): fonte gratuita de decisores (plano gratuito de 50
+     créditos/mês). Só é usada com `ENRIQUECIMENTO_GERENCIADOR_ATIVO=true` **e** a fonte ligada
+     em Admin → Enriquecimento → recursos, depois de confirmar o uso comercial com o
+     fornecedor. Vazio: a pesquisa de decisores segue exatamente como antes.
    - `WHATSAPP_WEBHOOK_VERIFY_TOKEN`: gere com
      `python -c "import secrets; print(secrets.token_urlsafe(32))"` — é o
      valor colado em Meta for Developers > WhatsApp > Step 2 (Production

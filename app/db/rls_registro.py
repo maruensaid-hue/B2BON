@@ -131,6 +131,7 @@ TENANT_DIRETO_ETAPA2: tuple[str, ...] = (
 # Tenant direto desde a migração que cria a tabela (a política nasce junto com ela; a lista das etapas anteriores fica congelada).
 TENANT_DIRETO_POSTERIORES: dict[str, str] = {
     "sinal_conta": "d1f3a5c7e9b2",  # tabela -> revisão que a cria com RLS
+    "enriquecimento_consulta": "f3b5d7a9c1e2",
 }
 
 # `tenant_id` pode ser nulo: a linha sem dono é de plataforma (só os contextos privilegiados a gravam; a leitura segue a política de cada tabela em POLITICAS_ESPECIAIS).
@@ -224,6 +225,7 @@ GLOBAIS: dict[str, str] = {
     'cnpj_socio': 'dado público nacional (Receita Federal)',
     'componente_infra': 'dado de plataforma sem escopo de empresa (catálogo, preço, custo de infraestrutura, política ou cotação)',
     'cotacao_cambio': 'dado de plataforma sem escopo de empresa (catálogo, preço, custo de infraestrutura, política ou cotação)',
+    'enriquecimento_fonte': 'configuração de plataforma das fontes de decisores (cota técnica e disjuntor); sem dado de cliente',
     'enriquecimento_custo_provedor': 'dado de plataforma sem escopo de empresa (catálogo, preço, custo de infraestrutura, política ou cotação)',
     'enriquecimento_lote_compra': 'dado de plataforma sem escopo de empresa (catálogo, preço, custo de infraestrutura, política ou cotação)',
     'enriquecimento_orcamento_global': 'dado de plataforma sem escopo de empresa (catálogo, preço, custo de infraestrutura, política ou cotação)',

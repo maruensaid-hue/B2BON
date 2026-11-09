@@ -8,6 +8,8 @@ from app.contexts.enriquecimento import (
     custo,
     estornos,
     execucao,
+    gerenciador,
+    indicadores,
     ledger,
     matriz,
     matriz_dados,
@@ -21,5 +23,5 @@ from app.contexts.enriquecimento import (
 )
 from app.contexts.enriquecimento.pesquisa import Solicitante
 
-__all__ = ["Solicitante", "conciliacao", "config", "custo", "estornos", "execucao", "ledger", "matriz", "matriz_dados", "pacotes", "painel", "pesquisa", "poc",
+__all__ = ["Solicitante", "conciliacao", "config", "custo", "estornos", "execucao", "gerenciador", "indicadores", "ledger", "matriz", "matriz_dados", "pacotes", "painel", "pesquisa", "poc",
            "precos", "renovacao", "vendas"]
