@@ -253,12 +253,23 @@ def testar(db: Session, tenant_id: str, provider) -> dict:
     """Pergunta à Meta pelo número configurado e guarda o que ela disse: prova de que token e IDs funcionam."""
     info = provider.info_numero()
     expira_em = None
+    aviso_respostas = None
+    inscrito = False
     if info.erro is None:
         try:
-            token = db.execute(select(ConfiguracaoWhatsApp.access_token).where(ConfiguracaoWhatsApp.tenant_id == tenant_id)).scalar()
+            token, waba_id = db.execute(
+                select(ConfiguracaoWhatsApp.access_token, ConfiguracaoWhatsApp.business_account_id).where(ConfiguracaoWhatsApp.tenant_id == tenant_id)
+            ).one()
         except Exception:  # noqa: BLE001 — token que não decifra: a validade fica sem consulta, o teste em si já passou
-            token = None
+            token, waba_id = None, None
         expira_em = validade_do_token(token) if token else None
+        # Sem o app inscrito na conta do WhatsApp, a Meta não manda as respostas dos clientes para a plataforma. Só o "Conectar com a
+        # Meta" inscrevia; a configuração manual (IDs e token colados) nunca recebia resposta (visto em produção em 09/11/2026).
+        if token and waba_id:
+            aviso_respostas = _inscrever_app(token, waba_id)
+            inscrito = aviso_respostas is None
+            if aviso_respostas:
+                logger.warning("WHATSAPP_INSCRICAO_APP_FALHOU tenant=%s motivo=%s", tenant_id, aviso_respostas)
         db.execute(
             update(ConfiguracaoWhatsApp).where(ConfiguracaoWhatsApp.tenant_id == tenant_id)
             .values(numero_exibicao=info.numero_exibicao, nome_verificado=info.nome_verificado, qualidade=info.qualidade,
@@ -266,7 +277,8 @@ def testar(db: Session, tenant_id: str, provider) -> dict:
         )
         db.commit()
     return {"ok": info.erro is None, "numero_exibicao": info.numero_exibicao, "nome_verificado": info.nome_verificado,
-            "qualidade": info.qualidade, "erro": info.erro, "token_expira_em": expira_em}
+            "qualidade": info.qualidade, "erro": info.erro, "token_expira_em": expira_em,
+            "respostas_ativas": info.erro is None and aviso_respostas is None and inscrito, "avisos": [aviso_respostas] if aviso_respostas else []}
 
 
 def definir_direct_send(db: Session, tenant_id: str, ator_id: str | None, habilitado: bool) -> None:

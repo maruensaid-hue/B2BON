@@ -155,3 +155,31 @@ def test_envio_pela_meta_manda_o_telefone_normalizado(monkeypatch):
     _provider().enviar_template("11993495349", "confirmacao", {})
 
     assert enviados[0]["to"] == "5511993495349"
+
+
+def test_testar_conexao_inscreve_o_app_na_conta_para_receber_respostas(db_session, monkeypatch):
+    """Visto em produção em 09/11/2026: a configuração manual (IDs e token colados) nunca inscrevia o app na conta do WhatsApp, e a Meta
+    não mandava as respostas dos clientes. O "Testar conexão" agora faz a inscrição."""
+    from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
+    from app.providers.channels.whatsapp.base import InfoNumero
+    from app.services import whatsapp_conexao_service
+
+    db_session.add(ConfiguracaoWhatsApp(tenant_id=TENANT, access_token="EAAtoken", phone_number_id="111", business_account_id="waba-9"))
+    db_session.commit()
+    chamadas = []
+
+    def post(url, headers=None, timeout=None, **kwargs):
+        chamadas.append(url)
+        return _Resposta(200, {"success": True})
+
+    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(whatsapp_conexao_service, "validade_do_token", lambda token: None)
+
+    class _Provider:
+        def info_numero(self):
+            return InfoNumero(numero_exibicao="+1 555-200-5471", nome_verificado="Test Number", qualidade="GREEN")
+
+    resultado = whatsapp_conexao_service.testar(db_session, TENANT, _Provider())
+
+    assert any(url.endswith("/waba-9/subscribed_apps") for url in chamadas)
+    assert resultado["respostas_ativas"] is True and resultado["avisos"] == []

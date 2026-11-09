@@ -34,6 +34,7 @@ interface ResultadoConexao {
   token_expira_em?: string | null;
   avisos?: string[];
   erro?: string | null;
+  respostas_ativas?: boolean;
 }
 
 const DIAS_PARA_AVISAR = 15;
@@ -181,7 +182,9 @@ export function WhatsAppConexao({
 
   async function testar() {
     await executar("testar", async () => {
-      setTeste(await api.post<ResultadoConexao & { ok: boolean }>("/configuracao-whatsapp/testar"));
+      const resultado = await api.post<ResultadoConexao & { ok: boolean }>("/configuracao-whatsapp/testar");
+      setTeste(resultado);
+      if (resultado.avisos?.length) setAviso(resultado.avisos.join(" "));
       await onAtualizado();
     });
   }
@@ -204,7 +207,9 @@ export function WhatsAppConexao({
         access_token: String(form.get("access_token") ?? "").trim() || null,
       });
       await onAtualizado();
-      setTeste(await api.post<ResultadoConexao & { ok: boolean }>("/configuracao-whatsapp/testar"));
+      const resultado = await api.post<ResultadoConexao & { ok: boolean }>("/configuracao-whatsapp/testar");
+      setTeste(resultado);
+      if (resultado.avisos?.length) setAviso(resultado.avisos.join(" "));
     });
   }
 
@@ -241,6 +246,9 @@ export function WhatsAppConexao({
             </div>
           )}
           {teste?.erro && <div className="mt-1 text-[11px] text-red">A Meta não reconheceu a conexão: {teste.erro}</div>}
+          {teste?.respostas_ativas && (
+            <div className="mt-1 text-[11px] text-green">Respostas dos clientes ativadas: o que eles responderem chega à plataforma.</div>
+          )}
         </div>
       ) : (
         <div className="rounded-lg bg-surf2 p-2.5 text-[12px] text-muted">Nenhum número conectado.</div>
