@@ -5,6 +5,7 @@ from app.api.deps import (
     exigir_papel, exigir_escopo_aprovacao_usuario, exigir_escopo_mensagem_usuario,
     get_ator_id, get_db, get_plan_limits_provider, get_tenant_id, get_usuario_atual,
 )
+from app.api import envio_imediato
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.aprovacao import (
     AprovacaoFilaItemSchema,
@@ -96,7 +97,10 @@ def aprovar_lote(
     db: Session = Depends(get_db),
 ) -> list[AprovacaoSchema]:
     _validar_ids_aprovacao_no_escopo(db, tenant_id, dados.ids, usuario)
-    return aprovacao_service.aprovar_lote(db, tenant_id, ator_id, dados.ids)
+    aprovacoes = aprovacao_service.aprovar_lote(db, tenant_id, ator_id, dados.ids)
+    resposta = [AprovacaoSchema.model_validate(a) for a in aprovacoes]
+    envio_imediato.enviar_o_que_ja_venceu(db, tenant_id, [a.mensagem_id for a in resposta])
+    return resposta
 
 
 @router.post("/{aprovacao_id}/aprovar", response_model=AprovacaoSchema, dependencies=[Depends(exigir_escopo_aprovacao_usuario)])
@@ -106,7 +110,9 @@ def aprovar(
     ator_id: str | None = Depends(get_ator_id),
     db: Session = Depends(get_db),
 ) -> AprovacaoSchema:
-    return aprovacao_service.aprovar(db, tenant_id, ator_id, aprovacao_id)
+    resposta = AprovacaoSchema.model_validate(aprovacao_service.aprovar(db, tenant_id, ator_id, aprovacao_id))
+    envio_imediato.enviar_o_que_ja_venceu(db, tenant_id, [resposta.mensagem_id])
+    return resposta
 
 
 @router.post("/{aprovacao_id}/rejeitar", response_model=AprovacaoSchema, dependencies=[Depends(exigir_escopo_aprovacao_usuario)])

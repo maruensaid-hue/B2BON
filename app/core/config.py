@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     # Sourcing, CRM, MAP, PREDATOR) mesmo que o plano do tenant dele não os inclua; clientes (admin/user) seguem
     # só o que o plano libera. Desligar volta o super_admin a seguir o plano como qualquer um.
     super_admin_acesso_total_modulos: bool = True
+    # Ao aprovar uma mensagem (ou ativar a cadência), o que já estiver no horário sai na hora, sem esperar o cron de envio.
+    # O cron do GitHub atrasa muito (visto em produção em 09/11/2026: ~1 h entre rodadas em vez de 15 min). O cron continua
+    # como rede de segurança para o que vencer depois. Desligar volta a depender só do cron.
+    envio_imediato_ao_aprovar: bool = True
     # O super admin da plataforma pesquisa decisores sem os limites de plano e franquia (clientes, representantes e vendedores seguem o plano).
     enriquecimento_super_admin_sem_limites: bool = True
     # D-087: apps OAuth da B2B ON em cada CRM (registrados pela CyberFort).

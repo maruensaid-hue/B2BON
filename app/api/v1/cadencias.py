@@ -5,9 +5,11 @@ from app.api.deps import (
     exigir_escopo_cadencia_usuario, exigir_papel, get_ator_id, get_db, get_llm_provider,
     get_plan_limits_provider, get_tenant_id, get_usuario_atual, limitar_ia_por_tenant,
 )
+from app.api import envio_imediato
 from app.llm.base import LLMProvider
 from app.models.conta import Conta
 from app.models.icp import ICP
+from app.models.mensagem import Mensagem
 from app.models.usuario import Usuario
 from app.services.errors import NaoAutorizado, NaoEncontrado
 from app.providers.plan_limits.base import PlanLimitsProvider
@@ -280,7 +282,14 @@ def ativar_cadencia(
     plan_limits: PlanLimitsProvider = Depends(get_plan_limits_provider),
 ) -> AtivarCadenciaResponseSchema:
     resultado = cadencia_service.ativar(db, tenant_id, ator_id, cadencia_id, plan_limits)
-    return AtivarCadenciaResponseSchema(**resultado)
+    resposta = AtivarCadenciaResponseSchema(**resultado)
+    aprovadas = [
+        mensagem_id for (mensagem_id,) in db.query(Mensagem.id).filter(
+            Mensagem.tenant_id == tenant_id, Mensagem.cadencia_id == cadencia_id, Mensagem.status == "aprovado"
+        ).all()
+    ]
+    envio_imediato.enviar_o_que_ja_venceu(db, tenant_id, aprovadas)
+    return resposta
 
 
 @router.get("/{cadencia_id}/teste-ab", response_model=RelatorioAbTesteSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])

@@ -160,8 +160,11 @@ def processar_pendentes(
     whatsapp: WhatsAppProvider,
     email: EmailProvider,
     email_validation: EmailVerificationProvider,
+    somente_mensagem_ids: list[int] | None = None,
 ) -> dict:
-    """Dispatcher explícito, chamado por cron externo — a arquitetura de
+    """`somente_mensagem_ids`: limita a rodada a essas mensagens (envio imediato logo após aprovar/ativar).
+
+    Dispatcher explícito, chamado por cron externo — a arquitetura de
     referência não define fila de jobs; manter isto síncrono e idempotente
     é o que garante determinismo em teste (E3-H2, E3-H3, E10-H1).
 
@@ -171,18 +174,19 @@ def processar_pendentes(
     agora = datetime.now(UTC)
     config = db.query(ConfiguracaoEnvio).filter_by(tenant_id=tenant_id).one_or_none()
 
-    candidatas = (
-        db.query(Mensagem)
-        .filter(
-            Mensagem.tenant_id == tenant_id,
-            Mensagem.status.in_(["aprovado", "falhou"]),
-            Mensagem.tentativas_envio < MAX_TENTATIVAS_ENVIO,
-            Mensagem.agendado_para.isnot(None),
-            Mensagem.agendado_para <= agora,
-        )
-        .order_by(Mensagem.agendado_para)
-        .all()
+    consulta = db.query(Mensagem).filter(
+        Mensagem.tenant_id == tenant_id,
+        Mensagem.status.in_(["aprovado", "falhou"]),
+        Mensagem.tentativas_envio < MAX_TENTATIVAS_ENVIO,
+        Mensagem.agendado_para.isnot(None),
+        Mensagem.agendado_para <= agora,
     )
+    if somente_mensagem_ids is not None:
+        if not somente_mensagem_ids:
+            consulta = consulta.filter(False)
+        else:
+            consulta = consulta.filter(Mensagem.id.in_(somente_mensagem_ids))
+    candidatas = consulta.order_by(Mensagem.agendado_para).all()
 
     resultado = {
         "enviadas": 0,

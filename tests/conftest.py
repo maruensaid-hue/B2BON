@@ -128,6 +128,16 @@ def _super_admin_segue_o_plano(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _sem_envio_imediato_ao_aprovar(monkeypatch):
+    """Em produção, aprovar/ativar já dispara o que estiver no horário (`envio_imediato_ao_aprovar`). A suíte começa com a
+    chave desligada para os testes de fila e de envio continuarem controlando quando o dispatcher roda; quem testa o envio
+    imediato liga a chave (tests/integration/test_envio_imediato.py)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "envio_imediato_ao_aprovar", False)
+
+
+@pytest.fixture(autouse=True)
 def _ptax_sem_rede(monkeypatch):
     """D-076: a suíte nunca chama a API do Banco Central; sem cotação, a PTAX fica ausente (testes de câmbio injetam a
     busca ou cadastram a cotação)."""
