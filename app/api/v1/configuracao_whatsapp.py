@@ -3,7 +3,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import exigir_papel, get_ator_id, get_db, get_tenant_id, resolver_whatsapp_provider
-from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
+from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp, hash_phone_number_id
 from app.schemas.configuracao_whatsapp import (
     ConectarMetaRequestSchema,
     ConfiguracaoWhatsAppSchema,
@@ -88,7 +88,8 @@ def salvar_configuracao_whatsapp(
         config_id = config.id
     else:
         config_id = linha_existente.id
-        valores = {"phone_number_id": dados.phone_number_id, "business_account_id": dados.business_account_id, "origem_conexao": "manual"}
+        valores = {"phone_number_id": dados.phone_number_id, "phone_number_id_hash": hash_phone_number_id(dados.phone_number_id),
+                   "business_account_id": dados.business_account_id, "origem_conexao": "manual"}
         if dados.access_token:
             valores["access_token"] = dados.access_token
         db.execute(update(ConfiguracaoWhatsApp).where(ConfiguracaoWhatsApp.id == config_id).values(**valores))

@@ -18,7 +18,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
+from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp, hash_phone_number_id
 from app.providers.channels.whatsapp.meta import MetaWhatsAppProvider
 from app.services import auditoria_service
 from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
@@ -211,6 +211,8 @@ def _salvar(db: Session, tenant_id: str, valores: dict) -> int:
         db.add(config)
         db.flush()
         return config.id
+    if "phone_number_id" in valores:  # `update` em massa não passa pelo `@validates` do modelo
+        valores = {**valores, "phone_number_id_hash": hash_phone_number_id(valores["phone_number_id"])}
     db.execute(update(ConfiguracaoWhatsApp).where(ConfiguracaoWhatsApp.id == existente.id).values(**valores))
     return existente.id
 

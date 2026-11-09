@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import logging
 import re
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
@@ -21,10 +22,11 @@ from app.contexts.finops import contract as finops
 from app.core.config import settings
 from app.db import rls
 from app.llm.base import LLMProvider
-from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp
+from app.models.configuracao_whatsapp import ConfiguracaoWhatsApp, hash_phone_number_id
 from app.models.decisor import Decisor
 from app.providers.channels.email.base import EmailProvider
 from app.providers.channels.whatsapp.base import WhatsAppProvider
+from app.providers.channels.whatsapp.meta import telefone_para_meta
 from app.providers.fiscal.base import FiscalProvider
 from app.providers.payment.base import PaymentProvider
 from app.schemas.reputacao import RegistrarEventoReputacaoRequestSchema, SaudeCanalSchema
@@ -43,6 +45,7 @@ from app.services import (
 )
 from app.services.errors import NaoAutorizado, NaoEncontrado, ValidacaoFalhou
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
@@ -83,6 +86,31 @@ def _whatsapp_provider_do_webhook_email(
     return resolver_whatsapp_provider(dados.tenant_id, db)
 
 
+def _decisor_pelo_telefone(db: Session, tenant_id: str, telefone: str) -> Decisor | None:
+    """A Meta manda o remetente só com dígitos e com o código do país ("5511993495349"); o contato pode estar cadastrado de qualquer jeito
+    ("11993495349", "(11) 99349-5349", "+55 11 99349-5349"). A comparação exata nunca achava ninguém (visto em produção em 09/11/2026).
+    Compara pela mesma forma que o envio usa (`telefone_para_meta`), filtrando antes pelos últimos 4 dígitos para não ler a base toda."""
+    alvo = telefone_para_meta(telefone)
+    if len(alvo) < 8:
+        return None
+    candidatos = (
+        db.query(Decisor)
+        .filter(Decisor.tenant_id == tenant_id, Decisor.telefone.isnot(None), Decisor.telefone.like(f"%{alvo[-4:]}"))
+        .order_by(Decisor.id)
+        .all()
+    )
+    for candidato in candidatos:
+        if telefone_para_meta(candidato.telefone) == alvo:
+            return candidato
+    # Celular brasileiro: a Meta às vezes entrega o remetente sem o nono dígito (55 + DDD + 8 dígitos).
+    if alvo.startswith("55") and len(alvo) == 12:
+        com_nove = f"{alvo[:4]}9{alvo[4:]}"
+        for candidato in candidatos:
+            if telefone_para_meta(candidato.telefone) == com_nove:
+                return candidato
+    return None
+
+
 def _processar_mensagem_whatsapp(
     db: Session,
     llm: LLMProvider,
@@ -95,8 +123,9 @@ def _processar_mensagem_whatsapp(
     simplificado dos testes e payload nativo da Meta): opt-out por
     palavra-chave (E9-H2), resposta que interrompe a cadência (E3-H3) e
     alimenta a conversa de qualificação S.H.A.R.K. (E5-H1)."""
-    decisor = db.query(Decisor).filter_by(tenant_id=tenant_id, telefone=telefone).first()
+    decisor = _decisor_pelo_telefone(db, tenant_id, telefone)
     if decisor is None:
+        logger.info("WEBHOOK_WHATSAPP_REMETENTE_DESCONHECIDO tenant=%s (telefone não cadastrado em nenhum contato)", tenant_id)
         raise NaoEncontrado("Decisor não encontrado para este telefone.")
 
     if texto.strip().lower() in _PALAVRAS_OPTOUT:
@@ -168,8 +197,11 @@ async def receber_webhook_whatsapp_meta(
             phone_number_id = valor.get("metadata", {}).get("phone_number_id")
             if not phone_number_id:
                 continue
-            with rls.contexto_busca(db, rls.ESCOPO_WHATSAPP_NUMERO, str(phone_number_id)):  # o número que recebeu a mensagem diz de qual tenant ela é
-                config = db.query(ConfiguracaoWhatsApp).filter_by(phone_number_id=phone_number_id).one_or_none()
+            chave_numero = hash_phone_number_id(str(phone_number_id))
+            with rls.contexto_busca(db, rls.ESCOPO_WHATSAPP_NUMERO, chave_numero):  # o número que recebeu a mensagem diz de qual tenant ela é
+                config = db.query(ConfiguracaoWhatsApp).filter_by(phone_number_id_hash=chave_numero).one_or_none()
+            if config is None:
+                logger.warning("WEBHOOK_WHATSAPP_NUMERO_DESCONHECIDO: nenhum tenant tem este número configurado")
             if config is None:
                 continue
             rls.definir_tenant(db, config.tenant_id)

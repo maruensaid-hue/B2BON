@@ -1,3 +1,4 @@
+import pathlib
 """O registro de RLS (D-110, D-111) classifica TODA tabela do modelo. Tabela nova sem classificação quebra este teste: ou ganha política (e migração), ou entra em PENDENTES/GLOBAIS com o motivo."""
 
 import importlib.util
@@ -96,7 +97,10 @@ def test_migracao_da_primeira_etapa_congelou_o_que_era_o_registro_dela():
     assert set(modulo.TENANT_DIRETO) == set(r.TENANT_DIRETO_ETAPA1)
     assert dict(modulo.DUAS_PARTES) == dict(r.DUAS_PARTES_ETAPA1)
     protegidas = set(r.TENANT_DIRETO_ETAPA1)
-    esperadas = {(e, b.tabela, b.predicado) for e, itens in r.BUSCAS.items() for b in itens if b.tabela in protegidas}
+    esperadas = {
+        (e, b.tabela, r.BUSCAS_ALTERADAS_DEPOIS.get((e, b.tabela), (b.predicado,))[0])
+        for e, itens in r.BUSCAS.items() for b in itens if b.tabela in protegidas
+    }
     assert set(modulo.BUSCAS) == esperadas
 
 
@@ -122,3 +126,10 @@ def test_tabelas_com_tenant_nulo_sao_exatamente_as_declaradas():
         n for n, t in Base.metadata.tables.items() if "tenant_id" in t.columns and t.columns["tenant_id"].nullable and n in (set(r.TENANT_DIRETO) | set(r.TENANT_NULAVEL_ETAPA2))
     }
     assert nulaveis == set(r.TENANT_NULAVEL_ETAPA2)
+
+
+def test_busca_alterada_depois_tem_migracao_que_aplica_o_predicado_novo():
+    for (escopo, tabela), (_antigo, revisao) in r.BUSCAS_ALTERADAS_DEPOIS.items():
+        modulo = _carregar_migracao(revisao)
+        novo = next(b.predicado for b in r.BUSCAS[escopo] if b.tabela == tabela)
+        assert novo in pathlib.Path(modulo.__file__).read_text(encoding="utf-8")

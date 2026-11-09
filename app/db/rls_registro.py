@@ -31,7 +31,7 @@ BUSCAS: dict[str, tuple[Busca, ...]] = {
     ),
     "convite-cadastro": (Busca("convite_cadastro", "codigo = b2bon_chave()"),),
     "convite-vitrine": (Busca("convite_vitrine", "codigo = b2bon_chave()"),),
-    "whatsapp-numero": (Busca("configuracao_whatsapp", "phone_number_id = b2bon_chave()"),),
+    "whatsapp-numero": (Busca("configuracao_whatsapp", "phone_number_id_hash = b2bon_chave()"),),  # hash: o ID é cifrado (ver o modelo)
     "captura-lead": (Busca("link_captura_lead", "codigo = b2bon_chave()"),),
     "integracao-webhook": (Busca("conexao_integracao", "webhook_token_hash = b2bon_chave()"),),
     "portal-fornecedor": (Busca("participante_sourcing", "token_hash = b2bon_chave()"),),
@@ -43,6 +43,12 @@ BUSCAS: dict[str, tuple[Busca, ...]] = {
         Busca("compra_credito", "id::text = b2bon_chave()"),
         Busca("enriquecimento_compra", "id::text = b2bon_chave()"),
     ),
+}
+
+# Buscas cujo predicado foi trocado por uma migração posterior: (escopo, tabela) -> (predicado original, revisão que trocou). As migrações das
+# etapas ficam congeladas; o teste que confere essas cópias usa o predicado original daqui.
+BUSCAS_ALTERADAS_DEPOIS: dict[tuple[str, str], tuple[str, str]] = {
+    ("whatsapp-numero", "configuracao_whatsapp"): ("phone_number_id = b2bon_chave()", "a4c6e8f0b2d3"),  # ID cifrado: a busca passou para o hash
 }
 
 # nome -> {tabela: "ler" | "escrever"}
