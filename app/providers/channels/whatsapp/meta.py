@@ -1,4 +1,5 @@
 import logging
+import re
 
 import httpx
 
@@ -6,6 +7,22 @@ from app.core.config import settings
 from app.providers.channels.whatsapp.base import InfoNumero, ResultadoEnvio, TemplateCriado, TemplateInfo, WhatsAppProvider
 
 logger = logging.getLogger(__name__)
+
+
+def telefone_para_meta(telefone: str) -> str:
+    """A Meta quer o número completo, só dígitos, com o código do país. Telefone brasileiro cadastrado sem o 55 ("11993495349") ia
+    como está e a Meta lia "1" como código dos EUA: a mensagem nunca chegava (visto em produção em 06/11/2026, erro 131030).
+    Com "+" o número já é internacional e só perde a formatação; sem "+", 10 ou 11 dígitos (DDD + número) ganham o 55."""
+    texto = (telefone or "").strip()
+    digitos = re.sub(r"\D", "", texto)
+    if texto.startswith("+"):
+        return digitos
+    if texto.startswith("00"):
+        return digitos[2:]
+    digitos = digitos.lstrip("0")
+    if len(digitos) in (10, 11):
+        return f"55{digitos}"
+    return digitos
 
 
 class MetaWhatsAppProvider(WhatsAppProvider):
@@ -75,6 +92,7 @@ class MetaWhatsAppProvider(WhatsAppProvider):
         return self._enviar(payload)
 
     def _enviar(self, payload: dict) -> ResultadoEnvio:
+        payload = {**payload, "to": telefone_para_meta(payload["to"])}
         try:
             resposta = httpx.post(
                 f"{self._base_url}/{self._phone_number_id}/messages",

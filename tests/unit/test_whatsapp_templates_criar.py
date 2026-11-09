@@ -125,3 +125,33 @@ def test_envio_de_toque_usa_o_nome_do_modelo_mesmo_quando_o_toque_guarda_o_id_lo
 
     assert [envio["template_id"] for envio in provider.envios] == ["confirmacao", "confirmacao"]
     assert whatsapp_service.nome_do_template_para_envio(db_session, TENANT, "nao_existe") == "nao_existe"
+
+
+@pytest.mark.parametrize("telefone, esperado", [
+    ("11993495349", "5511993495349"),
+    ("(11) 99349-5349", "5511993495349"),
+    ("011 99349-5349", "5511993495349"),
+    ("1132145678", "551132145678"),
+    ("5511993495349", "5511993495349"),
+    ("+55 11 99349-5349", "5511993495349"),
+    ("+1 415 555 0100", "14155550100"),
+    ("0044 20 7946 0958", "442079460958"),
+])
+def test_telefone_vai_para_a_meta_com_codigo_do_pais(telefone, esperado):
+    """Visto em produção em 06/11/2026: "11993495349" ia sem o 55 e a Meta lia como número dos EUA (erro 131030)."""
+    from app.providers.channels.whatsapp.meta import telefone_para_meta
+
+    assert telefone_para_meta(telefone) == esperado
+
+
+def test_envio_pela_meta_manda_o_telefone_normalizado(monkeypatch):
+    enviados = []
+
+    def post(url, json=None, headers=None, timeout=None):
+        enviados.append(json)
+        return _Resposta(200, {"messages": [{"id": "wamid.1"}]})
+
+    monkeypatch.setattr(httpx, "post", post)
+    _provider().enviar_template("11993495349", "confirmacao", {})
+
+    assert enviados[0]["to"] == "5511993495349"
