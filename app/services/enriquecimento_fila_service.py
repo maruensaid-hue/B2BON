@@ -1,4 +1,5 @@
 import logging
+from time import monotonic
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import or_
@@ -24,6 +25,9 @@ _LIMITE_POR_EXECUCAO = 20
 # IA indisponível: espera crescente entre tentativas (15 min, 30 min, 1 h, 2 h) e no máximo 5 no total; esgotadas, a
 # conta fica `falhou` com o motivo, e o reenfileiramento manual continua possível.
 _BACKOFF_MINUTOS = (15, 30, 60, 120)
+# Tempo máximo de uma rodada: o passo do GitHub Actions desiste aos 300 s (curl --max-time) e 20 contas chegaram a levar ~6 min
+# (visto em produção em 09/11/2026). Passado o limite, a rodada não pega conta nova; o resto fica para a próxima.
+_ORCAMENTO_SEGUNDOS = 240
 _MAX_TENTATIVAS = 5
 
 
@@ -63,7 +67,11 @@ def processar_pendentes(
     concluidos = 0
     falhas = 0
     adiados = 0
+    inicio = monotonic()
     for item in itens:
+        if monotonic() - inicio > _ORCAMENTO_SEGUNDOS:
+            break
+        item_id, conta_id = item.id, item.conta_id
         try:
             conta_service.enriquecer(
                 db, item.tenant_id, None, item.conta_id, llm, site_fetcher, web_search, plan_limits,
@@ -87,11 +95,16 @@ def processar_pendentes(
                 item.proxima_tentativa_em = agora + timedelta(minutes=espera)
                 adiados += 1
         except Exception as erro:
-            logger.warning("Falha ao enriquecer conta %s da fila em lote", item.conta_id, exc_info=True)
+            # Um erro do banco deixa a sessão inutilizável até o rollback: sem isto, a rodada inteira caía (500) sem gravar nada,
+            # nem o "falhou" desta conta, que voltava na rodada seguinte e quebrava de novo (visto em produção em 09/11/2026).
+            db.rollback()
+            logger.warning("Falha ao enriquecer conta %s da fila em lote", conta_id, exc_info=True)
+            item = db.get(FilaEnriquecimentoConta, item_id)
             item.status = "falhou"
             item.erro = str(erro)[:500]
             falhas += 1
         item.processado_em = datetime.now(UTC)
+        db.commit()  # cada conta grava o seu resultado: uma falha adiante não desfaz o que já foi feito
 
     db.commit()
-    return {"processados": len(itens), "concluidos": concluidos, "falhas": falhas, "adiados": adiados}
+    return {"processados": concluidos + falhas + adiados, "concluidos": concluidos, "falhas": falhas, "adiados": adiados}

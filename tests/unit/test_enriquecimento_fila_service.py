@@ -149,3 +149,54 @@ def test_ia_fora_do_ar_desiste_apos_o_limite_de_tentativas(db_session):
         db_session.refresh(item)
 
     assert (item.status, item.tentativas) == ("falhou", enriquecimento_fila_service._MAX_TENTATIVAS)
+
+
+def test_erro_do_banco_numa_conta_nao_derruba_a_rodada_nem_desfaz_as_outras(db_session, monkeypatch):
+    """Visto em produção em 09/11/2026: uma conta cujo enriquecimento deu erro no banco (texto da IA com caractere nulo) deixava a
+    sessão inutilizada; a rodada inteira caía com 500 sem gravar nada, e a mesma conta quebrava de novo em toda rodada."""
+    from app.services import conta_service
+
+    conta_quebra = _criar_conta(db_session, "Empresa Quebra", dominio="quebra.com.br")
+    conta_ok = _criar_conta(db_session, "Alpha Tech", dominio="alphatech.com.br")
+    id_quebra, id_ok = conta_quebra.id, conta_ok.id
+    enriquecimento_fila_service.enfileirar(db_session, TENANT_ID, [id_quebra, id_ok])
+    original = conta_service.enriquecer
+
+    def enriquecer(db, tenant_id, ator_id, conta_id, *args, **kwargs):
+        if conta_id == id_quebra:
+            db.add(Conta(tenant_id=None, icp_id=None, nome=None, status="prospectada"))  # viola NOT NULL no flush
+            db.flush()
+        return original(db, tenant_id, ator_id, conta_id, *args, **kwargs)
+
+    monkeypatch.setattr(conta_service, "enriquecer", enriquecer)
+
+    resultado = enriquecimento_fila_service.processar_pendentes(
+        db_session, FakeLLMProvider(["porte: media"]), _site_fetcher(), FakeWebSearchProvider(),
+        FakeAccountDataProvider(), FakeGraphClient(), PLAN_LIMITS,
+    )
+
+    assert resultado["falhas"] == 1 and resultado["concluidos"] == 1
+    status = {i.conta_id: i.status for i in db_session.query(FilaEnriquecimentoConta).all()}
+    assert status == {id_quebra: "falhou", id_ok: "concluido"}
+
+
+def test_rodada_para_de_pegar_conta_nova_quando_passa_do_tempo(db_session, monkeypatch):
+    conta = _criar_conta(db_session, "Alpha Tech", dominio="alphatech.com.br")
+    enriquecimento_fila_service.enfileirar(db_session, TENANT_ID, [conta.id])
+    monkeypatch.setattr(enriquecimento_fila_service, "_ORCAMENTO_SEGUNDOS", -1)
+
+    resultado = enriquecimento_fila_service.processar_pendentes(
+        db_session, FakeLLMProvider(["porte: media"]), _site_fetcher(), FakeWebSearchProvider(),
+        FakeAccountDataProvider(), FakeGraphClient(), PLAN_LIMITS,
+    )
+
+    assert resultado["processados"] == 0
+    assert db_session.query(FilaEnriquecimentoConta).one().status == "pendente"
+
+
+def test_resposta_da_ia_perde_o_caractere_nulo():
+    from app.llm.schemas import LLMResponse
+
+    resposta = LLMResponse(content="porte: media\npossivel_dor: \x00crescer\x00", model="x", input_tokens=0, output_tokens=0)
+
+    assert resposta.content == "porte: media\npossivel_dor: crescer"

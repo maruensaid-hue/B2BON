@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class LLMRequest(BaseModel):
@@ -22,3 +22,10 @@ class LLMResponse(BaseModel):
     cache_creation_input_tokens: int = 0
     cache_read_input_tokens: int = 0
     provider: str = "anthropic"
+
+    @field_validator("content")
+    @classmethod
+    def _sem_caractere_nulo(cls, valor: str) -> str:
+        """O Postgres recusa texto com o caractere nulo (\\x00). Uma resposta de IA com ele (visto em produção em 09/11/2026, na
+        linha "possivel_dor" da pesquisa no site) derrubava a gravação, e com ela a rodada inteira da fila de enriquecimento."""
+        return valor.replace("\x00", "")
