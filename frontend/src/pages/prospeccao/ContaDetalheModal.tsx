@@ -67,6 +67,7 @@ interface Decisor {
   papel_confirmado: string | null;
   papel_sugerido: string | null;
   email_status: string | null;
+  suprimido_em?: string | null;
 }
 
 const ROTULOS_ORIGEM: Record<string, string> = {
@@ -657,6 +658,7 @@ export function ContaDetalheModal({ contaId, onClose, onAtualizado }: Props) {
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5">
+                          {decisor.suprimido_em && <Badge tone="red">Descadastrado</Badge>}
                           {decisor.origem && ROTULOS_ORIGEM[decisor.origem] && (
                             <Badge tone="muted">{ROTULOS_ORIGEM[decisor.origem]}</Badge>
                           )}

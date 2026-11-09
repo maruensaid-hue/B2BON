@@ -178,3 +178,46 @@ def test_hash_do_numero_e_gravado_tambem_quando_a_configuracao_e_atualizada(clie
     config = db_session.query(ConfiguracaoWhatsApp).filter_by(tenant_id=TENANT_ID).one()
     db_session.refresh(config)
     assert config.phone_number_id_hash == hash_phone_number_id("222")
+
+
+def test_lista_de_conversas_mostra_quem_respondeu_com_a_ultima_fala(client, db_session, onboarding_completo, criar_conta_com_decisor):
+    from app.models.conversa_qualificacao import ConversaQualificacao
+    from app.models.turno_conversa import TurnoConversa
+
+    conta, decisor = criar_conta_com_decisor()
+    conversa = ConversaQualificacao(tenant_id=TENANT_ID, conta_id=conta.id, decisor_id=decisor.id, canal="whatsapp")
+    db_session.add(conversa)
+    db_session.flush()
+    db_session.add(TurnoConversa(tenant_id=TENANT_ID, conversa_id=conversa.id, direcao="entrada", conteudo="Tenho interesse"))
+    db_session.commit()
+
+    resposta = client.get("/api/v1/conversas")
+
+    assert resposta.status_code == 200
+    item = next(c for c in resposta.json() if c["id"] == conversa.id)
+    assert item["decisor_nome"] == decisor.nome and item["conta_nome"] == conta.nome
+    assert item["ultima_fala"] == "Tenho interesse" and item["ultima_direcao"] == "entrada" and item["total_turnos"] == 1
+    assert client.get("/api/v1/conversas", params={"status": "concluida"}).json() == []
+
+
+def test_sair_aparece_na_linha_do_tempo_e_no_contato(
+    client, db_session, onboarding_completo, criar_conta_com_decisor, monkeypatch, fake_whatsapp
+):
+    """Visto em produção em 09/11/2026: o SAIR descadastrava, mas nada na tela mostrava; agora vira atividade da conta e o contato
+    volta com `suprimido_em`."""
+    from app.models.atividade import Atividade
+
+    conta, decisor = criar_conta_com_decisor(telefone="11993495349")
+    db_session.add(ConfiguracaoWhatsApp(tenant_id=TENANT_ID, access_token="token-fake", phone_number_id="999888777", business_account_id="waba-1"))
+    db_session.commit()
+    monkeypatch.setattr("app.api.v1.webhooks.resolver_whatsapp_provider", lambda tenant_id, db: fake_whatsapp)
+    conta_id, decisor_id = conta.id, decisor.id
+
+    resposta = client.post("/api/v1/webhooks/whatsapp/meta", **_assinado(_payload_resposta("999888777", "5511993495349", "SAIR")))
+
+    assert resposta.status_code == 200
+    db_session.expire_all()
+    descricoes = [a.descricao for a in db_session.query(Atividade).filter_by(conta_id=conta_id).all()]
+    assert any("pediu para não receber mais mensagens" in d for d in descricoes)
+    contatos = client.get(f"/api/v1/contas/{conta_id}/decisores").json()
+    assert next(c for c in contatos if c["id"] == decisor_id)["suprimido_em"] is not None

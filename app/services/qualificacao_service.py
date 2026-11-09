@@ -59,6 +59,51 @@ def _obter_ou_iniciar_conversa(
     return conversa
 
 
+def listar_conversas(db: Session, tenant_id: str, usuario_id: int | None = None, status: str | None = None, limite: int = 200) -> list[dict]:
+    """Tela de Conversas: quem respondeu, em que etapa do roteiro está, a nota e a última fala. `usuario_id` (papel `user`) limita às
+    conversas dos contatos do próprio vendedor, a mesma regra de `deps.exigir_escopo_conversa_usuario`."""
+    from app.models.conta import Conta
+    from app.models.icp import ICP
+    from app.models.qualificacao import QualificacaoScore
+
+    consulta = (
+        db.query(ConversaQualificacao, Conta.nome, Decisor.nome, Decisor.cargo, Decisor.suprimido_em)
+        .join(Conta, Conta.id == ConversaQualificacao.conta_id)
+        .join(Decisor, Decisor.id == ConversaQualificacao.decisor_id)
+        .filter(ConversaQualificacao.tenant_id == tenant_id, Conta.tenant_id == tenant_id)
+    )
+    if status:
+        consulta = consulta.filter(ConversaQualificacao.status == status)
+    if usuario_id is not None:
+        consulta = consulta.outerjoin(ICP, ICP.id == Conta.icp_id).filter(
+            ((Conta.vendedor_usuario_id == usuario_id) | (Conta.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+            ((Conta.vendedor_usuario_id.is_(None)) | (Conta.vendedor_usuario_id == usuario_id)),
+            ((Decisor.criado_por_usuario_id == usuario_id) | (ICP.criador_usuario_id == usuario_id)),
+        )
+    linhas = consulta.order_by(ConversaQualificacao.atualizado_em.desc(), ConversaQualificacao.id.desc()).limit(limite).all()
+    ids = [conversa.id for conversa, *_ in linhas]
+    ultimos: dict[int, TurnoConversa] = {}
+    totais: dict[int, int] = {}
+    notas: dict[int, float] = {}
+    if ids:
+        for turno in db.query(TurnoConversa).filter(TurnoConversa.conversa_id.in_(ids)).order_by(TurnoConversa.criado_em, TurnoConversa.id):
+            ultimos[turno.conversa_id] = turno
+            totais[turno.conversa_id] = totais.get(turno.conversa_id, 0) + 1
+        for nota in db.query(QualificacaoScore).filter(QualificacaoScore.conversa_id.in_(ids)).order_by(QualificacaoScore.id):
+            notas[nota.conversa_id] = nota.score_total
+    resultado = []
+    for conversa, conta_nome, decisor_nome, decisor_cargo, suprimido_em in linhas:
+        ultimo = ultimos.get(conversa.id)
+        resultado.append({
+            "id": conversa.id, "conta_id": conversa.conta_id, "conta_nome": conta_nome, "decisor_id": conversa.decisor_id,
+            "decisor_nome": decisor_nome, "decisor_cargo": decisor_cargo, "canal": conversa.canal, "etapa_atual": conversa.etapa_atual,
+            "status": conversa.status, "score_total": notas.get(conversa.id), "total_turnos": totais.get(conversa.id, 0),
+            "ultima_fala": (ultimo.conteudo[:200] if ultimo else None), "ultima_direcao": (ultimo.direcao if ultimo else None),
+            "atualizado_em": conversa.atualizado_em, "criado_em": conversa.criado_em, "descadastrado": suprimido_em is not None,
+        })
+    return resultado
+
+
 def obter_com_turnos(db: Session, tenant_id: str, conversa_id: int) -> tuple[ConversaQualificacao, list[TurnoConversa]]:
     conversa = db.query(ConversaQualificacao).filter_by(id=conversa_id, tenant_id=tenant_id).one_or_none()
     if conversa is None:
@@ -179,6 +224,8 @@ def _continuar_roteiro(
         "transferido": False,
         "notificacao_id": notificacao_id,
         "faq_respondida": False,
+        # A pergunta só fica registrada aqui; quem chama a leva para o rascunho de resposta (Aprovações): nada sai sem aprovação.
+        "pergunta_qualificacao": conteudo_saida or None,
     }
 
 
@@ -273,6 +320,7 @@ def _responder_faq(
         "transferido": False,
         "notificacao_id": None,
         "faq_respondida": True,
+        "resposta_faq": item.resposta,  # texto cadastrado, sem IA: vira o rascunho de resposta como está
     }
 
 

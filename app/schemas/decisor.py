@@ -21,6 +21,7 @@ class DecisorSchema(BaseModel):
     papel_confirmado: str | None = None
     papel_sugerido: str | None = None
     email_status: str | None = None
+    suprimido_em: datetime | None = None  # pediu para não receber mais mensagens
     criado_em: datetime
 
 

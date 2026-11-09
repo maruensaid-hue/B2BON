@@ -62,6 +62,7 @@ const ApiPlataforma = lazy(() => import("@/pages/admin/ApiPlataforma").then((m) 
 const Integracoes = lazy(() => import("@/pages/admin/Integracoes").then((m) => ({ default: m.Integracoes })));
 const Relatorios = lazy(() => import("@/pages/admin/Relatorios").then((m) => ({ default: m.Relatorios })));
 const Aprovacoes = lazy(() => import("@/pages/aprovacoes/Aprovacoes").then((m) => ({ default: m.Aprovacoes })));
+const Conversas = lazy(() => import("@/pages/conversas/Conversas").then((m) => ({ default: m.Conversas })));
 const Cadencias = lazy(() => import("@/pages/cadencias/Cadencias").then((m) => ({ default: m.Cadencias })));
 const Campanhas = lazy(() => import("@/pages/campanhas/Campanhas").then((m) => ({ default: m.Campanhas })));
 // Dashboard e Central de Negócios puxam o recharts (biblioteca de gráfico
@@ -293,6 +294,14 @@ export default function App() {
             element={
               <Suspense fallback={<CarregandoPagina />}>
                 <Aprovacoes />
+              </Suspense>
+            }
+          />
+          <Route
+            path="conversas"
+            element={
+              <Suspense fallback={<CarregandoPagina />}>
+                <Conversas />
               </Suspense>
             }
           />

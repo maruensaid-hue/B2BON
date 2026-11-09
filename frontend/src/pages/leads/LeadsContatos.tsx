@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
@@ -18,6 +19,7 @@ interface LeadDecisor {
   conta_nome?: string | null;
   email: string | null;
   telefone: string | null;
+  suprimido_em?: string | null;
 }
 
 interface LeadConta {
@@ -206,6 +208,11 @@ export function LeadsContatos() {
                 <td className="p-2 font-semibold">
                   {contato.nome}
                   {contato.cargo && <span className="text-muted"> · {contato.cargo}</span>}
+                  {contato.suprimido_em && (
+                    <span className="ml-1.5">
+                      <Badge tone="red">Descadastrado</Badge>
+                    </span>
+                  )}
                 </td>
                 <td className="p-2 text-muted">{nomeEmpresa(contato.conta_id)}</td>
                 <td className="p-2 text-muted">{contato.email ?? "—"}</td>

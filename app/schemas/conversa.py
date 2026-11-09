@@ -37,3 +37,22 @@ class ConversaComTurnosSchema(BaseModel):
 class DevolverLeadRequestSchema(BaseModel):
     motivo: str
     cadencia_nutricao_id: int
+
+
+class ConversaResumoSchema(BaseModel):
+    id: int
+    conta_id: int
+    conta_nome: str
+    decisor_id: int
+    decisor_nome: str
+    decisor_cargo: str | None
+    canal: str
+    etapa_atual: str
+    status: str
+    score_total: float | None
+    total_turnos: int
+    ultima_fala: str | None
+    ultima_direcao: str | None
+    atualizado_em: datetime
+    criado_em: datetime
+    descadastrado: bool = False

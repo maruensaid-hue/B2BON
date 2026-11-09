@@ -193,3 +193,51 @@ def test_ligar_exige_cadencia_de_icp(db_session):
 
     with pytest.raises(RegraNegocioViolada):
         cadencia_service.definir_prospeccao_automatica(db_session, TENANT, "1", cadencia.id, True)
+
+
+# --- Qualificação vira rascunho para aprovação (antes só ficava registrada na conversa) -------------------------------------
+
+def test_pergunta_da_qualificacao_fecha_o_rascunho_de_resposta(db_session):
+    _base(db_session)
+    _, marina = _conta_com_decisor(db_session)
+    _enviada(db_session, marina)
+    llm = FakeLLMProvider(["Que bom, Marina! Uma conversa curta ajuda. Hoje, qual é o maior gargalo na agenda?"])
+
+    resultado = conversa_comercial_service.apos_resposta(
+        db_session, TENANT, marina, "Tenho interesse", "email", llm, StubPlanLimitsProvider(),
+        qualificacao={"pergunta_qualificacao": "Qual é o maior gargalo na agenda hoje?"},
+    )
+
+    assert "Qual é o maior gargalo na agenda hoje?" in llm.chamadas[0].prompt
+    rascunho = db_session.query(Mensagem).filter_by(id=resultado["rascunho_mensagem_id"]).one()
+    assert rascunho.status == "aguardando_aprovacao"
+
+
+def test_resposta_de_pergunta_frequente_vai_como_cadastrada_sem_ia(db_session):
+    _base(db_session)
+    _, marina = _conta_com_decisor(db_session)
+    _enviada(db_session, marina)
+    llm = FakeLLMProvider([])
+
+    resultado = conversa_comercial_service.apos_resposta(
+        db_session, TENANT, marina, "Vocês emitem nota?", "email", llm, StubPlanLimitsProvider(),
+        qualificacao={"resposta_faq": "Sim, emitimos nota fiscal de serviço todo mês."},
+    )
+
+    assert llm.chamadas == []
+    rascunho = db_session.query(Mensagem).filter_by(id=resultado["rascunho_mensagem_id"]).one()
+    assert rascunho.conteudo == "Sim, emitimos nota fiscal de serviço todo mês." and rascunho.status == "aguardando_aprovacao"
+
+
+def test_sem_rascunho_da_ia_a_pergunta_da_qualificacao_vai_sozinha(db_session):
+    _base(db_session, rascunho=False)
+    _, marina = _conta_com_decisor(db_session)
+    _enviada(db_session, marina)
+
+    resultado = conversa_comercial_service.apos_resposta(
+        db_session, TENANT, marina, "Tenho interesse", "email", FakeLLMProvider([]), StubPlanLimitsProvider(),
+        qualificacao={"pergunta_qualificacao": "Quantas unidades vocês têm hoje?"},
+    )
+
+    rascunho = db_session.query(Mensagem).filter_by(id=resultado["rascunho_mensagem_id"]).one()
+    assert rascunho.conteudo == "Quantas unidades vocês têm hoje?"

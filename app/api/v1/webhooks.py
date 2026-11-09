@@ -146,7 +146,9 @@ def _processar_mensagem_whatsapp(
     resultado_qualificacao = qualificacao_service.processar_mensagem_recebida(
         db, tenant_id, decisor.id, "whatsapp", texto, llm, whatsapp
     )
-    conversa = conversa_comercial_service.apos_resposta(db, tenant_id, decisor, texto, "whatsapp", llm, get_plan_limits_provider(db))
+    conversa = conversa_comercial_service.apos_resposta(
+        db, tenant_id, decisor, texto, "whatsapp", llm, get_plan_limits_provider(db), qualificacao=resultado_qualificacao
+    )
     return {**resultado_resposta, **resultado_qualificacao, "conversa_comercial": conversa}
 
 
@@ -256,7 +258,9 @@ def webhook_email(
     resultado_qualificacao = qualificacao_service.processar_mensagem_recebida(
         db, dados.tenant_id, decisor.id, "email", dados.texto, llm, whatsapp
     )
-    conversa = conversa_comercial_service.apos_resposta(db, dados.tenant_id, decisor, dados.texto, "email", llm, get_plan_limits_provider(db))
+    conversa = conversa_comercial_service.apos_resposta(
+        db, dados.tenant_id, decisor, dados.texto, "email", llm, get_plan_limits_provider(db), qualificacao=resultado_qualificacao
+    )
     return {**resultado_resposta, **resultado_qualificacao, "conversa_comercial": conversa}
 
 

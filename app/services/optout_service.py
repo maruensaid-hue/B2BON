@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.db import rls
 from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
-from app.services import auditoria_service
+from app.services import atividade_service, auditoria_service
 from app.services.errors import NaoEncontrado, ValidacaoFalhou
 
 _SEPARADOR = ":"
@@ -72,10 +72,19 @@ def aplicar(db: Session, tenant_id: str, decisor: Decisor, origem: str) -> dict:
     """Mesmo efeito de `processar`, sem commit (quem chama decide). D-087:
     o opt-out também vai para o CRM do cliente que tiver PREDATOR → CRM
     ligado — exceto quando veio do próprio CRM (já está lá)."""
+    ja_estava = decisor.suprimido_em is not None
     if decisor.suprimido_em is None:
         decisor.suprimido_em = datetime.now(UTC)
 
     canceladas = _cancelar_mensagens_pendentes(db, decisor.id)
+    # Visível na linha do tempo da conta (antes o "SAIR" só ia para a auditoria e nada na tela mostrava o descadastro, visto em
+    # produção em 09/11/2026). A resposta escrita ("me tire da lista") já registra a própria atividade com o trecho citado.
+    if not ja_estava and not origem.startswith("resposta_"):
+        canal = {"whatsapp": "WhatsApp", "email": "e-mail"}.get(origem, origem.replace("_", " "))
+        atividade_service.registrar(
+            db, tenant_id, conta_id=decisor.conta_id, tipo="sistema",
+            descricao=f"{decisor.nome} pediu para não receber mais mensagens ({canal}): descadastrado, nada mais sai para este contato.",
+        )
 
     auditoria_service.registrar(
         db,
