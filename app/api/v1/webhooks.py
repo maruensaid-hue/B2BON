@@ -86,6 +86,15 @@ def _whatsapp_provider_do_webhook_email(
     return resolver_whatsapp_provider(dados.tenant_id, db)
 
 
+def _texto_da_mensagem(mensagem: dict) -> str | None:
+    """Texto digitado, ou o rótulo do botão tocado (resposta rápida de um modelo ou mensagem interativa)."""
+    return (
+        (mensagem.get("text") or {}).get("body")
+        or (mensagem.get("button") or {}).get("text")
+        or ((mensagem.get("interactive") or {}).get("button_reply") or {}).get("title")
+    )
+
+
 def _decisor_pelo_telefone(db: Session, tenant_id: str, telefone: str) -> Decisor | None:
     """A Meta manda o remetente só com dígitos e com o código do país ("5511993495349"); o contato pode estar cadastrado de qualquer jeito
     ("11993495349", "(11) 99349-5349", "+55 11 99349-5349"). A comparação exata nunca achava ninguém (visto em produção em 09/11/2026).
@@ -125,7 +134,6 @@ def _processar_mensagem_whatsapp(
     alimenta a conversa de qualificação S.H.A.R.K. (E5-H1)."""
     decisor = _decisor_pelo_telefone(db, tenant_id, telefone)
     if decisor is None:
-        logger.info("WEBHOOK_WHATSAPP_REMETENTE_DESCONHECIDO tenant=%s (telefone não cadastrado em nenhum contato)", tenant_id)
         raise NaoEncontrado("Decisor não encontrado para este telefone.")
 
     if texto.strip().lower() in _PALAVRAS_OPTOUT:
@@ -200,21 +208,30 @@ async def receber_webhook_whatsapp_meta(
             chave_numero = hash_phone_number_id(str(phone_number_id))
             with rls.contexto_busca(db, rls.ESCOPO_WHATSAPP_NUMERO, chave_numero):  # o número que recebeu a mensagem diz de qual tenant ela é
                 config = db.query(ConfiguracaoWhatsApp).filter_by(phone_number_id_hash=chave_numero).one_or_none()
-            if config is None:
-                logger.warning("WEBHOOK_WHATSAPP_NUMERO_DESCONHECIDO: nenhum tenant tem este número configurado")
+            mensagens = valor.get("messages", [])
+            # Sem telefone nem texto no log (dado pessoal): só o suficiente para saber o que chegou e o que foi feito.
+            logger.warning(
+                "WEBHOOK_WHATSAPP campo=%s tenant=%s mensagens=%s tipos=%s status=%s",
+                mudanca.get("field"), config.tenant_id if config else "desconhecido", len(mensagens),
+                ",".join(sorted({str(m.get("type")) for m in mensagens})) or "-",
+                ",".join(sorted({str(st.get("status")) for st in valor.get("statuses", [])})) or "-",
+            )
             if config is None:
                 continue
             rls.definir_tenant(db, config.tenant_id)
             whatsapp = resolver_whatsapp_provider(config.tenant_id, db)
-            for mensagem in valor.get("messages", []):
+            for mensagem in mensagens:
                 telefone = mensagem.get("from")
-                texto = mensagem.get("text", {}).get("body")
+                texto = _texto_da_mensagem(mensagem)
                 if not telefone or not texto:
+                    logger.warning("WEBHOOK_WHATSAPP_IGNORADA tenant=%s tipo=%s (sem texto)", config.tenant_id, mensagem.get("type"))
                     continue
                 try:
-                    _processar_mensagem_whatsapp(db, llm, whatsapp, config.tenant_id, telefone, texto)
+                    resultado = _processar_mensagem_whatsapp(db, llm, whatsapp, config.tenant_id, telefone, texto)
                 except NaoEncontrado:
+                    logger.warning("WEBHOOK_WHATSAPP_REMETENTE_DESCONHECIDO tenant=%s (telefone não bate com nenhum contato)", config.tenant_id)
                     continue
+                logger.warning("WEBHOOK_WHATSAPP_TRATADA tenant=%s resultado=%s", config.tenant_id, sorted((resultado or {}).keys()))
     return {"recebido": True}
 
 
