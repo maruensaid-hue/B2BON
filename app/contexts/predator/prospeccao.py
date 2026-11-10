@@ -476,8 +476,17 @@ def enriquecer(
             coletado_em=agora,
         ))
 
+    # Site achado por busca e sem prova de ser da empresa (só semelhança de nome) não vira o site da conta nem o resumo usado nas
+    # mensagens. No piloto de 10/11/2026 a busca trouxe o site da Polícia Científica de SC para uma assessoria de comunicação e o de
+    # uma empresa de limpeza para uma de TI, e esse resumo entrava no prompt da cadência como "fato sobre a empresa".
+    site_aceito = not divergente and (
+        origem == "cadastrado" or coleta.dominio_situacao in ("confirmado", "confirmado_manualmente", "provavel")
+    )
+    if not divergente and not site_aceito:
+        avisos.append("Como o site não foi confirmado, ele não foi gravado na conta e o resumo não é usado nas mensagens.")
+
     # (4) A coleta vale por si: campos de proveniência e conteúdo das páginas ficam gravados antes de qualquer IA.
-    if dominio_descoberto and not divergente:
+    if dominio_descoberto and site_aceito:
         conta.dominio = dominio_descoberto
     campos: list[CampoEnriquecido] = []
     if dominio_descoberto:
@@ -604,7 +613,7 @@ def enriquecer(
         )
     db.add_all(campos)
 
-    if not conta.resumo_site or not conta.resumo_site.strip():
+    if site_aceito and (not conta.resumo_site or not conta.resumo_site.strip()):
         conta.resumo_site = resposta.content
     coleta.resumo, coleta.estado, coleta.avisos, coleta.concluida_em = resposta.content, "concluida", avisos, datetime.now(UTC)
 

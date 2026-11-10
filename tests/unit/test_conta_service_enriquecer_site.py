@@ -25,7 +25,9 @@ def _site_fetcher(resposta: str = "=== https://alphatech.com.br ===\nConteúdo i
     return lambda dominio: resposta
 
 
-def test_enriquecer_sem_dominio_descobre_e_persiste(db_session):
+def test_enriquecer_sem_dominio_descobre_mas_nao_grava_site_sem_prova(db_session):
+    """Site achado só por semelhança de nome (inconclusivo) não vira o site da conta nem o resumo usado nas mensagens: no piloto de
+    10/11/2026 a busca trouxe o site de outra empresa e o resumo dele entrava na cadência como fato."""
     conta = _criar_conta(db_session, dominio=None)
     web_search = FakeWebSearchProvider([ResultadoBusca(titulo="Alpha Tech", url="https://www.alphatech.com.br/", descricao="")])
     llm = FakeLLMProvider(["porte: media"])
@@ -33,8 +35,24 @@ def test_enriquecer_sem_dominio_descobre_e_persiste(db_session):
     conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, llm, _site_fetcher(), web_search, PLAN_LIMITS)
 
     db_session.refresh(conta)
-    assert conta.dominio == "www.alphatech.com.br"
+    assert conta.dominio is None
+    assert conta.resumo_site is None
     assert web_search.buscas == ["Alpha Tech site oficial"]
+
+
+def test_enriquecer_sem_dominio_grava_site_quando_o_cnpj_aparece_nele(db_session):
+    conta = _criar_conta(db_session, dominio=None)
+    conta.cnpj = "11222333000181"
+    db_session.commit()
+    web_search = FakeWebSearchProvider([ResultadoBusca(titulo="Alpha Tech", url="https://www.alphatech.com.br/", descricao="")])
+    llm = FakeLLMProvider(["porte: media"])
+    site = _site_fetcher("=== https://alphatech.com.br ===\nAlpha Tech Ltda — CNPJ 11.222.333/0001-81. Conteúdo institucional.")
+
+    conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, llm, site, web_search, PLAN_LIMITS)
+
+    db_session.refresh(conta)
+    assert conta.dominio == "www.alphatech.com.br"
+    assert conta.resumo_site == "porte: media"
 
 
 def test_enriquecer_sem_dominio_e_sem_resultado_aceitavel_falha(db_session):
@@ -297,10 +315,13 @@ def test_ia_fora_do_ar_com_dominio_descoberto_grava_o_dominio(db_session):
     from app.services.errors import IAIndisponivel
 
     conta = _criar_conta(db_session, dominio=None)
+    conta.cnpj = "11222333000181"  # o site comprova ser da empresa: só assim o domínio descoberto é gravado
+    db_session.commit()
     web_search = FakeWebSearchProvider([ResultadoBusca(titulo="Alpha Tech", url="https://www.alphatech.com.br/", descricao="")])
+    site = _site_fetcher("=== https://alphatech.com.br ===\nAlpha Tech Ltda — CNPJ 11.222.333/0001-81.")
 
     with pytest.raises(IAIndisponivel):
-        conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, _IAForaDoAr(["x"]), _site_fetcher(), web_search, PLAN_LIMITS)
+        conta_service.enriquecer(db_session, TENANT_ID, "1", conta.id, _IAForaDoAr(["x"]), site, web_search, PLAN_LIMITS)
 
     db_session.expire_all()
     assert db_session.get(Conta, conta.id).dominio == "www.alphatech.com.br"

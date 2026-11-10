@@ -138,8 +138,10 @@ def test_enriquecer_sem_dominio_descobre_e_persiste(client, fake_llm, fake_web_s
     campos_por_nome = {campo["campo"]: campo["valor"] for campo in resposta.json()["campos"]}
     assert campos_por_nome["dominio_descoberto_automaticamente"] == "betaclinica.com.br"
 
+    # Sem prova de que o site é da empresa (só semelhança de nome), o domínio fica registrado na coleta mas não é gravado na ficha:
+    # no piloto de 10/11/2026 a busca trouxe sites de outras empresas e o resumo deles ia para as mensagens.
     conta_atualizada = client.get(f"/api/v1/contas/{conta_id}").json()
-    assert conta_atualizada["dominio"] == "betaclinica.com.br"
+    assert conta_atualizada["dominio"] is None
 
 
 def test_enriquecer_sem_limite_semanal_configurado_nunca_bloqueia(client, fake_llm, fake_site_fetcher):
