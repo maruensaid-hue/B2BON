@@ -529,6 +529,37 @@ _TENTATIVAS_POR_TOQUE = 3
 _LIMITE_RESUMO_SITE_NO_PROMPT = 1200
 
 
+# Linha de metadado que a IA às vezes põe antes da mensagem ("**Toque 5 — LinkedIn**", "**Canal:** ...", "# Toque 5", "Mensagem:").
+_ROTULOS_DE_METADADO = r"(toque|canal|lead|contato|empresa|lista|cad[eê]ncia|assunto|mensagem|corpo|destinat[aá]rio|cargo|objetivo)"
+_LINHA_DE_METADADO = re.compile(
+    r"^\s*("
+    r"#+\s.*"  # título markdown
+    r"|\*\*[^*\n]+\*\*\s*:?\s*"  # linha inteira em negrito
+    rf"|[*_]*{_ROTULOS_DE_METADADO}[*_]*\s*[:—–].*"  # "Canal: ...", "**Lead:** ...", "Toque — LinkedIn"
+    r"|[*_]*toque\s*\d.*"  # "Toque 5 ..."
+    r"|-{3,}|\*{3,}|_{3,}"  # separador
+    r")\s*$",
+    re.IGNORECASE,
+)
+
+
+def limpar_texto_gerado(texto: str) -> str:
+    """Tira da mensagem da IA o que não é para a pessoa ler: cabeçalho de metadados no início (título, "Toque", "Canal:", "Lead:",
+    "Mensagem:", separador "---") e marcação de markdown (asteriscos, sublinhados, "#"). Nas tarefas de LinkedIn o vendedor copiava
+    tudo isso junto com a mensagem (visto em produção em 10/11/2026). Só remove linhas de metadado do TOPO, até a primeira linha de
+    texto de verdade; se sobrar texto vazio, devolve o original sem markdown."""
+    linhas = (texto or "").strip().splitlines()
+    inicio = 0
+    while inicio < len(linhas) and (not linhas[inicio].strip() or _LINHA_DE_METADADO.match(linhas[inicio])):
+        inicio += 1
+    corpo = "\n".join(linhas[inicio:]).strip() or (texto or "").strip()
+    corpo = re.sub(r"\*\*(.+?)\*\*", r"\1", corpo)
+    corpo = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"\1", corpo)
+    corpo = re.sub(r"(?<!\w)__(.+?)__(?!\w)", r"\1", corpo)
+    corpo = re.sub(r"^\s*#+\s+", "", corpo, flags=re.MULTILINE)
+    return corpo.strip()
+
+
 def _fatos_da_conta(db: Session, conta: Conta, primeiro_toque: bool) -> str:
     """Trecho de prompt com o que se sabe DESTA empresa: sinais verificados (com evidência gravada) e o resumo do site.
 
@@ -614,7 +645,8 @@ def _gerar_conteudo_toque(
     regra_de_veracidade = (
         " Nunca afirme que a empresa ou a pessoa fez, abriu, contratou, lançou ou está passando por algo, a menos que esteja nos fatos "
         "sobre esta empresa acima; use as dores e situações do perfil só como pergunta ou como algo comum no setor (ex.: 'é comum que...'). "
-        "Escreva em texto simples, sem markdown (sem asteriscos, sem negrito, sem títulos)."
+        "Escreva em texto simples, sem markdown (sem asteriscos, sem negrito, sem títulos). Devolva só o texto que a pessoa vai ler: "
+        "sem cabeçalho, sem 'Toque', 'Canal', 'Lead', 'Contato', 'Empresa', 'Lista' ou 'Mensagem:' e sem comentários seus."
     )
     perfil = (
         f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento})"
@@ -671,6 +703,8 @@ def _gerar_conteudo_toque(
             correspondencia = re.match(r"ASSUNTO:\s*(.+?)\nCORPO:\s*(.+)", resposta.content, re.DOTALL)
             if correspondencia:
                 assunto, conteudo = correspondencia.group(1).strip(), correspondencia.group(2).strip()
+            assunto = limpar_texto_gerado(assunto) if assunto else assunto
+        conteudo = limpar_texto_gerado(conteudo)
         if not comunicacao_service.validar_texto(f"{assunto or ''}\n{conteudo}", config.restricoes):
             # Frase batida/de spam: refaz enquanto houver tentativa; na última aceita (o toque não some do lote por isso) e a aprovação
             # automática a retém com o motivo (`aprovacao_service`).

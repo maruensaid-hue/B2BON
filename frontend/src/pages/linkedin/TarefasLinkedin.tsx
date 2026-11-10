@@ -47,6 +47,23 @@ function urlDoPerfil(link: string | null): string | null {
   }
 }
 
+// Linha de metadado que a IA às vezes punha antes da mensagem ("**Toque 5 — LinkedIn**", "**Canal:** ...", "Mensagem:", "---").
+// O texto novo já sai limpo do servidor; isto cobre tarefas antigas, para o vendedor não colar o cabeçalho no LinkedIn.
+const LINHA_DE_METADADO =
+  /^\s*(#+\s.*|\*\*[^*\n]+\*\*\s*:?\s*|[*_]*(toque|canal|lead|contato|empresa|lista|cad[eê]ncia|assunto|mensagem|corpo|destinat[aá]rio|cargo|objetivo)[*_]*\s*[:—–].*|[*_]*toque\s*\d.*|-{3,}|\*{3,}|_{3,})\s*$/i;
+
+function textoParaEnviar(texto: string): string {
+  const linhas = (texto ?? "").trim().split("\n");
+  let inicio = 0;
+  while (inicio < linhas.length && (!linhas[inicio].trim() || LINHA_DE_METADADO.test(linhas[inicio]))) inicio += 1;
+  const corpo = linhas.slice(inicio).join("\n").trim() || (texto ?? "").trim();
+  return corpo
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/(^|[^\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])/g, "$1$2")
+    .replace(/^\s*#+\s+/gm, "")
+    .trim();
+}
+
 // Tela das tarefas de LinkedIn: copiar a mensagem, abrir o perfil, marcar como enviada ou ignorar. O B2B ON não envia pelo LinkedIn (protege a conta da pessoa).
 export function TarefasLinkedin() {
   const [filtro, setFiltro] = useState("pendente");
@@ -76,7 +93,7 @@ export function TarefasLinkedin() {
   async function copiar(tarefa: TarefaLinkedin) {
     setErro(null);
     try {
-      await navigator.clipboard.writeText(tarefa.texto);
+      await navigator.clipboard.writeText(textoParaEnviar(tarefa.texto));
       setCopiadaId(tarefa.id);
       window.setTimeout(() => setCopiadaId((atual) => (atual === tarefa.id ? null : atual)), 2500);
     } catch {
@@ -121,9 +138,13 @@ export function TarefasLinkedin() {
         </div>
         <ol className="mt-2 list-decimal pl-5 text-[12px] text-muted">
           <li>Clique em <strong className="text-text">Copiar mensagem</strong>.</li>
-          <li>Clique em <strong className="text-text">Abrir perfil</strong> (abre numa nova aba) e envie a mensagem pelo LinkedIn.</li>
+          <li>Clique em <strong className="text-text">Abrir perfil</strong> (abre numa nova aba), cole a mensagem e <strong className="text-text">leia antes de enviar</strong>: o texto foi escrito pela IA e você é quem envia.</li>
           <li>Volte e clique em <strong className="text-text">Marcar como enviada</strong>. Isso atualiza a cadência e o histórico da conta.</li>
         </ol>
+        <div className="mt-2 rounded-lg bg-amber/10 p-2 text-[11px] text-amber">
+          Antes de enviar, confira o que foi colado: só deve ir a mensagem para a pessoa, sem título, "Assunto", "Toque", nome da lista ou
+          observações. Se aparecer algo assim, apague antes de enviar.
+        </div>
       </Card>
 
       {erro && <div className="mb-3 text-[12px] text-red">{erro}</div>}
@@ -170,13 +191,13 @@ export function TarefasLinkedin() {
                 className="mb-3 cursor-text rounded-lg bg-surf2 p-3 text-[12px] whitespace-pre-wrap text-text select-all"
                 title="Clique para selecionar o texto todo"
               >
-                {tarefa.texto}
+                {textoParaEnviar(tarefa.texto)}
               </div>
 
               {tarefa.status === "pendente" ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <Button size="sm" variant="ghost" onClick={() => copiar(tarefa)}>
-                    {copiadaId === tarefa.id ? "✓ Copiada" : "Copiar mensagem"}
+                    {copiadaId === tarefa.id ? "✓ Copiada: revise ao colar" : "Copiar mensagem"}
                   </Button>
                   <Button
                     size="sm"
