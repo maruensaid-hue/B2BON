@@ -37,14 +37,14 @@ def test_filial_com_a_mesma_raiz_confirma_com_registro_da_evidencia():
 
 
 def test_email_do_cadastro_no_mesmo_dominio_mais_endereco_confirma_sem_cnpj_no_site():
-    v = _v([("u", "Nossa sede: Republica do Chile, 65 - Centro, Rio de Janeiro")])
-    assert v.situacao == "confirmado" and _tipos(v) == {"email_dominio", "endereco"}
+    v = _v([("u", "Petrobras. Nossa sede: Republica do Chile, 65 - Centro, Rio de Janeiro")])
+    assert v.situacao == "confirmado" and _tipos(v) == {"email_dominio", "endereco", "nome"}
     assert any("não exibe CNPJ" in l for l in v.limitacoes)
 
 
 def test_so_email_e_cep_fica_provavel_e_pede_validacao_manual():
-    v = _v([("u", "CEP 20031-170")])
-    assert v.situacao == "provavel" and v.exige_validacao_manual and v.pontuacao == 55
+    v = _v([("u", "Petrobras - CEP 20031-170")])
+    assert v.situacao == "provavel" and v.exige_validacao_manual and v.pontuacao == 60  # 35 + 20 + 5 do nome, que não confirma sozinho
 
 
 def test_nome_parecido_sozinho_nunca_confirma():
@@ -60,7 +60,7 @@ def test_site_com_outro_cnpj_e_sem_prova_e_divergente():
 
 def test_outro_cnpj_mas_com_email_e_endereco_do_cadastro_nao_e_divergente():
     # grupo/parceiro exibindo outro CNPJ no rodapé, mas com e-mail e endereço oficiais batendo
-    v = _v([("u", "Parceiro CNPJ 11.222.333/0001-81. Sede Republica do Chile, 65")])
+    v = _v([("u", "Petrobras. Parceiro CNPJ 11.222.333/0001-81. Sede Republica do Chile, 65")])
     assert v.situacao == "confirmado"
 
 
@@ -147,3 +147,25 @@ def test_margem_derivada_so_com_mesma_pagina_periodo_e_moeda_com_formula_e_orige
 )
 def test_nao_deriva_misturando_paginas_periodos_moedas_ou_sem_periodo(paginas):
     assert derivar_indicadores(extrair_indicadores(paginas)) == []
+
+
+# Dados de contato do cadastro público costumam ser do escritório contábil/advocatício que cuida do CNPJ (alerta do PO, 10/11/2026).
+def test_email_e_endereco_do_cadastro_sem_o_nome_da_empresa_no_site_nao_provam():
+    v = _v([("u", "Nossa sede: Republica do Chile, 65 - Centro, Rio de Janeiro")])
+    assert v.situacao == "inconclusivo" and v.pontuacao == 0
+    assert any("costumam ser do escritório contábil" in l for l in v.limitacoes)
+
+
+def test_site_de_escritorio_contabil_com_o_email_do_cadastro_nao_vira_site_da_empresa():
+    registro = {**REGISTRO, "email": "fiscal@contabilmais.com.br"}
+    v = _v([("u", "Contabil Mais - escritório de contabilidade. Clientes: Petrobras. Rua Republica do Chile, 65")],
+           registro=registro, dominio="contabilmais.com.br")
+    assert v.situacao == "inconclusivo"
+    assert any("escritório contábil ou de advocacia" in l for l in v.limitacoes)
+
+
+def test_escritorio_de_contabilidade_pode_confirmar_o_proprio_site():
+    registro = {**REGISTRO, "razao_social": "CONTABIL MAIS LTDA", "nome_fantasia": "CONTABIL MAIS", "email": "contato@contabilmais.com.br"}
+    v = _v([("u", "Contabil Mais - escritório de contabilidade. Sede Republica do Chile, 65")],
+           registro=registro, dominio="contabilmais.com.br", nome="Contabil Mais")
+    assert v.situacao == "confirmado"

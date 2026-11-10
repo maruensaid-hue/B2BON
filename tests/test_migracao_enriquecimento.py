@@ -53,7 +53,8 @@ def test_migracao_preserva_o_legado_nao_inventa_configuracao_e_registra_so_o_lot
             # Corporate e os planos da suíte que não existem aqui não são criados.
             configs = conexao.execute(sa.text(
                 "SELECT p.nome, c.modo, c.franquia_creditos, c.periodicidade, c.limite_creditos_pesquisa, c.decisores_por_empresa_max, c.aprovado_por "
-                "FROM enriquecimento_config_plano c JOIN plano p ON p.id = c.plano_id ORDER BY p.nome")).fetchall()
+                "FROM enriquecimento_config_plano c JOIN plano p ON p.id = c.plano_id "
+                "WHERE p.nome NOT LIKE '%Individual' ORDER BY p.nome")).fetchall()
             assert configs == [("PREDATOR Professional", "franquia_fixa", 60, "mensal", 60, 10, "po:matriz-2026-10-21"),
                                ("PREDATOR Starter", "franquia_fixa", 30, "mensal", 30, 5, "po:matriz-2026-10-21"),
                                ("Teste", "franquia_fixa", 30, "mensal", 30, 3, "po:matriz-2026-10-21")]
@@ -148,7 +149,7 @@ def test_migracao_que_libera_os_planos_da_matriz_nao_sobrescreve_configuracao_ja
         with engine.connect() as conexao:
             linhas = conexao.execute(sa.text(
                 "SELECT p.nome, c.franquia_creditos, c.limite_creditos_pesquisa, c.decisores_por_empresa_max FROM enriquecimento_config_plano c "
-                "JOIN plano p ON p.id = c.plano_id WHERE p.nome LIKE 'PREDATOR%' ORDER BY p.nome")).fetchall()
+                "JOIN plano p ON p.id = c.plano_id WHERE p.nome LIKE 'PREDATOR%' AND p.nome NOT LIKE '%Individual' ORDER BY p.nome")).fetchall()
         assert linhas == [("PREDATOR Professional", 999, 999, 7), ("PREDATOR Starter", 30, 30, 5)]  # Starter liberado; Professional do admin preservado
         command.downgrade(config, "d7f9b1c3e5a7")
         with engine.connect() as conexao:

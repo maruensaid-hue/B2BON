@@ -21,6 +21,9 @@ Pagina = tuple[str, str]  # (url, texto visível)
 _REGEX_CNPJ = re.compile(r"(?<!\d)(\d{2})\.?(\d{3})\.?(\d{3})/?(\d{4})-?(\d{2})(?!\d)")
 _REGEX_CEP = re.compile(r"(?<!\d)(\d{5})-?(\d{3})(?!\d)")
 _PESOS = {"cnpj_exato": 70, "cnpj_mesma_raiz": 55, "email_dominio": 35, "endereco": 25, "cep": 20, "telefone": 10, "nome": 5}
+# Site de escritório contábil ou de advocacia: o e-mail, o telefone e muitas vezes o endereço do cadastro público da empresa são
+# desses escritórios (eles abrem e mantêm o CNPJ do cliente), então bater esses dados com o site não prova que o site é da empresa.
+_REGEX_ESCRITORIO = re.compile(r"\b(contabil|contabilidade|contador(es)?|escritorio contabil|advocacia|advogados?|sociedade de advogados)\b")
 _SUFIXOS_JURIDICOS = re.compile(r"\b(ltda|eireli|epp|mei|s\s*/?\s*a|sa|me|sociedade anonima|comercio|industria|servicos)\b")
 
 
@@ -90,6 +93,24 @@ def verificar_dominio(dominio: str, paginas: list[Pagina], cnpj_conta: str | Non
     elif mesma_raiz:
         pontuacao += _PESOS["cnpj_mesma_raiz"]
 
+    nomes = [n for n in {normalizar(nome_conta), normalizar((registro or {}).get("razao_social")),
+                         normalizar((registro or {}).get("nome_fantasia"))} if n]
+    nucleos = [n for n in (re.sub(r"\s+", " ", _SUFIXOS_JURIDICOS.sub(" ", n)).strip() for n in nomes) if len(n) >= 5]
+    nome_no_site = False
+    if nucleos:
+        nome_no_site = any(n in texto_norm for n in nucleos)
+        evidencia("nome", "Nome da empresa " + ("aparece" if nome_no_site else "não aparece") + " no site (indício fraco, nunca confirma sozinho)",
+                  nome_no_site)
+        pontuacao += _PESOS["nome"] if nome_no_site else 0
+
+    # E-mail, telefone e endereço do cadastro público muitas vezes são do escritório contábil ou de advocacia que cuida do CNPJ
+    # (alerta do PO em 10/11/2026). Por isso só contam como prova quando o nome da empresa também aparece no site e o site não é
+    # de um escritório desses (a não ser que a própria empresa seja um).
+    empresa_e_escritorio = bool(_REGEX_ESCRITORIO.search(" ".join(nomes)))
+    site_de_escritorio = not empresa_e_escritorio and bool(_REGEX_ESCRITORIO.search(texto_norm[:20000]))
+    cadastro_vale = nome_no_site and not site_de_escritorio
+    pontuacao_antes_do_cadastro = pontuacao
+
     if registro is None:
         limitacoes.append(
             "Cadastro público do CNPJ indisponível ou CNPJ não informado: e-mail, endereço e telefone oficiais não foram comparados."
@@ -125,15 +146,17 @@ def verificar_dominio(dominio: str, paginas: list[Pagina], cnpj_conta: str | Non
             evidencia("telefone", "Telefone do cadastro " + ("aparece" if achou else "não aparece") + " no site", achou)
             pontuacao += _PESOS["telefone"] if achou else 0
 
-    nomes = [n for n in {normalizar(nome_conta), normalizar((registro or {}).get("razao_social")),
-                         normalizar((registro or {}).get("nome_fantasia"))} if n]
-    nucleos = [n for n in (re.sub(r"\s+", " ", _SUFIXOS_JURIDICOS.sub(" ", n)).strip() for n in nomes) if len(n) >= 5]
-    if nucleos:
-        achou = any(n in texto_norm for n in nucleos)
-        evidencia("nome", "Nome da empresa " + ("aparece" if achou else "não aparece") + " no site (indício fraco, nunca confirma sozinho)", achou)
-        pontuacao += _PESOS["nome"] if achou else 0
+    if registro is not None and not cadastro_vale and pontuacao > pontuacao_antes_do_cadastro:
+        pontuacao = pontuacao_antes_do_cadastro
+        limitacoes.append(
+            "Dados de contato do cadastro público (e-mail, telefone, endereço) bateram com o site, mas não contam como prova: "
+            + ("o site parece ser de escritório contábil ou de advocacia, que costuma constar no cadastro do cliente."
+               if site_de_escritorio else "o nome da empresa não aparece no site, e esses dados costumam ser do escritório contábil.")
+        )
 
-    if exato or mesma_raiz or pontuacao >= 60:
+    # O nome é indício fraco: ajuda a decidir se os dados do cadastro valem, mas não empurra ninguém para "confirmado".
+    pontuacao_sem_nome = pontuacao - (_PESOS["nome"] if nome_no_site else 0)
+    if exato or mesma_raiz or pontuacao_sem_nome >= 60:
         situacao = "confirmado"
     elif outros_cnpjs and not exato and not mesma_raiz and pontuacao < 30:
         situacao = "divergente"
