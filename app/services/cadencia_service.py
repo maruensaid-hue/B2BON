@@ -599,11 +599,22 @@ def _gerar_conteudo_toque(
     fallback silencioso (`assunto=None`, o texto inteiro vira
     `conteudo`) — nunca perde a mensagem por causa de formatação."""
     enquadramento_variante = f" {_ENQUADRAMENTO_VARIANTE[variante]}" if variante else ""
+    # Dores e gatilhos do ICP são HIPÓTESES sobre o perfil, não fatos sobre esta empresa. Sem dizer isso, a IA escrevia "notei que a
+    # empresa X acabou de abrir uma filial / vagas de SDR" para todo mundo (visto em produção em 10/11/2026).
     dores_e_gatilhos = (
-        (f" Dores prováveis desse perfil de cliente: {', '.join(icp.dores)}." if icp.dores else "")
-        + (f" Gatilhos de abordagem: {', '.join(icp.gatilhos)}." if icp.gatilhos else "")
+        (f" Dores comuns nesse perfil de cliente (hipóteses, não fatos sobre esta empresa): {', '.join(icp.dores)}." if icp.dores else "")
+        + (
+            f" Situações que costumam motivar a compra nesse perfil (hipóteses, não fatos sobre esta empresa): {', '.join(icp.gatilhos)}."
+            if icp.gatilhos
+            else ""
+        )
         if icp is not None
         else ""
+    )
+    regra_de_veracidade = (
+        " Nunca afirme que a empresa ou a pessoa fez, abriu, contratou, lançou ou está passando por algo, a menos que esteja nos fatos "
+        "sobre esta empresa acima; use as dores e situações do perfil só como pergunta ou como algo comum no setor (ex.: 'é comum que...'). "
+        "Escreva em texto simples, sem markdown (sem asteriscos, sem negrito, sem títulos)."
     )
     perfil = (
         f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento})"
@@ -629,7 +640,7 @@ def _gerar_conteudo_toque(
         f"para {decisor.nome} ({decisor.cargo or 'decisor'}) na empresa {conta.nome}, "
         f"{perfil}.{dores_e_gatilhos}{_fatos_da_conta(db, conta, toque.ordem == 1)} "
         f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais}{regras_aprendidas} "
-        f"Tom: {config.tom}.{enquadramento_variante}{instrucao_sem_template} Nunca mencione: "
+        f"Tom: {config.tom}.{enquadramento_variante}{instrucao_sem_template}{regra_de_veracidade} Nunca mencione: "
         f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
         f"{instrucao_formato_email}"
     )

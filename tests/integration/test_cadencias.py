@@ -93,6 +93,10 @@ def test_mensagens_personalizadas_usam_dados_do_decisor(
     # ICP precisam alimentar o texto gerado, não só o nome da oferta
     assert all("Descrição da oferta" in prompt and "diferencial1" in prompt for prompt in prompts)
     assert all("dor1" in prompt and "gatilho1" in prompt for prompt in prompts)
+    # Dores e gatilhos do ICP entram como hipóteses, com a regra de não afirmar nada sobre a empresa que não esteja nos fatos
+    # (antes a IA escrevia "notei que vocês abriram uma filial" para todo mundo, visto em produção em 10/11/2026).
+    assert all("hipóteses, não fatos sobre esta empresa" in prompt for prompt in prompts)
+    assert all("Nunca afirme que a empresa" in prompt and "sem markdown" in prompt for prompt in prompts)
 
 
 def test_regra_aprendida_ativa_entra_no_prompt_da_cadencia(
