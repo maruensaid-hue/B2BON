@@ -48,7 +48,7 @@ function PlanoOpcao({
       <div>
         <div className="font-semibold">{plano.nome}</div>
         <div className="text-[10.5px] text-muted">
-          {plano.max_usuarios != null ? `Até ${plano.max_usuarios} usuários` : "Usuários ilimitados"}
+          {plano.max_usuarios === 1 ? "1 usuário" : plano.max_usuarios != null ? `Até ${plano.max_usuarios} usuários` : "Usuários ilimitados"}
           {temPredator && ` · ${plano.franquia_contas_mes} contas/mês`}
         </div>
         {temPredator && (

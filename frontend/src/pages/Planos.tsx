@@ -64,6 +64,7 @@ const CONTRATACAO_POR_MODULO: ModuloContratacao[] = [
   {
     nome: "MAP",
     tiers: [
+      { nome: "Individual", usuarios: "1 usuário", preco: "R$ 29,90/mês", checkoutPlanoNome: "MAP Individual" },
       { nome: "Starter", usuarios: "Até 5 usuários", preco: "R$ 149,50/mês", checkoutPlanoNome: "MAP Starter" },
       {
         nome: "Professional",
@@ -83,6 +84,7 @@ const CONTRATACAO_POR_MODULO: ModuloContratacao[] = [
   {
     nome: "PREDATOR",
     tiers: [
+      { nome: "Individual", usuarios: "1 usuário", preco: "R$ 95,10/mês", checkoutPlanoNome: "PREDATOR Individual" },
       {
         nome: "Starter",
         usuarios: "Até 5 usuários",
@@ -107,6 +109,7 @@ const CONTRATACAO_POR_MODULO: ModuloContratacao[] = [
   {
     nome: "CRM",
     tiers: [
+      { nome: "Individual", usuarios: "1 usuário", preco: "R$ 59,90/mês", checkoutPlanoNome: "CRM Individual" },
       { nome: "Starter", usuarios: "Até 5 usuários", preco: "R$ 299,50/mês", checkoutPlanoNome: "CRM Starter" },
       {
         nome: "Professional",
@@ -139,6 +142,19 @@ interface Plano {
 }
 
 const PLANOS: Plano[] = [
+  // Assinatura individual (PO, 2026-11-10): 1 usuário com a suíte inteira, porta de entrada para quem vende sozinho.
+  {
+    nome: "Individual",
+    usuarios: "1 usuário",
+    total: "R$ 149,90",
+    porUsuario: "a suíte completa para quem vende sozinho",
+    checkoutPlanoNome: "Individual",
+    linhas: [
+      { nome: "Rede social", valor: "Grátis" },
+      { nome: "MAP, PREDATOR e CRM", valor: "Incluídos" },
+      { nome: "Empresas novas por mês", valor: "40" },
+    ],
+  },
   {
     nome: "Starter",
     usuarios: "Até 5 usuários",
@@ -293,8 +309,8 @@ export function Planos() {
           <div className="text-[10px] font-semibold tracking-widest text-cyan uppercase">Ou contrate separado</div>
           <div className="mt-1.5 font-head text-xl font-bold text-text">Contratação por módulo</div>
           <div className="mx-auto mt-2 max-w-lg text-[12px] text-muted">
-            Precisa só de um módulo? MAP, PREDATOR e CRM também podem ser contratados avulsos, na
-            mesma faixa de desconto por usuário da suíte completa. Shoal é sempre gratuito, com ou
+            Precisa só de um módulo? MAP, PREDATOR e CRM também podem ser contratados avulsos, a partir de 1
+            usuário, na mesma faixa de desconto por usuário da suíte completa. Shoal é sempre gratuito, com ou
             sem outro módulo contratado.
           </div>
         </div>

@@ -43,7 +43,9 @@ function PlanoDaLinha({
       <div className="text-[11px] text-muted">
         {creditos(plano.ai_credits_mensais)} de IA por mês
         {" · "}
-        {plano.max_usuarios !== null
+        {plano.max_usuarios === 1
+          ? "1 usuário"
+          : plano.max_usuarios !== null
           ? `até ${plano.max_usuarios} usuários`
           : pendencias.includes("usuarios_incluidos")
             ? "usuários: a definir"
