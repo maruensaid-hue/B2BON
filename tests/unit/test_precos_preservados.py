@@ -16,6 +16,8 @@ PRECOS = {
     "MAP Starter": 149.50, "MAP Professional": 269.10, "MAP Enterprise": 478.40,
     "PREDATOR Starter": 475.50, "PREDATOR Professional": 855.90, "PREDATOR Enterprise": 1521.60,
     "CRM Starter": 299.50, "CRM Professional": 539.10, "CRM Enterprise": 958.40,
+    # Assinatura de 1 usuário, instrução do PO em 2026-11-10 (migração b6d8f0a2c4e7).
+    "Individual": 149.90, "PREDATOR Individual": 95.10, "CRM Individual": 59.90, "MAP Individual": 29.90,
 }
 
 
@@ -38,7 +40,9 @@ def test_seed_e_migracao_cobram_os_mesmos_precos():
     suites = {nome: float(preco) for nome, preco in re.findall(r'"nome": "([^"]+)",[^\n]*"preco_mensal": ([\d.]+)', seed)}
     migracao = (RAIZ / "alembic/versions/807d7076f1df_contratacao_avulsa_por_modulo.py").read_text(encoding="utf-8")
     avulsos = {nome: float(preco) for nome, preco in re.findall(r'\("([A-Z]+ \w+)", ([\d.]+), \d+, "\w+"\)', migracao)}
-    cobrados = {k: v for k, v in {**suites, **avulsos}.items() if k in PRECOS}
+    individual = (RAIZ / "alembic/versions/b6d8f0a2c4e7_planos_individuais.py").read_text(encoding="utf-8")
+    individuais = {nome: float(preco) for nome, preco in re.findall(r'\("([A-Za-z ]*Individual)", "[^"]+", ([\d.]+),', individual)}
+    cobrados = {k: v for k, v in {**suites, **avulsos, **individuais}.items() if k in PRECOS}
     assert cobrados == PRECOS
 
 
