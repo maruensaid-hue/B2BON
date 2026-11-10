@@ -211,6 +211,10 @@ def listar_fila(
         query = query.filter(Mensagem.cadencia_id == cadencia_id)
     if status:
         query = query.filter(Aprovacao.status == status)
+        if status in ("pendente", "editado"):
+            # Mensagem cancelada (cadência cancelada, descadastro, "parar ao responder", cancelamento manual) não é mais decisão
+            # pendente, mesmo que o item da fila não tenha sido fechado.
+            query = query.filter(Mensagem.status == "aguardando_aprovacao")
     if decisor_id:
         query = query.filter(Mensagem.decisor_id == decisor_id)
 
@@ -234,6 +238,16 @@ def listar_fila(
         }
         for aprovacao, mensagem, decisor in query.all()
     ]
+
+
+# Só mensagem ainda não decidida (ou já aprovada, sem efeito) pode ser aprovada. Antes, aprovar uma mensagem CANCELADA a fazia
+# voltar a "aprovado" e sair: em 10/11/2026 rascunhos cancelados (versão com fatos inventados) foram aprovados em lote junto com
+# os novos e cada contato recebeu o primeiro e-mail duas vezes. Também evita reenviar uma mensagem já enviada.
+_STATUS_APROVAVEIS = ("aguardando_aprovacao", "aprovado")
+
+
+def _mensagem_aprovavel(mensagem: Mensagem) -> bool:
+    return mensagem.status in _STATUS_APROVAVEIS
 
 
 def _obter_aprovacao(db: Session, tenant_id: str, aprovacao_id: int) -> Aprovacao:
@@ -268,6 +282,12 @@ def _publicar_mensagem_aprovada(db: Session, tenant_id: str, ator_id: str | None
 def aprovar(db: Session, tenant_id: str, ator_id: str | None, aprovacao_id: int) -> Aprovacao:
     aprovacao = _obter_aprovacao(db, tenant_id, aprovacao_id)
     mensagem = db.query(Mensagem).filter_by(id=aprovacao.mensagem_id).one()
+    if not _mensagem_aprovavel(mensagem):
+        raise RegraNegocioViolada(
+            "Esta mensagem não pode mais ser aprovada: ela foi cancelada ou já foi enviada."
+            if mensagem.status in ("cancelado", "enviado")
+            else f"Esta mensagem não pode ser aprovada (situação: {mensagem.status})."
+        )
 
     foi_editada = aprovacao.status == "editado"
     aprovacao.status = "aprovado"
@@ -297,6 +317,10 @@ def aprovar_lote(db: Session, tenant_id: str, ator_id: str | None, aprovacao_ids
     """Aprovação em lote só é permitida para itens do mesmo template (E4-H1)."""
     aprovacoes = [_obter_aprovacao(db, tenant_id, aid) for aid in aprovacao_ids]
     mensagens = [db.query(Mensagem).filter_by(id=a.mensagem_id).one() for a in aprovacoes]
+    # Cancelada ou já enviada fica de fora do lote (não volta a sair); o resto do lote é aprovado normalmente.
+    pares = [(a, m) for a, m in zip(aprovacoes, mensagens, strict=True) if _mensagem_aprovavel(m)]
+    aprovacoes = [a for a, _ in pares]
+    mensagens = [m for _, m in pares]
 
     templates = {m.template_id for m in mensagens}
     if len(templates) > 1:
@@ -424,6 +448,9 @@ def cancelar_mensagem(db: Session, tenant_id: str, ator_id: str | None, mensagem
         raise RegraNegocioViolada("Só é possível cancelar mensagens ainda não enviadas.")
 
     mensagem.status = "cancelado"
+    db.query(Aprovacao).filter(
+        Aprovacao.tenant_id == tenant_id, Aprovacao.mensagem_id == mensagem.id, Aprovacao.status.in_(("pendente", "editado"))
+    ).update({"status": "rejeitado", "decidido_em": datetime.now(UTC)}, synchronize_session=False)
     auditoria_service.registrar(
         db,
         tenant_id,

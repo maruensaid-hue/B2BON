@@ -378,3 +378,71 @@ def test_decisoes_humanas_viram_eventos_de_aprendizado(client, db_session, caden
     assert aprovado.dados["editada_antes"] is True and aprovado.feature == "predator.mensagem_cadencia"
     dominio = {e.tipo for e in db_session.query(EventoDominio)}
     assert {"AIRecommendationAccepted", "AIRecommendationRejected"} <= dominio
+
+
+# Mensagem cancelada não volta a sair por aprovação (produção 10/11/2026: rascunhos cancelados foram aprovados em lote junto com os
+# novos e cada contato recebeu o primeiro e-mail duas vezes).
+def _cancelar_direto(db_session, mensagem):
+    from app.models.mensagem import Mensagem
+
+    db_session.query(Mensagem).filter_by(id=mensagem.id).update({"status": "cancelado"})
+    db_session.commit()
+
+
+def test_mensagem_cancelada_nao_pode_ser_aprovada(client, db_session, cadencia_e_decisor):
+    from app.models.aprovacao import Aprovacao
+    from app.models.mensagem import Mensagem
+
+    cadencia, decisor, _ = cadencia_e_decisor
+    mensagem = _propor_mensagem(db_session, cadencia, decisor)
+    aprovacao_id = db_session.query(Aprovacao.id).filter_by(mensagem_id=mensagem.id).scalar()
+    _cancelar_direto(db_session, mensagem)
+
+    resposta = client.post(f"/api/v1/aprovacoes/{aprovacao_id}/aprovar")
+
+    assert resposta.status_code in (400, 409, 422)
+    db_session.expire_all()
+    assert db_session.get(Mensagem, mensagem.id).status == "cancelado"
+
+
+def test_fila_pendente_nao_mostra_mensagem_cancelada(client, db_session, cadencia_e_decisor):
+    cadencia, decisor, _ = cadencia_e_decisor
+    cancelada = _propor_mensagem(db_session, cadencia, decisor, conteudo="velha")
+    _propor_mensagem(db_session, cadencia, decisor, conteudo="nova")
+    _cancelar_direto(db_session, cancelada)
+
+    itens = client.get("/api/v1/aprovacoes", params={"status": "pendente"}).json()
+
+    assert [item["conteudo"] for item in itens] == ["nova"]
+
+
+def test_lote_aprova_so_o_que_nao_foi_cancelado(client, db_session, cadencia_e_decisor):
+    from app.models.aprovacao import Aprovacao
+    from app.models.mensagem import Mensagem
+
+    cadencia, decisor, _ = cadencia_e_decisor
+    cancelada = _propor_mensagem(db_session, cadencia, decisor, conteudo="velha")
+    nova = _propor_mensagem(db_session, cadencia, decisor, conteudo="nova")
+    ids = [db_session.query(Aprovacao.id).filter_by(mensagem_id=m.id).scalar() for m in (cancelada, nova)]
+    _cancelar_direto(db_session, cancelada)
+
+    resposta = client.post("/api/v1/aprovacoes/aprovar-lote", json={"ids": ids})
+
+    assert resposta.status_code == 200
+    assert [item["mensagem_id"] for item in resposta.json()] == [nova.id]
+    db_session.expire_all()
+    assert db_session.get(Mensagem, cancelada.id).status == "cancelado"
+    assert db_session.get(Mensagem, nova.id).status == "aprovado"
+
+
+def test_cancelar_mensagem_fecha_o_item_da_fila(client, db_session, cadencia_e_decisor):
+    from app.models.aprovacao import Aprovacao
+
+    cadencia, decisor, _ = cadencia_e_decisor
+    mensagem = _propor_mensagem(db_session, cadencia, decisor)
+
+    resposta = client.post(f"/api/v1/aprovacoes/mensagens/{mensagem.id}/cancelar")
+
+    assert resposta.status_code == 200
+    db_session.expire_all()
+    assert db_session.query(Aprovacao.status).filter_by(mensagem_id=mensagem.id).scalar() == "rejeitado"
