@@ -917,9 +917,12 @@ def ativar(
     if any(toque.canal == "email" for toque in toques_da_cadencia(db, cadencia.id)):
         reputacao_service.exigir_canal_nao_pausado(db, tenant_id, "email")
 
+    # Mensagem cancelada (descadastro, cancelamento manual, rascunho refeito) não sai e não é decisão pendente: antes ela entrava
+    # aqui e travava a ativação com "toques pendentes de aprovação" sem nada na fila (visto em produção em 11/11/2026).
     mensagens = (
         db.query(Mensagem)
         .filter_by(tenant_id=tenant_id, cadencia_id=cadencia.id, agendado_para=None)
+        .filter(Mensagem.status != "cancelado")
         .all()
     )
     if not mensagens:

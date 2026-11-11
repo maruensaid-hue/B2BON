@@ -406,6 +406,22 @@ def test_ativar_apos_aprovar_todos_os_toques(client, onboarding_completo, criar_
     assert resposta.json()["cadencia"]["status"] == "ativa"
 
 
+def test_ativar_ignora_mensagem_cancelada(client, onboarding_completo, criar_conta_com_decisor, criar_cadencia):
+    """Mensagem cancelada (ex.: cancelamento manual) não trava a ativação com "pendentes de aprovação" sem nada na fila
+    (visto em produção em 11/11/2026)."""
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    itens = client.get("/api/v1/aprovacoes", params={"cadencia_id": cadencia["id"]}).json()
+    client.post(f"/api/v1/aprovacoes/mensagens/{itens[0]['mensagem_id']}/cancelar")
+    _aprovar_tudo(client, cadencia["id"])
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    assert resposta.status_code == 200
+    assert resposta.json()["cadencia"]["status"] == "ativa"
+
+
 def test_excluir_cadencia_em_rascunho(client, criar_cadencia):
     cadencia = criar_cadencia()
 
