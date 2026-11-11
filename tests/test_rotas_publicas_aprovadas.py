@@ -30,6 +30,8 @@ APROVADAS = {
     ("POST", "/api/v1/auth/registrar-vitrine"): "autenticacao",
     ("POST", "/api/v1/captura-lead/{codigo}"): "token_na_url_ou_cabecalho",
     ("GET", "/api/v1/captura-lead/{codigo}/info"): "token_na_url_ou_cabecalho",
+    ("POST", "/api/v1/pre-reserva/{codigo}"): "token_na_url_ou_cabecalho",
+    ("GET", "/api/v1/pre-reserva/{codigo}/info"): "token_na_url_ou_cabecalho",
     ("GET", "/api/v1/catalogo"): "catalogo_publico",
     ("GET", "/api/v1/central-negocios/mercado"): "catalogo_publico",
     ("GET", "/api/v1/central-negocios/noticias"): "catalogo_publico",

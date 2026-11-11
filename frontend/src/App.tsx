@@ -110,6 +110,7 @@ const AprovarDescontos = lazy(() => import("@/pages/ro/AprovarDescontos").then((
 
 // Páginas públicas além do login (Phase H): fora do bundle principal, que fica só com o que a entrada precisa.
 const CapturaLead = lazy(() => import("@/pages/CapturaLead").then((m) => ({ default: m.CapturaLead })));
+const PreReserva = lazy(() => import("@/pages/PreReserva").then((m) => ({ default: m.PreReserva })));
 const ConviteVitrine = lazy(() => import("@/pages/ConviteVitrine").then((m) => ({ default: m.ConviteVitrine })));
 const CriarConta = lazy(() => import("@/pages/CriarConta").then((m) => ({ default: m.CriarConta })));
 const EsqueciSenha = lazy(() => import("@/pages/EsqueciSenha").then((m) => ({ default: m.EsqueciSenha })));
@@ -141,6 +142,7 @@ export default function App() {
         <Route path="/redefinir-senha/:token" element={<RedefinirSenha />} />
         <Route path="/convite-vitrine/:codigo" element={<ConviteVitrine />} />
         <Route path="/captura-lead/:codigo" element={<CapturaLead />} />
+        <Route path="/pre-reserva/:codigo" element={<PreReserva />} />
         <Route path="/criar-conta" element={<CriarConta />} />
         <Route path="/planos" element={<Planos />} />
         <Route path="/como-funcionam-ai-credits" element={<ComoFuncionamAiCredits />} />

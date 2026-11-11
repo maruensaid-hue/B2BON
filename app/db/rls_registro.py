@@ -138,6 +138,8 @@ TENANT_DIRETO_ETAPA2: tuple[str, ...] = (
 TENANT_DIRETO_POSTERIORES: dict[str, str] = {
     "sinal_conta": "d1f3a5c7e9b2",  # tabela -> revisão que a cria com RLS
     "enriquecimento_consulta": "f3b5d7a9c1e2",
+    "configuracao_pre_reserva": "c7e9a1b3d5f7",
+    "pre_reserva": "c7e9a1b3d5f7",
 }
 
 # `tenant_id` pode ser nulo: a linha sem dono é de plataforma (só os contextos privilegiados a gravam; a leitura segue a política de cada tabela em POLITICAS_ESPECIAIS).

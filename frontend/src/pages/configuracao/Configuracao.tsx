@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SeletorArquivo } from "@/components/ui/SeletorArquivo";
+import { PreReservaConfig } from "@/pages/configuracao/PreReservaConfig";
 import { TutorialConfiguracao } from "@/pages/configuracao/TutorialConfiguracao";
 import { TemplatesWhatsApp } from "@/pages/configuracao/TemplatesWhatsApp";
 import { type ConfiguracaoWhatsApp, WhatsAppConexao } from "@/pages/configuracao/WhatsAppConexao";
@@ -1292,6 +1293,8 @@ export function Configuracao() {
           <div className="text-[11px] text-muted">Carregando link...</div>
         )}
       </Card>
+
+      {isGestor && <PreReservaConfig />}
 
       <TutorialConfiguracao open={tutorialAberto} onClose={fecharTutorial} />
     </div>

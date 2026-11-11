@@ -14,6 +14,7 @@ from app.api.v1.cadencias import router as cadencias_router
 from app.api.v1.campanhas import router as campanhas_router
 from app.api.v1.canais import router as canais_router
 from app.api.v1.captura_lead import router as captura_lead_router
+from app.api.v1.pre_reserva import router as pre_reserva_router
 from app.api.v1.central_negocios import router as central_negocios_router
 from app.api.v1.comunicacao import router as comunicacao_router
 from app.api.v1.configuracao_envio import router as configuracao_envio_router
@@ -153,6 +154,7 @@ router.include_router(ai_credits_router)
 # o link do próprio tenant — mesmo raciocínio de `webhooks_router`/
 # `optout_router` acima.
 router.include_router(captura_lead_router)
+router.include_router(pre_reserva_router)
 router.include_router(configuracao_envio_router, dependencies=_exige_predator)
 router.include_router(configuracao_whatsapp_router, dependencies=_exige_predator)
 router.include_router(configuracao_email_smtp_router, dependencies=_exige_predator)
