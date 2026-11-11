@@ -97,6 +97,8 @@ def test_mensagens_personalizadas_usam_dados_do_decisor(
     # (antes a IA escrevia "notei que vocês abriram uma filial" para todo mundo, visto em produção em 10/11/2026).
     assert all("hipóteses, não fatos sobre esta empresa" in prompt for prompt in prompts)
     assert all("Nunca afirme que a empresa" in prompt and "sem markdown" in prompt for prompt in prompts)
+    # Estrutura mínima: cumprimentar pelo primeiro nome e dizer o que a oferta faz (10/11/2026: saíam só perguntas genéricas).
+    assert all("Comece cumprimentando" in prompt and "diferenciais concretos" in prompt for prompt in prompts)
 
 
 def test_regra_aprendida_ativa_entra_no_prompt_da_cadencia(
@@ -786,3 +788,25 @@ def test_toque_whatsapp_com_modelo_usa_o_texto_do_modelo_e_nao_chama_a_ia(
     itens = client.get("/api/v1/aprovacoes", params={"cadencia_id": cadencia["id"]}).json()
     item_whatsapp = next(item for item in itens if item["canal"] == "whatsapp")
     assert item_whatsapp["conteudo"] == "Olá! Confirmando nossa conversa."
+
+
+def test_link_de_assinatura_da_oferta_vai_como_proximo_passo_nos_emails(
+    client, db_session, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm
+):
+    """O link de assinatura escrito na descrição da oferta vira o próximo passo dos e-mails (10/11/2026: a IA o ignorava)."""
+    from app.models.oferta import Oferta
+
+    oferta = db_session.query(Oferta).filter_by(ativo=True).first()
+    oferta.descricao = f"{oferta.descricao} Assine direto pelo site: https://b2bon.exemplo.com.br/criar-conta?plano=Individual."
+    db_session.commit()
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    prompts_email = [c.prompt for c in fake_llm.chamadas if "canal email" in c.prompt]
+    prompts_outros = [c.prompt for c in fake_llm.chamadas if "canal email" not in c.prompt]
+    assert prompts_email and all(
+        "exatamente como está, sozinho na linha: https://b2bon.exemplo.com.br/criar-conta?plano=Individual " in p for p in prompts_email
+    )
+    assert all("sozinho na linha" not in p for p in prompts_outros)

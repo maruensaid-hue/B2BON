@@ -648,6 +648,22 @@ def _gerar_conteudo_toque(
         "Escreva em texto simples, sem markdown (sem asteriscos, sem negrito, sem títulos). Devolva só o texto que a pessoa vai ler: "
         "sem cabeçalho, sem 'Toque', 'Canal', 'Lead', 'Contato', 'Empresa', 'Lista' ou 'Mensagem:' e sem comentários seus."
     )
+    # Estrutura mínima da mensagem: sem isto a IA (sobretudo a de reserva) escrevia só perguntas genéricas, sem cumprimentar, sem
+    # dizer o que é a oferta e sem o link de assinatura que estava na descrição dela (visto em produção em 10/11/2026).
+    from app.services.campanha_personalizacao import primeiro_nome
+
+    nome_pessoa = primeiro_nome(decisor.nome)
+    link_oferta = re.search(r"https?://[^\s)\"'<>]+", oferta.descricao or "")
+    link_oferta = link_oferta.group(0).rstrip(".,;:") if link_oferta else None
+    instrucao_estrutura = (
+        f" Comece cumprimentando {nome_pessoa} pelo primeiro nome. Em uma ou duas frases, diga o que a '{oferta.nome}' faz por uma "
+        "empresa como a dela e cite um ou dois diferenciais concretos da oferta (use os diferenciais acima, sem inventar outros)."
+    )
+    if link_oferta and toque.canal == "email":
+        instrucao_estrutura += (
+            f" Feche com um próximo passo claro: convide a conhecer os planos e assinar direto pelo site, escrevendo este link exatamente "
+            f"como está, sozinho na linha: {link_oferta} . Depois do link, termine com uma pergunta curta."
+        )
     perfil = (
         f"aderente ao ICP '{icp.nome}' (segmento {icp.segmento})"
         if icp is not None
@@ -672,7 +688,7 @@ def _gerar_conteudo_toque(
         f"para {decisor.nome} ({decisor.cargo or 'decisor'}) na empresa {conta.nome}, "
         f"{perfil}.{dores_e_gatilhos}{_fatos_da_conta(db, conta, toque.ordem == 1)} "
         f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais}{regras_aprendidas} "
-        f"Tom: {config.tom}.{enquadramento_variante}{instrucao_sem_template}{regra_de_veracidade} Nunca mencione: "
+        f"Tom: {config.tom}.{enquadramento_variante}{instrucao_sem_template or instrucao_estrutura}{regra_de_veracidade} Nunca mencione: "
         f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
         f"{instrucao_formato_email}"
     )
