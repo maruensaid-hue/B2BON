@@ -600,14 +600,53 @@ def reativar(db: Session, tenant_id: str, ator: Usuario) -> Tenant:
 # essas linhas órfãs (ou, pior, com FK real, bloquearia a exclusão da
 # tabela-pai com erro de integridade).
 def _condicoes_indiretas(metadata):
+    """Linhas que dependem de um objeto do tenant mesmo sem ser dele: a tabela não tem `tenant_id` (canal de uma sala) ou o autor é OUTRA empresa
+    (mensagem, comentário, reação, repost). Sem isto o objeto do tenant não podia ser apagado: a chave estrangeira do filho barrava e a exclusão
+    parava com "registros de outra empresa ligados a este tenant". A condição vale junto com `tenant_id*` da própria tabela, quando ela tiver."""
     conta = metadata.tables["conta"]
     assinatura = metadata.tables["assinatura_webhook_parceiro"]
+    sala = metadata.tables["sala_corporativa"]
+    canal = metadata.tables["canal_sala"]
+    post = metadata.tables["post_rede_social"]
+    post_raiz = post.alias("post_raiz")
+
+    def salas(tenant_id):
+        return select(sala.c.id).where(or_(sala.c.tenant_id_a == tenant_id, sala.c.tenant_id_b == tenant_id))
+
+    def canais(tenant_id):
+        return select(canal.c.id).where(canal.c.sala_id.in_(salas(tenant_id)))
+
+    def posts_e_reposts(tenant_id):
+        """Posts do tenant e os reposts que outras empresas fizeram deles (compartilhar = repost sempre pra raiz, então um nível só)."""
+        raizes = select(post_raiz.c.id).where(post_raiz.c.tenant_id == tenant_id)
+        return select(post.c.id).where(or_(post.c.tenant_id == tenant_id, post.c.post_original_id.in_(raizes)))
+
+    def da_sala(t, tenant_id):
+        return t.c.sala_id.in_(salas(tenant_id))
+
+    def do_post(t, tenant_id):
+        return t.c.post_id.in_(posts_e_reposts(tenant_id))
+
     return {
         "campo_enriquecido": lambda t, tenant_id: t.c.conta_id.in_(
             select(conta.c.id).where(conta.c.tenant_id == tenant_id)
         ),
         "evento_webhook_parceiro": lambda t, tenant_id: t.c.assinatura_id.in_(
             select(assinatura.c.id).where(assinatura.c.tenant_id == tenant_id)
+        ),
+        "canal_sala": da_sala,
+        "mensagem_sala": lambda t, tenant_id: t.c.canal_id.in_(canais(tenant_id)),
+        "documento_sala": lambda t, tenant_id: or_(da_sala(t, tenant_id), t.c.canal_id.in_(canais(tenant_id))),
+        "participante_sala": da_sala,
+        "reuniao_sala": da_sala,
+        "stakeholder_sala": da_sala,
+        "tarefa_sala": da_sala,
+        "sala_compra": lambda t, tenant_id: t.c.sala_corporativa_id.in_(salas(tenant_id)),
+        "midia_post": do_post,
+        "comentario_post": do_post,
+        "reacao_post": do_post,
+        "post_rede_social": lambda t, tenant_id: t.c.post_original_id.in_(
+            select(post_raiz.c.id).where(post_raiz.c.tenant_id == tenant_id)
         ),
     }
 
@@ -689,14 +728,12 @@ def apagar_dados(db: Session, tenant_id: str) -> None:
     for table in reversed(metadata.sorted_tables):
         if table.name in _TABELAS_EXCLUIDAS_DA_VARREDURA:
             continue
+        condicoes = [coluna == tenant_id for coluna in table.columns if coluna.name.startswith("tenant_id")]
         if table.name in condicoes_indiretas:
-            db.execute(table.delete().where(condicoes_indiretas[table.name](table, tenant_id)))
-            db.commit()
+            condicoes.append(condicoes_indiretas[table.name](table, tenant_id))
+        if not condicoes:
             continue
-        colunas_tenant = [coluna for coluna in table.columns if coluna.name.startswith("tenant_id")]
-        if not colunas_tenant:
-            continue
-        db.execute(table.delete().where(or_(*(coluna == tenant_id for coluna in colunas_tenant))))
+        db.execute(table.delete().where(or_(*condicoes)))
         db.commit()
 
 

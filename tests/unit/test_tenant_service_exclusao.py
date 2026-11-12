@@ -298,3 +298,63 @@ def _valor_minimo(coluna):
     if tipo is datetime:
         return datetime.now(UTC)
     return {int: 1, float: 1.0, str: "x", bool: False}.get(tipo, "x")
+
+
+def test_excluir_definitivamente_apaga_sala_e_post_com_filhos_de_outra_empresa(db_session):
+    """Regressão (produção, 12/11/2026): a sala corporativa do tenant tinha um canal (tabela sem `tenant_id`) e a exclusão parava na chave
+    estrangeira. Vale também pro que o parceiro escreveu na sala e nos posts do tenant; o que é só do parceiro continua."""
+    from app.models.canal_sala import CanalSala
+    from app.models.comentario_post import ComentarioPost
+    from app.models.mensagem_sala import MensagemSala
+    from app.models.midia_post import MidiaPost
+    from app.models.post_rede_social import PostRedeSocial
+    from app.models.reacao_post import ReacaoPost
+    from app.models.sala_corporativa import SalaCorporativa
+
+    ator = _ator(db_session)
+    _tenant_alvo(db_session)
+    _tenant_alvo(db_session, "tenant-parceiro")
+    usuario_alvo = Usuario(tenant_id=TENANT_ALVO, nome="Dono", email="dono@alvo.com", papel="admin", ativo=True)
+    usuario_parceiro = Usuario(tenant_id="tenant-parceiro", nome="Par", email="par@parceiro.com", papel="admin", ativo=True)
+    db_session.add_all([usuario_alvo, usuario_parceiro])
+    db_session.flush()
+
+    sala = SalaCorporativa(tenant_id_a=TENANT_ALVO, tenant_id_b="tenant-parceiro")
+    db_session.add(sala)
+    db_session.flush()
+    canal = CanalSala(sala_id=sala.id, tipo="GENERAL")
+    db_session.add(canal)
+    db_session.flush()
+    db_session.add(MensagemSala(canal_id=canal.id, tenant_id_remetente="tenant-parceiro", usuario_id=usuario_parceiro.id, texto="oi"))
+
+    post_alvo = PostRedeSocial(tenant_id=TENANT_ALVO, usuario_autor_id=usuario_alvo.id, texto="post do alvo")
+    post_parceiro = PostRedeSocial(tenant_id="tenant-parceiro", usuario_autor_id=usuario_parceiro.id, texto="post do parceiro")
+    db_session.add_all([post_alvo, post_parceiro])
+    db_session.flush()
+    repost = PostRedeSocial(tenant_id="tenant-parceiro", usuario_autor_id=usuario_parceiro.id, texto="", post_original_id=post_alvo.id)
+    db_session.add(repost)
+    db_session.flush()
+    db_session.add_all([
+        MidiaPost(post_id=post_alvo.id, ordem=0, conteudo=b"x", tipo_mime="image/png", tamanho_bytes=1),
+        ComentarioPost(post_id=post_alvo.id, tenant_id="tenant-parceiro", usuario_id=usuario_parceiro.id, texto="comentário do parceiro"),
+        ReacaoPost(post_id=post_alvo.id, tenant_id="tenant-parceiro", usuario_id=usuario_parceiro.id),
+        ComentarioPost(post_id=repost.id, tenant_id="tenant-parceiro", usuario_id=usuario_parceiro.id, texto="no repost"),
+        ComentarioPost(post_id=post_parceiro.id, tenant_id="tenant-parceiro", usuario_id=usuario_parceiro.id, texto="só do parceiro"),
+    ])
+    db_session.commit()
+    id_repost, id_post_parceiro = repost.id, post_parceiro.id
+
+    tenant_service.excluir_definitivamente(db_session, TENANT_ALVO, ator)
+
+    assert db_session.query(Tenant).filter_by(id=TENANT_ALVO).one_or_none() is None
+    assert db_session.query(SalaCorporativa).count() == 0
+    assert db_session.query(CanalSala).count() == 0
+    assert db_session.query(MensagemSala).count() == 0
+    assert db_session.query(MidiaPost).count() == 0
+    assert db_session.query(ReacaoPost).count() == 0
+    assert db_session.query(PostRedeSocial).filter_by(tenant_id=TENANT_ALVO).count() == 0
+    assert db_session.query(PostRedeSocial).filter_by(id=id_repost).count() == 0  # o repost dependia do post excluído
+    # o parceiro continua com o que é só dele
+    assert db_session.query(Tenant).filter_by(id="tenant-parceiro").count() == 1
+    assert db_session.query(PostRedeSocial).filter_by(id=id_post_parceiro).count() == 1
+    assert [c.texto for c in db_session.query(ComentarioPost).all()] == ["só do parceiro"]
