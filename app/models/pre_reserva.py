@@ -44,9 +44,9 @@ class PreReserva(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenant.id"), index=True)
-    conta_id: Mapped[int] = mapped_column(ForeignKey("conta.id"))
-    decisor_id: Mapped[int] = mapped_column(ForeignKey("decisor.id"))
-    negocio_id: Mapped[int] = mapped_column(ForeignKey("negocio.id"))
+    conta_id: Mapped[int] = mapped_column(ForeignKey("conta.id"), index=True)
+    decisor_id: Mapped[int] = mapped_column(ForeignKey("decisor.id"), index=True)
+    negocio_id: Mapped[int] = mapped_column(ForeignKey("negocio.id"), index=True)
     data_evento: Mapped[date] = mapped_column(Date)
     formato: Mapped[str] = mapped_column(String)  # presencial | online
     cidade: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -1,7 +1,7 @@
-import pathlib
 """O registro de RLS (D-110, D-111) classifica TODA tabela do modelo. Tabela nova sem classificação quebra este teste: ou ganha política (e migração), ou entra em PENDENTES/GLOBAIS com o motivo."""
 
 import importlib.util
+import pathlib
 from pathlib import Path
 
 import app.main  # noqa: F401 — registra também as tabelas que só o app importa (webhooks de parceiro, relatório)
