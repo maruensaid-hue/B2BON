@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -21,3 +21,8 @@ class ToqueCadencia(Base):
     # Toque de WhatsApp SEM template (Direct Send da Meta, categoria utilidade). Só com o risco aceito na cadência por um admin
     # (`Cadencia.direct_send_aceito_por`) e a conta habilitada; o texto passa pela checagem de conteúdo promocional antes de sair.
     whatsapp_sem_template: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Texto fixo (opcional): quando preenchido, a geração usa este texto em vez de pedir à IA. Aceita os marcadores das Campanhas — [Nome]
+    # (primeiro nome), [Nome completo] e [Empresa] — trocados pelos dados de cada contato na geração. `assunto_fixo` é obrigatório no e-mail
+    # com texto fixo e ignorado nos outros canais. Sem texto fixo, nada muda: a IA escreve o toque.
+    texto_fixo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assunto_fixo: Mapped[str | None] = mapped_column(String, nullable=True)

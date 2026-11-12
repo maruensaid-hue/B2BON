@@ -5,7 +5,7 @@ import { AvisoWhatsAppTemplate } from "@/components/AvisoWhatsAppTemplate";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
-import { Input, Select } from "@/components/ui/Input";
+import { Input, Select, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { TutorialCadencias } from "@/pages/cadencias/TutorialCadencias";
 import type { Conta, ICP, ListaProspeccao } from "@/pages/prospeccao/Prospeccao";
@@ -51,6 +51,8 @@ interface ToqueCadencia {
   template_whatsapp_id: string | null;
   ab_teste_habilitado: boolean;
   whatsapp_sem_template: boolean;
+  texto_fixo: string | null;
+  assunto_fixo: string | null;
 }
 
 interface ToqueRascunho {
@@ -157,6 +159,8 @@ export function Cadencias() {
   const [pausarEmpresaNaCriacao, setPausarEmpresaNaCriacao] = useState(false);
   const [riscoSemTemplateAceito, setRiscoSemTemplateAceito] = useState(false);
   const [toqueSemTemplateEmConfirmacao, setToqueSemTemplateEmConfirmacao] = useState<number | null>(null);
+  // Texto fixo do toque: a geração usa este texto (com [Nome], [Nome completo] e [Empresa]) em vez de chamar a IA.
+  const [textoFixoEmEdicao, setTextoFixoEmEdicao] = useState<{ toqueId: number; texto: string; assunto: string } | null>(null);
   const [salvandoCancelamentoAoResponder, setSalvandoCancelamentoAoResponder] = useState(false);
   const [resultadoGeracao, setResultadoGeracao] = useState<GerarLoteResultado | null>(null);
   const [progressoGeracao, setProgressoGeracao] = useState<{ atual: number; total: number } | null>(null);
@@ -268,6 +272,20 @@ export function Cadencias() {
       await carregarToques(cadenciaSelecionadaId);
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível mudar o envio deste toque.");
+    }
+  }
+
+  async function salvarTextoFixo(limpar = false) {
+    if (cadenciaSelecionadaId === null || textoFixoEmEdicao === null) return;
+    try {
+      await api.put(`/cadencias/${cadenciaSelecionadaId}/toques/${textoFixoEmEdicao.toqueId}/texto-fixo`, {
+        texto_fixo: limpar ? null : textoFixoEmEdicao.texto,
+        assunto_fixo: limpar ? null : textoFixoEmEdicao.assunto,
+      });
+      setTextoFixoEmEdicao(null);
+      await carregarToques(cadenciaSelecionadaId);
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível salvar o texto fixo deste toque.");
     }
   }
 
@@ -866,6 +884,18 @@ export function Cadencias() {
                       <Badge tone="red">sem template — 1º contato fica parado</Badge>
                     ))}
                   {toque.ab_teste_habilitado && <Badge tone="amber">teste A/B</Badge>}
+                  {!(toque.canal === "whatsapp" && toque.template_whatsapp_id && !toque.whatsapp_sem_template) &&
+                    (toque.texto_fixo ? <Badge tone="green">texto fixo</Badge> : <Badge tone="muted">texto da IA</Badge>)}
+                  {cadenciaSelecionada.status !== "cancelada" &&
+                    !(toque.canal === "whatsapp" && toque.template_whatsapp_id && !toque.whatsapp_sem_template) && (
+                      <button
+                        type="button"
+                        className="text-[11px] text-cyan hover:underline"
+                        onClick={() => setTextoFixoEmEdicao({ toqueId: toque.id, texto: toque.texto_fixo ?? "", assunto: toque.assunto_fixo ?? "" })}
+                      >
+                        {toque.texto_fixo ? "editar texto" : "escrever texto fixo…"}
+                      </button>
+                    )}
                   {cadenciaSelecionada.status !== "cancelada" && (
                     <button
                       type="button"
@@ -879,6 +909,46 @@ export function Cadencias() {
                 </div>
               ))}
             </div>
+
+            {textoFixoEmEdicao !== null && (() => {
+              const toqueEditado = toques.find((t) => t.id === textoFixoEmEdicao.toqueId);
+              const ehEmail = toqueEditado?.canal === "email";
+              return (
+                <div className="mt-2 flex flex-col gap-1.5 rounded-md border border-border bg-surf2 p-2 text-[12px]">
+                  <div className="text-muted">
+                    <strong className="text-text">Texto fixo do toque #{toqueEditado?.ordem}.</strong> A geração usa este texto em vez da IA. Use
+                    [Nome] (primeiro nome), [Nome completo] e [Empresa]; sem nome, "Olá, [Nome]," vira "Olá!". Vale para as mensagens geradas
+                    a partir de agora.
+                  </div>
+                  {ehEmail && (
+                    <Input
+                      placeholder="Assunto do e-mail"
+                      value={textoFixoEmEdicao.assunto}
+                      onChange={(event) => setTextoFixoEmEdicao({ ...textoFixoEmEdicao, assunto: event.target.value })}
+                    />
+                  )}
+                  <Textarea
+                    rows={10}
+                    placeholder="Olá, [Nome], ..."
+                    value={textoFixoEmEdicao.texto}
+                    onChange={(event) => setTextoFixoEmEdicao({ ...textoFixoEmEdicao, texto: event.target.value })}
+                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button type="button" variant="primary" onClick={() => salvarTextoFixo()}>
+                      Salvar texto fixo
+                    </Button>
+                    {toqueEditado?.texto_fixo && (
+                      <Button type="button" variant="ghost" onClick={() => salvarTextoFixo(true)}>
+                        Voltar para a IA
+                      </Button>
+                    )}
+                    <Button type="button" variant="ghost" onClick={() => setTextoFixoEmEdicao(null)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {cadenciaSelecionada.status !== "cancelada" && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border pt-2">

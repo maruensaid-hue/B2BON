@@ -391,3 +391,59 @@ Recurso novo da plataforma: página pública de pré-reserva com a marca **O Ven
 **Ainda não faz:** gerar a cobrança no Mercado Pago sozinho, cancelar sozinho quando o prazo vence e avisar por e-mail quando chega uma pré-reserva (ela aparece no CRM e no card). São os próximos passos naturais.
 
 **Pendente: vencimento da cobrança.** Pix e cartão compensam na hora; boleto leva até 3 dias úteis, então numa data a 10–12 dias do evento prefira Pix ou cartão.
+
+
+---
+
+## 8. Descrição da palestra (versões finais)
+
+Base: a série *O Vendedor Tubarão*, de Maruen Said. A palestra segue o livro *Método SHARK* (método S.H.A.R.K. e flywheel de vendas). O MAP corresponde ao livro *Engenharia de Alta Performance*; o PREDATOR, a *Águas Profundas*. O roteiro de qualificação "S.H.A.R.K." dentro do B2B ON é uma adaptação prática e não precisa bater com o livro.
+
+### 8.1 Título e subtítulo
+
+> **O Vendedor Tubarão: quem não caça, vira isca**
+> O plano de caça para bater a meta de 2027
+
+### 8.2 Versão curta (formulário de pré-reserva e Calendly)
+
+> Uma palestra para equipes comerciais que querem chegar a janeiro com a rotina de vendas já definida. Com humor e linguagem de quem vive a rua, Maruen Said, com 30 anos de vendas e autor da série *O Vendedor Tubarão*, apresenta o método S.H.A.R.K., do livro *Método SHARK*: as cinco fases da venda moderna, da leitura do cenário ao fechamento, e o flywheel de vendas, que faz cada cliente bem atendido trazer o próximo. Antes do evento, fazemos um briefing com você para usar os desafios reais do seu time. Presencial ou online, de 40, 60 ou 90 minutos, com 30 dias de acesso ao MAP para colocar o método em prática.
+
+### 8.3 Versão completa (site e propostas)
+
+> **O Vendedor Tubarão: quem não caça, vira isca**
+> *O plano de caça para bater a meta de 2027*
+>
+> A convenção de fim de ano é o último momento em que o time comercial inteiro está na mesma sala antes de a nova meta começar a contar. Esta palestra foi feita para esse momento: a equipe se diverte, mas sai sabendo o que fazer na primeira semana de janeiro.
+>
+> **O que o time leva para casa**
+> - **O método S.H.A.R.K.: as cinco fases da venda moderna.**
+>   - **S – Situational Awareness (Consciência Situacional):** entender o mercado, o cliente e o momento dele antes de abordar.
+>   - **H – Hunting Strategy (Estratégia de Caça):** escolher em quem investir energia e como chegar até essas pessoas.
+>   - **A – Authority Building (Construção de Autoridade):** fazer o cliente enxergar o vendedor como alguém que entende do problema dele.
+>   - **R – Relationship Engineering (Engenharia de Relacionamento):** construir a relação com cada pessoa que influencia a compra, e não só com quem assina.
+>   - **K – Kill the Deal (Fechamento e Consolidação):** conduzir até o pedido e garantir que a venda se sustente depois dele.
+> - **A roda que ganha velocidade: o flywheel de vendas.** Como cada cliente bem atendido vira recompra e indicação, o que dá energia à roda e o que cria atrito e trava o crescimento da carteira.
+> - **Do palco para a rotina.** Como transformar o método em hábito diário de prospecção e follow-up. Para isso, a palestra inclui 30 dias de acesso ao MAP, a ferramenta que põe em prática a gestão comercial descrita em *Engenharia de Alta Performance*, o segundo livro da série.
+>
+> **Como funciona**
+> - Presencial ou online, com 40, 60 ou 90 minutos.
+> - Briefing antes do evento, para a palestra usar a linguagem, o mercado e os desafios do seu time.
+> - 30 dias de acesso ao MAP depois do evento, para o time aplicar o método no dia a dia.
+>
+> **Quem apresenta**
+> Maruen Said tem 30 anos de experiência em vendas e foi premiado como Salesman LATAM e Salesman Global pela SUSE e pela Oracle. É autor da série *O Vendedor Tubarão*: *Método SHARK*, base desta palestra, que apresenta o S.H.A.R.K. e o flywheel de vendas; *Engenharia de Alta Performance*; e *Águas Profundas*.
+>
+> **O que dizem**
+> > "Maruen é um profissional dinâmico, criterioso e focado em seus objetivos."
+> > — Evandro Francisco, Diretor Administrativo, Eclat
+>
+> > "Maruen sempre foi um gestor comercial interessado e capaz de resolver os problemas dos clientes e prospects com as melhores soluções disponíveis no mercado. Como revenda autorizada, centro de treinamento oficial e distribuidores da Conectiva Linux, sempre recebemos seu apoio incondicional. Ele agregou valor aos produtos e serviços dos fabricantes para os quais trabalhou e com quem tivemos contato."
+> > — José Glicério Ruas Alves, Founder e CEO, Microhard
+>
+> **Para quem**
+> Equipes de vendas internas e externas, representantes comerciais e gestores, em convenções de fim de ano, kick-offs e encontros de resultado.
+
+### 8.4 Pendências da descrição
+- Avisar Evandro Francisco e José Glicério antes de usar os depoimentos (são recomendações do LinkedIn).
+- Definir se os 30 dias de MAP valem para uma pessoa ou para o time, e como liberar e encerrar o acesso (o plano gratuito por convite não expira sozinho).
+- Se cada prêmio veio de uma empresa (ex.: LATAM pela SUSE, Global pela Oracle), separar na frase.

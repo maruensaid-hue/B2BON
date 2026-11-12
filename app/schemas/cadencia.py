@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CadenciaSchema(BaseModel):
@@ -32,6 +32,8 @@ class ToqueCadenciaCreateSchema(BaseModel):
     template_whatsapp_id: str | None = None
     ab_teste_habilitado: bool = False
     whatsapp_sem_template: bool = False
+    texto_fixo: str | None = Field(default=None, max_length=10000)
+    assunto_fixo: str | None = Field(default=None, max_length=300)
 
 
 class ToqueCadenciaSchema(BaseModel):
@@ -45,6 +47,15 @@ class ToqueCadenciaSchema(BaseModel):
     template_whatsapp_id: str | None
     ab_teste_habilitado: bool
     whatsapp_sem_template: bool = False
+    texto_fixo: str | None = None
+    assunto_fixo: str | None = None
+
+
+class DefinirTextoFixoRequestSchema(BaseModel):
+    """`texto_fixo` vazio ou nulo volta o toque para a IA."""
+
+    texto_fixo: str | None = Field(default=None, max_length=10000)
+    assunto_fixo: str | None = Field(default=None, max_length=300)
 
 
 class DefinirWhatsAppSemTemplateRequestSchema(BaseModel):

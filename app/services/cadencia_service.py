@@ -23,6 +23,7 @@ from app.schemas.cadencia import CadenciaCreateSchema
 from app.services import (
     aprovacao_service,
     auditoria_service,
+    campanha_personalizacao,
     comunicacao_service,
     franquia_service,
     limite_criacao_service,
@@ -31,7 +32,7 @@ from app.services import (
     reputacao_service,
     whatsapp_service,
 )
-from app.services.errors import NaoEncontrado, RegraNegocioViolada
+from app.services.errors import NaoEncontrado, RegraNegocioViolada, ValidacaoFalhou
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +335,39 @@ def remover_toque(db: Session, tenant_id: str, ator_id: str | None, cadencia_id:
     db.commit()
 
 
+def _texto_fixo_validado(canal: str, texto_fixo: str | None, assunto_fixo: str | None) -> dict:
+    """Normaliza o par texto/assunto fixo de um toque. Texto vazio volta o toque para a IA (e descarta o assunto). E-mail com texto fixo
+    precisa de assunto: sem ele a mensagem sairia sem assunto. WhatsApp com modelo aprovado não usa texto fixo — o que sai é o modelo."""
+    texto = (texto_fixo or "").strip() or None
+    if texto is None:
+        return {"texto_fixo": None, "assunto_fixo": None}
+    assunto = (assunto_fixo or "").strip() or None
+    if canal == "email" and assunto is None:
+        raise ValidacaoFalhou("Toque de e-mail com texto fixo precisa de um assunto fixo.")
+    return {"texto_fixo": texto, "assunto_fixo": assunto if canal == "email" else None}
+
+
+def definir_texto_fixo(
+    db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int, toque_id: int, texto_fixo: str | None, assunto_fixo: str | None
+) -> ToqueCadencia:
+    """Liga (ou desliga, com texto vazio) o texto fixo de um toque. Como as outras edições de toque, só vale para mensagens geradas a partir
+    de agora; as que já estão na fila de aprovação não mudam."""
+    cadencia = obter(db, tenant_id, cadencia_id)
+    _exigir_nao_cancelada(cadencia)
+    toque = db.query(ToqueCadencia).filter_by(id=toque_id, cadencia_id=cadencia.id, tenant_id=tenant_id).one_or_none()
+    if toque is None:
+        raise NaoEncontrado(f"Toque {toque_id} não encontrado nesta cadência")
+    valores = _texto_fixo_validado(toque.canal, texto_fixo, assunto_fixo)
+    toque.texto_fixo, toque.assunto_fixo = valores["texto_fixo"], valores["assunto_fixo"]
+    auditoria_service.registrar(
+        db, tenant_id, "toque_texto_fixo_definido", "toque_cadencia", toque.id, ator_id,
+        {"texto_fixo": toque.texto_fixo is not None, "caracteres": len(toque.texto_fixo or "")},
+    )
+    db.commit()
+    db.refresh(toque)
+    return toque
+
+
 def atualizar_toque(
     db: Session,
     tenant_id: str,
@@ -354,6 +388,10 @@ def atualizar_toque(
 
     if canal is not None:
         toque.canal = canal
+        if canal != "email":
+            toque.assunto_fixo = None
+        elif toque.texto_fixo and not toque.assunto_fixo:
+            raise ValidacaoFalhou("Toque de e-mail com texto fixo precisa de um assunto fixo: defina o assunto antes de trocar o canal.")
         if canal != "whatsapp":
             # Evita deixar um id de template órfão num toque que não é
             # mais WhatsApp.
@@ -474,6 +512,7 @@ def criar(
                 template_whatsapp_id=toque.template_whatsapp_id,
                 ab_teste_habilitado=toque.ab_teste_habilitado,
                 whatsapp_sem_template=toque.canal == "whatsapp" and toque.whatsapp_sem_template,
+                **_texto_fixo_validado(toque.canal, toque.texto_fixo, toque.assunto_fixo),
             )
         )
 
@@ -851,9 +890,15 @@ def gerar_para_lote(
                 )
                 mensagens_geradas += 1
                 continue
-            conteudo, assunto, falhou_por_erro_ia = _gerar_conteudo_toque(
-                db, llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal], lista
-            )
+            if toque.texto_fixo:
+                # Texto escrito por quem montou a cadência: só troca os marcadores, sem IA (não gasta cota nem inventa nada).
+                conteudo = campanha_personalizacao.renderizar(toque.texto_fixo, decisor.nome, conta.nome)
+                assunto = campanha_personalizacao.renderizar(toque.assunto_fixo, decisor.nome, conta.nome) if toque.canal == "email" else None
+                falhou_por_erro_ia = False
+            else:
+                conteudo, assunto, falhou_por_erro_ia = _gerar_conteudo_toque(
+                    db, llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal], lista
+                )
             if conteudo is None:
                 if falhou_por_erro_ia:
                     toques_falha_ia += 1

@@ -25,6 +25,7 @@ from app.schemas.cadencia import (
     DefinirProspeccaoAutomaticaRequestSchema,
     DefinirWhatsAppSemTemplateRequestSchema,
     DefinirTemplateWhatsAppRequestSchema,
+    DefinirTextoFixoRequestSchema,
     GerarCadenciaRequestSchema,
     GerarCadenciaResponseSchema,
     RelatorioAbTesteSchema,
@@ -117,6 +118,20 @@ def atualizar_toque(
         db, tenant_id, ator_id, cadencia_id, toque_id,
         dados.canal, dados.intervalo_dias_apos_anterior, dados.ab_teste_habilitado,
     )
+
+
+@router.put("/{cadencia_id}/toques/{toque_id}/texto-fixo", response_model=ToqueCadenciaSchema, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
+def definir_texto_fixo(
+    cadencia_id: int,
+    toque_id: int,
+    dados: DefinirTextoFixoRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> ToqueCadenciaSchema:
+    """Texto (e, no e-mail, assunto) fixo do toque, com os marcadores [Nome], [Nome completo] e [Empresa]: a geração usa este texto em vez
+    da IA. Texto vazio volta o toque para a IA. Só vale para mensagens geradas depois."""
+    return cadencia_service.definir_texto_fixo(db, tenant_id, ator_id, cadencia_id, toque_id, dados.texto_fixo, dados.assunto_fixo)
 
 
 @router.delete("/{cadencia_id}/toques/{toque_id}", status_code=204, dependencies=[Depends(exigir_escopo_cadencia_usuario)])
