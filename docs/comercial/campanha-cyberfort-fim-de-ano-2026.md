@@ -151,15 +151,24 @@ Nota de conexão do LinkedIn (todas as campanhas):
 
 ### Acronis (máquina de vendas)
 
-Modelo diferente das outras quatro: a Acronis é uma suíte SaaS com cobrança mensal, então a campanha busca **fechamento rápido, sem consultoria**. Os temas de vulnerabilidades e de Linux e Kubernetes seguem na campanha Cinco frentes.
+Modelo diferente das outras três: a Acronis é uma suíte SaaS com cobrança mensal, então a campanha busca **fechamento rápido, sem consultoria**. Os temas de vulnerabilidades e de Linux e Kubernetes seguem na campanha Cinco frentes.
+
+**Quem define o quê**
+- **Preço, composição do pacote, forma de pagamento e fidelidade** vêm do **distribuidor**, na cotação que ele monta para cada cliente. A CyberFort não publica tabela e as mensagens não citam valor nem prazo de proposta.
+- **Proteção contra ransomware** já vem incluída: faz parte do EDR da Acronis.
 
 **Como a venda roda**
-1. O e-mail pede **três números**: computadores, servidores e contas de e-mail na nuvem (Microsoft 365 ou Google Workspace).
-2. A pessoa responde → você devolve a **proposta-padrão** (modelo abaixo) em até um dia útil, com o valor mensal.
-3. **Aceite por e-mail** ("de acordo") → criação da conta Acronis e instalação dos agentes com o time do cliente.
-4. Primeiro teste de restauração acompanhado, para o cliente ver o backup funcionando.
+1. **E-mail de abertura** pede três números: computadores, servidores (físicos ou virtuais) e contas de Microsoft 365 ou Google Workspace.
+2. **Resposta com os números** → no B2B ON, a cadência para sozinha (cancela ao responder). Registre os números no negócio da conta.
+3. **Pedido de cotação ao distribuidor** com os números e o nome da empresa (modelo abaixo).
+4. **Proposta do distribuidor** chega → repasse ao cliente com uma mensagem curta da CyberFort (modelo abaixo), sem reescrever valores ou condições.
+5. **Aceite** do cliente ("de acordo") → confirme com o distribuidor, crie a conta Acronis e combine a instalação dos agentes com o time do cliente.
+6. **Primeiro teste de restauração** feito junto com o cliente. É o momento em que ele vê o backup funcionando, e o melhor gancho para indicar outras áreas ou filiais.
 
-Sem preço nas mensagens: o valor aparece só na proposta.
+**Se a pessoa não responder com números**
+- Respondeu "já temos backup": pergunte quando foi o último teste de restauração e encerre com cordialidade se não houver abertura.
+- Respondeu "manda o preço": explique que a proposta é feita para o ambiente de cada empresa e peça só os três números.
+- Pediu reunião: 20 minutos para levantar os números juntos; a proposta segue o mesmo caminho.
 
 **Sequência** (mais curta que as consultivas): e-mail dia 0, LinkedIn +2, e-mail +2, e-mail +3, e-mail +4.
 
@@ -168,14 +177,14 @@ Sem preço nas mensagens: o valor aparece só na proposta.
 >
 > Uma pergunta direta: se um servidor ou o computador de alguém do financeiro parasse hoje, vocês conseguiriam recuperar os arquivos e voltar a trabalhar no mesmo dia?
 >
-> A CyberFort oferece o Acronis em assinatura mensal: backup em nuvem de computadores, servidores e contas de e-mail, com a opção de proteção contra ransomware no mesmo agente. Começa sem projeto longo e sem investimento em equipamento.
+> A CyberFort oferece o Acronis em assinatura mensal: backup em nuvem de computadores, servidores e contas de e-mail, com proteção contra ransomware incluída no EDR da Acronis. Começa sem projeto longo e sem investimento em equipamento.
 >
-> Para te mandar uma proposta pronta, só preciso de três números:
+> Para te mandar uma proposta, só preciso de três números:
 > 1. quantos computadores;
 > 2. quantos servidores (físicos ou virtuais);
 > 3. quantas contas de Microsoft 365 ou Google Workspace, se usarem.
 >
-> Pode responder com números aproximados. Devolvo a proposta em até um dia útil.
+> Pode responder com números aproximados. Com eles, preparo a proposta para o ambiente de vocês.
 
 **2. LinkedIn (+2)**
 > [Nome], estou falando com responsáveis de TI sobre backup em nuvem com cobrança mensal. Achei que valia conectar.
@@ -195,35 +204,33 @@ Sem preço nas mensagens: o valor aparece só na proposta.
 **5. Encerramento (+4)** — assunto: *Fecho por aqui*
 > [Nome], esta é minha última mensagem sobre o backup.
 >
-> Se em algum momento quiser a proposta, a regra continua a mesma: me mande quantos computadores, servidores e contas de e-mail vocês têm, e eu devolvo o valor mensal em até um dia útil. Se preferir não receber mais mensagens, é só usar o link abaixo.
+> Se em algum momento quiser a proposta, a regra continua a mesma: me mande quantos computadores, servidores e contas de e-mail vocês têm, e eu preparo o valor mensal para o ambiente de vocês. Se preferir não receber mais mensagens, é só usar o link abaixo.
 >
 > Obrigado pela atenção.
 
 (Todos os e-mails terminam com "Maruen Said / CyberFort · cyberfort.com.br".)
 
-**Proposta-padrão (modelo para responder em até um dia útil)**
+**Pedido de cotação ao distribuidor (modelo)**
+> Assunto: Cotação Acronis — [Empresa]
+>
+> Olá, [contato no distribuidor],
+>
+> Preciso de uma cotação de Acronis (backup em nuvem com EDR) para a [Empresa], CNPJ [CNPJ]:
+> - computadores: [x]
+> - servidores: [x] (físicos [x] / virtuais [x])
+> - contas de Microsoft 365 ou Google Workspace: [x]
+> - observações do cliente: [retenção desejada, volume aproximado de dados, prazo]
+>
+> Pode me mandar com valor mensal, composição do pacote, forma de pagamento e regra de fidelidade?
+
+**Envio da proposta ao cliente (modelo)**
 > Olá, [Nome],
 >
-> Segue a proposta do backup em nuvem para a [Empresa], com base no que você me passou:
+> Segue a proposta do backup em nuvem com Acronis para a [Empresa], montada a partir dos números que você me passou. Nela estão o valor mensal, o que está incluído (com a proteção contra ransomware do EDR), a forma de pagamento e as condições.
 >
-> | Item | Quantidade | Valor mensal |
-> |---|---|---|
-> | Computadores | [x] | R$ [ ] |
-> | Servidores | [x] | R$ [ ] |
-> | Contas de e-mail na nuvem | [x] | R$ [ ] |
-> | Armazenamento em nuvem | [x] GB | R$ [ ] |
-> | **Total mensal** | | **R$ [ ]** |
+> Depois do seu "de acordo", criamos a conta e instalamos os agentes com o seu time, e fazemos juntos o primeiro teste de restauração.
 >
-> **Inclui:** [o que entra no pacote: backup, retenção, antirransomware, suporte da CyberFort].
-> **Como começa:** depois do seu "de acordo" por e-mail, criamos a conta e instalamos os agentes com o seu time; o primeiro teste de restauração é feito junto.
-> **Condições:** cobrança mensal [forma de pagamento]; [fidelidade/cancelamento]; validade da proposta: [data].
->
-> Para seguir, é só responder "de acordo".
-
-**Pendências antes de disparar a Acronis**
-- Tabela de preços e o que entra em cada pacote (para preencher a proposta-padrão).
-- Forma de pagamento, fidelidade e regra de cancelamento.
-- Confirmar que a proteção contra ransomware está no pacote que vamos oferecer (a mensagem fala dela como opção).
+> Fico à disposição para qualquer dúvida.
 
 ## Indicadores (acompanhar toda semana)
 Contatos alcançados, respostas, tema escolhido, reuniões realizadas, oportunidades qualificadas, próximos passos acordados e projetos com janela prevista para 2027.
