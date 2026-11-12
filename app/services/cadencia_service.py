@@ -26,6 +26,7 @@ from app.services import (
     comunicacao_service,
     franquia_service,
     limite_criacao_service,
+    oferta_seo,
     regra_aprendida_service,
     reputacao_service,
     whatsapp_service,
@@ -671,6 +672,11 @@ def _gerar_conteudo_toque(
     )
     diferenciais = f" Diferenciais: {', '.join(oferta.diferenciais)}." if oferta.diferenciais else ""
     provas_sociais = f" Provas sociais: {', '.join(oferta.provas_sociais)}." if oferta.provas_sociais else ""
+    # SEO e palavras-chave da oferta viram vocabulário da mensagem. O WhatsApp sem modelo (categoria utilidade da Meta) é aviso curto, sem promoção:
+    # não recebe o trecho.
+    seo_e_palavras_chave = (
+        "" if toque.canal == "whatsapp" and toque.whatsapp_sem_template else oferta_seo.trecho_prompt(oferta, config.restricoes, canal=toque.canal)
+    )
     instrucao_sem_template = (
         " Esta mensagem sai pelo WhatsApp SEM template, na categoria utilidade da Meta: escreva como um aviso curto (até 60 palavras), "
         "sem promoção, sem preço, sem desconto, sem falar em 'nossa solução', produto ou serviço, sem link; diga o motivo concreto do "
@@ -687,7 +693,7 @@ def _gerar_conteudo_toque(
         f"Escreva o toque {toque.ordem} (canal {toque.canal}) de uma cadência de prospecção "
         f"para {decisor.nome} ({decisor.cargo or 'decisor'}) na empresa {conta.nome}, "
         f"{perfil}.{dores_e_gatilhos}{_fatos_da_conta(db, conta, toque.ordem == 1)} "
-        f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais}{regras_aprendidas} "
+        f"Oferta: '{oferta.nome}' — {oferta.descricao}.{diferenciais}{provas_sociais}{seo_e_palavras_chave}{regras_aprendidas} "
         f"Tom: {config.tom}.{enquadramento_variante}{instrucao_sem_template or instrucao_estrutura}{regra_de_veracidade} Nunca mencione: "
         f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
         f"{instrucao_formato_email}"

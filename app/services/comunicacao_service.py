@@ -8,7 +8,7 @@ from app.models.configuracao_comunicacao import ConfiguracaoComunicacao
 from app.models.icp import ICP
 from app.models.oferta import Oferta
 from app.schemas.comunicacao import ConfiguracaoComunicacaoUpsertSchema
-from app.services import auditoria_service, optout_service
+from app.services import auditoria_service, oferta_seo, optout_service
 from app.services.errors import RegraNegocioViolada, ValidacaoFalhou
 
 
@@ -84,7 +84,8 @@ def gerar_amostra(
                 LLMRequest(
                     prompt=(
                         f"Escreva a mensagem de prospecção nº {indice + 1} para o ICP "
-                        f"'{icp.nome}' (segmento {icp.segmento}), oferecendo '{oferta.nome}'. "
+                        f"'{icp.nome}' (segmento {icp.segmento}), oferecendo '{oferta.nome}'."
+                        f"{oferta_seo.trecho_prompt(oferta, config.restricoes)} "
                         f"Tom: {config.tom}. Nunca mencione: "
                         f"{', '.join(config.restricoes) if config.restricoes else 'nenhuma restrição'}."
                     ),

@@ -25,7 +25,7 @@ from app.models.decisor import Decisor
 from app.models.mensagem import Mensagem
 from app.models.oferta import Oferta
 from app.providers.plan_limits.base import PlanLimitsProvider
-from app.services import aprovacao_service, atividade_service, comunicacao_service, crm_service
+from app.services import aprovacao_service, atividade_service, comunicacao_service, crm_service, oferta_seo
 from app.services.errors import IAIndisponivel, RegraNegocioViolada
 
 logger = logging.getLogger(__name__)
@@ -80,6 +80,7 @@ def _prompt(oferta: Oferta | None, config: ConfiguracaoComunicacao, decisor: Dec
         f"Oferta: '{oferta.nome}' — {oferta.descricao}."
         + (f" Diferenciais: {', '.join(oferta.diferenciais)}." if oferta.diferenciais else "")
         + (f" Faixa de preço: de {oferta.faixa_preco_min:g} a {oferta.faixa_preco_max:g}." if oferta.faixa_preco_min and oferta.faixa_preco_max else "")
+        + oferta_seo.trecho_prompt(oferta, config.restricoes)
         if oferta is not None else "Oferta: não informada (não fale de produto, preço nem prazo; só proponha a conversa)."
     )
     agenda = (

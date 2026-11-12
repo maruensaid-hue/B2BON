@@ -46,6 +46,10 @@ class Oferta(Base):
     ticket_medio: Mapped[float | None] = mapped_column(Float, nullable=True)
     margem_media: Mapped[float | None] = mapped_column(Float, nullable=True)
     playbook: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # SEO e palavras-chave: vocabulário que entra no prompt das mensagens (ver `app/services/oferta_seo.py`). Opcionais.
+    palavras_chave: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    seo_titulo: Mapped[str | None] = mapped_column(String, nullable=True)
+    seo_descricao: Mapped[str | None] = mapped_column(String, nullable=True)
     # Portfólio: entra no Next Best Offer / White Space. Independe de `ativo`.
     disponivel_para_venda: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
 

@@ -26,8 +26,16 @@ interface Oferta {
   ticket_medio?: number | null;
   margem_media?: number | null;
   disponivel_para_venda?: boolean;
+  palavras_chave?: string[] | null;
+  seo_titulo?: string | null;
+  seo_descricao?: string | null;
   [campo: string]: unknown;
 }
+
+// Limites de SEO e palavras-chave (os mesmos do backend, em `app/services/oferta_seo.py`).
+const LIMITE_PALAVRAS_CHAVE = 15;
+const LIMITE_SEO_TITULO = 70;
+const LIMITE_SEO_DESCRICAO = 200;
 
 // Offer Intelligence (Fase 6, master prompt §25): alimenta o Next Best
 // Offer, o Discovery Gap e o White Space. Tudo opcional; o que ficar em
@@ -477,6 +485,9 @@ export function Configuracao() {
       descricao: String(form.get("descricao")),
       diferenciais: paraListaPorLinha(String(form.get("diferenciais") ?? "")),
       provas_sociais: paraListaPorLinha(String(form.get("provas_sociais") ?? "")),
+      palavras_chave: paraListaPorLinha(String(form.get("palavras_chave") ?? "")),
+      seo_titulo: String(form.get("seo_titulo") ?? "").trim() || null,
+      seo_descricao: String(form.get("seo_descricao") ?? "").trim() || null,
       ...Object.fromEntries(
         CAMPOS_LISTA_INTELIGENCIA_OFERTA.map(([campo]) => [campo, paraListaPorLinha(String(form.get(campo) ?? ""))]),
       ),
@@ -858,6 +869,52 @@ export function Configuracao() {
               defaultValue={ofertaEmEdicao?.provas_sociais.join("\n")}
               placeholder={"+40 clientes atendidos\nCertificação X (auditada anualmente)"}
             />
+          </div>
+          <div className="flex flex-col gap-3 rounded-lg border border-border px-3 py-3" data-tutorial-id="configuracao:oferta-seo">
+            <div className="text-[11px] text-muted">
+              <span className="font-semibold text-text">SEO e palavras-chave</span> — orientam o vocabulário das mensagens que a IA escreve (cadência,
+              respostas e a amostra de comunicação). São termos e expressões, nunca fatos sobre a empresa da pessoa. Opcionais: em branco, a mensagem
+              sai como antes.
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+                Palavras-chave (uma por linha, até {LIMITE_PALAVRAS_CHAVE} — a primeira é a principal)
+              </div>
+              <Textarea
+                name="palavras_chave"
+                rows={4}
+                defaultValue={(ofertaEmEdicao?.palavras_chave ?? []).join("\n")}
+                placeholder={"gestão de licenças de software\nauditoria de licenças\nSAM"}
+              />
+              <div className="mt-1 text-[10px] text-muted">
+                Use os termos que o seu público procuraria. A IA usa de uma a três por mensagem, só quando cabem naturalmente, e a principal pode
+                aparecer no assunto do e-mail. Palavras que contenham um termo das restrições de comunicação são ignoradas.
+              </div>
+            </div>
+            <div>
+              <Input
+                name="seo_titulo"
+                label={`Título SEO (até ${LIMITE_SEO_TITULO} caracteres)`}
+                maxLength={LIMITE_SEO_TITULO}
+                defaultValue={ofertaEmEdicao?.seo_titulo ?? ""}
+                placeholder="Gestão de licenças de software para empresas médias"
+              />
+            </div>
+            <div>
+              <div className="mb-1.5 text-[10px] tracking-wide text-muted uppercase">
+                Descrição SEO (uma frase, até {LIMITE_SEO_DESCRICAO} caracteres)
+              </div>
+              <Textarea
+                name="seo_descricao"
+                rows={2}
+                maxLength={LIMITE_SEO_DESCRICAO}
+                defaultValue={ofertaEmEdicao?.seo_descricao ?? ""}
+                placeholder="Reduza o custo com licenças sem uso e chegue à auditoria sem susto."
+              />
+              <div className="mt-1 text-[10px] text-muted">
+                Título e descrição servem de referência de vocabulário e de proposta de valor; a IA não os copia literalmente.
+              </div>
+            </div>
           </div>
           <details className="rounded-lg border border-border px-3 py-2">
             <summary className="cursor-pointer text-[11px] text-cyan">
