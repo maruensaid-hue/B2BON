@@ -10,11 +10,11 @@ Campanha de prospecção da CyberFort no B2B ON (tenant `cyberfort`), montada em
 |---|---|---|---|
 | Antifraude | cargos de fraude, prevenção e risco | 43 | 122 |
 | LGPD e dados | privacidade, auditoria, compliance, jurídico, dados e IA | 74 | 157 |
-| Infra e segurança | TI, infraestrutura, segurança, CTO/CIO, sistemas (e a Lista_Prospects, que é quase toda de TI) | 88 | 139 |
+| **Acronis (máquina de vendas)** | TI, infraestrutura, segurança, CTO/CIO, sistemas, e a Lista_Prospects (PMEs, quase toda de TI) | 88 | 139 |
 | Cinco frentes | cargo genérico ("Gerente", "Diretor", "Superintendente"…) | 224 | 291 |
 
 Regras usadas:
-- Cada empresa fica em **uma** campanha só, a do tema mais específico entre os contatos dela (antifraude > LGPD e dados > infra > cinco frentes).
+- Cada empresa fica em **uma** campanha só, a do tema mais específico entre os contatos dela (antifraude > LGPD e dados > Acronis > cinco frentes).
 - **Até 4 contatos por empresa**, o mais sênior primeiro. O B2B ON escreve só para o **primeiro contato** de cada empresa na cadência; os outros ficam no CRM para o follow-up manual.
 - Nomes de empresa unificados nos casos óbvios (BB / Banco do Brasil / Banco do Brasil S/A; variações de Itaú, Bradesco, HDI, TIM).
 - Ficaram fora: os 298 contatos da palestra, 3 e-mails genéricos e as empresas que já existiam no B2B ON (o B2B ON reaproveita a conta existente e ela não entra na lista nova).
@@ -34,7 +34,6 @@ Nota de conexão do LinkedIn (todas as campanhas):
 | Cinco frentes | Prioridades de tecnologia para 2027 | Qual tema pesa mais em 2027? | 30 minutos para organizar 2027 | Uma pergunta sobre recuperação | Fecho por aqui |
 | Antifraude | Prevenção a fraudes no planejamento de 2027 | Onde a fraude pesa mais hoje? | 30 minutos sobre arquitetura antifraude | Do padrão novo ao controle em produção | Fecho por aqui |
 | LGPD e dados | LGPD no planejamento de 2027 | O que está menos maduro na adequação? | 30 minutos sobre a adequação à LGPD | Se a ANPD pedisse amanhã | Fecho por aqui |
-| Infra e segurança | Infraestrutura no planejamento de 2027 | Qual desses vira projeto em 2027? | 30 minutos sobre o ambiente de vocês | Quando foi o último teste de restauração? | Fecho por aqui |
 
 ## Textos
 
@@ -150,42 +149,81 @@ Nota de conexão do LinkedIn (todas as campanhas):
 >
 > Obrigado pela atenção.
 
-### Infra e segurança
+### Acronis (máquina de vendas)
 
-**1. Abertura (dia 0)**
-> Olá, {nome},
->
-> O fim do ano é um bom momento para revisar prioridades de infraestrutura e organizar os projetos de 2027. Na CyberFort, estamos conversando com times de TI sobre três perguntas:
->
-> 1. Os ativos e sistemas críticos estão inventariados e atualizados?
-> 2. O time sabe o que precisa restaurar, e em quanto tempo, se algo parar?
-> 3. O ambiente Linux ou Kubernetes atende aos planos de 2027?
->
-> Trabalhamos com SecPod, Acronis e SUSE, mas a conversa começa pelo problema e pelo prazo. Alguma dessas perguntas está na sua pauta? Se responder só com o número, já me ajuda.
->
-> Se houver orçamento ainda em 2026, avaliamos juntos se uma etapa de escopo ou diagnóstico cabe no prazo. Se não houver, organizamos a conversa para o próximo ciclo.
+Modelo diferente das outras quatro: a Acronis é uma suíte SaaS com cobrança mensal, então a campanha busca **fechamento rápido, sem consultoria**. Os temas de vulnerabilidades e de Linux e Kubernetes seguem na campanha Cinco frentes.
 
-**2. Qualificação (+3)**
-> {nome}, uma pergunta rápida para não te mandar nada fora de contexto: qual desses temas tem mais chance de virar projeto em 2027, vulnerabilidades e patches, backup e recuperação ou Linux e Kubernetes? E quem participaria da decisão além de TI?
->
-> Se existir janela de orçamento em 2026, ajuda saber até quando dá para decidir.
+**Como a venda roda**
+1. O e-mail pede **três números**: computadores, servidores e contas de e-mail na nuvem (Microsoft 365 ou Google Workspace).
+2. A pessoa responde → você devolve a **proposta-padrão** (modelo abaixo) em até um dia útil, com o valor mensal.
+3. **Aceite por e-mail** ("de acordo") → criação da conta Acronis e instalação dos agentes com o time do cliente.
+4. Primeiro teste de restauração acompanhado, para o cliente ver o backup funcionando.
 
-**3. Convite (+4)**
-> {nome}, proponho uma conversa de 30 minutos. Você conta o cenário do ambiente; eu conto como conduzimos o diagnóstico de exposição, a revisão de backup ou a avaliação de Linux e containers. No fim, fica claro se há um próximo passo agora, em janeiro ou nenhum.
->
-> Se fizer sentido, me responda com dois horários que funcionam para você.
+Sem preço nas mensagens: o valor aparece só na proposta.
 
-**4. Retomada (+5)**
-> {nome}, deixo uma pergunta que costuma abrir boas conversas nesta época: quando foi a última vez que vocês testaram, de verdade, a restauração de um sistema crítico, e quanto tempo levou?
->
-> Se não houver uma resposta rápida, backup e recuperação podem merecer espaço no planejamento de 2027. Se a prioridade for vulnerabilidades ou Linux e Kubernetes, me diga que eu volto com algo específico.
+**Sequência** (mais curta que as consultivas): e-mail dia 0, LinkedIn +2, e-mail +2, e-mail +3, e-mail +4.
 
-**5. Encerramento (+7)**
-> {nome}, esta é minha última mensagem por enquanto.
+**1. Abertura (dia 0)** — assunto: *Backup das máquinas de vocês, com cobrança mensal*
+> Olá, [Nome],
 >
-> Se algum desses temas entrar na pauta de 2027, me diga o mês em que faz sentido conversar e eu retomo nessa época. Se preferir não receber mais mensagens, é só usar o link abaixo.
+> Uma pergunta direta: se um servidor ou o computador de alguém do financeiro parasse hoje, vocês conseguiriam recuperar os arquivos e voltar a trabalhar no mesmo dia?
+>
+> A CyberFort oferece o Acronis em assinatura mensal: backup em nuvem de computadores, servidores e contas de e-mail, com a opção de proteção contra ransomware no mesmo agente. Começa sem projeto longo e sem investimento em equipamento.
+>
+> Para te mandar uma proposta pronta, só preciso de três números:
+> 1. quantos computadores;
+> 2. quantos servidores (físicos ou virtuais);
+> 3. quantas contas de Microsoft 365 ou Google Workspace, se usarem.
+>
+> Pode responder com números aproximados. Devolvo a proposta em até um dia útil.
+
+**2. LinkedIn (+2)**
+> [Nome], estou falando com responsáveis de TI sobre backup em nuvem com cobrança mensal. Achei que valia conectar.
+
+**3. Lembrete (+2)** — assunto: *Três números e a proposta sai*
+> [Nome], voltando rápido: para a proposta do backup em nuvem, preciso só de quantos computadores, quantos servidores e quantas contas de e-mail na nuvem vocês têm. Com isso, mando o valor mensal, o que está incluído e como começa.
+>
+> Se o backup já está resolvido aí, me diga e eu não insisto.
+
+**4. Prova (+3)** — assunto: *Quando foi o último teste de restauração?*
+> [Nome], uma pergunta que costuma mostrar se o backup funciona de verdade: quando foi a última vez que alguém restaurou um arquivo ou uma máquina inteira, e quanto tempo levou?
+>
+> Backup que nunca foi testado é uma aposta. Com o Acronis, a restauração de um arquivo ou da máquina inteira sai do mesmo console, e a gente acompanha o primeiro teste junto com o seu time.
+>
+> Se quiser a proposta, é só responder com o número de computadores, servidores e contas de e-mail.
+
+**5. Encerramento (+4)** — assunto: *Fecho por aqui*
+> [Nome], esta é minha última mensagem sobre o backup.
+>
+> Se em algum momento quiser a proposta, a regra continua a mesma: me mande quantos computadores, servidores e contas de e-mail vocês têm, e eu devolvo o valor mensal em até um dia útil. Se preferir não receber mais mensagens, é só usar o link abaixo.
 >
 > Obrigado pela atenção.
+
+(Todos os e-mails terminam com "Maruen Said / CyberFort · cyberfort.com.br".)
+
+**Proposta-padrão (modelo para responder em até um dia útil)**
+> Olá, [Nome],
+>
+> Segue a proposta do backup em nuvem para a [Empresa], com base no que você me passou:
+>
+> | Item | Quantidade | Valor mensal |
+> |---|---|---|
+> | Computadores | [x] | R$ [ ] |
+> | Servidores | [x] | R$ [ ] |
+> | Contas de e-mail na nuvem | [x] | R$ [ ] |
+> | Armazenamento em nuvem | [x] GB | R$ [ ] |
+> | **Total mensal** | | **R$ [ ]** |
+>
+> **Inclui:** [o que entra no pacote: backup, retenção, antirransomware, suporte da CyberFort].
+> **Como começa:** depois do seu "de acordo" por e-mail, criamos a conta e instalamos os agentes com o seu time; o primeiro teste de restauração é feito junto.
+> **Condições:** cobrança mensal [forma de pagamento]; [fidelidade/cancelamento]; validade da proposta: [data].
+>
+> Para seguir, é só responder "de acordo".
+
+**Pendências antes de disparar a Acronis**
+- Tabela de preços e o que entra em cada pacote (para preencher a proposta-padrão).
+- Forma de pagamento, fidelidade e regra de cancelamento.
+- Confirmar que a proteção contra ransomware está no pacote que vamos oferecer (a mensagem fala dela como opção).
 
 ## Indicadores (acompanhar toda semana)
 Contatos alcançados, respostas, tema escolhido, reuniões realizadas, oportunidades qualificadas, próximos passos acordados e projetos com janela prevista para 2027.
