@@ -350,6 +350,41 @@ def test_solicitar_redefinicao_senha_email_inexistente_nao_envia_nem_falha(db_se
     assert db_session.query(RedefinicaoSenha).count() == 0
 
 
+def test_solicitar_redefinicao_senha_ignora_maiuscula_e_espaco_no_email(db_session):
+    """Celular capitaliza a primeira letra e o teclado deixa espaço no fim: o pedido tem que achar o mesmo usuário."""
+    _criar_usuario(db_session, email="maiuscula@teste.com.br")
+    fake_email = FakeEmailProvider()
+
+    auth_service.solicitar_redefinicao_senha(db_session, "  Maiuscula@Teste.com.br ", fake_email)
+
+    assert len(fake_email.envios) == 1
+    assert fake_email.envios[0]["destinatario"] == "maiuscula@teste.com.br"
+    assert db_session.query(RedefinicaoSenha).count() == 1
+
+
+def test_autenticar_senha_ignora_maiuscula_e_espaco_no_email(db_session):
+    usuario = _criar_usuario(db_session, email="login-maiusculo@teste.com.br")
+    senha = "senha-correta-123"
+    usuario.senha_hash = auth_service.hash_senha(senha)
+    db_session.commit()
+
+    autenticado, _ = auth_service.autenticar_senha(db_session, " Login-Maiusculo@teste.com.br", senha)
+
+    assert autenticado.id == usuario.id
+
+
+def test_solicitar_redefinicao_senha_registra_no_log_quando_o_envio_falha(db_session, caplog):
+    """O provedor devolve a falha em vez de levantar exceção; sem o registro, o e-mail sumia sem rastro nenhum."""
+    usuario = _criar_usuario(db_session, email="falha-envio@teste.com.br")
+    fake_email = FakeEmailProvider()
+    fake_email.falhar_proximos = 1
+
+    with caplog.at_level("WARNING", logger="app.services.auth_service"):
+        auth_service.solicitar_redefinicao_senha(db_session, "falha-envio@teste.com.br", fake_email)
+
+    assert any(f"usuário {usuario.id}" in r.getMessage() and "falha simulada" in r.getMessage() for r in caplog.records)
+
+
 def test_solicitar_redefinicao_senha_usuario_so_google_nao_envia(db_session):
     """Sem `senha_hash` (login só por Google) não há senha pra redefinir."""
     _criar_usuario(db_session, email="so-google@teste.com.br", senha_hash=None, google_sub="google-sub-123")

@@ -8,7 +8,7 @@ import bcrypt
 import jwt
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -81,9 +81,11 @@ def validar_token(db: Session, token: str) -> Usuario:
 
 
 def buscar_usuario_por_email(db: Session, email: str) -> Usuario | None:
-    """Busca de UMA linha antes de saber o tenant (política `login` do banco: só a linha cujo e-mail coincide)."""
-    with rls.contexto_busca(db, rls.ESCOPO_LOGIN, email.strip().lower()):
-        return db.query(Usuario).filter_by(email=email).one_or_none()
+    """Busca de UMA linha antes de saber o tenant (política `login` do banco: só a linha cujo e-mail coincide).
+    Maiúsculas e espaços nas pontas não contam: o celular capitaliza a primeira letra e o teclado deixa espaço no fim, e o e-mail guardado é sempre minúsculo."""
+    normalizado = email.strip().lower()
+    with rls.contexto_busca(db, rls.ESCOPO_LOGIN, normalizado):
+        return db.query(Usuario).filter(func.lower(Usuario.email) == normalizado).one_or_none()
 
 
 def autenticar_senha(db: Session, email: str, senha: str) -> tuple[Usuario, bool]:
@@ -199,10 +201,14 @@ def solicitar_redefinicao_senha(db: Session, email: str, email_provider: EmailPr
         f"continua a mesma."
     )
     try:
-        email_provider.enviar(
+        resultado = email_provider.enviar(
             usuario.email, "Redefinição de senha — B2B ON", corpo, "B2B ON",
             settings.sendgrid_remetente_email, usuario.tenant_id,
         )
+        if not resultado.sucesso:  # o provedor não levanta exceção: devolve a falha, e sem este registro o e-mail some sem deixar rastro
+            logger.warning(
+                "E-mail de redefinição de senha NÃO enviado pro usuário %s: %s", usuario.id, resultado.motivo_falha
+            )
     except Exception:
         logger.warning("Falha ao enviar e-mail de redefinição de senha pro usuário %s", usuario.id, exc_info=True)
 
