@@ -583,6 +583,26 @@ _LINHA_DE_METADADO = re.compile(
 )
 
 
+_LINHA_ASSUNTO = re.compile(r"^[\s*_#>-]*assunto[\s*_]*:[\s*_]*(.+?)[\s*_]*$", re.IGNORECASE | re.MULTILINE)
+_LINHA_CORPO = re.compile(r"^[\s*_#>-]*corpo[\s*_]*:[\s*_]*", re.IGNORECASE | re.MULTILINE)
+
+
+def separar_assunto_corpo(texto: str) -> tuple[str | None, str]:
+    """Separa assunto e corpo da resposta da IA para e-mail. Antes só valia o formato exato "ASSUNTO: …\\nCORPO: …" no início; a IA de
+    reserva às vezes escreve "**Assunto:** …" depois de um cabeçalho, ou omite "CORPO:", e o e-mail ficava sem assunto (12/11/2026).
+    Sem linha de assunto, devolve `(None, texto)`."""
+    texto = texto or ""
+    achado = _LINHA_ASSUNTO.search(texto)
+    if achado is None:
+        return None, texto
+    assunto = achado.group(1).strip() or None
+    resto = texto[achado.end():]
+    corpo = _LINHA_CORPO.search(resto)
+    if corpo is not None and not resto[: corpo.start()].strip(" \t\r\n-*_"):
+        resto = resto[corpo.end():]
+    return assunto, resto.strip()
+
+
 def limpar_texto_gerado(texto: str) -> str:
     """Tira da mensagem da IA o que não é para a pessoa ler: cabeçalho de metadados no início (título, "Toque", "Canal:", "Lead:",
     "Mensagem:", separador "---") e marcação de markdown (asteriscos, sublinhados, "#"). Nas tarefas de LinkedIn o vendedor copiava
@@ -666,9 +686,10 @@ def _gerar_conteudo_toque(
 
     `assunto` (raio-X 2026-09-24, visão rica de negócio/Aprovações) só é
     gerado pra canal email — a IA recebe uma instrução extra de formato
-    (`ASSUNTO:`/`CORPO:`); se ela não obedecer o formato, cai em
-    fallback silencioso (`assunto=None`, o texto inteiro vira
-    `conteudo`) — nunca perde a mensagem por causa de formatação."""
+    (`ASSUNTO:`/`CORPO:`), lida com tolerância por `separar_assunto_corpo`.
+    E-mail sem assunto é refeito; se nenhuma tentativa trouxer assunto, o
+    toque conta como falha da IA (12/11/2026: e-mails sem assunto chegaram
+    à fila e alguns foram aprovados)."""
     enquadramento_variante = f" {_ENQUADRAMENTO_VARIANTE[variante]}" if variante else ""
     # Dores e gatilhos do ICP são HIPÓTESES sobre o perfil, não fatos sobre esta empresa. Sem dizer isso, a IA escrevia "notei que a
     # empresa X acabou de abrir uma filial / vagas de SDR" para todo mundo (visto em produção em 10/11/2026).
@@ -761,10 +782,13 @@ def _gerar_conteudo_toque(
         assunto: str | None = None
         conteudo = resposta.content
         if toque.canal == "email":
-            correspondencia = re.match(r"ASSUNTO:\s*(.+?)\nCORPO:\s*(.+)", resposta.content, re.DOTALL)
-            if correspondencia:
-                assunto, conteudo = correspondencia.group(1).strip(), correspondencia.group(2).strip()
+            assunto, conteudo = separar_assunto_corpo(resposta.content)
             assunto = limpar_texto_gerado(assunto) if assunto else assunto
+            if not (assunto or "").strip():
+                # E-mail sem assunto não sai (portão de envio): pede de novo; se a IA nunca devolver assunto, o toque conta como falha da IA.
+                logger.warning("IA devolveu e-mail sem assunto (tentativa %s); refazendo", tentativa + 1)
+                falhou_por_erro_ia = True
+                continue
         conteudo = limpar_texto_gerado(conteudo)
         if not comunicacao_service.validar_texto(f"{assunto or ''}\n{conteudo}", config.restricoes):
             # Frase batida/de spam: refaz enquanto houver tentativa; na última aceita (o toque não some do lote por isso) e a aprovação

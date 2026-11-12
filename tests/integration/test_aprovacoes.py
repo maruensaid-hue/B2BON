@@ -33,7 +33,7 @@ def cadencia_e_decisor(db_session):
 
 
 def _propor_mensagem(
-    db_session, cadencia, decisor, canal="email", template_id="tpl-1", conteudo="Olá {{nome}}", assunto=None
+    db_session, cadencia, decisor, canal="email", template_id="tpl-1", conteudo="Olá {{nome}}", assunto="Assunto de teste"
 ):
     return aprovacao_service.criar_proposta(
         db_session, TENANT_ID, cadencia.id, decisor.id, canal, template_id, conteudo, StubPlanLimitsProvider(),
@@ -98,7 +98,7 @@ def test_fila_mensagem_sem_assunto_nao_quebra(client, db_session, cadencia_e_dec
     """Mensagem de email gerada antes desta coluna existir (ou de canal
     que nunca tem assunto) — nunca inventa um assunto pra dado antigo."""
     cadencia, decisor, _ = cadencia_e_decisor
-    _propor_mensagem(db_session, cadencia, decisor, canal="whatsapp")
+    _propor_mensagem(db_session, cadencia, decisor, canal="whatsapp", assunto=None)
 
     itens = client.get("/api/v1/aprovacoes", params={"canal": "whatsapp"}).json()
 

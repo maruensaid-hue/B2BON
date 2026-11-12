@@ -55,7 +55,7 @@ def test_mensagem_nao_e_enviada_sem_aprovacao(db_session, decisor_de_teste):
 def test_mensagem_e_enviada_apos_aprovacao(db_session, decisor_de_teste):
     decisor, cadencia = decisor_de_teste
     mensagem = aprovacao_service.criar_proposta(
-        db_session, TENANT_ID, cadencia.id, decisor.id, "email", "template-1", "Olá {{nome}}", PLAN_LIMITS
+        db_session, TENANT_ID, cadencia.id, decisor.id, "email", "template-1", "Olá {{nome}}", PLAN_LIMITS, assunto="Assunto"
     )
     aprovacao = aprovacao_service.listar_fila(db_session, TENANT_ID)[0]
     aprovacao_service.aprovar(db_session, TENANT_ID, "aprovador-1", aprovacao["aprovacao_id"])

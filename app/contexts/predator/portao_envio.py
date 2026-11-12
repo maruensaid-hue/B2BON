@@ -64,6 +64,9 @@ def verificar(conteudo: str, assunto: str | None, canal: str, dominios_permitido
     problemas: list[Problema] = []
     if not (conteudo or "").strip():
         problemas.append(Problema("corpo_vazio", "Mensagem sem texto.", True))
+    if canal == "email" and not (assunto or "").strip():
+        # Em 12/11/2026 a IA respondeu fora do formato ASSUNTO/CORPO e e-mails aprovados iam sair sem assunto.
+        problemas.append(Problema("assunto_vazio", "E-mail sem assunto.", True))
     campo = next((m.group(0) for m in _CAMPO_VAZIO.finditer(texto) if not _VARIAVEL_VALIDA.match(m.group(0))), None)
     if campo:
         problemas.append(Problema("campo_nao_preenchido", f"Campo de mesclagem não preenchido: {campo}", True))

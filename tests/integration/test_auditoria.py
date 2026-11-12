@@ -30,7 +30,7 @@ def aprovacao_registrada(client, db_session):
     db_session.commit()
 
     aprovacao_service.criar_proposta(
-        db_session, TENANT_ID, cadencia.id, decisor.id, "email", "tpl-1", "Olá {{nome}}", StubPlanLimitsProvider()
+        db_session, TENANT_ID, cadencia.id, decisor.id, "email", "tpl-1", "Olá {{nome}}", StubPlanLimitsProvider(), assunto="Assunto"
     )
     aprovacao_id = client.get("/api/v1/aprovacoes").json()[0]["aprovacao_id"]
     client.post(f"/api/v1/aprovacoes/{aprovacao_id}/aprovar")

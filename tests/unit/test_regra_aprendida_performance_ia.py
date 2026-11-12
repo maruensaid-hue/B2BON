@@ -31,7 +31,7 @@ def _criar_cadencia_e_decisor(db_session) -> tuple[Decisor, Cadencia]:
 
 def _criar_proposta(db_session, decisor: Decisor, cadencia: Cadencia, texto: str = "Texto original"):
     mensagem = aprovacao_service.criar_proposta(
-        db_session, TENANT_ID, cadencia.id, decisor.id, "email", None, texto, StubPlanLimitsProvider(),
+        db_session, TENANT_ID, cadencia.id, decisor.id, "email", None, texto, StubPlanLimitsProvider(), assunto="Assunto",
     )
     aprovacao = db_session.query(Aprovacao).filter_by(mensagem_id=mensagem.id).one()
     return mensagem, aprovacao

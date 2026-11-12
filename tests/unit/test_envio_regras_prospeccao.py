@@ -20,7 +20,7 @@ TENANT = "tenant-regras-envio"
 
 # --- Checagem determinística ----------------------------------------------------------------------------------------------
 
-def _codigos(conteudo, assunto=None, canal="email", permitidos=("alpha.com.br",)):
+def _codigos(conteudo, assunto="Assunto", canal="email", permitidos=("alpha.com.br",)):
     return {p.codigo for p in portao_envio.verificar(conteudo, assunto, canal, set(permitidos))}
 
 
@@ -94,7 +94,7 @@ def _empresa(db, *nomes_emails, status_email=None):
 
 
 def _mensagem(db, decisor, conteudo="Oi {{nome}}, vi as vagas da {{empresa}}. Faz sentido conversar?", cadencia=None, status="aprovado"):
-    mensagem = Mensagem(tenant_id=TENANT, decisor_id=decisor.id, canal="email", conteudo=conteudo, status=status,
+    mensagem = Mensagem(tenant_id=TENANT, decisor_id=decisor.id, canal="email", conteudo=conteudo, assunto="Assunto", status=status,
                         agendado_para=datetime.now(UTC) - timedelta(minutes=1), cadencia_id=cadencia.id if cadencia else None)
     db.add(mensagem)
     db.flush()
@@ -149,8 +149,8 @@ def test_aprovacao_automatica_retem_link_estranho(db_session):
     db_session.add(RegraAutoAprovacao(tenant_id=TENANT, template_id="tpl", habilitada=True))
     db_session.commit()
 
-    limpa = aprovacao_service.criar_proposta(db_session, TENANT, None, ana.id, "email", "tpl", "Oi Ana, faz sentido conversar?", StubPlanLimitsProvider())
-    suspeita = aprovacao_service.criar_proposta(db_session, TENANT, None, ana.id, "email", "tpl", "Oi Ana, veja https://golpe.xyz", StubPlanLimitsProvider())
+    limpa = aprovacao_service.criar_proposta(db_session, TENANT, None, ana.id, "email", "tpl", "Oi Ana, faz sentido conversar?", StubPlanLimitsProvider(), assunto="Conversa")
+    suspeita = aprovacao_service.criar_proposta(db_session, TENANT, None, ana.id, "email", "tpl", "Oi Ana, veja https://golpe.xyz", StubPlanLimitsProvider(), assunto="Conversa")
 
     assert limpa.status == "aprovado"
     assert suspeita.status == "aguardando_aprovacao" and "golpe.xyz" in suspeita.motivo_falha

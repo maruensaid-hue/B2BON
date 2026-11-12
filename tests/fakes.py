@@ -121,6 +121,10 @@ class FakeLLMProvider(LLMProvider):
         else:
             self._contador += 1
             texto = f"Mensagem de prospecção número {self._contador}."
+        if "ASSUNTO: <linha única>" in request.prompt and "assunto" not in texto.lower():
+            # Como a IA real quando obedece o formato pedido para e-mail (e-mail sem assunto é refeito e não sai). Para simular a IA fora
+            # do formato, o teste usa um texto que cite "assunto" sem a linha "Assunto: …".
+            texto = f"ASSUNTO: Assunto de teste\nCORPO:\n{texto}"
         return LLMResponse(content=texto, model="fake-model", input_tokens=0, output_tokens=0)
 
 

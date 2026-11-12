@@ -141,15 +141,17 @@ def test_toque_email_extrai_assunto_do_formato_da_ia(
     """Raio-X 2026-09-24: a IA passa a gerar um assunto pra toques de
     email, num formato de texto puro (ASSUNTO:/CORPO:) — sem parsing
     estruturado (JSON) neste projeto ainda. Se a IA não obedecer o
-    formato numa tentativa pontual (toque 3), cai em fallback silencioso
-    (assunto=None, texto inteiro vira conteudo), nunca derruba o toque."""
+    formato numa tentativa pontual (toque 3), o toque é refeito: e-mail sem
+    assunto não pode chegar à fila (12/11/2026, e-mails sem assunto foram
+    aprovados por engano)."""
     conta, _ = criar_conta_com_decisor()
     cadencia = criar_cadencia()
     # toques 1, 3, 5 são email; 2 é whatsapp com modelo (não chama a IA); 4 é linkedin.
     fake_llm.definir_respostas(
         [
             "ASSUNTO: Proposta para sua empresa\nCORPO:\nOlá, temos uma solução para você.",
-            "Mensagem de prospecção sem o formato esperado.",
+            "Mensagem de prospecção sem o formato esperado e sem linha de assunto.",
+            "ASSUNTO: Retomando\nCORPO:\nMensagem refeita no formato.",
             "Mensagem de linkedin.",
             "ASSUNTO: Follow-up\nCORPO:\nSegunda tentativa de contato.",
         ]
@@ -172,10 +174,8 @@ def test_toque_email_extrai_assunto_do_formato_da_ia(
     assert all(item["assunto"] is None for item in itens_whatsapp)
 
     assuntos = {item["assunto"] for item in itens_email}
-    assert assuntos == {"Proposta para sua empresa", "Follow-up", None}
-    item_sem_assunto = next(item for item in itens_email if item["assunto"] is None)
-    assert "ASSUNTO:" not in item_sem_assunto["conteudo"]
-    assert "Mensagem de prospecção sem o formato esperado." in item_sem_assunto["conteudo"]
+    assert assuntos == {"Proposta para sua empresa", "Follow-up", "Retomando"}
+    assert not any("sem o formato esperado" in item["conteudo"] for item in itens_email)
     item_com_assunto = next(item for item in itens_email if item["assunto"] == "Proposta para sua empresa")
     assert "ASSUNTO:" not in item_com_assunto["conteudo"]
     assert "Olá, temos uma solução para você." in item_com_assunto["conteudo"]
@@ -285,7 +285,7 @@ def test_gerar_recupera_de_falha_intermitente_da_ia(
             if self._falhas_restantes > 0:
                 self._falhas_restantes -= 1
                 raise LLMIndisponivel("instabilidade simulada")
-            return LLMResponse(content="Mensagem válida.", model="fake", input_tokens=0, output_tokens=0)
+            return LLMResponse(content="ASSUNTO: Assunto\nCORPO:\nMensagem válida.", model="fake", input_tokens=0, output_tokens=0)
 
     conta, _ = criar_conta_com_decisor()
     cadencia = criar_cadencia()

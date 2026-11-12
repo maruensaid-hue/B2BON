@@ -279,6 +279,13 @@ def _publicar_mensagem_aprovada(db: Session, tenant_id: str, ator_id: str | None
     )
 
 
+_MSG_EMAIL_SEM_ASSUNTO = "E-mail sem assunto não pode ser aprovado: cancele a mensagem e gere o toque de novo."
+
+
+def _email_sem_assunto(mensagem: Mensagem) -> bool:
+    return mensagem.canal == "email" and not (mensagem.assunto or "").strip()
+
+
 def aprovar(db: Session, tenant_id: str, ator_id: str | None, aprovacao_id: int) -> Aprovacao:
     aprovacao = _obter_aprovacao(db, tenant_id, aprovacao_id)
     mensagem = db.query(Mensagem).filter_by(id=aprovacao.mensagem_id).one()
@@ -288,6 +295,8 @@ def aprovar(db: Session, tenant_id: str, ator_id: str | None, aprovacao_id: int)
             if mensagem.status in ("cancelado", "enviado")
             else f"Esta mensagem não pode ser aprovada (situação: {mensagem.status})."
         )
+    if _email_sem_assunto(mensagem):
+        raise RegraNegocioViolada(_MSG_EMAIL_SEM_ASSUNTO)
 
     foi_editada = aprovacao.status == "editado"
     aprovacao.status = "aprovado"
@@ -319,6 +328,9 @@ def aprovar_lote(db: Session, tenant_id: str, ator_id: str | None, aprovacao_ids
     mensagens = [db.query(Mensagem).filter_by(id=a.mensagem_id).one() for a in aprovacoes]
     # Cancelada ou já enviada fica de fora do lote (não volta a sair); o resto do lote é aprovado normalmente.
     pares = [(a, m) for a, m in zip(aprovacoes, mensagens, strict=True) if _mensagem_aprovavel(m)]
+    sem_assunto = sum(1 for _, m in pares if _email_sem_assunto(m))
+    if sem_assunto:
+        raise RegraNegocioViolada(f"{sem_assunto} e-mail(s) da seleção estão sem assunto. {_MSG_EMAIL_SEM_ASSUNTO}")
     aprovacoes = [a for a, _ in pares]
     mensagens = [m for _, m in pares]
 
