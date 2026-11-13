@@ -23,6 +23,16 @@ def gerar_token(tenant_id: str, decisor_id: int) -> str:
     return f"{payload}{_SEPARADOR}{assinatura}"
 
 
+def url_descadastro(tenant_id: str, decisor_id: int) -> str:
+    """Link de descadastro do e-mail: abre a página de confirmação (GET); quem descadastra é o POST do botão ou do cliente de e-mail."""
+    return f"{settings.url_base_api}/opt-out/email/{gerar_token(tenant_id, decisor_id)}"
+
+
+def validar_token(token: str) -> None:
+    """Só confere a assinatura — a página de confirmação (GET) não muda nada."""
+    _validar_token(token)
+
+
 def _validar_token(token: str) -> tuple[str, int]:
     partes = token.split(_SEPARADOR)
     if len(partes) != 3:

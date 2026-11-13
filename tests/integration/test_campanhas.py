@@ -102,10 +102,13 @@ def test_optout_por_token_publico(client, db_session):
     ).json()[0]
 
     token = campanha_service.gerar_token_optout("tenant-teste", destinatario["id"])
-    resposta = client.get(f"/api/v1/opt-out/campanha/{token}")
+    assert "Confirmar descadastro" in client.get(f"/api/v1/opt-out/campanha/{token}").text  # abrir o link não descadastra
+    assert client.get(f"/api/v1/campanhas/{criada['id']}").json()["destinatarios"][0]["status"] != "optout"
+    resposta = client.post(f"/api/v1/opt-out/campanha/{token}")
 
     assert resposta.status_code == 200
-    assert resposta.json()["suprimido"] is True
+    assert "descadastro feito" in resposta.text
+    assert client.get(f"/api/v1/campanhas/{criada['id']}").json()["destinatarios"][0]["status"] == "optout"
 
 
 def test_campanha_de_outro_tenant_nao_aparece(client, criar_usuario_autenticado):

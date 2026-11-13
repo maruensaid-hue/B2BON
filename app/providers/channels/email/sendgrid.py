@@ -3,7 +3,7 @@ import re
 import httpx
 
 from app.core.config import settings
-from app.providers.channels.email.base import EmailProvider, ResultadoEnvio, montar_html_com_pixel
+from app.providers.channels.email.base import EmailProvider, ResultadoEnvio, cabecalhos_descadastro, montar_html_com_pixel
 
 _URL_ENVIO = "https://api.sendgrid.com/v3/mail/send"
 
@@ -39,6 +39,7 @@ class SendGridEmailProvider(EmailProvider):
         mensagem_id: int | None = None,
         campanha_destinatario_id: int | None = None,
         reply_to: str | None = None,
+        descadastro_url: str | None = None,
     ) -> ResultadoEnvio:
         conteudo = [{"type": "text/plain", "value": corpo}]
         if pixel_url:
@@ -67,6 +68,8 @@ class SendGridEmailProvider(EmailProvider):
             "subject": assunto,
             "content": conteudo,
         }
+        if descadastro_url:
+            corpo_requisicao["headers"] = cabecalhos_descadastro(descadastro_url)
 
         try:
             resposta = httpx.post(

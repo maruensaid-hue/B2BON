@@ -4,7 +4,7 @@ import time
 from email.message import EmailMessage
 
 from app.core.config import settings
-from app.providers.channels.email.base import EmailProvider, ResultadoEnvio, montar_html_com_pixel
+from app.providers.channels.email.base import EmailProvider, ResultadoEnvio, cabecalhos_descadastro, montar_html_com_pixel
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ class SmtpEmailProvider(EmailProvider):
         mensagem_id: int | None = None,
         campanha_destinatario_id: int | None = None,
         reply_to: str | None = None,
+        descadastro_url: str | None = None,
     ) -> ResultadoEnvio:
         mensagem = EmailMessage()
         mensagem["Subject"] = assunto
@@ -57,6 +58,8 @@ class SmtpEmailProvider(EmailProvider):
         mensagem["To"] = destinatario
         if reply_to:
             mensagem["Reply-To"] = reply_to
+        for nome, valor in cabecalhos_descadastro(descadastro_url).items():
+            mensagem[nome] = valor
         mensagem.set_content(corpo)
 
         if pixel_url:

@@ -23,5 +23,6 @@ class EmailDesativadoProvider(EmailProvider):
         mensagem_id: int | None = None,
         campanha_destinatario_id: int | None = None,
         reply_to: str | None = None,
+        descadastro_url: str | None = None,
     ) -> ResultadoEnvio:
         return ResultadoEnvio(sucesso=False, motivo_falha=self.motivo)

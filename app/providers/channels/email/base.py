@@ -9,6 +9,15 @@ from pydantic import BaseModel
 _LINK = re.compile(r"https?://(?:(?!&quot;|&#x27;|&lt;|&gt;)[^\s<>\"'])+")
 
 
+def cabecalhos_descadastro(descadastro_url: str | None) -> dict[str, str]:
+    """Descadastro de um clique no cabeçalho (RFC 8058): o Gmail/Outlook mostram o botão "Cancelar inscrição" e mandam um POST para
+    o link. Filtro de segurança corporativo só faz GET, que agora apenas mostra a página de confirmação — antes o GET já
+    descadastrava, e o filtro do Santander/BB/Andritz descadastrou 4 pessoas segundos depois do envio (visto em 13/11/2026)."""
+    if not descadastro_url:
+        return {}
+    return {"List-Unsubscribe": f"<{descadastro_url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
+
+
 def montar_html_com_pixel(corpo: str, pixel_url: str) -> str:
     """HTML da parte `text/html` do multipart/alternative — texto puro
     escapado (preserva quebras de linha) mais o pixel de 1x1 de rastreio de
@@ -47,6 +56,7 @@ class EmailProvider(ABC):
         mensagem_id: int | None = None,
         campanha_destinatario_id: int | None = None,
         reply_to: str | None = None,
+        descadastro_url: str | None = None,
     ) -> ResultadoEnvio:
         """`tenant_id` viaja até o provider pra permitir anexar contexto de
         tenant em eventos assíncronos do ESP (ex.: `custom_args` do SendGrid,

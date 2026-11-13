@@ -123,15 +123,18 @@ def _processar_email(
     remetente_email = config.remetente_email if config else settings.sendgrid_remetente_email
     corpo = f"{mensagem.conteudo}\n\n{config.assinatura}" if config else mensagem.conteudo
     pixel_url = rastreamento_service.url_pixel(mensagem.tenant_id, mensagem.id)
+    # O assunto aprovado é o que sai. Antes ia sempre "Contato", ignorando o assunto escrito e aprovado (visto em 13/11/2026).
+    assunto = (mensagem.assunto or "").strip() or "Contato"
     return provider.enviar(
         decisor.email,
-        "Contato",
+        assunto,
         corpo,
         remetente_nome,
         remetente_email,
         mensagem.tenant_id,
         pixel_url,
         mensagem_id=mensagem.id,
+        descadastro_url=optout_service.url_descadastro(mensagem.tenant_id, decisor.id),
     )
 
 

@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 
 from app.contexts.intelligence import contract as intel
-from app.core.config import settings
 from app.llm.base import LLMProvider
 from app.llm.schemas import LLMRequest
 from app.models.configuracao_comunicacao import ConfiguracaoComunicacao
@@ -47,8 +46,7 @@ def rodape_email(tenant_id: str, decisor_id: int, conteudo: str) -> str:
     pra ser reaproveitado também pelo e-mail direto/pessoal
     (`email_direto_service`), sem duplicar a montagem do link. Mesmo
     texto de sempre, comportamento idêntico ao já existente."""
-    token = optout_service.gerar_token(tenant_id, decisor_id)
-    link = f"{settings.url_base_api}/opt-out/email/{token}"
+    link = optout_service.url_descadastro(tenant_id, decisor_id)
     return f"{conteudo}\n\nPara não receber mais e-mails: {link}"
 
 

@@ -231,3 +231,9 @@ def test_remetente_e_assinatura_configuraveis_aplicados_no_envio(
     assert envio["remetente_nome"] == "Ana Vendas"
     assert envio["remetente_email"] == "ana@empresateste.com.br"
     assert "Atenciosamente, Ana" in envio["corpo"]
+    # O assunto aprovado é o que sai (antes ia sempre "Contato") e o descadastro de um clique vai no cabeçalho.
+    aprovada = client.get("/api/v1/aprovacoes").json()
+    assunto_aprovado = next(a["assunto"] for a in aprovada if a["mensagem_id"] == envio["mensagem_id"])
+    assert assunto_aprovado and envio["assunto"] == assunto_aprovado
+    assert envio["descadastro_url"] and "/opt-out/email/" in envio["descadastro_url"]
+    assert envio["descadastro_url"] in envio["corpo"]

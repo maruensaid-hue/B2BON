@@ -707,6 +707,7 @@ def _disparar_destinatario(
                 campanha.tenant_id,
                 pixel_url=rastreamento_service.url_pixel_campanha(campanha.tenant_id, destinatario.id),
                 campanha_destinatario_id=destinatario.id,
+                descadastro_url=url_optout(campanha.tenant_id, destinatario.id),
             )
             if resultado.sucesso:
                 enviou_algum = True
@@ -731,9 +732,17 @@ def _disparar_destinatario(
     return enviou_algum, ultimo_motivo, adiado
 
 
+def url_optout(tenant_id: str, destinatario_id: int) -> str:
+    return f"{settings.url_base_api}/opt-out/campanha/{gerar_token_optout(tenant_id, destinatario_id)}"
+
+
 def _link_optout(tenant_id: str, destinatario_id: int) -> str:
-    token = gerar_token_optout(tenant_id, destinatario_id)
-    return f"Não quer mais receber esses e-mails? Descadastre-se: {settings.url_base_api}/opt-out/campanha/{token}"
+    return f"Não quer mais receber esses e-mails? Descadastre-se: {url_optout(tenant_id, destinatario_id)}"
+
+
+def validar_token_optout(token: str) -> None:
+    """Só confere a assinatura — a página de confirmação (GET) não muda nada."""
+    _validar_token_optout(token)
 
 
 def gerar_token_optout(tenant_id: str, destinatario_id: int) -> str:

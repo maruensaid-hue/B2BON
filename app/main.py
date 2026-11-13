@@ -151,6 +151,7 @@ async def proteger_sessao_cookie_contra_csrf(request: Request, call_next):
         request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
         and request.url.path not in rotas_publicas_auth
         and not request.url.path.startswith("/api/v1/webhooks/")
+        and not request.url.path.startswith("/api/v1/opt-out/")  # botão da página de descadastro: público, token assinado na URL
         and settings.sessao_cookie_nome in request.cookies
         and not request.headers.get("authorization", "").startswith("Bearer ")
     ):
