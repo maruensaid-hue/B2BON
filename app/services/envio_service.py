@@ -1,5 +1,5 @@
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -59,8 +59,13 @@ MAX_TENTATIVAS_ENVIO = 3
 JANELA_LIVRE_WHATSAPP_HORAS = 24
 
 
+# Dia útil e horário de envio contam no horário de Brasília (sem horário de verão desde 2019). Antes contavam em UTC: o "fim de
+# semana" acabava domingo às 21h e o horário configurado (09:00–18:00) valia como 06:00–15:00 (visto em 13/11/2026).
+_FUSO_BRASILIA = timezone(timedelta(hours=-3))
+
+
 def _dentro_da_janela_dias_uteis_e_horario(config: ConfiguracaoEnvio | None) -> bool:
-    agora = datetime.now(UTC)
+    agora = datetime.now(UTC).astimezone(_FUSO_BRASILIA)
     if agora.weekday() >= 5:  # sábado/domingo — E3-H3
         return False
     if config is None:
@@ -225,6 +230,11 @@ def processar_pendentes(
             auditoria_service.registrar(db, tenant_id, "envio_bloqueado_email_inexistente", "mensagem", mensagem.id, None, {},
                                         conta_id=decisor.conta_id, canal=mensagem.canal)
             resultado["bloqueadas_email_inexistente"] += 1
+            continue
+
+        if mensagem.canal == "linkedin" and config is not None and not _dentro_da_janela_dias_uteis_e_horario(config):
+            # Com horário de envio configurado, a tarefa de LinkedIn também só aparece em dia útil e dentro do horário (13/11/2026).
+            resultado["adiadas"] += 1
             continue
 
         if mensagem.canal == "linkedin":

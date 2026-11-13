@@ -237,3 +237,42 @@ def test_remetente_e_assinatura_configuraveis_aplicados_no_envio(
     assert assunto_aprovado and envio["assunto"] == assunto_aprovado
     assert envio["descadastro_url"] and "/opt-out/email/" in envio["descadastro_url"]
     assert envio["descadastro_url"] in envio["corpo"]
+
+
+class _SegundaSeguinte:
+    _agora = datetime(2024, 1, 15, 14, 0, tzinfo=UTC)
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls._agora
+
+
+class _SabadoDeManha:
+    _agora = datetime(2024, 1, 13, 13, 0, tzinfo=UTC)  # sábado, 10:00 em Brasília
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls._agora
+
+
+def test_tarefa_de_linkedin_espera_dia_util_quando_ha_horario_configurado(
+    client, onboarding_completo, criar_conta_com_decisor, monkeypatch
+):
+    """Com horário de envio configurado, a tarefa de LinkedIn não aparece no fim de semana (13/11/2026)."""
+    client.put(
+        "/api/v1/configuracao-envio",
+        json={"remetente_nome": "Ana", "remetente_email": "ana@empresateste.com.br", "assinatura": "",
+              "horario_inicio": "08:00:00", "horario_fim": "18:00:00"},
+    )
+    _fixar_relogio_comercial(monkeypatch)  # agenda na segunda 08/01/2024
+    conta, _ = criar_conta_com_decisor()
+    toques = [{"ordem": 1, "canal": "linkedin", "intervalo_dias_apos_anterior": 0}] + [
+        {"ordem": n, "canal": "email", "intervalo_dias_apos_anterior": 30} for n in range(2, 6)
+    ]
+    _criar_gerar_aprovar_ativar(client, conta.id, toques)
+
+    monkeypatch.setattr(envio_service, "datetime", _SabadoDeManha)
+    assert client.post("/api/v1/envios/processar").json()["tarefas_linkedin_criadas"] == 0
+
+    monkeypatch.setattr(envio_service, "datetime", _SegundaSeguinte)
+    assert client.post("/api/v1/envios/processar").json()["tarefas_linkedin_criadas"] == 1
