@@ -111,6 +111,33 @@ def aplicar(db: Session, tenant_id: str, decisor: Decisor, origem: str) -> dict:
     return {"decisor_id": decisor.id, "suprimido": True, "mensagens_canceladas": canceladas}
 
 
+def desfazer(db: Session, tenant_id: str, ator_id: str | None, decisor_id: int, motivo: str) -> Decisor:
+    """Volta a liberar envios para quem foi descadastrado por engano — ex.: o filtro de segurança de e-mail corporativo abriu o
+    link e o descadastro antigo valia só por abrir (visto em 13/11/2026). Só admin, com motivo, e fica na auditoria e na linha do
+    tempo. As mensagens canceladas pelo descadastro não voltam: quem desfaz gera de novo o que quiser enviar."""
+    motivo = (motivo or "").strip()
+    if len(motivo) < 10:
+        raise ValidacaoFalhou("Explique o motivo (mínimo de 10 caracteres): desfazer um descadastro fica registrado na auditoria.")
+    decisor = db.query(Decisor).filter_by(id=decisor_id, tenant_id=tenant_id).one_or_none()
+    if decisor is None:
+        raise NaoEncontrado(f"Decisor {decisor_id} não encontrado")
+    if decisor.suprimido_em is None:
+        raise ValidacaoFalhou("Este contato não está descadastrado.")
+    suprimido_em = decisor.suprimido_em
+    decisor.suprimido_em = None
+    atividade_service.registrar(
+        db, tenant_id, conta_id=decisor.conta_id, tipo="sistema",
+        descricao=f"Descadastro de {decisor.nome} desfeito por um administrador. Motivo: {motivo[:300]}",
+    )
+    auditoria_service.registrar(
+        db, tenant_id, "optout_desfeito", "decisor", decisor.id, ator_id,
+        {"motivo": motivo[:500], "suprimido_em": suprimido_em.isoformat()}, conta_id=decisor.conta_id,
+    )
+    db.commit()
+    db.refresh(decisor)
+    return decisor
+
+
 def existe_supressao(db: Session, decisor_id: int) -> bool:
     """Lista de supressão consultada antes de qualquer novo envio (E9-H2)."""
     decisor = db.query(Decisor).filter_by(id=decisor_id).one_or_none()

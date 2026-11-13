@@ -91,3 +91,34 @@ def test_lista_supressao_consultada_antes_do_envio(
 
     assert resultado["enviadas"] == 0
     assert fake_whatsapp.envios == []
+
+
+def test_admin_desfaz_descadastro_feito_por_engano(client, db_session, onboarding_completo, criar_conta_com_decisor):
+    conta, decisor = criar_conta_com_decisor()
+    token = optout_service.gerar_token("tenant-teste", decisor.id)
+    client.post(f"/api/v1/opt-out/email/{token}")
+    db_session.refresh(decisor)
+    assert decisor.suprimido_em is not None
+    url = f"/api/v1/contas/{conta.id}/decisores/{decisor.id}/desfazer-descadastro"
+
+    assert client.post(url, json={"motivo": "curto"}).status_code == 422
+    resposta = client.post(url, json={"motivo": "Filtro de seguranca abriu o link segundos apos o envio"})
+
+    assert resposta.status_code == 200
+    assert resposta.json()["suprimido_em"] is None
+    db_session.refresh(decisor)
+    assert decisor.suprimido_em is None
+    assert client.post(url, json={"motivo": "Filtro de seguranca abriu o link segundos apos o envio"}).status_code == 422
+    eventos = client.get("/api/v1/auditoria").json()
+    assert any(e["evento_tipo"] == "optout_desfeito" and e["entidade_id"] == decisor.id for e in eventos)
+
+
+def test_vendedor_nao_desfaz_descadastro(client, db_session, onboarding_completo, criar_conta_com_decisor, criar_usuario_autenticado):
+    conta, decisor = criar_conta_com_decisor()
+    client.post(f"/api/v1/opt-out/email/{optout_service.gerar_token('tenant-teste', decisor.id)}")
+    headers = criar_usuario_autenticado("tenant-teste", papel="user", email="vendedor@tenant-teste.com.br")
+    resposta = client.post(
+        f"/api/v1/contas/{conta.id}/decisores/{decisor.id}/desfazer-descadastro",
+        json={"motivo": "Filtro de seguranca abriu o link segundos apos o envio"}, headers=headers,
+    )
+    assert resposta.status_code == 403

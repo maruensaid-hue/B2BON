@@ -9,6 +9,7 @@ from app.api.deps import (
     get_tenant_id,
     get_usuario_atual,
     exigir_escopo_decisor_usuario,
+    exigir_papel,
     limitar_ia_por_tenant,
 )
 from app.contexts.integrations import contract as integracoes
@@ -35,6 +36,7 @@ from app.schemas.decisor import (
     AtualizarDecisorRequestSchema,
     ConfirmarPapelDecisorRequestSchema,
     DecisorCreateSchema,
+    DesfazerDescadastroRequestSchema,
     DecisorSchema,
 )
 from app.services import (
@@ -275,6 +277,24 @@ def atualizar_decisor(
         db, tenant_id, ator_id, conta_id, decisor_id, dados.nome, dados.cargo, dados.email, dados.telefone,
         dados.linkedin_url, dados.conta_id,
     )
+
+
+@router.post("/contas/{conta_id}/decisores/{decisor_id}/desfazer-descadastro", response_model=DecisorSchema,
+             dependencies=[Depends(exigir_papel("super_admin", "admin")), Depends(exigir_escopo_conta)])
+def desfazer_descadastro_decisor(
+    conta_id: int,
+    decisor_id: int,
+    dados: DesfazerDescadastroRequestSchema,
+    tenant_id: str = Depends(get_tenant_id),
+    ator_id: str | None = Depends(get_ator_id),
+    db: Session = Depends(get_db),
+) -> DecisorSchema:
+    """Descadastro feito por engano (ex.: filtro de segurança de e-mail que abriu o link). Só admin, com motivo na auditoria."""
+    decisor = db.query(Decisor).filter_by(id=decisor_id, tenant_id=tenant_id, conta_id=conta_id).one_or_none()
+    if decisor is None:
+        raise NaoEncontrado(f"Decisor {decisor_id} não encontrado nesta empresa")
+    decisor = optout_service.desfazer(db, tenant_id, ator_id, decisor.id, dados.motivo)
+    return _serializar_decisores_com_linkedin(db, tenant_id, conta_id, ator_id, [decisor])[0]
 
 
 @router.post("/contas/{conta_id}/decisores/{decisor_id}/papel", response_model=DecisorSchema, dependencies=[Depends(exigir_escopo_conta), Depends(exigir_escopo_decisor_usuario)])

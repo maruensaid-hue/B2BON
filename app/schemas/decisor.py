@@ -40,6 +40,10 @@ class DecisorCreateSchema(BaseModel):
     telefone: str | None = None
 
 
+class DesfazerDescadastroRequestSchema(BaseModel):
+    motivo: str
+
+
 class ConfirmarPapelDecisorRequestSchema(BaseModel):
     papel: str
 
