@@ -65,7 +65,8 @@ export default defineConfig({
     tailwindcss(),
     cabecalhosDeSeguranca(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt': a versão nova espera e só assume quando o app pede (src/lib/atualizacaoApp.ts), na troca de tela ou com a aba escondida.
+      registerType: 'prompt',
       manifest: {
         name: 'B2B ON — Operating Network',
         short_name: 'B2B ON',

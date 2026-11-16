@@ -6,6 +6,7 @@ import App from "@/App";
 import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/theme";
 import "@/index.css";
+import "@/lib/atualizacaoApp";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -1,8 +1,9 @@
-import { lazy, Suspense } from "react";
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { aplicarAtualizacaoPendente } from "@/lib/atualizacaoApp";
 import { Login } from "@/pages/Login";
 
 // Rotas fora do bundle principal — cada uma vira seu próprio chunk, buscado
@@ -128,6 +129,12 @@ function CarregandoPagina() {
 }
 
 export default function App() {
+  const { pathname } = useLocation();
+  // Troca de tela é um momento seguro para aplicar uma versão nova já baixada (ver lib/atualizacaoApp).
+  useEffect(() => {
+    aplicarAtualizacaoPendente();
+  }, [pathname]);
+
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
