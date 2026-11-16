@@ -118,6 +118,8 @@ const ROTULO_STATUS: Record<string, string> = {
 };
 
 const LIMITE_POR_PAGINA = 50;
+// Acima disso a lista de bloqueados começa recolhida: com centenas de linhas ela empurrava o resto da página para baixo.
+const LIMITE_BLOQUEIOS_ABERTOS = 5;
 
 function paraPercentual(valor: number | null | undefined): string {
   if (valor === null || valor === undefined) return "—";
@@ -152,6 +154,8 @@ export function RelatorioEntrega() {
   const [retornoBounces, setRetornoBounces] = useState<{ tipo: "ok" | "aviso" | "erro"; linhas: string[] } | null>(null);
   const [bloqueios, setBloqueios] = useState<BloqueioContato[]>([]);
   const [liberandoId, setLiberandoId] = useState<number | null>(null);
+  // null = ainda não escolhido: a lista começa recolhida quando é grande (escondia o resto da página) e aberta quando é curta.
+  const [bloqueiosAbertos, setBloqueiosAbertos] = useState<boolean | null>(null);
   const [registrandoBounces, setRegistrandoBounces] = useState(false);
 
   async function carregar() {
@@ -292,7 +296,8 @@ export function RelatorioEntrega() {
   const podeLiberar = usuario?.papel === "admin" || usuario?.papel === "super_admin";
   const resumo = relatorio?.resumo_envios;
   const medidoPeloProvedor = saude?.medido_pelo_provedor ?? true;
-  const totalPaginas = envios ? Math.max(1, Math.ceil(envios.total / LIMITE_POR_PAGINA)) : 1;
+  const listaBloqueiosAberta = bloqueiosAbertos ?? bloqueios.length <= LIMITE_BLOQUEIOS_ABERTOS;
+  const totalPaginas = envios ?Math.max(1, Math.ceil(envios.total / LIMITE_POR_PAGINA)) : 1;
 
   return (
     <div className="p-5.5">
@@ -385,13 +390,24 @@ export function RelatorioEntrega() {
       </Card>
 
       <Card className="mb-4">
-        <SectionLabel>Contatos bloqueados ({bloqueios.length})</SectionLabel>
+        <div className="flex items-center justify-between gap-2">
+          <SectionLabel>Contatos bloqueados ({bloqueios.length})</SectionLabel>
+          {bloqueios.length > 0 && (
+            <Button size="sm" variant="ghost" aria-expanded={listaBloqueiosAberta} onClick={() => setBloqueiosAbertos(!listaBloqueiosAberta)}>
+              {listaBloqueiosAberta ? "Recolher ▲" : "Expandir ▼"}
+            </Button>
+          )}
+        </div>
         <div className="mb-2 text-[11px] text-muted">
           Quem pediu para não receber mais nada (marcado por você em “Não quer receber”, nas campanhas) e os e-mails registrados como inexistentes (que voltaram como não entregues).
           Esses endereços e telefones não recebem nada da plataforma; “Liberar” desfaz o bloqueio.
         </div>
         {bloqueios.length === 0 ? (
           <div className="text-[12px] text-muted">Ninguém bloqueado.</div>
+        ) : !listaBloqueiosAberta ? (
+          <button type="button" className="text-[12px] text-cyan hover:underline" onClick={() => setBloqueiosAbertos(true)}>
+            Lista recolhida — mostrar os {bloqueios.length} contatos bloqueados
+          </button>
         ) : (
           <div className="flex flex-col gap-1.5">
             {bloqueios.map((bloqueio) => (
