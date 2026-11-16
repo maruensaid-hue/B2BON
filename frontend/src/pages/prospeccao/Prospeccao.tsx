@@ -86,6 +86,7 @@ interface ParticipanteEvento {
   cargo?: string;
   email?: string;
   telefone?: string;
+  linkedin_url?: string;
   observacoes?: string;
 }
 
@@ -115,7 +116,7 @@ function paraListaPorLinha(texto: string): string[] {
     .filter(Boolean);
 }
 
-type CampoParticipante = "nome" | "empresa" | "cargo" | "email" | "telefone" | "observacoes" | "ignorar";
+type CampoParticipante = "nome" | "empresa" | "cargo" | "email" | "telefone" | "linkedin" | "observacoes" | "ignorar";
 
 const CAMPOS_DISPONIVEIS: { valor: CampoParticipante; rotulo: string }[] = [
   { valor: "nome", rotulo: "Nome" },
@@ -123,6 +124,7 @@ const CAMPOS_DISPONIVEIS: { valor: CampoParticipante; rotulo: string }[] = [
   { valor: "cargo", rotulo: "Cargo" },
   { valor: "email", rotulo: "E-mail" },
   { valor: "telefone", rotulo: "Telefone" },
+  { valor: "linkedin", rotulo: "Perfil do LinkedIn (URL)" },
   { valor: "observacoes", rotulo: "Observações" },
   { valor: "ignorar", rotulo: "Ignorar" },
 ];
@@ -150,6 +152,13 @@ const SINONIMOS_CABECALHO: Record<string, CampoParticipante> = {
   fone: "telefone",
   celular: "telefone",
   whatsapp: "telefone",
+  linkedin: "linkedin",
+  url: "linkedin",
+  perfil: "linkedin",
+  "perfil linkedin": "linkedin",
+  "linkedin url": "linkedin",
+  "url linkedin": "linkedin",
+  "profile url": "linkedin",
   observacao: "observacoes",
   observacoes: "observacoes",
   obs: "observacoes",
@@ -190,6 +199,7 @@ function parseParticipantesComMapa(
       cargo: valores.cargo || undefined,
       email: valores.email || undefined,
       telefone: valores.telefone || undefined,
+      linkedin_url: valores.linkedin || undefined,
       observacoes: valores.observacoes || undefined,
     };
   });

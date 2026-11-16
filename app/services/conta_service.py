@@ -257,6 +257,16 @@ def listar_decisores_leads(
     return consulta.order_by(Decisor.id.desc()).all()
 
 
+def _perfil_linkedin_do_participante(participante: ParticipanteEventoSchema) -> str | None:
+    """URL do perfil da coluna própria ou, se a planilha a mandou para Observações, a URL de LinkedIn que estiver lá."""
+    for texto in (participante.linkedin_url, participante.observacoes):
+        achado = re.search(r"(?:https?://)?(?:[a-z]{2,3}\.)?linkedin\.com/in/[^\s,;|<>\"')]+", texto or "", re.IGNORECASE)
+        if achado:
+            url = achado.group(0).rstrip(".")
+            return url if url.lower().startswith("http") else f"https://{url}"
+    return None
+
+
 def _normalizar_nome(nome: str) -> str:
     return " ".join(nome.split()).lower()
 
@@ -363,12 +373,14 @@ def importar_participantes(
         existentes = decisores_por_conta.setdefault(conta.id, [])
         nome_participante = _normalizar_nome(participante.nome)
         email_participante = participante.email.strip().lower() if participante.email else None
-        ja_cadastrado = any(
-            _normalizar_nome(decisor.nome) == nome_participante
+        ja_cadastrado = next((
+            decisor for decisor in existentes
+            if _normalizar_nome(decisor.nome) == nome_participante
             or (email_participante and decisor.email and decisor.email.strip().lower() == email_participante)
-            for decisor in existentes
-        )
-        if ja_cadastrado:
+        ), None)
+        if ja_cadastrado is not None:
+            if not ja_cadastrado.linkedin_url:  # reimportar a planilha com a coluna de LinkedIn completa o perfil de quem já existe
+                ja_cadastrado.linkedin_url = _perfil_linkedin_do_participante(participante)
             continue
 
         novo_decisor = Decisor(
@@ -378,6 +390,7 @@ def importar_participantes(
             cargo=participante.cargo,
             email=participante.email,
             telefone=participante.telefone,
+            linkedin_url=_perfil_linkedin_do_participante(participante),
             criado_por_usuario_id=usuario_id if restrito else None,
         )
         db.add(novo_decisor)

@@ -198,3 +198,76 @@ def test_tarefa_de_linkedin_de_outro_tenant_nao_aparece_nem_pode_ser_marcada(
     assert client.get("/api/v1/linkedin/tarefas", headers=outro).json() == []
     assert client.get("/api/v1/linkedin/tarefas/contagem", headers=outro).json() == {"pendentes": 0}
     assert client.post(f"/api/v1/linkedin/tarefas/{tarefa['id']}/marcar", json={"executada": True}, headers=outro).status_code == 404
+
+
+# 16/11/2026: tarefas de LinkedIn sem perfil porque a importação de planilha mandou a URL para as Observações da empresa.
+def test_tarefa_sem_perfil_recupera_a_url_das_observacoes_da_empresa(client, onboarding_completo, criar_conta_com_decisor, db_session):
+    from app.models.decisor import Decisor
+
+    conta, decisor = criar_conta_com_decisor(linkedin_url=None)
+    conta.observacoes = "https://www.linkedin.com/in/decisor-de-verdade"
+    db_session.commit()
+    _criar_gerar_aprovar_ativar(client, conta.id, _TOQUES_LINKEDIN_PRIMEIRO)
+
+    client.post("/api/v1/envios/processar")
+    tarefa = client.get("/api/v1/linkedin/tarefas").json()[0]
+
+    assert tarefa["link_perfil"] == "https://linkedin.com/in/decisor-de-verdade"
+    assert tarefa["link_busca"] is None
+    db_session.expire_all()
+    assert db_session.get(Decisor, decisor.id).linkedin_url == "https://linkedin.com/in/decisor-de-verdade"
+
+
+def test_tarefa_antiga_sem_perfil_e_corrigida_ao_listar(client, onboarding_completo, criar_conta_com_decisor, db_session):
+    from app.models.tarefa_linkedin import TarefaLinkedin
+
+    conta, decisor = criar_conta_com_decisor(linkedin_url=None)
+    _criar_gerar_aprovar_ativar(client, conta.id, _TOQUES_LINKEDIN_PRIMEIRO)
+    client.post("/api/v1/envios/processar")
+    assert client.get("/api/v1/linkedin/tarefas").json()[0]["link_perfil"] is None
+    conta.observacoes = "Veio da lista X | https://www.linkedin.com/in/decisor-teste-123"
+    db_session.commit()
+
+    tarefa = client.get("/api/v1/linkedin/tarefas").json()[0]
+
+    assert tarefa["link_perfil"] == "https://linkedin.com/in/decisor-teste-123"
+    db_session.expire_all()
+    assert db_session.get(TarefaLinkedin, tarefa["id"]).link_perfil == "https://linkedin.com/in/decisor-teste-123"
+
+
+def test_tarefa_recupera_perfil_pelas_conexoes_importadas_com_o_mesmo_nome(client, onboarding_completo, criar_conta_com_decisor):
+    conta, _ = criar_conta_com_decisor(linkedin_url=None, nome="Maria Souza")
+    client.post("/api/v1/linkedin/conexoes/importar", json={"conteudo_csv": _CSV_EXPORT_LINKEDIN})
+    _criar_gerar_aprovar_ativar(client, conta.id, _TOQUES_LINKEDIN_PRIMEIRO)
+
+    client.post("/api/v1/envios/processar")
+    tarefa = client.get("/api/v1/linkedin/tarefas").json()[0]
+
+    assert tarefa["link_perfil"] == "https://linkedin.com/in/maria-souza"
+
+
+def test_tarefa_sem_perfil_em_lugar_nenhum_oferece_a_busca_por_nome_e_empresa(client, onboarding_completo, criar_conta_com_decisor):
+    conta, _ = criar_conta_com_decisor(linkedin_url=None, nome="Fulano de Tal")
+    _criar_gerar_aprovar_ativar(client, conta.id, _TOQUES_LINKEDIN_PRIMEIRO)
+
+    client.post("/api/v1/envios/processar")
+    tarefa = client.get("/api/v1/linkedin/tarefas").json()[0]
+
+    assert tarefa["link_perfil"] is None
+    assert tarefa["link_busca"] == "https://www.linkedin.com/search/results/people/?keywords=Fulano%20de%20Tal%20Conta%20Teste"
+
+
+def test_url_de_outro_contato_da_mesma_empresa_nao_e_usada(client, onboarding_completo, criar_conta_com_decisor, db_session):
+    from app.models.decisor import Decisor
+
+    conta, decisor = criar_conta_com_decisor(linkedin_url=None, nome="Ana Lima")
+    db_session.add(Decisor(tenant_id=conta.tenant_id, conta_id=conta.id, nome="Bruno Costa", cargo="CFO"))
+    conta.observacoes = "https://www.linkedin.com/in/bruno-costa-9"
+    db_session.commit()
+    _criar_gerar_aprovar_ativar(client, conta.id, _TOQUES_LINKEDIN_PRIMEIRO)
+
+    client.post("/api/v1/envios/processar")
+    tarefa = next(t for t in client.get("/api/v1/linkedin/tarefas").json() if t["decisor_id"] == decisor.id)
+
+    assert tarefa["link_perfil"] is None
+    assert tarefa["link_busca"]

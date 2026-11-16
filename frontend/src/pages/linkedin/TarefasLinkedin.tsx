@@ -15,6 +15,7 @@ interface TarefaLinkedin {
   decisor_id: number;
   texto: string;
   link_perfil: string | null;
+  link_busca?: string | null;
   status: "pendente" | "executada" | "ignorada";
   criado_em: string;
   decisor_nome: string | null;
@@ -171,6 +172,7 @@ export function TarefasLinkedin() {
       <div className="flex flex-col gap-3">
         {tarefas?.map((tarefa) => {
           const perfil = urlDoPerfil(tarefa.link_perfil);
+          const busca = perfil === null ? urlDoPerfil(tarefa.link_busca ?? null) : null;
           const ocupada = processandoId === tarefa.id;
           return (
             <Card key={tarefa.id}>
@@ -202,13 +204,19 @@ export function TarefasLinkedin() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    disabled={perfil === null}
-                    title={perfil === null ? "Este contato não tem link de perfil do LinkedIn cadastrado" : undefined}
-                    onClick={() => perfil && window.open(perfil, "_blank", "noopener,noreferrer")}
+                    disabled={perfil === null && busca === null}
+                    title={busca !== null ? "O perfil não veio na importação: abre a busca do LinkedIn pelo nome e empresa do contato" : undefined}
+                    onClick={() => {
+                      const destino = perfil ?? busca;
+                      if (destino) window.open(destino, "_blank", "noopener,noreferrer");
+                    }}
                   >
-                    Abrir perfil
+                    {perfil === null && busca !== null ? "Buscar no LinkedIn" : "Abrir perfil"}
                   </Button>
-                  {perfil === null && <span className="text-[10px] text-muted">sem link de perfil cadastrado</span>}
+                  {perfil === null && busca !== null && (
+                    <span className="text-[10px] text-muted">perfil não veio na importação: confira nome e empresa antes de enviar</span>
+                  )}
+                  {perfil === null && busca === null && <span className="text-[10px] text-muted">sem link de perfil cadastrado</span>}
                   <span className="flex-1" />
                   <Button size="sm" disabled={ocupada} onClick={() => marcar(tarefa, true)}>
                     {ocupada ? "Salvando..." : "Marcar como enviada"}

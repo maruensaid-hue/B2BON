@@ -12,6 +12,8 @@ class TarefaLinkedinSchema(BaseModel):
     decisor_id: int
     texto: str
     link_perfil: str | None
+    # Sem perfil conhecido: busca de pessoas do LinkedIn pelo nome e empresa do contato.
+    link_busca: str | None = None
     status: str
     criado_em: datetime
     atualizado_em: datetime

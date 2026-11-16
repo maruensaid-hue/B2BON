@@ -22,6 +22,7 @@ from app.services import (
     auditoria_service,
     bloqueio_contato_service,
     campanha_personalizacao,
+    linkedin_service,
     optout_service,
     portao_envio_service,
     rampa_service,
@@ -246,7 +247,10 @@ def processar_pendentes(
                         mensagem_id=mensagem.id,
                         decisor_id=decisor.id,
                         texto=mensagem.conteudo,
-                        link_perfil=decisor.linkedin_url,
+                        # Perfil cadastrado ou recuperado dos dados importados (16/11/2026: tarefas saíam sem perfil com a URL nas observações).
+                        link_perfil=linkedin_service.resolver_perfil(
+                            db, tenant_id, decisor, db.query(Conta).filter_by(id=decisor.conta_id, tenant_id=tenant_id).one_or_none()
+                        ),
                     )
                 )
                 resultado["tarefas_linkedin_criadas"] += 1

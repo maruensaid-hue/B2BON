@@ -187,3 +187,22 @@ def test_mapear_decisores_de_conta_sem_lista_tambem_nao_consulta_provedor_de_con
     client.post(f"/api/v1/contas/{conta['id']}/decisores/mapear")
 
     assert fake_contact_enrichment.buscas == []
+
+
+def test_importar_participantes_grava_o_perfil_do_linkedin_no_contato(client, db_session):
+    """16/11/2026: a URL do LinkedIn ia para as Observações da empresa e a tarefa de LinkedIn saía sem perfil."""
+    from app.models.decisor import Decisor
+
+    lista = client.post("/api/v1/listas-prospeccao", json={"nome": "Conexões"}).json()
+    client.post(
+        f"/api/v1/listas-prospeccao/{lista['id']}/contas/importar-participantes",
+        json={
+            "participantes": [
+                {"nome": "Joana Silva", "empresa": "Alpha", "linkedin_url": "linkedin.com/in/joana-silva"},
+                {"nome": "Rui Dias", "empresa": "Beta", "observacoes": "https://www.linkedin.com/in/rui-dias"},
+            ]
+        },
+    )
+
+    perfis = {d.nome: d.linkedin_url for d in db_session.query(Decisor).filter(Decisor.nome.in_(["Joana Silva", "Rui Dias"]))}
+    assert perfis == {"Joana Silva": "https://linkedin.com/in/joana-silva", "Rui Dias": "https://www.linkedin.com/in/rui-dias"}
