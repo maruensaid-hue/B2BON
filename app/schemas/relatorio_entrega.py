@@ -16,6 +16,15 @@ class SaudeCanalEmailSchema(BaseModel):
     amostra_minima: int
     # False com conta SMTP própria: o provedor não devolve bounce/spam, então as taxas em zero não provam nada.
     medido_pelo_provedor: bool = True
+    # Recusas do servidor do destinatário por spam/reputação nos últimos 7 dias (informadas pelo usuário ou devolvidas pelo envio por API).
+    recusas_spam: int = 0
+    enviados_recusas: int = 0
+    taxa_recusa_spam: float = 0.0
+    limiar_recusa_spam_alerta: float = 0.01
+    limiar_recusa_spam_pausa: float = 0.02
+    nivel_recusa_spam: str = "ok"  # ok | alerta | critico
+    isento_pausa_spam: bool = False
+    pausado_por_spam: bool = False
 
 
 class ContatoComBounceSchema(BaseModel):
@@ -32,11 +41,13 @@ class ContatoComBounceSchema(BaseModel):
 class RegistrarBouncesManuaisRequestSchema(BaseModel):
     """Texto livre com os endereços que voltaram como não entregues."""
     texto: str
+    tipo: str = "auto"  # auto (lê o aviso colado) | inexistente | spam
 
 
 class RegistroBouncesManuaisSchema(BaseModel):
     """Resultado do registro manual: registrados (passam a ser barrados em toda a plataforma), já registrados e não encontrados, com o motivo."""
     registrados: list[str]
+    recusados_spam: list[str] = []  # dos registrados, os que contaram como recusa por spam
     ja_registrados: list[str]
     nao_encontrados: list[str]
     motivo_nao_encontrados: str | None = None

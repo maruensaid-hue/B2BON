@@ -25,6 +25,11 @@ class TenantSchema(BaseModel):
     tenant_pai_id: str | None
     modo_cobranca: str
     ativo: bool
+    isento_pausa_spam: bool = False
+
+
+class DefinirIsencaoPausaSpamRequestSchema(BaseModel):
+    isento: bool
 
 
 class TenantComLicencaSchema(BaseModel):

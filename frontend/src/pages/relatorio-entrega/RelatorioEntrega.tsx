@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionLabel } from "@/components/ui/Card";
-import { Textarea } from "@/components/ui/Input";
+import { Select, Textarea } from "@/components/ui/Input";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { ContaDetalheModal } from "@/pages/prospeccao/ContaDetalheModal";
 import { TutorialRelatorioEntrega } from "@/pages/relatorio-entrega/TutorialRelatorioEntrega";
@@ -22,6 +22,15 @@ interface SaudeCanalEmail {
   limiar_spam: number;
   amostra_minima: number;
   medido_pelo_provedor: boolean;
+  // Recusas do servidor do destinatário por spam/reputação nos últimos 7 dias, sobre os e-mails que saíram no período.
+  recusas_spam?: number;
+  enviados_recusas?: number;
+  taxa_recusa_spam?: number;
+  limiar_recusa_spam_alerta?: number;
+  limiar_recusa_spam_pausa?: number;
+  nivel_recusa_spam?: "ok" | "alerta" | "critico";
+  isento_pausa_spam?: boolean;
+  pausado_por_spam?: boolean;
 }
 
 interface ContatoComBounce {
@@ -121,6 +130,19 @@ const LIMITE_POR_PAGINA = 50;
 // Acima disso a lista de bloqueados começa recolhida: com centenas de linhas ela empurrava o resto da página para baixo.
 const LIMITE_BLOQUEIOS_ABERTOS = 5;
 
+// O que fazer quando os servidores dos destinatários recusam os e-mails como spam: o que mais pesa na reputação de quem envia.
+function ChecklistReputacao() {
+  return (
+    <ul className="mt-2 list-disc pl-5 text-[11px] text-muted">
+      <li>Confirme a autenticação do domínio de envio (SPF, DKIM e DMARC) com quem cuida do seu e-mail.</li>
+      <li>Limpe a lista: tire endereços antigos, genéricos (contato@, vendas@) e quem nunca abriu.</li>
+      <li>Reduza o volume diário por algumas semanas e aumente aos poucos (aquecimento).</li>
+      <li>Evite links encurtados, muitos links, anexos e palavras de promoção agressiva; personalize o texto.</li>
+      <li>Mantenha o link de descadastro visível e responda a quem pedir para sair.</li>
+    </ul>
+  );
+}
+
 function paraPercentual(valor: number | null | undefined): string {
   if (valor === null || valor === undefined) return "—";
   return `${(valor * 100).toFixed(1)}%`;
@@ -150,6 +172,7 @@ export function RelatorioEntrega() {
   const [suprimindoDecisorId, setSuprimindoDecisorId] = useState<number | null>(null);
   const [contaEmEdicaoId, setContaEmEdicaoId] = useState<number | null>(null);
   const [textoBounces, setTextoBounces] = useState("");
+  const [tipoBounces, setTipoBounces] = useState<"auto" | "inexistente" | "spam">("auto");
   // O resultado do registro aparece dentro do próprio cartão (o aviso do topo da página fica fora da tela, perto do botão não mudava nada).
   const [retornoBounces, setRetornoBounces] = useState<{ tipo: "ok" | "aviso" | "erro"; linhas: string[] } | null>(null);
   const [bloqueios, setBloqueios] = useState<BloqueioContato[]>([]);
@@ -243,14 +266,21 @@ export function RelatorioEntrega() {
     try {
       const resposta = await api.post<{
         registrados: string[];
+        recusados_spam?: string[];
         ja_registrados: string[];
         nao_encontrados: string[];
         motivo_nao_encontrados: string | null;
-      }>("/relatorio-entrega/bounces-manuais", { texto: textoBounces });
+      }>("/relatorio-entrega/bounces-manuais", { texto: textoBounces, tipo: tipoBounces });
       const linhas: string[] = [];
       if (resposta.registrados.length > 0) {
         linhas.push(
           `${resposta.registrados.length} endereço(s) registrado(s) como inexistente(s): ${resposta.registrados.slice(0, 8).join(", ")}${resposta.registrados.length > 8 ? "…" : ""}. Eles não recebem mais nada da plataforma (campanhas, cadências e webmail).`,
+        );
+      }
+      const recusadosSpam = resposta.recusados_spam ?? [];
+      if (recusadosSpam.length > 0) {
+        linhas.push(
+          `Desses, ${recusadosSpam.length} contaram como recusa por spam ou reputação (entram na taxa de recusas por spam): ${recusadosSpam.slice(0, 8).join(", ")}${recusadosSpam.length > 8 ? "…" : ""}. Se algum foi classificado errado, libere em “Contatos bloqueados” e registre de novo escolhendo o motivo.`,
         );
       }
       if (resposta.ja_registrados.length > 0) {
@@ -296,6 +326,8 @@ export function RelatorioEntrega() {
   const podeLiberar = usuario?.papel === "admin" || usuario?.papel === "super_admin";
   const resumo = relatorio?.resumo_envios;
   const medidoPeloProvedor = saude?.medido_pelo_provedor ?? true;
+  const nivelSpam = saude?.nivel_recusa_spam ?? "ok";
+  const pausadoPorSpam = saude?.pausado_por_spam ?? false;
   const listaBloqueiosAberta = bloqueiosAbertos ?? bloqueios.length <= LIMITE_BLOQUEIOS_ABERTOS;
   const totalPaginas = envios ?Math.max(1, Math.ceil(envios.total / LIMITE_POR_PAGINA)) : 1;
 
@@ -353,9 +385,44 @@ export function RelatorioEntrega() {
             value={saude ? (medidoPeloProvedor ? paraPercentual(saude.taxa_spam) : "não medido") : "—"}
             sub={saude && medidoPeloProvedor ? `limite: ${paraPercentual(saude.limiar_spam)}` : undefined}
           />
+          <KpiCard
+            label="Recusados por spam"
+            value={saude ? `${saude.recusas_spam ?? 0} · ${paraPercentual(saude.taxa_recusa_spam ?? 0)}` : "—"}
+            sub={
+              saude
+                ? `servidor do destinatário recusou por spam/reputação · pausa a partir de ${paraPercentual(saude.limiar_recusa_spam_pausa ?? 0.02)} (com ${saude.amostra_minima}+ envios)${saude.isento_pausa_spam ? " · empresa isenta da pausa" : ""}`
+                : undefined
+            }
+            colorClassName={nivelSpam === "critico" ? "text-red" : nivelSpam === "alerta" ? "text-amber" : "text-cyan"}
+          />
           <KpiCard label="Taxa de abertura" value={paraPercentual(relatorio?.taxa_abertura_email)} colorClassName="text-violet" />
         </div>
-        {saude?.pausado && (
+        {saude && nivelSpam !== "ok" && !pausadoPorSpam && (
+          <div className={`mb-2 rounded-lg p-3 text-[12px] text-text ${nivelSpam === "critico" ? "bg-red/10" : "bg-amber/10"}`}>
+            {nivelSpam === "critico" && saude.isento_pausa_spam
+              ? `As recusas por spam passaram de ${paraPercentual(saude.limiar_recusa_spam_pausa ?? 0.02)} dos e-mails enviados nos últimos 7 dias. Sua empresa está isenta da pausa automática, mas a reputação do remetente está sendo prejudicada.`
+              : `Atenção: ${paraPercentual(saude.taxa_recusa_spam ?? 0)} dos e-mails dos últimos 7 dias foram recusados como spam. A partir de ${paraPercentual(saude.limiar_recusa_spam_pausa ?? 0.02)} o canal de e-mail pausa e novas campanhas e cadências ficam bloqueadas até a taxa cair.`}
+            <ChecklistReputacao />
+          </div>
+        )}
+        {pausadoPorSpam && (
+          <div className="mb-2 rounded-lg bg-red/10 p-3 text-[12px] text-text">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                Canal de e-mail pausado: {paraPercentual(saude?.taxa_recusa_spam ?? 0)} dos seus e-mails dos últimos 7 dias foram recusados como spam (limite{" "}
+                {paraPercentual(saude?.limiar_recusa_spam_pausa ?? 0.02)}). Novas campanhas e cadências de e-mail ficam bloqueadas e os envios agendados
+                aguardam. O canal volta sozinho quando a taxa cair abaixo do limite, ou depois de revisão do administrador da plataforma.
+              </span>
+              {usuario?.papel === "super_admin" && (
+                <Button size="sm" variant="danger" disabled={reativando} onClick={reativarCanalEmail}>
+                  {reativando ? "Reativando..." : "Reativar canal (revisado)"}
+                </Button>
+              )}
+            </div>
+            <ChecklistReputacao />
+          </div>
+        )}
+        {saude?.pausado && !pausadoPorSpam && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-red/10 p-3 text-[12px] text-text">
             <span>
               {relatorio && relatorio.contatos_com_bounce.length > 0
@@ -385,7 +452,7 @@ export function RelatorioEntrega() {
           considera e-mails de cadência e campanha. Contas com SMTP próprio (como o Gmail) não recebem esse retorno: o
           sistema só vê a recusa que o servidor de e-mail dá na hora do envio, que aparece como "Erro" ou "Não enviado" no
           detalhamento abaixo. Um endereço que não existe costuma ser recusado depois, com um aviso de falha na sua caixa
-          de entrada, e esse aviso o sistema ainda não lê.
+          de entrada, e esse aviso o sistema ainda não lê: cole-o em “Registrar e-mails que voltaram”, que separa endereço inexistente de recusa por spam.
         </div>
       </Card>
 
@@ -432,9 +499,18 @@ export function RelatorioEntrega() {
       <Card className="mb-4">
         <SectionLabel>Registrar e-mails que voltaram</SectionLabel>
         <div className="mb-2 text-[11px] text-muted">
-          Quando o Gmail devolve um e-mail por endereço inexistente, o aviso de falha chega na sua caixa de entrada, não aqui. Cole abaixo os endereços
-          que voltaram (um por linha, ou o próprio aviso): eles passam a constar como erro e o sistema deixa de enviar para esses endereços em qualquer área —
+          Quando o Gmail devolve um e-mail (endereço inexistente ou mensagem bloqueada como spam), o aviso de falha chega na sua caixa de entrada, não aqui.
+          Cole abaixo o próprio aviso ou os endereços que voltaram (um por linha). Pelo aviso colado o sistema separa endereço inexistente de recusa por
+          spam, que entra na taxa de recusas por spam e pode pausar o canal; só com o endereço, escolha o motivo. Eles passam a constar como erro e o sistema deixa de enviar para esses endereços em qualquer área —
           campanhas, cadências, webmail, lembretes e pesquisas. Só entram endereços que já aparecem em alguma campanha, cadência ou contato; se foi engano, libere em “Contatos bloqueados”.
+        </div>
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px]">
+          <span className="text-muted">Motivo:</span>
+          <Select value={tipoBounces} onChange={(event) => setTipoBounces(event.target.value as "auto" | "inexistente" | "spam")}>
+            <option value="auto">Detectar pelo aviso colado</option>
+            <option value="inexistente">Endereço inexistente</option>
+            <option value="spam">Recusado como spam / bloqueio de reputação</option>
+          </Select>
         </div>
         <Textarea
           rows={3}

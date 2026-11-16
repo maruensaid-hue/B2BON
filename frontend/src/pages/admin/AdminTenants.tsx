@@ -19,6 +19,7 @@ interface Tenant {
   tenant_pai_id: string | null;
   modo_cobranca: string;
   ativo: boolean;
+  isento_pausa_spam?: boolean;
 }
 
 interface Plano {
@@ -181,6 +182,17 @@ export function AdminTenants() {
                   Reativar
                 </Button>
               )}
+              {isSuperAdmin && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={processandoTenantId === tenant.id}
+                  title="Isento: as recusas por spam aparecem no Relatório de Entrega, mas o canal de e-mail não pausa por elas"
+                  onClick={() => alternarIsencaoSpam(tenant)}
+                >
+                  {tenant.isento_pausa_spam ? "Isento da pausa por spam ✓" : "Isentar da pausa por spam"}
+                </Button>
+              )}
               <Button size="sm" variant="danger" onClick={() => setTenantParaExcluir(tenant)}>
                 Excluir definitivamente
               </Button>
@@ -267,6 +279,21 @@ export function AdminTenants() {
       await carregar();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível desativar o tenant.");
+    } finally {
+      setProcessandoTenantId(null);
+    }
+  }
+
+  // Só super admin: tira (ou devolve) o tenant da pausa automática por recusas de spam. As recusas continuam aparecendo no Relatório de Entrega dele.
+  async function alternarIsencaoSpam(tenant: Tenant) {
+    if (processandoTenantId !== null) return;
+    setProcessandoTenantId(tenant.id);
+    setErro(null);
+    try {
+      await api.put(`/admin/tenants/${tenant.id}/isencao-pausa-spam`, { isento: !tenant.isento_pausa_spam });
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof ApiError ? error.message : "Não foi possível mudar a isenção da pausa por spam.");
     } finally {
       setProcessandoTenantId(null);
     }

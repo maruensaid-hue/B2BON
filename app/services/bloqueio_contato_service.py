@@ -18,6 +18,12 @@ _MINIMO_DE_DIGITOS = 8
 # Endereço que voltou como inexistente: bloqueia só o e-mail (o telefone da mesma pessoa continua valendo) e vale em toda a plataforma.
 ORIGEM_EMAIL_INEXISTENTE = "email_inexistente"
 MOTIVO_BOUNCE_MANUAL = "Informado manualmente: o e-mail voltou como não entregue."
+# Endereço cujo servidor recusou a mensagem por spam ou reputação do remetente: também deixa de receber e-mail, mas conta na taxa de recusas por spam
+# (`reputacao_service`), não na de e-mail inexistente.
+ORIGEM_EMAIL_RECUSADO_SPAM = "email_recusado_spam"
+MOTIVO_SPAM_MANUAL = "Informado manualmente: recusado pelo servidor do destinatário como spam ou por reputação do remetente."
+ORIGENS_EMAIL_DEVOLVIDO = (ORIGEM_EMAIL_INEXISTENTE, ORIGEM_EMAIL_RECUSADO_SPAM)
+_MOTIVOS_MANUAIS = (MOTIVO_BOUNCE_MANUAL, MOTIVO_SPAM_MANUAL)
 
 
 def normalizar_email(email: str | None) -> str | None:
@@ -53,7 +59,7 @@ def carregar(db: Session, tenant_id: str) -> Bloqueados:
     """Carrega a lista do tenant em conjuntos normalizados, uma vez por rodada de envio."""
     bloqueados = Bloqueados()
     for bloqueio in db.query(BloqueioContato).filter_by(tenant_id=tenant_id).all():
-        if bloqueio.origem == ORIGEM_EMAIL_INEXISTENTE:
+        if bloqueio.origem in ORIGENS_EMAIL_DEVOLVIDO:
             if bloqueio.email:
                 bloqueados.emails_inexistentes.add(bloqueio.email)
             continue
@@ -90,24 +96,23 @@ def email_esta_inviavel(email: str | None, inviaveis: set[str]) -> bool:
     return normalizado is not None and normalizado in inviaveis
 
 
-def registrar_email_inexistente(db: Session, tenant_id: str, ator_id: str | None, email: str, motivo: str) -> tuple[BloqueioContato, bool]:
-    """Põe um e-mail na lista como inexistente (só o e-mail; o telefone não entra). Idempotente: devolve `(bloqueio, criado)`. Não faz commit."""
+def registrar_email_inexistente(
+    db: Session, tenant_id: str, ator_id: str | None, email: str, motivo: str, origem: str = ORIGEM_EMAIL_INEXISTENTE
+) -> tuple[BloqueioContato, bool]:
+    """Põe um e-mail na lista como devolvido (só o e-mail; o telefone não entra): inexistente ou, com `origem=ORIGEM_EMAIL_RECUSADO_SPAM`, recusado por spam.
+    Idempotente: um endereço já registrado por qualquer dos dois motivos não é registrado de novo; devolve `(bloqueio, criado)`. Não faz commit."""
     email_normalizado = normalizar_email(email)
     existente = (
         db.query(BloqueioContato)
-        .filter_by(tenant_id=tenant_id, email=email_normalizado, origem=ORIGEM_EMAIL_INEXISTENTE)
-        .one_or_none()
+        .filter(BloqueioContato.tenant_id == tenant_id, BloqueioContato.email == email_normalizado, BloqueioContato.origem.in_(ORIGENS_EMAIL_DEVOLVIDO))
+        .first()
     )
     if existente is not None:
         return existente, False
-    bloqueio = BloqueioContato(
-        tenant_id=tenant_id, email=email_normalizado, telefone=None, motivo=motivo, origem=ORIGEM_EMAIL_INEXISTENTE, criado_por=ator_id
-    )
+    bloqueio = BloqueioContato(tenant_id=tenant_id, email=email_normalizado, telefone=None, motivo=motivo, origem=origem, criado_por=ator_id)
     db.add(bloqueio)
     db.flush()
-    auditoria_service.registrar(
-        db, tenant_id, "email_inexistente_registrado", "bloqueio_contato", bloqueio.id, ator_id, {"origem": ORIGEM_EMAIL_INEXISTENTE}
-    )
+    auditoria_service.registrar(db, tenant_id, "email_inexistente_registrado", "bloqueio_contato", bloqueio.id, ator_id, {"origem": origem})
     return bloqueio, True
 
 
@@ -116,14 +121,14 @@ def _limpar_bounces_manuais(db: Session, tenant_id: str, email: str) -> None:
     for destinatario in db.query(CampanhaDestinatario).filter(
         CampanhaDestinatario.tenant_id == tenant_id,
         func.lower(func.trim(CampanhaDestinatario.email)) == email,
-        CampanhaDestinatario.motivo_bounce == MOTIVO_BOUNCE_MANUAL,
+        CampanhaDestinatario.motivo_bounce.in_(_MOTIVOS_MANUAIS),
     ):
         destinatario.bounce_em = None
         destinatario.motivo_bounce = None
     for mensagem in (
         db.query(Mensagem)
         .join(Decisor, Mensagem.decisor_id == Decisor.id)
-        .filter(Mensagem.tenant_id == tenant_id, func.lower(func.trim(Decisor.email)) == email, Mensagem.motivo_bounce == MOTIVO_BOUNCE_MANUAL)
+        .filter(Mensagem.tenant_id == tenant_id, func.lower(func.trim(Decisor.email)) == email, Mensagem.motivo_bounce.in_(_MOTIVOS_MANUAIS))
     ):
         mensagem.bounce_em = None
         mensagem.motivo_bounce = None
@@ -176,7 +181,7 @@ def liberar(db: Session, tenant_id: str, ator_id: str | None, bloqueio_id: int) 
     bloqueio = db.query(BloqueioContato).filter_by(id=bloqueio_id, tenant_id=tenant_id).one_or_none()
     if bloqueio is None:
         raise NaoEncontrado(f"Bloqueio {bloqueio_id} não encontrado")
-    if bloqueio.origem == ORIGEM_EMAIL_INEXISTENTE and bloqueio.email:
+    if bloqueio.origem in ORIGENS_EMAIL_DEVOLVIDO and bloqueio.email:
         _limpar_bounces_manuais(db, tenant_id, bloqueio.email)  # senão o e-mail continuaria barrado pelo bounce manual
     db.delete(bloqueio)
     auditoria_service.registrar(db, tenant_id, "contato_liberado", "bloqueio_contato", bloqueio_id, ator_id, {})

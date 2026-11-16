@@ -312,6 +312,10 @@ class Settings(BaseSettings):
     # Sem amostra mínima, 1 bounce em 15 envios (6,7%) já pausava o canal —
     # percentual sobre volume pequeno não é sinal de reputação, é ruído.
     amostra_minima_reputacao: int = 50
+    # Recusas do servidor do destinatário por spam ou reputação do remetente, sobre os e-mails que saíram nos últimos 7 dias (pedido do PO em 16/11/2026):
+    # a partir de 1% o cliente vê um aviso; a partir de 2% (com a amostra mínima acima) o canal de e-mail pausa até a taxa cair.
+    limiar_recusa_spam_alerta: float = 0.01
+    limiar_recusa_spam_pausa: float = 0.02
 
     # Padrão recomendado de dias após a reunião realizada para disparar a
     # pesquisa de NPS — ajustável por tenant via ConfiguracaoNps (E11-H1).

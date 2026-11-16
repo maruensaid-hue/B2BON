@@ -19,6 +19,6 @@ class BloqueioContato(Base):
     email: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     telefone: Mapped[str | None] = mapped_column(String, nullable=True)
     motivo: Mapped[str] = mapped_column(String)
-    origem: Mapped[str] = mapped_column(String)  # campanha | manual
+    origem: Mapped[str] = mapped_column(String)  # campanha | manual | email_inexistente | email_recusado_spam
     criado_por: Mapped[str | None] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

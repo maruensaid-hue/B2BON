@@ -23,7 +23,7 @@ _MAPA_EVENTOS = {
     "delivered": "enviado",
     "bounce": "bounce",
     "dropped": "bounce",
-    "blocked": "bounce",
+    "blocked": "recusa_spam",  # recusa do servidor do destinatário por reputação/spam: conta na taxa de recusas por spam, não na de bounce
     "spamreport": "spam_report",
 }
 

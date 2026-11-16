@@ -658,15 +658,33 @@ sai: o envio falha com o aviso para configurar.
 próprios envios da B2B ON, não só nos retornos do serviço de envio:
 **Enviados**, **Entregues** (só com o Envio por API), **Abertos** (pelo
 pixel, indicador aproximado — seção 5.7), **Com erro**, **Não enviados**,
-**Taxa de bounce**, **Taxa de spam** e **Taxa de abertura**. O selo
-indica **Saudável** ou **Pausado**.
+**Taxa de bounce**, **Taxa de spam**, **Recusados por spam** e **Taxa de
+abertura**. O selo indica **Saudável** ou **Pausado**.
+
+**Recusados por spam e pausa do canal.** "Recusados por spam" conta os
+e-mails que o servidor do destinatário recusou por spam ou pela reputação
+de quem envia (registrados por você a partir do aviso de falha, ou
+devolvidos pelo Envio por API), sobre os e-mails que saíram nos últimos 7
+dias. A partir de **1%** aparece um aviso com o que fazer para melhorar a
+reputação. A partir de **2%** (com pelo menos 50 envios no período) o
+**canal de e-mail pausa**: novas campanhas e cadências de e-mail não podem
+ser ativadas e os envios agendados aguardam. O canal volta sozinho quando
+a taxa cai abaixo de 2% (mais envios sem recusa, ou recusas antigas saindo
+da janela de 7 dias), ou depois de revisão do administrador da plataforma —
+essa pausa não pode ser desfeita pelo próprio cliente. O administrador da
+plataforma pode isentar uma empresa da pausa (Admin → Tenants); isenta, ela
+continua vendo as recusas no relatório.
 
 **Registrar e-mails que voltaram (para quem usa SMTP).** Quando o Gmail
-ou outro provedor devolve um e-mail por endereço inexistente, o aviso de
-falha chega na **sua caixa de entrada**, não na B2B ON (e o sistema não
-lê a sua caixa). Em **Registrar e-mails que voltaram**, cole os
-endereços que voltaram — um por linha, ou o próprio texto do aviso — e
-clique em **Registrar como erro**. Os endereços passam a constar como erro e
+ou outro provedor devolve um e-mail (endereço inexistente ou mensagem
+bloqueada como spam), o aviso de falha chega na **sua caixa de entrada**,
+não na B2B ON (e o sistema não lê a sua caixa). Em **Registrar e-mails que
+voltaram**, cole o próprio texto do aviso — ou só os endereços, um por
+linha — e clique em **Registrar como erro**. Em **Motivo**, "Detectar pelo
+aviso colado" lê o código e o texto do servidor (5.1.x, "user unknown" =
+inexistente; 5.7.x, "blocked", "spam", "policy" = recusa por spam); com só
+os endereços, escolha "Endereço inexistente" ou "Recusado como spam". As
+recusas por spam entram na taxa **Recusados por spam**. Os endereços passam a constar como erro e
 entram na lista de e-mails inexistentes: o sistema **deixa de enviar para eles
 em qualquer área** — campanhas, cadências, Webmail, lembretes de reunião e
 pesquisas NPS (o telefone da mesma pessoa continua valendo). O resultado
@@ -679,9 +697,11 @@ engano, **Liberar** em **Contatos bloqueados**.
 
 **Contatos bloqueados.** Lista os e-mails e telefones de quem pediu para
 não receber (marcados em **Não quer receber**, seção 5.13) e os e-mails
-registrados como inexistentes, com o motivo e a data. Nenhum deles recebe
-mensagem da plataforma. **Liberar** (só `admin` e `super_admin`) desfaz o
-bloqueio.
+registrados como inexistentes ou recusados por spam, com o motivo e a
+data. Nenhum deles recebe mensagem da plataforma. **Liberar** (só `admin` e
+`super_admin`) desfaz o bloqueio (uma recusa por spam liberada sai da
+taxa). Com mais de 5 contatos a lista começa recolhida: use **Expandir** e
+**Recolher** no canto do cartão.
 
 **Testando a conta de e-mail e o Webmail.** Depois de salvar a conta em
 Configuração → E-mail (SMTP), use **"Enviar e-mail de teste"**: a B2B ON

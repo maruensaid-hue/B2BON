@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     exigir_gestor_do_tenant,
+    exigir_papel,
     get_ator_id,
     get_db,
     get_email_provider,
@@ -16,12 +17,13 @@ from app.providers.channels.email.base import EmailProvider
 from app.providers.plan_limits.base import PlanLimitsProvider
 from app.schemas.tenant import (
     CriarTenantRequestSchema,
+    DefinirIsencaoPausaSpamRequestSchema,
     DefinirLicencaRequestSchema,
     ExcluirTenantRequestSchema,
     LicencaSchema,
     TenantSchema,
 )
-from app.services import tenant_service
+from app.services import reputacao_service, tenant_service
 from app.services.errors import NaoAutorizado, RegraNegocioViolada, ValidacaoFalhou
 
 router = APIRouter(prefix="/admin/tenants", tags=["admin"], dependencies=[Depends(permitir_gestao_hierarquica)])
@@ -116,6 +118,17 @@ def reativar_tenant(
     db: Session = Depends(get_db),
 ) -> TenantSchema:
     return tenant_service.reativar(db, tenant_id, ator)
+
+
+@router.put("/{tenant_id}/isencao-pausa-spam", response_model=TenantSchema)
+def definir_isencao_pausa_spam(
+    tenant_id: str,
+    dados: DefinirIsencaoPausaSpamRequestSchema,
+    ator: Usuario = Depends(exigir_papel("super_admin")),
+    db: Session = Depends(get_db),
+) -> TenantSchema:
+    """Isenta (ou não) o tenant da pausa automática por recusas de spam. Só o super admin: um admin de distribuidor não pode tirar um cliente da regra."""
+    return reputacao_service.definir_isencao_pausa_spam(db, tenant_id, ator.id, dados.isento)
 
 
 @router.delete("/{tenant_id}", status_code=204)

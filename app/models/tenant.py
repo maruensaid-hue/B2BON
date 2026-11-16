@@ -64,4 +64,6 @@ class Tenant(Base):
     # entre empresas, não comissão de venda a uma pessoa).
     representante_id: Mapped[int | None] = mapped_column(ForeignKey("representante.id"), nullable=True)
     # D-082: tenant de demonstração (dados fictícios) — expira e é apagado sozinho; nulo = tenant real.
+    # Fora da pausa automática por recusas de spam/bloqueio (os números continuam no Relatório de Entrega). Só o super admin liga; a CyberFort nasce isenta.
+    isento_pausa_spam: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     demo_expira_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)

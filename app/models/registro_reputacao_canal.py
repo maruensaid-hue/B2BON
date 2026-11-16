@@ -17,3 +17,5 @@ class RegistroReputacaoCanal(Base):
     enviados: Mapped[int] = mapped_column(Integer, default=0)
     bounces: Mapped[int] = mapped_column(Integer, default=0)
     spam_reports: Mapped[int] = mapped_column(Integer, default=0)
+    # Recusa do servidor do destinatário por spam ou reputação do remetente (retorno "blocked" do envio por API) — separada do bounce de e-mail inexistente.
+    recusas_spam: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

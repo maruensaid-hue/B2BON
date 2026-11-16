@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_ator_id, get_db, get_tenant_id
+from app.api.deps import get_ator_id, get_db, get_tenant_id, get_usuario_atual
+from app.models.usuario import Usuario
 from app.schemas.rampa import RampaStatusSchema
 from app.schemas.reputacao import SaudeCanalSchema
 from app.services import rampa_service, reputacao_service
@@ -34,7 +35,8 @@ def reativar_canal(
     canal: str,
     tenant_id: str = Depends(get_tenant_id),
     ator_id: str | None = Depends(get_ator_id),
+    usuario: Usuario = Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ) -> SaudeCanalSchema:
-    """Reativação manual do canal pausado automaticamente (E10-H2)."""
-    return SaudeCanalSchema(**reputacao_service.reativar(db, tenant_id, ator_id, canal))
+    """Reativação manual do canal pausado automaticamente (E10-H2). A pausa por recusas de spam só o super admin desfaz por aqui."""
+    return SaudeCanalSchema(**reputacao_service.reativar(db, tenant_id, ator_id, canal, super_admin=usuario.papel == "super_admin"))

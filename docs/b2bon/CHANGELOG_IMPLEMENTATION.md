@@ -1,5 +1,12 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Recusa por spam separada do e-mail inexistente, com pausa do canal (2026-11-16)
+
+- "Registrar e-mails que voltaram" lê o aviso colado e separa endereço inexistente (5.1.x, "user unknown") de recusa por spam ou reputação (5.7.x, "blocked", "spam", "policy"); só com os endereços, o usuário escolhe o motivo. O retorno "blocked" do Envio por API passa a contar como recusa por spam, não como bounce.
+- Relatório de Entrega ganha "Recusados por spam" (quantidade e taxa sobre os e-mails que saíram nos últimos 7 dias, contados nos próprios envios). A partir de 1%, aviso com o que fazer; a partir de 2% com 50+ envios, o canal de e-mail pausa: ativar campanha ou cadência de e-mail é recusado e os agendados aguardam. Volta sozinho quando a taxa cai; o cliente não desfaz essa pausa, só o super admin (e as recusas anteriores à revisão deixam de contar).
+- Isenção por tenant (`tenant.isento_pausa_spam`, Admin → Tenants, só super admin): o tenant vê as recusas mas não pausa. A CyberFort nasce isenta (migração `b5d7f9a1c3e6`), por decisão do PO.
+- A lista "Contatos bloqueados" pode ser recolhida e começa recolhida quando passa de 5.
+
 ## Nomes com a codificação trocada (2026-10-31, D-116)
 
 - Nome de empresa e de contato que chegavam de planilhas e CSVs com a codificação trocada ("QuÃ©bec", "GestÃ£o") agora são corrigidos ao gravar, em qualquer caminho de importação.

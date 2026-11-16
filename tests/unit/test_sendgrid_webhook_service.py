@@ -84,16 +84,15 @@ def test_processar_eventos_mapeia_tipo_e_agrupa_por_tenant(db_session) -> None:
     assert saude["spam_reports"] == 1
 
 
-def test_evento_blocked_conta_como_bounce(db_session) -> None:
-    """Raio-X 2026-09-16: "blocked" é o mesmo conceito de "entregue com
-    erro" que bounce/dropped — antes ficava de fora do mapa e nunca
-    pausava nada."""
+def test_evento_blocked_conta_como_recusa_por_spam(db_session) -> None:
+    """"blocked" (recusa do servidor do destinatário por reputação) entrou no mapa em 2026-09-16 como bounce; desde 16/11/2026 conta na taxa de recusas
+    por spam, separada do e-mail inexistente."""
     sendgrid_webhook_service.processar_eventos(
         db_session, [{"event": "blocked", "tenant_id": "tenant-b", "mensagem_id": "1"}]
     )
 
-    saude = reputacao_service.status_saude(db_session, "tenant-b", "email")
-    assert saude["bounces"] == 1
+    assert reputacao_service.status_saude(db_session, "tenant-b", "email")["bounces"] == 0
+    assert reputacao_service.saude_recusas_spam(db_session, "tenant-b")["recusas_spam"] == 1
 
 
 def _criar_mensagem_com_decisor(db_session, tenant_id: str) -> Mensagem:

@@ -51,4 +51,4 @@ def registrar_bounces_manuais(
 ) -> RegistroBouncesManuaisSchema:
     """Com conta SMTP própria o provedor não avisa quando um e-mail volta como não entregue (o aviso chega na caixa de entrada do usuário): aqui o
     usuário cola os endereços que voltaram e eles passam a constar como erro no relatório."""
-    return RegistroBouncesManuaisSchema(**relatorio_entrega_service.registrar_bounces_manuais(db, tenant_id, ator_id, dados.texto))
+    return RegistroBouncesManuaisSchema(**relatorio_entrega_service.registrar_bounces_manuais(db, tenant_id, ator_id, dados.texto, dados.tipo))

@@ -33,6 +33,23 @@ _JANELA_RESUMO_DIAS = 7
 _EMAIL_NO_TEXTO = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}")
 _MAXIMO_BOUNCES_POR_VEZ = 500
 MOTIVO_BOUNCE_MANUAL = bloqueio_contato_service.MOTIVO_BOUNCE_MANUAL
+MOTIVO_SPAM_MANUAL = bloqueio_contato_service.MOTIVO_SPAM_MANUAL
+_TIPOS_DEVOLUCAO = {"auto", "inexistente", "spam"}
+# Aviso de falha colado: o código e o texto do servidor dizem se o endereço não existe (5.1.x, "user unknown") ou se a mensagem foi recusada por spam ou
+# reputação do remetente (5.7.x, "blocked", "policy"). Sem nenhum sinal de spam, vale "inexistente" (o comportamento de antes).
+_CODIGO_INEXISTENTE = re.compile(r"\b5\.1\.\d+\b")
+_CODIGO_SPAM = re.compile(r"\b5\.7\.\d+\b")
+_TEXTO_INEXISTENTE = re.compile(
+    r"user unknown|unknown user|no such user|does not exist|doesn'?t exist|address not found|couldn'?t be found|could not be found|recipient not found|"
+    r"invalid recipient|mailbox not found|não existe|nao existe|endereço não encontrado|não foi encontrad",
+    re.IGNORECASE,
+)
+_TEXTO_SPAM = re.compile(
+    r"spam|blocked|bloquead|block ?list|blacklist|lista negra|policy|pol[íi]tica|reputation|reputa[çc][ãa]o|unsolicited|n[ãa]o solicitad|bulk mail",
+    re.IGNORECASE,
+)
+_JANELA_ANTES = 300
+_JANELA_DEPOIS = 700
 MOTIVO_NAO_ENCONTRADO = (
     "não aparece em nenhuma campanha, cadência ou contato desta empresa (nada foi bloqueado). Confira se o endereço está escrito igual ao cadastrado; "
     "avisos de falha costumam trazer também o endereço do remetente e do servidor, que podem ser ignorados."
@@ -299,7 +316,33 @@ def _resumo_envios(db: Session, tenant_id: str) -> dict:
     return resumo
 
 
-def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, texto: str) -> dict:
+def _tipo_pelo_texto(trecho: str) -> str | None:
+    """"spam", "inexistente" ou None (o trecho não diz). O código do servidor manda; sem código, valem as palavras."""
+    if _CODIGO_INEXISTENTE.search(trecho):
+        return "inexistente"
+    if _CODIGO_SPAM.search(trecho):
+        return "spam"
+    if _TEXTO_INEXISTENTE.search(trecho):
+        return "inexistente"
+    if _TEXTO_SPAM.search(trecho):
+        return "spam"
+    return None
+
+
+def classificar_devolucao(texto: str, endereco: str) -> str:
+    """Motivo da devolução de um endereço num aviso de falha colado: olha o trecho em volta de cada vez que o endereço aparece; se ali não houver sinal, o texto
+    inteiro. Sem sinal nenhum, "inexistente"."""
+    minusculo = texto.lower()
+    inicio = minusculo.find(endereco)
+    while inicio != -1:
+        tipo = _tipo_pelo_texto(texto[max(0, inicio - _JANELA_ANTES) : inicio + len(endereco) + _JANELA_DEPOIS])
+        if tipo is not None:
+            return tipo
+        inicio = minusculo.find(endereco, inicio + 1)
+    return _tipo_pelo_texto(texto) or "inexistente"
+
+
+def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, texto: str, tipo: str = "auto") -> dict:
     """Registra como inexistentes os e-mails que o usuário informou ter voltado como não entregues (aviso de falha na caixa de entrada). Com conta SMTP própria
     o provedor não devolve esse retorno ao sistema. Aceita texto livre (endereços separados por linha, vírgula, ponto e vírgula ou o próprio aviso colado).
 
@@ -314,6 +357,8 @@ def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, 
             enderecos.append(endereco)
     if not enderecos:
         raise ValidacaoFalhou("Cole ao menos um endereço de e-mail.")
+    if tipo not in _TIPOS_DEVOLUCAO:
+        raise ValidacaoFalhou("Motivo inválido: use detectar automaticamente, endereço inexistente ou recusado como spam.")
     if len(enderecos) > _MAXIMO_BOUNCES_POR_VEZ:
         raise ValidacaoFalhou(f"Informe até {_MAXIMO_BOUNCES_POR_VEZ} endereços por vez.")
 
@@ -345,6 +390,7 @@ def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, 
     registrados: list[str] = []
     ja_registrados: list[str] = []
     nao_encontrados: list[str] = []
+    recusados_spam: list[str] = []
     for endereco in enderecos:
         enviados = [
             item
@@ -354,22 +400,36 @@ def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, 
         if not de_campanhas.get(endereco) and not contatos.get(endereco):
             nao_encontrados.append(endereco)
             continue
+        e_spam = (classificar_devolucao(texto, endereco) if tipo == "auto" else tipo) == "spam"
+        motivo = MOTIVO_SPAM_MANUAL if e_spam else MOTIVO_BOUNCE_MANUAL
+        origem = bloqueio_contato_service.ORIGEM_EMAIL_RECUSADO_SPAM if e_spam else bloqueio_contato_service.ORIGEM_EMAIL_INEXISTENTE
         marcou_algum = False
         for item in enviados:
             if item.bounce_em is None:
                 item.bounce_em = agora
-                item.motivo_bounce = MOTIVO_BOUNCE_MANUAL
+                item.motivo_bounce = motivo
                 marcou_algum = True
-        _, criado = bloqueio_contato_service.registrar_email_inexistente(db, tenant_id, ator_id, endereco, MOTIVO_BOUNCE_MANUAL)
+        _, criado = bloqueio_contato_service.registrar_email_inexistente(db, tenant_id, ator_id, endereco, motivo, origem)
         (registrados if criado or marcou_algum else ja_registrados).append(endereco)
+        if criado and e_spam:
+            recusados_spam.append(endereco)
 
     auditoria_service.registrar(
         db, tenant_id, "bounce_registrado_manualmente", "relatorio_entrega", 0, ator_id,
-        {"registrados": len(registrados), "ja_registrados": len(ja_registrados), "nao_encontrados": len(nao_encontrados)},
+        {
+            "registrados": len(registrados),
+            "recusados_spam": len(recusados_spam),
+            "ja_registrados": len(ja_registrados),
+            "nao_encontrados": len(nao_encontrados),
+            "tipo": tipo,
+        },
     )
     db.commit()
+    if recusados_spam:
+        reputacao_service.avaliar_recusas_spam(db, tenant_id)  # recusa por spam conta na taxa e pode pausar o canal
     return {
         "registrados": registrados,
+        "recusados_spam": recusados_spam,
         "ja_registrados": ja_registrados,
         "nao_encontrados": nao_encontrados,
         "motivo_nao_encontrados": MOTIVO_NAO_ENCONTRADO if nao_encontrados else None,
@@ -377,7 +437,10 @@ def registrar_bounces_manuais(db: Session, tenant_id: str, ator_id: str | None, 
 
 
 def obter(db: Session, tenant_id: str) -> dict:
+    recusas = reputacao_service.avaliar_recusas_spam(db, tenant_id)  # antes do status: a pausa por spam pode ter entrado ou saído agora
     saude_email = reputacao_service.status_saude(db, tenant_id, "email")
+    saude_email.update(recusas)
+    saude_email["pausado_por_spam"] = reputacao_service.pausado_por_spam(db, tenant_id)
     # Com conta SMTP própria o provedor não devolve entrega/bounce/spam: as taxas abaixo ficam em zero sem querer dizer "nenhum problema".
     tem_api = db.execute(select(ConfiguracaoEmailApi.id).where(ConfiguracaoEmailApi.tenant_id == tenant_id)).first() is not None
     tem_smtp = db.execute(select(ConfiguracaoEmailSmtp.id).where(ConfiguracaoEmailSmtp.tenant_id == tenant_id)).first() is not None
