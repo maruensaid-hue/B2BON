@@ -131,6 +131,7 @@ export function Cadencias() {
   const cadenciaIdDaUrl = Number(searchParams.get("cadencia_id")) || null;
   const [cadencias, setCadencias] = useState<Cadencia[]>([]);
   const [cadenciaSelecionadaId, setCadenciaSelecionadaId] = useState<number | null>(null);
+  const [ativando, setAtivando] = useState(false);
   const [toques, setToques] = useState<ToqueCadencia[]>([]);
   const [icps, setIcps] = useState<ICP[]>([]);
   const [ofertas, setOfertas] = useState<OfertaResumo[]>([]);
@@ -510,14 +511,18 @@ export function Cadencias() {
   }
 
   async function ativarCadencia() {
-    if (cadenciaSelecionadaId === null) return;
+    // Um clique de cada vez: o clique duplo ativava a mesma cadência duas vezes (visto em produção em 16/11/2026).
+    if (cadenciaSelecionadaId === null || ativando) return;
     setErro(null);
+    setAtivando(true);
     try {
       await api.post(`/cadencias/${cadenciaSelecionadaId}/ativar`);
       setMensagem("Cadência ativada — os envios entram na fila conforme o agendamento de cada toque.");
       await carregarCadencias();
     } catch (error) {
       setErro(error instanceof ApiError ? error.message : "Não foi possível ativar a cadência.");
+    } finally {
+      setAtivando(false);
     }
   }
 
@@ -701,7 +706,7 @@ export function Cadencias() {
               <div className="flex items-center gap-2">
                 <Badge tone={toneStatus(cadenciaSelecionada.status)}>{cadenciaSelecionada.status}</Badge>
                 {(cadenciaSelecionada.status === "aguardando_aprovacao" || cadenciaSelecionada.status === "ativa") && (
-                  <Button size="sm" data-tutorial-id="cadencias:ativar" onClick={ativarCadencia}>
+                  <Button size="sm" data-tutorial-id="cadencias:ativar" onClick={ativarCadencia} disabled={ativando}>
                     {cadenciaSelecionada.status === "ativa" ? "Agendar novas mensagens" : "Ativar cadência"}
                   </Button>
                 )}

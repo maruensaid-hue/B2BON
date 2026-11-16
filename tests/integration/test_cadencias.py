@@ -422,6 +422,71 @@ def test_ativar_ignora_mensagem_cancelada(client, onboarding_completo, criar_con
     assert resposta.json()["cadencia"]["status"] == "ativa"
 
 
+def _rejeitar_tudo(client, cadencia_id: int) -> None:
+    itens = client.get("/api/v1/aprovacoes", params={"cadencia_id": cadencia_id, "status": "pendente"}).json()
+    for item in itens:
+        client.post(f"/api/v1/aprovacoes/{item['aprovacao_id']}/rejeitar", json={"motivo": "refazer"})
+
+
+def test_ativar_ignora_rascunho_rejeitado_que_ja_tem_versao_aprovada(
+    client, db_session, onboarding_completo, criar_conta_com_decisor, criar_cadencia
+):
+    """Rascunhos rejeitados e refeitos não travam a ativação com "pendentes de aprovação" sem nada na fila
+    (visto em produção em 16/11/2026, cadência da Acronis): a versão velha vira cancelada."""
+    from app.models.mensagem import Mensagem
+
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    _rejeitar_tudo(client, cadencia["id"])
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    for item in client.get("/api/v1/aprovacoes", params={"cadencia_id": cadencia["id"], "status": "pendente"}).json():
+        client.post(f"/api/v1/aprovacoes/{item['aprovacao_id']}/aprovar")
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["cadencia"]["status"] == "ativa"
+    db_session.expire_all()
+    status = [m.status for m in db_session.query(Mensagem).filter_by(cadencia_id=cadencia["id"]).all()]
+    assert status.count("cancelado") == 5
+    assert all(
+        m.agendado_para is not None
+        for m in db_session.query(Mensagem).filter_by(cadencia_id=cadencia["id"]).filter(Mensagem.status != "cancelado")
+    )
+
+
+def test_ativar_com_rejeitada_sem_nova_versao_explica_onde_ver(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia
+):
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    _rejeitar_tudo(client, cadencia["id"])
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    assert resposta.status_code == 409
+    assert "5 rejeitada" in resposta.text
+    assert "Rejeitadas" in resposta.text
+
+
+def test_agendar_de_novo_cadencia_ja_ativa_diz_que_ja_esta_ativa(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia
+):
+    """Clicar em "Agendar novas mensagens" sem contas novas não pode parecer bloqueio (LGPD e Cinco frentes, 16/11/2026)."""
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia()
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+    _aprovar_tudo(client, cadencia["id"])
+    assert client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar").status_code == 200
+
+    resposta = client.post(f"/api/v1/cadencias/{cadencia['id']}/ativar")
+
+    assert resposta.status_code == 409
+    assert "já está ativa" in resposta.text
+
+
 def test_excluir_cadencia_em_rascunho(client, criar_cadencia):
     cadencia = criar_cadencia()
 

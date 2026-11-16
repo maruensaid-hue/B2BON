@@ -969,6 +969,14 @@ def gerar_para_lote(
     }
 
 
+def _motivo_sem_mensagens_novas(cadencia: Cadencia) -> str:
+    # Depois de ativada, o botão vira "Agendar novas mensagens"; clicar de novo sem contas novas caía num texto que parecia
+    # bloqueio (visto em produção em 16/11/2026 nas cadências de LGPD e Cinco frentes, que já estavam ativas).
+    if cadencia.status == "ativa":
+        return "Cadência já está ativa e todas as mensagens aprovadas já estão agendadas — não há nada novo para agendar."
+    return "Cadência não tem mensagens novas pendentes de agendamento."
+
+
 def ativar(
     db: Session, tenant_id: str, ator_id: str | None, cadencia_id: int, plan_limits: PlanLimitsProvider
 ) -> dict:
@@ -1001,8 +1009,22 @@ def ativar(
         .all()
     )
     if not mensagens:
-        raise RegraNegocioViolada("Cadência não tem mensagens novas pendentes de agendamento.")
+        raise RegraNegocioViolada(_motivo_sem_mensagens_novas(cadencia))
 
+    # Rascunho rejeitado que já tem outra versão aprovada (ou enviada) para o mesmo contato e o mesmo toque é versão velha: não sai
+    # e não é decisão pendente. Antes ele travava a ativação com "toques pendentes de aprovação" sem nada na fila (visto em
+    # produção em 16/11/2026: 272 rascunhos da IA rejeitados em 12/11 e refeitos com texto fixo). Vira "cancelado" para não voltar.
+    versoes_validas = {
+        (decisor_id, toque_id)
+        for decisor_id, toque_id in db.query(Mensagem.decisor_id, Mensagem.toque_cadencia_id).filter(
+            Mensagem.tenant_id == tenant_id,
+            Mensagem.cadencia_id == cadencia.id,
+            Mensagem.status.notin_(("cancelado", "aguardando_aprovacao")),
+        )
+    }
+    pendentes = 0
+    rejeitadas = 0
+    a_agendar: list[Mensagem] = []
     for mensagem in mensagens:
         aprovacao = (
             db.query(Aprovacao)
@@ -1010,10 +1032,32 @@ def ativar(
             .order_by(Aprovacao.id.desc())
             .first()
         )
-        if aprovacao is None or aprovacao.status != "aprovado":
-            raise RegraNegocioViolada(
-                "Cadência tem toques pendentes de aprovação — não pode ser ativada."
+        if aprovacao is not None and aprovacao.status == "aprovado":
+            a_agendar.append(mensagem)
+        elif aprovacao is not None and aprovacao.status == "rejeitado":
+            if (mensagem.decisor_id, mensagem.toque_cadencia_id) in versoes_validas:
+                mensagem.status = "cancelado"
+            else:
+                rejeitadas += 1
+        else:
+            pendentes += 1
+    if pendentes or rejeitadas:
+        db.rollback()
+        partes = []
+        if pendentes:
+            partes.append(f"{pendentes} aguardando aprovação")
+        if rejeitadas:
+            partes.append(
+                f"{rejeitadas} rejeitada(s) sem outra versão aprovada — veja o filtro \"Rejeitadas\" em Aprovações e aprove, "
+                "edite ou cancele"
             )
+        raise RegraNegocioViolada(
+            "Cadência tem toques pendentes de aprovação — não pode ser ativada (" + "; ".join(partes) + ")."
+        )
+    if not a_agendar:
+        db.commit()  # só havia versões velhas rejeitadas: ficam canceladas
+        raise RegraNegocioViolada(_motivo_sem_mensagens_novas(cadencia))
+    mensagens = a_agendar
 
     agora = datetime.now(UTC)
     mensagens_por_decisor: dict[int, list[Mensagem]] = {}
