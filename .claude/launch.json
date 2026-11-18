@@ -18,6 +18,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000"],
       "port": 8000
+    },
+    {
+      "name": "backend-demo-scratch",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["C:/Users/MARUEN~1/AppData/Local/Temp/claude/6a4c9cadb056bc90/a2eca209-ea04-4d58-9e1d-ac972b8a7e34/scratchpad/run_demo_api.py"],
+      "port": 8000
     }
   ]
 }
