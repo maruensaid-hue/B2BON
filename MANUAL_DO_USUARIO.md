@@ -167,6 +167,14 @@ Prospecção (PREDATOR) gerou ou que entraram por outro canal.
     avisa isso antes de confirmar). Um CSV exportado pela própria B2B
     ON já vem com essa coluna preenchida, então reimportá-lo (ex.: após
     restaurar um backup) nunca duplica.
+- **Parcelas a receber** (no negócio ganho, modal do Pipeline ou tela
+  completa do negócio): o vendedor registra o que foi combinado com o
+  cliente: valor, vencimento e uma observação opcional (ex.: "boleto",
+  "2ª de 3"). Quando o cliente paga, **Marcar pago** dá baixa com a data
+  de hoje; **Desfazer pagamento** volta atrás. A parcela que passa do
+  vencimento sem baixa aparece no MAP, em **Clientes inadimplentes**.
+  Só dá para lançar parcelas depois que o negócio está como ganho. O
+  vendedor mexe só nos negócios dele; o gestor, em todos do tenant.
 
 ---
 
@@ -314,6 +322,49 @@ no MAP, só a saúde do tenant como cliente da B2B ON.
   - **Gerar script de resgate**: para tenants em risco, a IA gera um
     roteiro de conversa personalizado (com a justificativa dos pontos
     levantados) para reverter o risco de cancelamento.
+
+### 4.3 Clientes inadimplentes (aba do MAP)
+
+Mostra quem não pagou o que foi combinado na data prevista. São duas
+seções, cada uma para quem pode vê-la:
+
+- **Parcelas dos clientes**: as parcelas lançadas nos negócios ganhos
+  (CRM → negócio → Parcelas a receber) que venceram e não foram
+  marcadas como pagas. Para cada parcela: cliente, negócio, número da
+  parcela, valor, vencimento, dias de atraso, vendedor e a rede (tenant,
+  revenda, distribuidor e representante). O "hoje" é o de Brasília: uma
+  parcela que vence hoje ainda não está em atraso.
+  - `user` (vendedor): só as parcelas dos negócios dele.
+  - `admin` (gestor): todas do tenant, com filtro por vendedor. Se o
+    tenant é distribuidor/revendedor, também as da rede abaixo dele, com
+    filtros por tenant, revenda, distribuidor e representante.
+  - `super_admin`: todas as empresas, com os mesmos filtros.
+  - O representante comercial **não** vê as parcelas dos clientes dos
+    tenants que vendeu: é negócio do tenant com os clientes dele.
+- **Licenças B2B ON**: tenants com a licença vencida e sem pagamento
+  confirmado (cobrança direta). Situação: *em carência* (até 3 dias),
+  *diz que pagou* (o cliente avisou pela tela de pagamento), *vencida* ou
+  *suspensa*. Quem vê: `super_admin` (todos), o admin de
+  distribuidor/revendedor (os tenants abaixo dele) e o usuário vinculado
+  a um representante (os tenants que ele vendeu).
+
+Os filtros só oferecem tenants, vendedores e representantes que você já
+pode ver. No topo, os totais: valor em atraso, clientes, quantidade e o
+maior atraso.
+
+### 4.4 Anotações da daily (gestor)
+
+No topo do MAP, **✏️ Anotar da daily** abre um campo para o gestor
+(`admin`/`super_admin`) escrever o que quer lembrar na próxima daily.
+Por padrão a anotação aparece **amanhã** (data de Brasília); em "Mostrar
+em" dá para escolher outra data (hoje ou futura). Na data marcada ela
+aparece em destaque, no quadro amarelo **Anotações da sua daily para
+hoje**, e fica ali até você clicar **Marcar como vista**. Assim, uma
+anotação marcada para um sábado continua lá na segunda. **Ver anotações
+agendadas** lista as que ainda vão aparecer.
+
+As anotações são **só suas**: outro gestor do mesmo tenant não vê, não
+marca e não apaga.
 
 ---
 

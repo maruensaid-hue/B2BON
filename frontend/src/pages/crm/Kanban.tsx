@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
+import { ParcelasNegocio } from "@/components/ParcelasNegocio";
 import { PropostasNegocio } from "@/components/PropostasNegocio";
 import { SeletorConta } from "@/components/SeletorConta";
 import { Badge } from "@/components/ui/Badge";
@@ -892,6 +893,10 @@ export function Kanban() {
           <ListaAtividades atividades={atividadesDoNegocio} aoRegistrar={registrarAtividadeDoNegocio} />
 
           <PropostasNegocio negocioId={negocioEmEdicao.id} />
+
+          <div className="mt-4">
+            <ParcelasNegocio negocioId={negocioEmEdicao.id} />
+          </div>
           </div>
         )}
       </Modal>

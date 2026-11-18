@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 
 import { InteligenciaOportunidade } from "@/components/InteligenciaOportunidade";
 import { ListaAtividades, type Atividade } from "@/components/ListaAtividades";
+import { ParcelasNegocio } from "@/components/ParcelasNegocio";
 import { PropostasNegocio } from "@/components/PropostasNegocio";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -342,6 +343,10 @@ export function NegocioDetalhe() {
 
         <Card className="lg:col-span-2">
           <PropostasNegocio negocioId={negocio.id} />
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <ParcelasNegocio negocioId={negocio.id} />
         </Card>
       </div>
 

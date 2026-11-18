@@ -82,6 +82,8 @@ from app.api.v1.relatorio_entrega import router as relatorio_entrega_router
 from app.api.v1.reunioes import router as reunioes_router
 from app.api.v1.ropa import router as ropa_router
 from app.api.v1.map_performance import router as map_performance_router
+from app.api.v1.inadimplencia import router as inadimplencia_router
+from app.api.v1.parcelas_negocio import router as parcelas_negocio_router
 from app.api.v1.saude_conta import router as saude_conta_router
 from app.api.v1.template_proposta import router as template_proposta_router
 from app.api.v1.titulares import router as titulares_router
@@ -201,6 +203,7 @@ router.include_router(parceiros_router)
 router.include_router(relatorios_router)
 router.include_router(relatorio_consumo_router)
 router.include_router(crm_router, dependencies=_exige_crm)
+router.include_router(parcelas_negocio_router, dependencies=_exige_crm)
 router.include_router(oportunidades_router, dependencies=_exige_crm)
 router.include_router(revenue_intelligence_router, dependencies=_exige_crm)
 router.include_router(bids_router, dependencies=_exige_bids)
@@ -223,6 +226,8 @@ router.include_router(motor_router, dependencies=_exige_licenca)
 # tenant (escopo aplicado no serviço), distinto do /motor acima (só
 # super_admin, cross-tenant). Este sim é o módulo MAP vendido avulso.
 router.include_router(saude_conta_router, dependencies=_exige_map)
+# Quadro de inadimplentes + daily do gestor: o quadro de parcelas exige o MAP na própria rota; o de licenças é da rede B2B ON (representante, revenda).
+router.include_router(inadimplencia_router, dependencies=_exige_licenca)
 router.include_router(registro_oportunidade_router, dependencies=_exige_predator)
 router.include_router(usuarios_router, dependencies=_exige_licenca)
 router.include_router(template_proposta_router, dependencies=_exige_crm)

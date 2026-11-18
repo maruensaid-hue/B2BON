@@ -106,6 +106,8 @@ from app.models.interacao_tenant import InteracaoTenant
 from app.models.licenca import Licenca
 from app.models.link_captura_lead import LinkCapturaLead
 from app.models.pre_reserva import ConfiguracaoPreReserva, PreReserva
+from app.models.parcela_negocio import ParcelaNegocio
+from app.models.nota_daily import NotaDaily
 from app.models.lista_prospeccao import ListaProspeccao
 from app.models.material_oferta import MaterialOferta
 from app.models.mensagem import Mensagem
@@ -384,6 +386,8 @@ __all__ = [
     "LinkCapturaLead",
     "ConfiguracaoPreReserva",
     "PreReserva",
+    "ParcelaNegocio",
+    "NotaDaily",
     "QuotaComercial",
     "Representante",
     "ComissaoRepresentante",

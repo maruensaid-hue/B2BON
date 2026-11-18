@@ -123,6 +123,8 @@ def test_rotas_com_sessao_exigem_get_usuario_atual_e_nenhuma_aceita_tenant_do_cl
         "GET /api/v1/leads/contas", "POST /api/v1/rede-social/bloquear/{tenant_id_outro}", "GET /api/v1/rede-social/mensagens/{com_tenant_id}",
         "GET /api/v1/rede-social/relacionamentos/{tenant_id_alvo}", "DELETE /api/v1/rede-social/seguir/{tenant_id_seguido}",
         "GET /api/v1/registro-oportunidade", "GET /api/v1/saude-contas/dashboard", "GET /api/v1/saude-contas/ranking",
+        # Quadro de inadimplentes do MAP: parcelas passa por `tenant_ids_no_escopo` (403 fora da subárvore), licenças só filtra o que a pessoa já vê.
+        "GET /api/v1/map/inadimplencia/parcelas", "GET /api/v1/map/inadimplencia/licencas",
     }
     inesperadas = sorted(r for r in sem_papel if r.split(" [")[0] not in esperadas)
     assert not inesperadas, f"Rota nova recebe tenant do cliente sem exigir papel; revise o escopo e, se correto, adicione em `esperadas`: {inesperadas}"

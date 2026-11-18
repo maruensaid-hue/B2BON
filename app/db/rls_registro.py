@@ -140,6 +140,8 @@ TENANT_DIRETO_POSTERIORES: dict[str, str] = {
     "enriquecimento_consulta": "f3b5d7a9c1e2",
     "configuracao_pre_reserva": "c7e9a1b3d5f7",
     "pre_reserva": "c7e9a1b3d5f7",
+    "parcela_negocio": "d9f1b3c5e7a2",
+    "nota_daily": "d9f1b3c5e7a2",
 }
 
 # `tenant_id` pode ser nulo: a linha sem dono é de plataforma (só os contextos privilegiados a gravam; a leitura segue a política de cada tabela em POLITICAS_ESPECIAIS).

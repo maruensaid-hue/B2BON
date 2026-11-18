@@ -1,5 +1,25 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Clientes inadimplentes e anotações da daily no MAP (2026-11-18)
+
+- Pedido do PO: quadro de clientes que não pagaram na data combinada, por tenant, vendedor, representante, revenda e distribuidor, respeitando a
+  visibilidade atual. O modelo não tinha parcelas nem vencimentos nos negócios dos tenants. Consultado, o PO escolheu as duas fontes:
+  - **Parcelas a receber** (tabela nova `parcela_negocio`): o vendedor lança valor, vencimento e observação no negócio ganho (modal do Pipeline e tela
+    do negócio) e dá baixa com "Marcar pago". Rotas `GET/POST /crm/negocios/{id}/parcelas` e `PUT/DELETE /crm/negocios/{id}/parcelas/{parcela_id}`,
+    com o mesmo escopo das outras rotas do negócio (vendedor só nos dele) e auditoria.
+  - **Licenças B2B ON vencidas** sem pagamento confirmado (dado que já existia: `licenca.data_expiracao`, carência de 3 dias, cobrança direta).
+- Aba **Clientes inadimplentes** no MAP (`GET /map/inadimplencia/parcelas`, `/licencas` e `/acesso`). Parcelas: mesma regra do MAP-Contas
+  (`tenant_service.tenant_ids_no_escopo`, que também amplia a leitura do RLS): vendedor vê os negócios dele; admin vê o tenant e, se for
+  distribuidor/revendedor, a subárvore; super_admin vê tudo. Filtros por tenant, vendedor, representante, revenda e distribuidor, oferecendo só o
+  que a pessoa já vê. Licenças: super_admin, admin de distribuidor/revendedor (sem a própria licença) e usuário vinculado a representante.
+- **Decisão**: o representante não vê as parcelas dos clientes dos tenants que vendeu. É dado comercial do tenant com os clientes dele, não da venda
+  do B2B ON; o representante acompanha a licença desses tenants.
+- **Anotações da daily** (tabela nova `nota_daily`, rotas `/map/notas-daily`): só gestor (admin/super_admin) escreve. Por padrão a nota aparece no
+  dia seguinte (data de Brasília); pode escolher outra data, hoje ou futura. Na data ela aparece em destaque no topo do MAP e fica até ser marcada
+  como vista, para não se perder em fim de semana. **Decisão**: a nota é privada de quem escreveu. Outro gestor do mesmo tenant não a vê, porque
+  a daily é o caderno pessoal do gestor, não um mural do time.
+- Migração `d9f1b3c5e7a2`: as duas tabelas nascem vazias e com RLS (tenant direto + privilegiado). Nenhum dado existente muda.
+
 ## Recusa por spam separada do e-mail inexistente, com pausa do canal (2026-11-16)
 
 - "Registrar e-mails que voltaram" lê o aviso colado e separa endereço inexistente (5.1.x, "user unknown") de recusa por spam ou reputação (5.7.x, "blocked", "spam", "policy"); só com os endereços, o usuário escolhe o motivo. O retorno "blocked" do Envio por API passa a contar como recusa por spam, não como bounce.
