@@ -19,6 +19,10 @@
   como vista, para não se perder em fim de semana. **Decisão**: a nota é privada de quem escreveu. Outro gestor do mesmo tenant não a vê, porque
   a daily é o caderno pessoal do gestor, não um mural do time.
 - Migração `d9f1b3c5e7a2`: as duas tabelas nascem vazias e com RLS (tenant direto + privilegiado). Nenhum dado existente muda.
+- **Demonstração** (`/demo`): a empresa fictícia ganha o MAP completo. Custo de aquisição de 3 meses (ROI LTV/CAC), sinais de saúde por conta,
+  9 parcelas nos negócios ganhos (4 vencidas sem baixa, para o quadro aparecer preenchido) e 4 anotações da daily da gestora. As tabelas novas
+  entram na varredura que apaga a demonstração expirada (testado em Postgres real). Os ambientes de reserva preparados antes da subida ficam com a semente
+  antiga (uma reserva dura menos de um dia); os novos já nascem completos.
 
 ## Recusa por spam separada do e-mail inexistente, com pausa do canal (2026-11-16)
 
