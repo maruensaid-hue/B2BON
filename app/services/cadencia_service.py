@@ -620,6 +620,9 @@ def limpar_texto_gerado(texto: str) -> str:
     return corpo.strip()
 
 
+_LIMITE_TOQUE_ANTERIOR_NO_PROMPT = 1200
+
+
 def _fatos_da_conta(db: Session, conta: Conta, primeiro_toque: bool) -> str:
     """Trecho de prompt com o que se sabe DESTA empresa: sinais verificados (com evidência gravada) e o resumo do site.
 
@@ -654,6 +657,7 @@ def _gerar_conteudo_toque(
     variante: str | None = None,
     regras_aprendidas: str = "",
     lista: ListaProspeccao | None = None,
+    toques_anteriores: list[tuple[int, str, str]] | None = None,
 ) -> tuple[str | None, str | None, bool]:
     """Mensagem personalizada por conta/decisor — não mala direta (E3-H1).
 
@@ -720,6 +724,18 @@ def _gerar_conteudo_toque(
         f" Comece cumprimentando {nome_pessoa} pelo primeiro nome. Em uma ou duas frases, diga o que a '{oferta.nome}' faz por uma "
         "empresa como a dela e cite um ou dois diferenciais concretos da oferta (use os diferenciais acima, sem inventar outros)."
     )
+    if toque.ordem > 1:
+        # Acompanhamento (19/11/2026): todo toque recebia a mesma instrução de apresentação, e o 2º LinkedIn saía quase igual ao 1º,
+        # parecendo a mesma mensagem de volta nas Tarefas do LinkedIn. Do 2º toque em diante a IA vê o que já foi escrito e não se reapresenta.
+        anteriores = "\n\n".join(f"[toque {ordem}, {canal}]\n{texto[:_LIMITE_TOQUE_ANTERIOR_NO_PROMPT]}" for ordem, canal, texto in (toques_anteriores or []))
+        instrucao_estrutura = (
+            f" Este é um ACOMPANHAMENTO: {nome_pessoa} já recebeu {'as mensagens abaixo' if anteriores else 'mensagens anteriores desta cadência'}"
+            " e ainda não respondeu. Cumprimente pelo primeiro nome e retome o contato em uma frase curta, sem se apresentar de novo e sem "
+            f"repetir a explicação de o que a '{oferta.nome}' faz. Traga um ângulo NOVO, que ainda não apareceu: outro diferencial, uma prova "
+            "social ou uma pergunta diferente. Não reaproveite frases nem a estrutura das mensagens anteriores. Seja mais curto que o primeiro toque."
+        )
+        if anteriores:
+            instrucao_estrutura += " Mensagens já enviadas a esta pessoa nesta cadência (só para você não repetir):\n" + anteriores + "\n"
     if link_oferta and toque.canal == "email":
         instrucao_estrutura += (
             f" Feche com um próximo passo claro: convide a conhecer os planos e assinar direto pelo site, escrevendo este link exatamente "
@@ -901,6 +917,7 @@ def gerar_para_lote(
             continue
 
         contas_processadas.append(conta_id)
+        toques_anteriores: list[tuple[int, str, str]] = []
         for toque in toques:
             variante = variante_ab_para_decisor(decisor.id) if toque.ab_teste_habilitado else None
             if toque.canal == "whatsapp" and toque.template_whatsapp_id and not toque.whatsapp_sem_template:
@@ -921,7 +938,8 @@ def gerar_para_lote(
                 falhou_por_erro_ia = False
             else:
                 conteudo, assunto, falhou_por_erro_ia = _gerar_conteudo_toque(
-                    db, llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal], lista
+                    db, llm, icp, oferta, config, conta, decisor, toque, variante, regras_por_canal[toque.canal], lista,
+                    toques_anteriores,
                 )
             if conteudo is None:
                 if falhou_por_erro_ia:
@@ -929,6 +947,7 @@ def gerar_para_lote(
                 else:
                     toques_bloqueados_restricao += 1
                 continue
+            toques_anteriores.append((toque.ordem, toque.canal, conteudo))
             conteudo = _rodape_por_canal(db, tenant_id, decisor, toque.canal, conteudo)
             aprovacao_service.criar_proposta(
                 db,

@@ -1,5 +1,16 @@
 # CHANGELOG — IMPLEMENTATION
 
+## Toque de acompanhamento não repete a apresentação (2026-11-19)
+
+- Relato do cliente (CyberFort): as Tarefas do LinkedIn se encheram de mensagens "que já tinham sido enviadas". Não eram as mesmas: eram o 2º
+  toque de LinkedIn (4º da cadência) das três cadências "Onda LinkedIn 2", agendado para 19/11. Desde 10/11 todo toque recebia a mesma instrução
+  de apresentação ("cumprimente e diga o que a oferta faz"), sem saber o que já tinha sido dito, e o 2º LinkedIn saía quase igual ao 1º.
+- Agora, do 2º toque em diante, a IA recebe os textos dos toques anteriores dessa pessoa e escreve um acompanhamento: retoma o contato em uma
+  frase, não se reapresenta, traz um ângulo novo (outro diferencial, prova social ou pergunta) e é mais curta.
+- Dados: as 64 tarefas desse 4º toque criadas em 19/11 na CyberFort foram marcadas como ignoradas (mensagem cancelada, com motivo e auditoria).
+  As 256 tarefas pendentes do 1º toque de LinkedIn ficaram como estavam. Mensagens geradas antes desta correção e ainda não agendadas
+  mantêm o texto antigo: vale revisar ou regerar.
+
 ## Clientes inadimplentes e anotações da daily no MAP (2026-11-18)
 
 - Pedido do PO: quadro de clientes que não pagaram na data combinada, por tenant, vendedor, representante, revenda e distribuidor, respeitando a

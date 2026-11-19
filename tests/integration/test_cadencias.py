@@ -98,7 +98,9 @@ def test_mensagens_personalizadas_usam_dados_do_decisor(
     assert all("hipóteses, não fatos sobre esta empresa" in prompt for prompt in prompts)
     assert all("Nunca afirme que a empresa" in prompt and "sem markdown" in prompt for prompt in prompts)
     # Estrutura mínima: cumprimentar pelo primeiro nome e dizer o que a oferta faz (10/11/2026: saíam só perguntas genéricas).
-    assert all("Comece cumprimentando" in prompt and "diferenciais concretos" in prompt for prompt in prompts)
+    # Só o 1º toque se apresenta; do 2º em diante é acompanhamento, sem repetir a apresentação (19/11/2026).
+    assert "Comece cumprimentando" in prompts[0] and "diferenciais concretos" in prompts[0]
+    assert all("ACOMPANHAMENTO" in prompt and "Comece cumprimentando" not in prompt for prompt in prompts[1:])
 
 
 def test_regra_aprendida_ativa_entra_no_prompt_da_cadencia(
@@ -891,3 +893,27 @@ def test_link_de_assinatura_da_oferta_vai_como_proximo_passo_nos_emails(
         "exatamente como está, sozinho na linha: https://b2bon.exemplo.com.br/criar-conta?plano=Individual " in p for p in prompts_email
     )
     assert all("sozinho na linha" not in p for p in prompts_outros)
+
+
+def test_segundo_toque_de_linkedin_e_acompanhamento_e_nao_repete_a_apresentacao(
+    client, onboarding_completo, criar_conta_com_decisor, criar_cadencia, fake_llm
+):
+    """19/11/2026: o 2º LinkedIn saía quase igual ao 1º (a mesma apresentação da oferta) e parecia a mensagem já enviada de volta nas
+    Tarefas do LinkedIn. Do 2º toque em diante a IA recebe o que já foi escrito e a ordem de não se reapresentar."""
+    conta, _ = criar_conta_com_decisor()
+    cadencia = criar_cadencia(toques=[
+        {"ordem": 1, "canal": "email", "intervalo_dias_apos_anterior": 0},
+        {"ordem": 2, "canal": "linkedin", "intervalo_dias_apos_anterior": 2},
+        {"ordem": 3, "canal": "email", "intervalo_dias_apos_anterior": 3},
+        {"ordem": 4, "canal": "linkedin", "intervalo_dias_apos_anterior": 3},
+        {"ordem": 5, "canal": "email", "intervalo_dias_apos_anterior": 4},
+    ])
+    fake_llm.definir_respostas(["E-mail 1", "Primeira abordagem no LinkedIn: apresento a oferta X-123.", "E-mail 2", "Retomando.", "E-mail 3"])
+    client.post(f"/api/v1/cadencias/{cadencia['id']}/gerar", json={"conta_ids": [conta.id]})
+
+    prompts = [chamada.prompt for chamada in fake_llm.chamadas]
+    segundo_linkedin = next(p for p in prompts if "toque 4 (canal linkedin)" in p)
+    assert "ACOMPANHAMENTO" not in prompts[0] and "Comece cumprimentando" in prompts[0]
+    assert "ACOMPANHAMENTO" in segundo_linkedin and "sem se apresentar de novo" in segundo_linkedin
+    assert "Primeira abordagem no LinkedIn: apresento a oferta X-123." in segundo_linkedin
+    assert "Comece cumprimentando" not in segundo_linkedin
