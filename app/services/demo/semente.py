@@ -15,23 +15,39 @@ from app.contexts.bids import contract as bids
 from app.contexts.finops import contract as finops
 from app.contexts.shared import demonstracao
 from app.models.atividade import Atividade
+from app.models.bloqueio_contato import BloqueioContato
 from app.models.cadencia import Cadencia
 from app.models.campanha import Campanha, CampanhaDestinatario
+from app.models.campo_enriquecido import CampoEnriquecido
+from app.models.coleta_site import ColetaSiteConta
 from app.models.conta import Conta
+from app.models.conversa_qualificacao import ConversaQualificacao
+from app.models.custo_aquisicao import CustoAquisicao
 from app.models.decisor import Decisor
+from app.models.email_recebido import EmailRecebido
 from app.models.icp import ICP
 from app.models.interacao_conta import InteracaoConta
 from app.models.lista_prospeccao import ListaProspeccao
 from app.models.mensagem import Mensagem
 from app.models.necessidade_oportunidade import NecessidadeOportunidade
 from app.models.negocio import Negocio
+from app.models.nota_daily import NotaDaily
 from app.models.oferta import Oferta
+from app.models.parcela_negocio import ParcelaNegocio
 from app.models.pesquisa_nps import PesquisaNps
 from app.models.proposta_negocio import PropostaNegocio
+from app.models.regra_aprendida import RegraAprendida
+from app.models.registro_envio_diario import RegistroEnvioDiario
+from app.models.registro_reputacao_canal import RegistroReputacaoCanal
 from app.models.reuniao import Reuniao
+from app.models.sinal_conta import SinalConta
+from app.models.tarefa_linkedin import TarefaLinkedin
+from app.models.template_whatsapp import TemplateWhatsApp
 from app.models.toque_cadencia import ToqueCadencia
+from app.models.turno_conversa import TurnoConversa
 from app.models.usuario import Usuario
 from app.services import crm_service
+from app.services.inadimplencia_service import hoje_brasilia
 
 EMPRESA = "Atlas Soluções Industriais (demonstração)"
 EQUIPE = (("Marina Costa", "admin", "Gestora comercial"), ("Rafael Lima", "user", "Executivo de contas"),
@@ -355,6 +371,150 @@ def _licitacoes(db: Session, tenant_id: str, usuario_id: int, contas, ofertas) -
             L.registrar_resultado(db, tenant_id, usuario_id, lic.id, *dados["_resultado"])
 
 
+def _carteira_map(db: Session, tenant_id: str, contas, decisores, negocios, usuarios) -> None:
+    """MAP completo: custo de aquisição (ROI LTV/CAC), mais sinais de saúde por conta (um cliente em risco, outro saudável), NPS detrator,
+    parcelas dos negócios ganhos (algumas em atraso, para o quadro "Clientes inadimplentes") e anotações da daily da gestora."""
+    agora, hoje = _agora(), hoje_brasilia()
+    for meses_atras, valor in ((0, 18500.0), (1, 21300.0), (2, 16800.0)):
+        ano, mes = hoje.year, hoje.month - meses_atras
+        while mes < 1:
+            ano, mes = ano - 1, mes + 12
+        db.add(CustoAquisicao(tenant_id=tenant_id, periodo=f"{ano}-{mes:02d}", valor=valor))
+    # (conta, tipo, descrição, dias atrás) — mesmo vocabulário do "Registrar interação" do MAP
+    sinais = ((3, "reclamacao", "Relatório mensal chegou com dados de outra planta", 1), (3, "ticket_suporte", "Pediu reinstalação de 3 sensores", 4),
+              (3, "mencionou_concorrente", "Comprador citou proposta de um concorrente alemão", 6), (7, "ticket_suporte", "Dúvida sobre o painel de energia", 3),
+              (0, "feedback_positivo", "Diretor industrial indicou a Atlas para a planta de Betim", 5), (1, "contato", "Reunião trimestral de resultados", 8),
+              (2, "contato", "Visita técnica à linha de prensas", 2), (5, "reuniao_remarcada", "Comitê de compras adiou a apresentação", 3),
+              (8, "contato", "Ligação com o gerente de manutenção", 1), (11, "feedback_positivo", "Gostou do diagnóstico gratuito de ativos", 2))
+    for conta_i, tipo, descricao, dias in sinais:
+        db.add(InteracaoConta(tenant_id=tenant_id, conta_id=contas[conta_i].id, tipo=tipo, descricao=descricao,
+                              criado_por_usuario_id=usuarios[1].id, criado_em=agora - timedelta(days=dias)))
+    db.add(PesquisaNps(tenant_id=tenant_id, conta_id=contas[3].id, decisor_id=decisores[3][1].id, marco="dias_apos_reuniao", nota=4,
+                       classificacao="detrator", enviada_em=agora - timedelta(days=4), respondida_em=agora - timedelta(days=2)))
+    db.add(PesquisaNps(tenant_id=tenant_id, conta_id=contas[1].id, decisor_id=decisores[1][1].id, marco="dias_apos_reuniao",
+                       enviada_em=agora - timedelta(days=1)))  # enviada e ainda sem resposta
+    # Parcelas combinadas nos negócios ganhos: (valor, vencimento em dias a partir de hoje, pago há N dias ou None, observação)
+    planos = ((4800.0, -65, 62, "boleto"), (4800.0, -35, None, "boleto — cliente pediu prorrogação"), (4800.0, -5, None, "boleto"),
+              (2900.0, -40, 38, "Pix"), (2900.0, -10, 9, "Pix"), (2900.0, 20, None, "Pix"),
+              (6500.0, -18, None, "transferência"), (6500.0, 12, None, "transferência"), (5800.0, -2, None, "cartão corporativo"))
+    ganhos = [n for n in negocios if n.ganho_em is not None]
+    numeros: dict[int, int] = {}
+    for k, (valor, vence_em, pago_ha, observacao) in enumerate(planos):
+        negocio = ganhos[min(k // 3, len(ganhos) - 1)]
+        numeros[negocio.id] = numeros.get(negocio.id, 0) + 1
+        db.add(ParcelaNegocio(tenant_id=tenant_id, negocio_id=negocio.id, numero=numeros[negocio.id], valor=valor,
+                              vencimento=hoje + timedelta(days=vence_em), pago_em=hoje - timedelta(days=pago_ha) if pago_ha is not None else None,
+                              observacao=observacao, criado_por_usuario_id=negocio.vendedor_usuario_id))
+    gestora = usuarios[0]
+    for texto, dias, vista in (("Cobrar a Alimentos Serra Azul: duas parcelas em atraso. Falar com o financeiro antes da reunião de quinta.", 0, False),
+                               ("Revisar com o Rafael a proposta da Papel e Celulose Araucária (implantação em duas fases).", 0, False),
+                               ("Preparar a apresentação de resultados do trimestre para a diretoria.", 3, False),
+                               ("Conferir se a Juliana enviou os atestados do pregão da Rio Manso.", -2, True)):
+        db.add(NotaDaily(tenant_id=tenant_id, autor_usuario_id=gestora.id, texto=texto, exibir_em=hoje + timedelta(days=dias),
+                         concluida_em=agora - timedelta(days=1) if vista else None, criado_em=agora - timedelta(days=max(1, 1 - dias))))
+
+
+def _inteligencia_contas(db: Session, tenant_id: str, contas) -> None:
+    """PREDATOR: coletas de site concluídas (resumo, páginas, fontes) e os sinais que elas e o cadastro público produziram."""
+    agora = _agora()
+    for conta in contas[:9]:
+        coleta = ColetaSiteConta(tenant_id=tenant_id, conta_id=conta.id, dominio=conta.dominio, disparo="fila", estado="concluida",
+                                 iniciada_em=agora - timedelta(days=6, minutes=3), concluida_em=agora - timedelta(days=6), paginas=7,
+                                 fontes=[f"https://{conta.dominio}/", f"https://{conta.dominio}/sobre", f"https://{conta.dominio}/trabalhe-conosco"],
+                                 resumo=(f"{conta.nome_fantasia} atua em {conta.segmento.lower()} com operação em {conta.regiao}. O site destaca expansão "
+                                         "da capacidade produtiva, certificação ISO 9001 e vagas abertas para técnicos de manutenção."),
+                                 dominio_origem="cadastrado", dominio_situacao="confirmado", dominio_pontuacao=90,
+                                 dominio_evidencias=["Endereço da fábrica igual ao do cadastro", "E-mail com o mesmo domínio"])
+        db.add(coleta)
+        db.flush()
+        for codigo, valor_num, valor_texto, fonte in (("DOMINIO_CONFIRMADO", 1.0, None, "verificacao_dominio"),
+                                                      ("PAGINA_VAGAS", 1.0 if conta.id % 2 else 0.0, None, "pesquisa_no_site"),
+                                                      ("PUBLICA_PRIVACIDADE_LGPD", 1.0, None, "pesquisa_no_site"),
+                                                      ("IDADE_ANOS", float(8 + conta.id % 30), None, "cadastro_publico_cnpj"),
+                                                      ("SITUACAO_CADASTRAL", None, "ATIVA", "cadastro_publico_cnpj")):
+            db.add(SinalConta(tenant_id=tenant_id, conta_id=conta.id, codigo=codigo, valor_num=valor_num, valor_texto=valor_texto, confianca=0.9,
+                              fonte=fonte, coleta_id=coleta.id if fonte != "cadastro_publico_cnpj" else None,
+                              url_evidencia=f"https://{conta.dominio}/" if fonte == "pesquisa_no_site" else None, observado_em=agora - timedelta(days=6)))
+        for campo, valor in (("site_resumo", coleta.resumo), ("funcionarios_estimados", "200 a 500"), ("tecnologia_manutencao", "Planilhas e ERP")):
+            db.add(CampoEnriquecido(conta_id=conta.id, campo=campo, valor=valor, fonte="coleta_site"))
+
+
+def _operacao_predator(db: Session, tenant_id: str, icps, ofertas, contas, decisores, usuarios) -> None:
+    """PREDATOR além da cadência: tarefas assistidas de LinkedIn, templates de WhatsApp, regras aprendidas, conversas de qualificação,
+    respostas na caixa de entrada (Webmail) e uma campanha já enviada com aberturas e um bounce (Relatório de Entrega)."""
+    agora = _agora()
+    for k, mensagem in enumerate(db.query(Mensagem).filter_by(tenant_id=tenant_id, canal="linkedin").all()):
+        decisor = db.get(Decisor, mensagem.decisor_id)
+        db.add(TarefaLinkedin(tenant_id=tenant_id, mensagem_id=mensagem.id, decisor_id=decisor.id, texto=mensagem.conteudo,
+                              link_perfil=decisor.linkedin_url, status="executada" if k % 3 == 2 else "pendente"))
+    db.add_all([TemplateWhatsApp(tenant_id=tenant_id, nome="primeiro_contato_case", status="aprovado",
+                                 corpo="Olá {{1}}, aqui é da Atlas. Posso te mandar o case de uma metalúrgica que cortou 38% das paradas?"),
+                TemplateWhatsApp(tenant_id=tenant_id, nome="lembrete_reuniao", status="aprovado",
+                                 corpo="Oi {{1}}, confirmando nossa conversa de {{2}} às {{3}}. Até lá!"),
+                TemplateWhatsApp(tenant_id=tenant_id, nome="convite_webinar", status="pendente",
+                                 corpo="{{1}}, vamos mostrar ao vivo como reduzir paradas em 6 meses. Quer o link?")])
+    db.add_all([RegraAprendida(tenant_id=tenant_id, icp_id=icps[0].id, oferta_id=ofertas[0].id, canal="email",
+                               regra="Assuntos com número concreto (\"-38% de paradas\") tiveram o dobro de abertura: prefira dados a adjetivos."),
+                RegraAprendida(tenant_id=tenant_id, icp_id=icps[0].id, canal="linkedin",
+                               regra="Gerentes de manutenção respondem mais quando a mensagem cita a linha ou o equipamento do site da empresa."),
+                RegraAprendida(tenant_id=tenant_id, icp_id=icps[1].id, oferta_id=ofertas[3].id, canal="email",
+                               regra="Para prefeituras, citar a Lei 14.133 e o PCA no primeiro parágrafo; evitar falar de preço no primeiro toque."),
+                RegraAprendida(tenant_id=tenant_id, canal="whatsapp", ativa=False,
+                               regra="Mensagens de WhatsApp antes das 9h foram ignoradas (regra pausada pela gestora para novo teste).")])
+    conversas = ((5, "whatsapp", "autoridade", "em_andamento", None,
+                  (("saida", "Oi! Vi que vocês ampliaram a fábrica. Hoje as paradas não planejadas são um problema?"),
+                   ("entrada", "São sim, tivemos 4 paradas na extrusora em outubro."), ("saida", "Entendi. Quem decide investimentos em manutenção aí?"),
+                   ("entrada", "O diretor industrial, mas eu levo a proposta pra ele."))),
+                 (8, "email", "concluida", "transferida_humano", None,
+                  (("saida", "Bom dia! Faz sentido conversarmos sobre monitoramento das máquinas de papel?"),
+                   ("entrada", "Faz. Temos orçamento para 2027 e queremos começar no primeiro trimestre."),
+                   ("saida", "Ótimo! Vou passar para o Rafael, nosso executivo, agendar com você."))),
+                 (10, "email", "dores", "devolvida", "Contato informou que a empresa terceirizou a manutenção",
+                  (("saida", "Olá! A manutenção das empilhadeiras ainda é feita internamente?"), ("entrada", "Não, terceirizamos tudo em 2025."))))
+    for conta_i, canal, etapa, status, motivo, turnos in conversas:
+        conversa = ConversaQualificacao(tenant_id=tenant_id, conta_id=contas[conta_i].id, decisor_id=decisores[conta_i][0].id, canal=canal,
+                                        etapa_atual=etapa, status=status, motivo_devolucao=motivo,
+                                        transferido_em=agora - timedelta(hours=5) if status == "transferida_humano" else None,
+                                        criado_em=agora - timedelta(days=3))
+        db.add(conversa)
+        db.flush()
+        for k, (direcao, conteudo) in enumerate(turnos):
+            db.add(TurnoConversa(tenant_id=tenant_id, conversa_id=conversa.id, direcao=direcao, conteudo=conteudo,
+                                 criado_em=agora - timedelta(days=3) + timedelta(hours=k * 3)))
+    for conta_i, assunto, corpo, horas in ((6, "Re: Paradas não planejadas na linha de produção?",
+                                            "Oi! Tenho interesse sim. Pode ser quinta às 10h? Abraço, Thiago", 3),
+                                           (7, "Re: Paradas não planejadas na linha de produção?",
+                                            "Obrigado pelo contato. No momento estamos sem orçamento, me procure em fevereiro.", 20),
+                                           (4, "Dúvida sobre o case da Metalúrgica Horizonte",
+                                            "Vocês têm o case em PDF? Quero mostrar para o meu diretor.", 30)):
+        pessoa = decisores[conta_i][0]
+        db.add(EmailRecebido(tenant_id=tenant_id, decisor_id=pessoa.id, conta_id=contas[conta_i].id, remetente_email=pessoa.email,
+                             assunto=assunto, corpo=corpo, criado_em=agora - timedelta(hours=horas)))
+    campanha = Campanha(tenant_id=tenant_id, nome="Newsletter — Resultados de clientes (outubro)", tipo="marketing", canais=["email"],
+                        assunto="Como a Metalúrgica Horizonte cortou 38% das paradas", status="concluida",
+                        conteudo_email="Olá {{nome}}! Neste mês: o case da Metalúrgica Horizonte e o convite para o nosso webinar.")
+    db.add(campanha)
+    db.flush()
+    enviados = 0
+    for k, pessoas in enumerate(decisores):
+        for pessoa in pessoas:
+            enviados += 1
+            bounce = k == 14
+            db.add(CampanhaDestinatario(tenant_id=tenant_id, campanha_id=campanha.id, decisor_id=pessoa.id, nome=pessoa.nome, email=pessoa.email,
+                                        empresa=contas[k].nome_fantasia, status="enviado", enviado_em=agora - timedelta(days=4),
+                                        entregue_em=None if bounce else agora - timedelta(days=4),
+                                        aberto_em=agora - timedelta(days=3, hours=k) if k % 3 != 2 and not bounce else None,
+                                        bounce_em=agora - timedelta(days=4) if bounce else None,
+                                        motivo_bounce="550 5.1.1 user unknown" if bounce else None, pixel_incluido=True))
+    for dias in range(7):
+        dia = (agora - timedelta(days=dias)).date().isoformat()
+        quantidade = enviados if dias == 4 else 3 + dias % 3
+        db.add(RegistroEnvioDiario(tenant_id=tenant_id, canal="email", data=dia, quantidade_enviada=quantidade))
+        db.add(RegistroReputacaoCanal(tenant_id=tenant_id, canal="email", data=dia, enviados=quantidade, bounces=1 if dias == 4 else 0))
+    db.add(BloqueioContato(tenant_id=tenant_id, email=decisores[14][0].email, motivo="E-mail inexistente (550 5.1.1)", origem="email_inexistente",
+                           criado_por=str(usuarios[0].id)))
+
+
 def semear(db: Session, tenant_id: str, expira_em: datetime, creditos_ia: int) -> Usuario:
     """Preenche o tenant de demonstração; devolve a gestora (usuário da sessão)."""
     usuarios = _equipe(db, tenant_id)
@@ -369,6 +529,9 @@ def semear(db: Session, tenant_id: str, expira_em: datetime, creditos_ia: int) -
     _reunioes(db, tenant_id, contas, decisores, usuarios)
     _prospeccao(db, tenant_id, icps, ofertas, decisores, usuarios)
     _relacionamento(db, tenant_id, contas, decisores, negocios, usuarios)
+    _carteira_map(db, tenant_id, contas, decisores, negocios, usuarios)
+    _inteligencia_contas(db, tenant_id, contas)
+    _operacao_predator(db, tenant_id, icps, ofertas, contas, decisores, usuarios)
     db.commit()
     gestora = usuarios[0]
     _licitacoes(db, tenant_id, gestora.id, contas, ofertas)
