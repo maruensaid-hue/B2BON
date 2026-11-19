@@ -406,42 +406,51 @@ Base: a série *O Vendedor Tubarão*, de Maruen Said. A palestra segue o livro *
 
 ### 8.2 Versão curta (formulário de pré-reserva e Calendly)
 
-> Uma palestra para equipes comerciais que querem chegar a janeiro com a rotina de vendas já definida. Com humor e linguagem de quem vive a rua, Maruen Said, com 30 anos de vendas e autor da série *O Vendedor Tubarão*, apresenta o método S.H.A.R.K., do livro *Método SHARK*: as cinco fases da venda moderna, da leitura do cenário ao fechamento, e o flywheel de vendas, que faz cada cliente bem atendido trazer o próximo. Antes do evento, fazemos um briefing com você para usar os desafios reais do seu time. Presencial ou online, de 40, 60 ou 90 minutos, com 30 dias de acesso ao MAP para colocar o método em prática.
+> Reescrita em 13/11/2026 com a skill `palestra-que-vende` e enriquecida com os três livros da série. Roteiro, deck e origem de cada frase em `palestra-vendedor-tubarao-oferta-e-roteiro.md`.
+
+> **Seu time vai entrar em 2027 caçando ou esperando o cliente aparecer?**
+> Uma palestra não é um treinamento, é uma ignição. Em [40, 60 ou 90] minutos, *O Vendedor Tubarão: quem não caça, vira isca* faz cada vendedor descobrir se hoje nada como peixe, golfinho ou tubarão. Ele sai com o plano de caça da primeira semana de janeiro. O mapa é o método S.H.A.R.K., do livro *Método SHARK*: ler o oceano, planejar a caça, construir autoridade, criar confiança que leva à decisão e fechar sem implorar. Antes do evento fazemos um briefing para a palestra usar a meta, o mercado e a linguagem do seu time. Depois dele, o time tem 30 dias de acesso ao MAP, com um plano de prática de quatro semanas. Com Maruen Said, 30 anos em vendas e autor da série *O Vendedor Tubarão*. Presencial ou online.
 
 ### 8.3 Versão completa (site e propostas)
 
 > **O Vendedor Tubarão: quem não caça, vira isca**
 > *O plano de caça para bater a meta de 2027*
 >
-> A convenção de fim de ano é o último momento em que o time comercial inteiro está na mesma sala antes de a nova meta começar a contar. Esta palestra foi feita para esse momento: a equipe se diverte, mas sai sabendo o que fazer na primeira semana de janeiro.
+> **O problema**
+> A convenção de fim de ano é a última vez em que o time inteiro está na mesma sala antes de a meta nova começar a contar. Quase sempre ele sai de lá animado, com uma foto bonita e nenhuma mudança na segunda-feira. Vendedor sem método depende de humor, de sorte e de circunstância; e janeiro não costuma ajudar em nenhum dos três. Uma palestra não é um treinamento, é uma ignição. Esta foi feita para a ignição virar rotina.
 >
 > **O que o time leva para casa**
-> - **O método S.H.A.R.K.: as cinco fases da venda moderna.**
->   - **S – Situational Awareness (Consciência Situacional):** entender o mercado, o cliente e o momento dele antes de abordar.
->   - **H – Hunting Strategy (Estratégia de Caça):** escolher em quem investir energia e como chegar até essas pessoas.
->   - **A – Authority Building (Construção de Autoridade):** fazer o cliente enxergar o vendedor como alguém que entende do problema dele.
->   - **R – Relationship Engineering (Engenharia de Relacionamento):** construir a relação com cada pessoa que influencia a compra, e não só com quem assina.
->   - **K – Kill the Deal (Fechamento e Consolidação):** conduzir até o pedido e garantir que a venda se sustente depois dele.
-> - **A roda que ganha velocidade: o flywheel de vendas.** Como cada cliente bem atendido vira recompra e indicação, o que dá energia à roda e o que cria atrito e trava o crescimento da carteira.
-> - **Do palco para a rotina.** Como transformar o método em hábito diário de prospecção e follow-up. Para isso, a palestra inclui 30 dias de acesso ao MAP, a ferramenta que põe em prática a gestão comercial descrita em *Engenharia de Alta Performance*, o segundo livro da série.
+> 1. **Um diagnóstico honesto.** Cada pessoa se posiciona na matriz do livro: *peixe* (reativo, improvisa), *golfinho* (tem técnica mas não tem constância) ou *tubarão* (técnica e constância: opera com método e é previsível).
+> 2. **O método S.H.A.R.K., em cinco movimentos que não se pulam, cada um com a sua pergunta de bolso.**
+>    - **S, Consciência Situacional:** *o que mudou para isso entrar na agenda agora?*
+>    - **H, Estratégia de Caça:** *esta conta merece a minha energia agora?*
+>    - **A, Construção de Autoridade:** *que evidência eu tenho?*
+>    - **R, Engenharia de Relacionamento:** *quem precisa estar confortável para isso acontecer?*
+>    - **K, Fechamento e Consolidação:** *quem fará o quê, até quando?*
+> 3. **Ferramentas para o dia seguinte:** a abertura F.A.T.A.L. para os primeiros 14 segundos de uma ligação, o BUMP para responder objeção sem reagir no automático, e a pergunta do custo de ficar parado.
+> 4. **O plano de caça da primeira semana de janeiro**, escrito durante a palestra: as contas, a energia certa para cada uma e a primeira conversa marcada.
+> 5. **30 dias de acesso ao MAP**, a ferramenta que põe em prática a gestão comercial de *Engenharia de Alta Performance*, com um plano de quatro semanas: abertura e diagnóstico, objeções, leitura de perfil e pipeline em dia. `[CONFIRMAR: uma pessoa ou o time; como liberar e encerrar o acesso]`
 >
 > **Como funciona**
-> - Presencial ou online, com 40, 60 ou 90 minutos.
-> - Briefing antes do evento, para a palestra usar a linguagem, o mercado e os desafios do seu time.
-> - 30 dias de acesso ao MAP depois do evento, para o time aplicar o método no dia a dia.
+> - **Briefing antes do evento:** meta, produto, o que mudou no mercado, maior dificuldade do time e o vocabulário da empresa. A palestra usa os números e os exemplos do seu negócio, e nenhum slide é genérico.
+> - **Formato:** presencial ou online; 40, 60 ou 90 minutos.
+> - **Tom:** humor e linguagem de quem vive a rua, sem discurso de autoajuda. A plateia participa a cada poucos minutos e termina de pé.
 >
 > **Quem apresenta**
-> Maruen Said tem 30 anos de experiência em vendas e foi premiado como Salesman LATAM e Salesman Global pela SUSE e pela Oracle. É autor da série *O Vendedor Tubarão*: *Método SHARK*, base desta palestra, que apresenta o S.H.A.R.K. e o flywheel de vendas; *Engenharia de Alta Performance*; e *Águas Profundas*.
+> Maruen Said tem mais de 30 anos nas linhas de frente das vendas consultivas, de vendedor a gestor e de gestor a estrategista. Foi premiado como Salesman LATAM e Salesman Global pela SUSE e pela Oracle `[CONFIRMAR: qual prêmio veio de qual empresa]`. É autor da série *O Vendedor Tubarão* (*Método SHARK*, *Engenharia de Alta Performance* e *Mergulhando em Águas Profundas*).
 >
-> **O que dizem**
-> > "Maruen é um profissional dinâmico, criterioso e focado em seus objetivos."
-> > — Evandro Francisco, Diretor Administrativo, Eclat
+> **O que dizem** `[CONFIRMAR: avisar Evandro Francisco e José Glicério antes de publicar]`
+> > "Maruen é um profissional dinâmico, criterioso e focado em seus objetivos." (Evandro Francisco, Diretor Administrativo, Eclat)
 >
-> > "Maruen sempre foi um gestor comercial interessado e capaz de resolver os problemas dos clientes e prospects com as melhores soluções disponíveis no mercado. Como revenda autorizada, centro de treinamento oficial e distribuidores da Conectiva Linux, sempre recebemos seu apoio incondicional. Ele agregou valor aos produtos e serviços dos fabricantes para os quais trabalhou e com quem tivemos contato."
-> > — José Glicério Ruas Alves, Founder e CEO, Microhard
+> **Agenda e condições** (tudo verificável)
+> - R$ 8.000 presencial (deslocamento à parte) ou R$ 5.000 online. A data fica garantida com o sinal de 50%; os outros 50% são pagos no dia, antes de subir ao palco.
+> - Uma palestra por dia. A preparação leva 10 dias, então a reserva precisa sair pelo menos 10 dias antes do evento. Para a última data de 2026 (19/12), o prazo é 09/12.
+> - A pré-reserva segura a data por 48 horas sem custo, enquanto você aprova internamente.
+> - Toda reserva confirmada até 10/02/2027 inclui 2 horas de consultoria com o Maruen, para a liderança levar o plano do palco para a rotina.
+> - Datas livres: `[LINK DE PRÉ-RESERVA]` (só aparecem as datas abertas).
 >
-> **Para quem**
-> Equipes de vendas internas e externas, representantes comerciais e gestores, em convenções de fim de ano, kick-offs e encontros de resultado.
+> **Se não for o momento**
+> Se a convenção de vocês já está fechada, me diga em que mês costuma ser o kick-off de 2027 que eu volto só nessa época.
 
 ### 8.4 Pendências da descrição
 - Avisar Evandro Francisco e José Glicério antes de usar os depoimentos (são recomendações do LinkedIn).
