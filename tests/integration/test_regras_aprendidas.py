@@ -97,3 +97,22 @@ def test_sugerir_regra_com_ia_retorna_texto_sugerido(
 def test_sugerir_regra_com_ia_correcao_inexistente_retorna_404(client, onboarding_completo):
     resposta = client.post("/api/v1/regras-aprendidas/correcoes-recentes/9999/sugerir-regra")
     assert resposta.status_code == 404
+
+
+def test_regra_nao_aceita_icp_nem_oferta_de_outro_tenant(client, onboarding_completo, db_session, criar_icp):
+    from app.models.icp import ICP
+    from app.models.oferta import Oferta
+
+    icp_alheio = ICP(tenant_id="tenant-outro", grupo_id="g-outro", nome="ICP de outro tenant", segmento="Indústria", porte="Grande",
+                     regiao="Sudeste", ativo=True, versao=1)
+    oferta_alheia = Oferta(tenant_id="tenant-outro", nome="Oferta de outro tenant", descricao="d")
+    db_session.add_all([icp_alheio, oferta_alheia])
+    db_session.commit()
+
+    assert client.post("/api/v1/regras-aprendidas", json={"icp_id": icp_alheio.id, "regra": "x"}).status_code == 404
+    assert client.post("/api/v1/regras-aprendidas", json={"oferta_id": oferta_alheia.id, "regra": "x"}).status_code == 404
+
+    regra = client.post("/api/v1/regras-aprendidas", json={"icp_id": criar_icp(nome="Meu ICP")["id"], "regra": "x"}).json()
+    resposta = client.put(f"/api/v1/regras-aprendidas/{regra['id']}", json={"icp_id": icp_alheio.id, "regra": "x"})
+    assert resposta.status_code == 404
+    assert client.get("/api/v1/regras-aprendidas").json()[0]["icp_id"] != icp_alheio.id

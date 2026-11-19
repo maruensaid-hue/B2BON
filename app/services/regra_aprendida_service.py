@@ -7,7 +7,9 @@ from app.models.aprovacao import Aprovacao
 from app.models.auditoria import AuditLog
 from app.models.cadencia import Cadencia
 from app.models.conta import Conta
+from app.models.icp import ICP
 from app.models.mensagem import Mensagem
+from app.models.oferta import Oferta
 from app.models.regra_aprendida import RegraAprendida
 from app.schemas.regra_aprendida import RegraAprendidaCreateSchema
 from app.services import auditoria_service
@@ -34,7 +36,16 @@ def _obter(db: Session, tenant_id: str, regra_id: int) -> RegraAprendida:
     return regra
 
 
+def _validar_escopo(db: Session, tenant_id: str, dados: RegraAprendidaCreateSchema) -> None:
+    """ICP e oferta da regra têm de ser do próprio tenant: sem isso, um tenant gravava regra apontando para o id de outro."""
+    if dados.icp_id is not None and db.query(ICP).filter_by(id=dados.icp_id, tenant_id=tenant_id).one_or_none() is None:
+        raise NaoEncontrado(f"ICP {dados.icp_id} não encontrado")
+    if dados.oferta_id is not None and db.query(Oferta).filter_by(id=dados.oferta_id, tenant_id=tenant_id).one_or_none() is None:
+        raise NaoEncontrado(f"Oferta {dados.oferta_id} não encontrada")
+
+
 def criar(db: Session, tenant_id: str, ator_id: str | None, dados: RegraAprendidaCreateSchema) -> RegraAprendida:
+    _validar_escopo(db, tenant_id, dados)
     regra = RegraAprendida(
         tenant_id=tenant_id,
         icp_id=dados.icp_id,
@@ -56,6 +67,7 @@ def atualizar(
     db: Session, tenant_id: str, ator_id: str | None, regra_id: int, dados: RegraAprendidaCreateSchema
 ) -> RegraAprendida:
     regra = _obter(db, tenant_id, regra_id)
+    _validar_escopo(db, tenant_id, dados)
     regra.icp_id = dados.icp_id
     regra.oferta_id = dados.oferta_id
     regra.canal = dados.canal
